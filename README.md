@@ -1,172 +1,231 @@
 # Neve
 
-A pure functional language for system configuration and package management.
+> A pure functional language for system configuration and package management.
 
-一门用于系统配置与包管理的纯函数式语言。
+Neve is my attempt to create a modern replacement for the Nix language. While Nix is incredibly powerful, I've always felt it could be more approachable with cleaner syntax and a proper type system.
 
-> Pure Rust | Zero Ambiguity | Unified Syntax
->
-> 纯 Rust 实现 | 零二义性 | 语法统一
+**This project is still in early development.** Many features are incomplete or missing entirely. If you're interested in functional package management or language design, I'd love to hear your thoughts and suggestions!
 
-Neve is designed as a modern replacement for the Nix language, addressing its historical baggage while maintaining the power of declarative, reproducible system management.
+## What's Working
 
-Neve 旨在成为 Nix 语言的现代替代品，解决其历史包袱问题，同时保持声明式、可复现系统管理的强大能力。
+- **Lexer & Parser** - Can parse most Neve syntax
+- **Type Checker** - Basic Hindley-Milner inference
+- **Evaluator** - Simple expressions work
+- **LSP** - Basic editor support
 
-## Features / 特性
+## What's Not (Yet)
 
-- **Static Type System / 静态类型系统** - Hindley-Milner type inference with traits / 带 Trait 的 HM 类型推导
-- **Zero Ambiguity / 零二义性** - Every construct has exactly one parse interpretation / 每个构造只有唯一解析方式
-- **Pure Functional / 纯函数式** - No side effects, perfect reproducibility / 无副作用，完美可复现
-- **Modern Syntax / 现代语法** - Clean, consistent, indentation-independent / 简洁、一致、不依赖缩进
+- **Package Building** - Derivations are defined but don't actually build anything
+- **Store** - No content-addressed storage yet
+- **CLI** - Very incomplete
+- **Standard Library** - Just a skeleton
+- **Documentation** - You're looking at most of it
 
-## Quick Example / 快速示例
+## A Taste of Neve
 
 ```neve
--- Package definition / 包定义
+-- Define a simple package
 let hello = derivation #{
     name = "hello",
     version = "2.12",
     src = fetchurl #{
         url = "https://ftp.gnu.org/gnu/hello/hello-2.12.tar.gz",
-        sha256 = "cf04af86dc085268c5f4470fbae49b18afbc221b78096aab842d934a76bad0ab",
+        sha256 = "cf04af86dc085268c5f4470fbae49b18...",
     },
     build = fn(src) #{
         configure = "./configure --prefix=$out",
-        make = "make",
-        install = "make install",
+        make = "make install",
     },
 };
 
--- System configuration / 系统配置
-let config = #{
-    hostname = "myhost",
+-- System configuration
+let mySystem = #{
+    hostname = "wonderland",
     users = [
         #{ name = "alice", shell = "/bin/zsh" },
-        #{ name = "bob", shell = "/bin/bash" },
     ],
     packages = [hello, git, vim],
-    services = #{
-        sshd = #{ enable = true, port = 22 },
-        nginx = #{ enable = true },
-    },
 };
 ```
 
-## Syntax Comparison / 语法对比
+## Why Another Nix?
 
-| Concept / 概念 | Neve | Nix |
-|----------------|------|-----|
-| Records / 记录 | `#{ x = 1 }` | `{ x = 1; }` |
-| Lambda / 闭包 | `fn(x) x + 1` | `x: x + 1` |
-| Comments / 注释 | `-- comment --` | `# comment` |
-| Interpolation / 插值 | `` `hello {name}` `` | `"hello ${name}"` |
-| List concat / 列表连接 | `xs ++ ys` | `xs ++ ys` |
-| Record merge / 记录合并 | `a // b` | `a // b` |
-| Pipe / 管道 | `x \|> f \|> g` | N/A |
-| Type annotation / 类型注解 | `x: Int` | N/A |
+I love Nix's ideas but struggle with its syntax:
 
-## Project Status / 项目状态
+| Pain Point | Nix | Neve |
+|------------|-----|------|
+| Is this a record or function? | `{ x = 1; }` | `#{ x = 1 }` (always a record) |
+| Lambda syntax conflicts with types | `x: x + 1` | `fn(x) x + 1` |
+| Implicit recursion | `rec { }` | Automatic detection |
+| No type safety | Runtime errors | Catch errors early |
 
-**Phase 1: Core Language / 核心语言** - In Progress / 进行中
-
-| Component / 组件 | Status / 状态 |
-|------------------|---------------|
-| Lexer / 词法分析 | Done / 完成 |
-| Parser / 语法分析 | Done / 完成 |
-| HIR / Name Resolution / 名称解析 | Done / 完成 |
-| Type Checker / 类型检查 | Basic / 基础 |
-| Evaluator / 求值器 | Basic / 基础 |
-| Standard Library / 标准库 | Skeleton / 骨架 |
-| LSP / 语言服务 | Basic / 基础 |
-| Formatter / 格式化 | Basic / 基础 |
-
-**Phase 2: Package Management / 包管理** - Skeleton / 骨架
-
-| Component / 组件 | Status / 状态 |
-|------------------|---------------|
-| Derivation Model / 推导模型 | Skeleton / 骨架 |
-| Content-Addressed Store / 内容寻址存储 | Skeleton / 骨架 |
-| Sandbox Builder / 沙箱构建器 | Skeleton / 骨架 |
-| Fetchers / 获取器 | Skeleton / 骨架 |
-
-**Phase 3-4: System Config & Tooling / 系统配置与工具** - Planned / 计划中
-
-## Building / 构建
+## Building from Source
 
 ```bash
-# Clone / 克隆
-git clone https://github.com/aspect-analytics/neve.git
+git clone https://github.com/MCB-SMART-BOY/neve.git
 cd neve
-
-# Build / 构建
 cargo build --release
-
-# Test / 测试
-cargo test
+cargo test  # ~500 tests, most pass!
 ```
 
-## Architecture / 架构
+## Arch Linux (AUR)
+
+```bash
+yay -S neve-git
+```
+
+## Project Structure
 
 ```
 neve/
 ├── crates/
-│   ├── neve-common      # Span, interner, arena / 基础设施
-│   ├── neve-diagnostic  # Error reporting / 错误报告
-│   ├── neve-lexer       # Tokenizer / 词法分析
-│   ├── neve-syntax      # AST definitions / AST 定义
-│   ├── neve-parser      # Recursive descent parser / 递归下降解析器
-│   ├── neve-hir         # High-level IR / 高级中间表示
-│   ├── neve-typeck      # Type inference / 类型推导
-│   ├── neve-eval        # Evaluator / 求值器
-│   ├── neve-std         # Standard library / 标准库
-│   ├── neve-derive      # Derivation model / 推导模型
-│   ├── neve-store       # Content-addressed store / 内容寻址存储
-│   ├── neve-fetch       # URL/Git fetchers / 获取器
-│   ├── neve-builder     # Sandbox executor / 沙箱执行器
-│   ├── neve-config      # System configuration / 系统配置
-│   ├── neve-lsp         # Language Server / 语言服务器
-│   └── neve-fmt         # Formatter / 格式化器
-├── neve-cli/            # CLI application / 命令行工具
-└── tests/               # Integration tests / 集成测试
+│   ├── neve-lexer      # Tokenizer
+│   ├── neve-parser     # Recursive descent parser
+│   ├── neve-hir        # Name resolution
+│   ├── neve-typeck     # Type inference
+│   ├── neve-eval       # Tree-walking interpreter
+│   ├── neve-derive     # Derivation model (WIP)
+│   ├── neve-store      # Content-addressed store (WIP)
+│   └── ...
+└── tests/              # Integration tests
 ```
 
-## Design Philosophy / 设计哲学
+## Contributing
 
-1. **Zero Ambiguity / 零二义性** - No context-dependent parsing / 无上下文依赖解析
-2. **Unified Syntax / 语法统一** - Similar concepts use similar syntax / 相似概念使用相似语法
-3. **Indentation Independent / 不依赖缩进** - Explicit delimiters / 显式分隔符
-4. **Pure Functional / 纯函数式** - Side effects through derivations only / 副作用仅通过推导
-5. **Simplicity First / 简洁优先** - 17 keywords, minimal noise / 17 个关键字，最少噪音
+This is a learning project and I'm figuring things out as I go. If you:
 
-See / 详见 [PHILOSOPHY.md](PHILOSOPHY.md)
+- Find bugs (there are many)
+- Have ideas for better syntax
+- Want to help implement features
+- Just want to chat about language design
 
-## Nix vs Neve
+Please open an issue or PR! I'm especially interested in feedback on the syntax design.
 
-| Nix Problem / Nix 问题 | Neve Solution / Neve 方案 |
-|------------------------|---------------------------|
-| `{ }` ambiguity / 二义性 | `#{ }` records, `{ }` blocks / 记录与块分离 |
-| `x: x+1` lambda confusion / 闭包混淆 | `fn(x) x+1` explicit / 显式闭包 |
-| `rec { }` explicit recursion / 显式递归 | Automatic detection / 自动检测 |
-| `with pkgs;` scope pollution / 作用域污染 | `import pkgs (*)` explicit / 显式导入 |
-| No type system / 无类型系统 | Full HM inference / 完整 HM 推导 |
-| Lazy by default / 默认惰性 | Strict default, `lazy` keyword / 默认严格 |
+## Name
 
-## Name Origin / 命名由来
+*Neve* means "snow" in Italian and Portuguese - a nod to Nix (Latin for "snow"), but representing a fresh start.
 
-**Neve** means "snow" in Italian and Portuguese, connecting to Nix (Latin for "snow") while representing a fresh, clean design.
-
-**Neve** 在意大利语和葡萄牙语中意为"雪"，与 Nix（拉丁语"雪"）相呼应，象征纯净、简洁的设计。
-
-## License / 许可证
+## License
 
 [MPL-2.0](LICENSE)
 
-## Roadmap / 路线图
+---
 
-- [ ] Complete evaluator / 完善求值器 (lazy evaluation, imports / 惰性求值、导入)
-- [ ] CLI tool / 命令行工具 (`neve eval`, `neve build`, `neve repl`)
-- [ ] Sandbox builder / 沙箱构建器
-- [ ] Store with GC / 带垃圾回收的存储
-- [ ] Package repository / 包仓库
-- [ ] System configuration / 系统配置
-- [ ] Flake compatibility / Flake 兼容
+*This is a hobby project. Use at your own risk, and expect breaking changes.*
+
+---
+
+# Neve
+
+> 一门用于系统配置与包管理的纯函数式语言。
+
+Neve 是我尝试为 Nix 语言创造一个现代替代品。虽然 Nix 非常强大，但我一直觉得它可以更加友好——更清晰的语法，更完善的类型系统。
+
+**这个项目仍处于早期开发阶段。** 很多功能还不完整，甚至完全缺失。如果你对函数式包管理或语言设计感兴趣，非常欢迎提出你的想法和建议！
+
+## 已经能用的
+
+- **词法分析 & 语法分析** - 能解析大部分 Neve 语法
+- **类型检查** - 基础的 Hindley-Milner 推导
+- **求值器** - 简单表达式可以运行
+- **LSP** - 基本的编辑器支持
+
+## 还不能用的
+
+- **包构建** - Derivation 定义了但还不能真正构建
+- **Store** - 还没有内容寻址存储
+- **命令行工具** - 非常不完整
+- **标准库** - 只是个骨架
+- **文档** - 你现在看到的就是大部分了
+
+## Neve 长什么样
+
+```neve
+-- 定义一个简单的包
+let hello = derivation #{
+    name = "hello",
+    version = "2.12",
+    src = fetchurl #{
+        url = "https://ftp.gnu.org/gnu/hello/hello-2.12.tar.gz",
+        sha256 = "cf04af86dc085268c5f4470fbae49b18...",
+    },
+    build = fn(src) #{
+        configure = "./configure --prefix=$out",
+        make = "make install",
+    },
+};
+
+-- 系统配置
+let mySystem = #{
+    hostname = "wonderland",
+    users = [
+        #{ name = "alice", shell = "/bin/zsh" },
+    ],
+    packages = [hello, git, vim],
+};
+```
+
+## 为什么要再造一个 Nix？
+
+我喜欢 Nix 的理念，但总是被它的语法困扰：
+
+| 痛点 | Nix | Neve |
+|------|-----|------|
+| 这是记录还是函数？ | `{ x = 1; }` | `#{ x = 1 }` (永远是记录) |
+| Lambda 语法和类型冲突 | `x: x + 1` | `fn(x) x + 1` |
+| 隐式递归 | `rec { }` | 自动检测 |
+| 没有类型安全 | 运行时报错 | 提前发现错误 |
+
+## 从源码构建
+
+```bash
+git clone https://github.com/MCB-SMART-BOY/neve.git
+cd neve
+cargo build --release
+cargo test  # 约 500 个测试，大部分能过！
+```
+
+## Arch Linux (AUR)
+
+```bash
+yay -S neve-git
+```
+
+## 项目结构
+
+```
+neve/
+├── crates/
+│   ├── neve-lexer      # 词法分析
+│   ├── neve-parser     # 递归下降解析器
+│   ├── neve-hir        # 名称解析
+│   ├── neve-typeck     # 类型推导
+│   ├── neve-eval       # 树遍历解释器
+│   ├── neve-derive     # 推导模型 (WIP)
+│   ├── neve-store      # 内容寻址存储 (WIP)
+│   └── ...
+└── tests/              # 集成测试
+```
+
+## 参与贡献
+
+这是一个学习项目，我也在边做边摸索。如果你：
+
+- 发现了 bug（肯定很多）
+- 对语法设计有更好的想法
+- 想帮忙实现某些功能
+- 只是想聊聊语言设计
+
+欢迎开 issue 或 PR！我特别希望能收到关于语法设计的反馈。
+
+## 名字的由来
+
+*Neve* 在意大利语和葡萄牙语中意为"雪"——呼应 Nix（拉丁语的"雪"），但代表着一个全新的开始。
+
+## 许可证
+
+[MPL-2.0](LICENSE)
+
+---
+
+*这是个业余项目。使用风险自负，随时可能有破坏性更改。*
