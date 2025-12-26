@@ -1,0 +1,20 @@
+[package]
+name = "neve-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-lexer.workspace = true
+neve-eval.workspace = true
+neve-parser.workspace = true
+neve-derive.workspace = true
+neve-store.workspace = true
+neve-builder.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

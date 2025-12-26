@@ -1,0 +1,14 @@
+[package]
+name = "neve-derive"
+description = "Derivation model for Neve package management"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+thiserror.workspace = true

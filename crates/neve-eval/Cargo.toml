@@ -1,0 +1,15 @@
+[package]
+name = "neve-eval"
+description = "Interpreter/evaluator for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-syntax.workspace = true
+neve-hir.workspace = true
+neve-parser.workspace = true
+neve-diagnostic.workspace = true
+thiserror.workspace = true

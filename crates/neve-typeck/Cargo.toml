@@ -1,0 +1,15 @@
+[package]
+name = "neve-typeck"
+description = "Type checking for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-hir.workspace = true
+neve-diagnostic.workspace = true
+
+[dev-dependencies]
+neve-parser.workspace = true

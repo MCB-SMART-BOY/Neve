@@ -1,0 +1,10 @@
+[package]
+name = "neve-syntax"
+description = "AST and syntax definitions for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "neve-store"
+description = "Content-addressed store for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

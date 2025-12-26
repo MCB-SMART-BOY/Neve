@@ -1,0 +1,15 @@
+[package]
+name = "neve-hir"
+description = "High-level Intermediate Representation for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-syntax.workspace = true
+neve-diagnostic.workspace = true
+
+[dev-dependencies]
+neve-parser.workspace = true

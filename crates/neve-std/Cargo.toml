@@ -1,0 +1,11 @@
+[package]
+name = "neve-std"
+description = "Standard library for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-eval.workspace = true

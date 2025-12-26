@@ -1,0 +1,18 @@
+[package]
+name = "neve-fetch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neve-derive.workspace = true
+thiserror.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+blake3.workspace = true
+git2.workspace = true
+tar = "0.4"
+flate2 = "1"
+xz2 = "0.1"
+tempfile = "3"
+
+[dev-dependencies]

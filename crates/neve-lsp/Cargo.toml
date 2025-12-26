@@ -1,0 +1,24 @@
+[package]
+name = "neve-lsp"
+description = "Language Server Protocol implementation for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+neve-common.workspace = true
+neve-diagnostic.workspace = true
+neve-lexer.workspace = true
+neve-syntax.workspace = true
+neve-parser.workspace = true
+neve-hir.workspace = true
+neve-typeck.workspace = true
+neve-fmt.workspace = true
+
+tower-lsp.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+dashmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true

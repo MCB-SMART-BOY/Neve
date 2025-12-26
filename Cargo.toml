@@ -1,0 +1,79 @@
+[package]
+name = "neve-workspace"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+    "neve-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/mcbgaruda/neve"
+
+[workspace.dependencies]
+# Internal crates
+neve-common = { path = "crates/neve-common" }
+neve-diagnostic = { path = "crates/neve-diagnostic" }
+neve-lexer = { path = "crates/neve-lexer" }
+neve-syntax = { path = "crates/neve-syntax" }
+neve-parser = { path = "crates/neve-parser" }
+neve-hir = { path = "crates/neve-hir" }
+neve-typeck = { path = "crates/neve-typeck" }
+neve-eval = { path = "crates/neve-eval" }
+neve-std = { path = "crates/neve-std" }
+neve-derive = { path = "crates/neve-derive" }
+neve-store = { path = "crates/neve-store" }
+neve-fetch = { path = "crates/neve-fetch" }
+neve-builder = { path = "crates/neve-builder" }
+neve-config = { path = "crates/neve-config" }
+neve-lsp = { path = "crates/neve-lsp" }
+neve-fmt = { path = "crates/neve-fmt" }
+
+# External dependencies
+ariadne = "0.4"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["blocking"] }
+git2 = "0.19"
+rustyline = "15"
+logos = "0.15"
+tar = "0.4"
+flate2 = "1"
+xz2 = "0.1"
+tempfile = "3"
+nix = { version = "0.29", features = ["user", "fs", "process", "mount"] }
+tower-lsp = "0.20"
+async-trait = "0.1"
+dashmap = "6"
+
+# Dependencies for integration tests
+[dev-dependencies]
+neve-common = { path = "crates/neve-common" }
+neve-diagnostic = { path = "crates/neve-diagnostic" }
+neve-lexer = { path = "crates/neve-lexer" }
+neve-syntax = { path = "crates/neve-syntax" }
+neve-parser = { path = "crates/neve-parser" }
+neve-hir = { path = "crates/neve-hir" }
+neve-typeck = { path = "crates/neve-typeck" }
+neve-eval = { path = "crates/neve-eval" }
+neve-std = { path = "crates/neve-std" }
+neve-derive = { path = "crates/neve-derive" }
+neve-store = { path = "crates/neve-store" }
+neve-fetch = { path = "crates/neve-fetch" }
+neve-builder = { path = "crates/neve-builder" }
+neve-config = { path = "crates/neve-config" }
+neve-lsp = { path = "crates/neve-lsp" }
+neve-fmt = { path = "crates/neve-fmt" }
+tempfile = "3"

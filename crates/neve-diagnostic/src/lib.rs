@@ -1,0 +1,49 @@
+//! Diagnostic and error reporting for Neve.
+//!
+//! This crate provides beautiful error messages using ariadne.
+
+mod diagnostic;
+mod codes;
+
+pub use diagnostic::{Diagnostic, DiagnosticKind, Label, Severity};
+pub use codes::ErrorCode;
+
+use ariadne::{ColorGenerator, Label as AriadneLabel, Report, ReportKind, Source};
+
+/// Render a diagnostic to stderr.
+pub fn emit(source: &str, filename: &str, diagnostic: &Diagnostic) {
+    let kind = match diagnostic.severity {
+        Severity::Error => ReportKind::Error,
+        Severity::Warning => ReportKind::Warning,
+        Severity::Note => ReportKind::Advice,
+    };
+
+    let mut colors = ColorGenerator::new();
+    let mut report = Report::build(kind, filename, diagnostic.span.start.0 as usize)
+        .with_message(&diagnostic.message);
+
+    if let Some(code) = &diagnostic.code {
+        report = report.with_code(code.as_str());
+    }
+
+    for label in &diagnostic.labels {
+        let color = colors.next();
+        let ariadne_label = AriadneLabel::new((filename, label.span.range()))
+            .with_message(&label.message)
+            .with_color(color);
+        report = report.with_label(ariadne_label);
+    }
+
+    for note in &diagnostic.notes {
+        report = report.with_note(note);
+    }
+
+    if let Some(help) = &diagnostic.help {
+        report = report.with_help(help);
+    }
+
+    report
+        .finish()
+        .eprint((filename, Source::from(source)))
+        .unwrap();
+}

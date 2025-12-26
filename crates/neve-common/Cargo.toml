@@ -1,0 +1,9 @@
+[package]
+name = "neve-common"
+description = "Common utilities and data structures for Neve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

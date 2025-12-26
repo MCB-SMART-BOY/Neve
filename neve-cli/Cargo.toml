@@ -1,0 +1,30 @@
+[package]
+name = "neve"
+description = "The Neve language CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "neve"
+path = "src/main.rs"
+
+[dependencies]
+neve-common.workspace = true
+neve-diagnostic.workspace = true
+neve-lexer.workspace = true
+neve-syntax.workspace = true
+neve-parser.workspace = true
+neve-hir.workspace = true
+neve-typeck.workspace = true
+neve-eval.workspace = true
+neve-std.workspace = true
+neve-config.workspace = true
+neve-store.workspace = true
+neve-derive.workspace = true
+neve-fmt.workspace = true
+
+clap.workspace = true
+rustyline.workspace = true
+serde_json.workspace = true
