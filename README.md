@@ -1,27 +1,31 @@
 # Neve
 
 > A pure functional language for system configuration and package management.
+>
+> 一门用于系统配置与包管理的纯函数式语言。
 
-Neve is my attempt to create a modern replacement for the Nix language. While Nix is incredibly powerful, I've always felt it could be more approachable with cleaner syntax and a proper type system.
+---
 
-**This project is still in early development.** Many features are incomplete or missing entirely. If you're interested in functional package management or language design, I'd love to hear your thoughts and suggestions!
+## English
 
-## What's Working
+Neve is a modern replacement for the Nix language. While Nix is incredibly powerful, Neve aims to be more approachable with cleaner syntax and a proper type system.
 
-- **Lexer & Parser** - Can parse most Neve syntax
-- **Type Checker** - Basic Hindley-Milner inference
-- **Evaluator** - Simple expressions work
-- **LSP** - Basic editor support
+### Features
 
-## What's Not (Yet)
+- **Lexer & Parser** - Complete Neve syntax parsing with error recovery
+- **Type Checker** - Full Hindley-Milner type inference
+- **Evaluator** - Tree-walking interpreter for expressions
+- **LSP** - Editor support with semantic highlighting and symbol indexing
+- **Formatter** - Code formatting with configurable style
+- **REPL** - Interactive evaluation environment
+- **Store** - Content-addressed storage system
+- **Derivations** - Package build model with hash verification
+- **Fetcher** - Source fetching from URLs, Git repos, and local paths
+- **Builder** - Sandboxed build execution (Linux)
+- **Config** - System configuration with generations and activation
+- **Standard Library** - Built-in modules for io, list, map, math, option, path, result, set, string
 
-- **Package Building** - Derivations are defined but don't actually build anything
-- **Store** - No content-addressed storage yet
-- **CLI** - Very incomplete
-- **Standard Library** - Just a skeleton
-- **Documentation** - You're looking at most of it
-
-## A Taste of Neve
+### A Taste of Neve
 
 ```neve
 -- Define a simple package
@@ -48,7 +52,7 @@ let mySystem = #{
 };
 ```
 
-## Why Another Nix?
+### Why Another Nix?
 
 I love Nix's ideas but struggle with its syntax:
 
@@ -59,86 +63,107 @@ I love Nix's ideas but struggle with its syntax:
 | Implicit recursion | `rec { }` | Automatic detection |
 | No type safety | Runtime errors | Catch errors early |
 
-## Building from Source
+### Installation
+
+#### Building from Source
 
 ```bash
-git clone https://github.com/MCB-SMART-BOY/neve.git
+git clone https://github.com/mcbgaruda/neve.git
 cd neve
 cargo build --release
-cargo test  # ~500 tests, most pass!
 ```
 
-## Arch Linux (AUR)
+#### Arch Linux (AUR)
 
 ```bash
 yay -S neve-git
 ```
 
-## Project Structure
+### CLI Usage
+
+```bash
+neve eval "1 + 2"              # Evaluate an expression
+neve run file.neve             # Run a Neve file
+neve check file.neve           # Type check a file
+neve fmt file file.neve        # Format a file
+neve repl                      # Start interactive REPL
+neve build                     # Build a package
+neve package install <pkg>     # Install a package
+neve package remove <pkg>      # Remove a package
+neve search <query>            # Search for packages
+neve info <pkg>                # Show package info
+neve config build              # Build system configuration
+neve config switch             # Switch to new configuration
+neve store gc                  # Run garbage collection
+neve store info                # Show store information
+```
+
+### Project Structure
 
 ```
 neve/
 ├── crates/
-│   ├── neve-lexer      # Tokenizer
-│   ├── neve-parser     # Recursive descent parser
-│   ├── neve-hir        # Name resolution
-│   ├── neve-typeck     # Type inference
-│   ├── neve-eval       # Tree-walking interpreter
-│   ├── neve-derive     # Derivation model (WIP)
-│   ├── neve-store      # Content-addressed store (WIP)
-│   └── ...
-└── tests/              # Integration tests
+│   ├── neve-common      # Shared utilities (interner, spans)
+│   ├── neve-diagnostic  # Error reporting
+│   ├── neve-lexer       # Tokenizer
+│   ├── neve-syntax      # AST definitions
+│   ├── neve-parser      # Recursive descent parser
+│   ├── neve-hir         # Name resolution
+│   ├── neve-typeck      # Type inference
+│   ├── neve-eval        # Tree-walking interpreter
+│   ├── neve-std         # Standard library
+│   ├── neve-derive      # Derivation model
+│   ├── neve-store       # Content-addressed store
+│   ├── neve-fetch       # Source fetching
+│   ├── neve-builder     # Sandboxed builder
+│   ├── neve-config      # System configuration
+│   ├── neve-fmt         # Code formatter
+│   └── neve-lsp         # Language server
+├── neve-cli/            # Command line interface
+└── tests/               # Integration tests
 ```
 
-## Contributing
+### Contributing
 
-This is a learning project and I'm figuring things out as I go. If you:
+Contributions are welcome! If you:
 
-- Find bugs (there are many)
+- Find bugs
 - Have ideas for better syntax
 - Want to help implement features
 - Just want to chat about language design
 
-Please open an issue or PR! I'm especially interested in feedback on the syntax design.
+Please open an issue or PR!
 
-## Name
+### Name
 
 *Neve* means "snow" in Italian and Portuguese - a nod to Nix (Latin for "snow"), but representing a fresh start.
 
-## License
+### License
 
 [MPL-2.0](LICENSE)
 
 ---
 
-*This is a hobby project. Use at your own risk, and expect breaking changes.*
+## 中文
 
----
+Neve 是 Nix 语言的现代替代品。虽然 Nix 非常强大，但 Neve 的目标是提供更清晰的语法和完善的类型系统，让它更加易用。
 
-# Neve
+### 功能特性
 
-> 一门用于系统配置与包管理的纯函数式语言。
+- **词法分析 & 语法分析** - 完整的 Neve 语法解析，支持错误恢复
+- **类型检查** - 完整的 Hindley-Milner 类型推导
+- **求值器** - 表达式的树遍历解释器
+- **LSP** - 编辑器支持，包含语义高亮和符号索引
+- **格式化器** - 可配置风格的代码格式化
+- **REPL** - 交互式求值环境
+- **Store** - 内容寻址存储系统
+- **Derivations** - 带哈希验证的包构建模型
+- **Fetcher** - 从 URL、Git 仓库、本地路径获取源码
+- **Builder** - 沙箱构建执行（Linux）
+- **Config** - 系统配置，支持代际管理和激活
+- **标准库** - 内置 io、list、map、math、option、path、result、set、string 模块
 
-Neve 是我尝试为 Nix 语言创造一个现代替代品。虽然 Nix 非常强大，但我一直觉得它可以更加友好——更清晰的语法，更完善的类型系统。
-
-**这个项目仍处于早期开发阶段。** 很多功能还不完整，甚至完全缺失。如果你对函数式包管理或语言设计感兴趣，非常欢迎提出你的想法和建议！
-
-## 已经能用的
-
-- **词法分析 & 语法分析** - 能解析大部分 Neve 语法
-- **类型检查** - 基础的 Hindley-Milner 推导
-- **求值器** - 简单表达式可以运行
-- **LSP** - 基本的编辑器支持
-
-## 还不能用的
-
-- **包构建** - Derivation 定义了但还不能真正构建
-- **Store** - 还没有内容寻址存储
-- **命令行工具** - 非常不完整
-- **标准库** - 只是个骨架
-- **文档** - 你现在看到的就是大部分了
-
-## Neve 长什么样
+### Neve 长什么样
 
 ```neve
 -- 定义一个简单的包
@@ -165,7 +190,7 @@ let mySystem = #{
 };
 ```
 
-## 为什么要再造一个 Nix？
+### 为什么要再造一个 Nix？
 
 我喜欢 Nix 的理念，但总是被它的语法困扰：
 
@@ -176,56 +201,81 @@ let mySystem = #{
 | 隐式递归 | `rec { }` | 自动检测 |
 | 没有类型安全 | 运行时报错 | 提前发现错误 |
 
-## 从源码构建
+### 安装
+
+#### 从源码构建
 
 ```bash
-git clone https://github.com/MCB-SMART-BOY/neve.git
+git clone https://github.com/mcbgaruda/neve.git
 cd neve
 cargo build --release
-cargo test  # 约 500 个测试，大部分能过！
 ```
 
-## Arch Linux (AUR)
+#### Arch Linux (AUR)
 
 ```bash
 yay -S neve-git
 ```
 
-## 项目结构
+### CLI 使用
+
+```bash
+neve eval "1 + 2"              # 求值表达式
+neve run file.neve             # 运行 Neve 文件
+neve check file.neve           # 类型检查文件
+neve fmt file file.neve        # 格式化文件
+neve repl                      # 启动交互式 REPL
+neve build                     # 构建包
+neve package install <pkg>     # 安装包
+neve package remove <pkg>      # 移除包
+neve search <query>            # 搜索包
+neve info <pkg>                # 显示包信息
+neve config build              # 构建系统配置
+neve config switch             # 切换到新配置
+neve store gc                  # 运行垃圾回收
+neve store info                # 显示 store 信息
+```
+
+### 项目结构
 
 ```
 neve/
 ├── crates/
-│   ├── neve-lexer      # 词法分析
-│   ├── neve-parser     # 递归下降解析器
-│   ├── neve-hir        # 名称解析
-│   ├── neve-typeck     # 类型推导
-│   ├── neve-eval       # 树遍历解释器
-│   ├── neve-derive     # 推导模型 (WIP)
-│   ├── neve-store      # 内容寻址存储 (WIP)
-│   └── ...
-└── tests/              # 集成测试
+│   ├── neve-common      # 共享工具 (字符串池, 位置信息)
+│   ├── neve-diagnostic  # 错误报告
+│   ├── neve-lexer       # 词法分析
+│   ├── neve-syntax      # AST 定义
+│   ├── neve-parser      # 递归下降解析器
+│   ├── neve-hir         # 名称解析
+│   ├── neve-typeck      # 类型推导
+│   ├── neve-eval        # 树遍历解释器
+│   ├── neve-std         # 标准库
+│   ├── neve-derive      # 推导模型
+│   ├── neve-store       # 内容寻址存储
+│   ├── neve-fetch       # 源码获取
+│   ├── neve-builder     # 沙箱构建器
+│   ├── neve-config      # 系统配置
+│   ├── neve-fmt         # 代码格式化
+│   └── neve-lsp         # 语言服务器
+├── neve-cli/            # 命令行界面
+└── tests/               # 集成测试
 ```
 
-## 参与贡献
+### 参与贡献
 
-这是一个学习项目，我也在边做边摸索。如果你：
+欢迎贡献！如果你：
 
-- 发现了 bug（肯定很多）
+- 发现了 bug
 - 对语法设计有更好的想法
 - 想帮忙实现某些功能
 - 只是想聊聊语言设计
 
-欢迎开 issue 或 PR！我特别希望能收到关于语法设计的反馈。
+欢迎开 issue 或 PR！
 
-## 名字的由来
+### 名字的由来
 
 *Neve* 在意大利语和葡萄牙语中意为"雪"——呼应 Nix（拉丁语的"雪"），但代表着一个全新的开始。
 
-## 许可证
+### 许可证
 
 [MPL-2.0](LICENSE)
-
----
-
-*这是个业余项目。使用风险自负，随时可能有破坏性更改。*
