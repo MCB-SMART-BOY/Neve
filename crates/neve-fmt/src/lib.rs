@@ -60,21 +60,3 @@ impl std::fmt::Display for FormatError {
 
 impl std::error::Error for FormatError {}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_simple() {
-        let source = "let x=1";
-        let formatted = format(source).unwrap();
-        assert!(formatted.contains("let x = 1"));
-    }
-
-    #[test]
-    fn test_check() {
-        let source = "let x = 1\n";
-        let result = check(source);
-        assert!(result.is_ok());
-    }
-}

@@ -1,10 +1,11 @@
 //! The `neve store` commands.
 
+use crate::output;
 use neve_store::{Store, gc::GarbageCollector};
 
 /// Run garbage collection.
 pub fn gc() -> Result<(), String> {
-    println!("Running garbage collection...");
+    output::info("Running garbage collection...");
     
     let mut store = Store::open()
         .map_err(|e| format!("Failed to open store: {}", e))?;
@@ -16,22 +17,22 @@ pub fn gc() -> Result<(), String> {
         .map_err(|e| format!("Failed to analyze store: {}", e))?;
     
     if to_delete.is_empty() {
-        println!("No garbage to collect.");
+        output::success("No garbage to collect.");
         return Ok(());
     }
     
-    println!("Found {} paths to delete:", to_delete.len());
+    output::info(&format!("Found {} paths to delete:", to_delete.len()));
     for path in &to_delete {
         println!("  {}", path.display_name());
     }
     
     println!();
-    println!("Deleting...");
+    output::info("Deleting...");
     
     let result = gc.collect()
         .map_err(|e| format!("Failed to collect garbage: {}", e))?;
     
-    println!("Deleted {} paths, freed {}.", result.deleted, result.freed_human());
+    output::success(&format!("Deleted {} paths, freed {}.", result.deleted, result.freed_human()));
     
     Ok(())
 }

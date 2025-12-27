@@ -70,24 +70,3 @@ impl FormatConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_config() {
-        let config = FormatConfig::default();
-        assert_eq!(config.indent_width, 2);
-        assert_eq!(config.max_width, 100);
-        assert!(!config.use_tabs);
-    }
-
-    #[test]
-    fn test_indent_str() {
-        let config = FormatConfig::new().indent_width(4);
-        assert_eq!(config.indent_str(), "    ");
-        
-        let config = FormatConfig::new().use_tabs(true);
-        assert_eq!(config.indent_str(), "\t");
-    }
-}

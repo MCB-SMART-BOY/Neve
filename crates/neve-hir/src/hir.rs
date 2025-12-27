@@ -345,6 +345,17 @@ pub enum ExprKind {
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     Match(Box<Expr>, Vec<MatchArm>),
     Block(Vec<Stmt>, Option<Box<Expr>>),
+    /// Interpolated string `` `hello {name}` ``
+    Interpolated(Vec<StringPart>),
+}
+
+/// A part of an interpolated string.
+#[derive(Debug, Clone)]
+pub enum StringPart {
+    /// Literal string part
+    Literal(String),
+    /// Interpolated expression
+    Expr(Expr),
 }
 
 #[derive(Debug, Clone)]

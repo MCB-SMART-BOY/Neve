@@ -23,6 +23,7 @@ neve-std.workspace = true
 neve-config.workspace = true
 neve-store.workspace = true
 neve-derive.workspace = true
+neve-builder.workspace = true
 neve-fmt.workspace = true
 
 clap.workspace = true

@@ -50,10 +50,10 @@ fn test_all_keywords() {
 #[test]
 fn test_numbers() {
     assert_eq!(
-        lex("42 3.14 0xFF 0b1010"),
+        lex("42 3.25 0xFF 0b1010"),
         vec![
             TokenKind::Int(42),
-            TokenKind::Float(3.14),
+            TokenKind::Float(3.25),
             TokenKind::Int(255),
             TokenKind::Int(10),
             TokenKind::Eof,
@@ -520,7 +520,7 @@ fn test_pipe_chain() {
 #[test]
 fn test_invalid_char() {
     let (tokens, errors) = lex_with_errors("@");
-    assert!(errors > 0 || tokens.len() > 0);
+    assert!(errors > 0 || !tokens.is_empty());
 }
 
 #[test]
@@ -640,4 +640,468 @@ fn test_deeply_nested() {
     let source = "(".repeat(100) + "x" + &")".repeat(100);
     let tokens = lex(&source);
     assert!(tokens.len() > 200);
+}
+
+// ============================================================================
+// Additional Edge Cases - Numbers
+// ============================================================================
+
+#[test]
+fn test_number_with_underscores() {
+    // 1_000_000 style numbers if supported
+    let tokens = lex("1_000_000");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_hex_with_underscores() {
+    let tokens = lex("0xFF_FF");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_binary_with_underscores() {
+    let tokens = lex("0b1111_0000");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_float_very_small() {
+    let tokens = lex("0.000000001");
+    assert!(matches!(tokens[0], TokenKind::Float(_)));
+}
+
+#[test]
+fn test_float_very_large() {
+    let tokens = lex("99999999999.99999999");
+    assert!(matches!(tokens[0], TokenKind::Float(_)));
+}
+
+#[test]
+fn test_consecutive_numbers() {
+    // Should not merge
+    let tokens = lex("123 456");
+    assert_eq!(tokens[0], TokenKind::Int(123));
+    assert_eq!(tokens[1], TokenKind::Int(456));
+}
+
+#[test]
+fn test_number_after_dot() {
+    let tokens = lex("foo.123");
+    // Should be: ident, dot, int
+    assert_eq!(tokens[0], TokenKind::Ident("foo".to_string()));
+    assert_eq!(tokens[1], TokenKind::Dot);
+}
+
+#[test]
+fn test_hex_invalid_digit() {
+    let (tokens, errors) = lex_with_errors("0xGG");
+    // Should produce an error or parse partially
+    assert!(errors > 0 || tokens.len() > 1);
+}
+
+#[test]
+fn test_binary_invalid_digit() {
+    let (tokens, errors) = lex_with_errors("0b222");
+    // Should produce an error or parse partially
+    assert!(errors > 0 || tokens.len() > 1);
+}
+
+#[test]
+fn test_octal_invalid_digit() {
+    let (tokens, errors) = lex_with_errors("0o999");
+    // Should produce an error or parse partially
+    assert!(errors > 0 || tokens.len() > 1);
+}
+
+// ============================================================================
+// Additional Edge Cases - Strings and Characters
+// ============================================================================
+
+#[test]
+fn test_string_with_backslash() {
+    let tokens = lex(r#""path\\to\\file""#);
+    assert!(matches!(&tokens[0], TokenKind::String(_)));
+}
+
+#[test]
+fn test_string_with_null() {
+    let tokens = lex(r#""hello\0world""#);
+    assert!(matches!(&tokens[0], TokenKind::String(_)));
+}
+
+#[test]
+fn test_string_with_hex_escape() {
+    let tokens = lex(r#""hello\x41world""#);
+    assert!(matches!(&tokens[0], TokenKind::String(_)));
+}
+
+#[test]
+fn test_string_with_unicode_escape() {
+    let tokens = lex(r#""hello\u{1F600}world""#);
+    assert!(matches!(&tokens[0], TokenKind::String(_)));
+}
+
+#[test]
+fn test_multiline_string() {
+    let tokens = lex(r#""""
+multiline
+string
+""""#);
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_char_backslash() {
+    let tokens = lex(r"'\\'");
+    assert!(matches!(&tokens[0], TokenKind::Char(_)));
+}
+
+#[test]
+fn test_char_quote() {
+    let tokens = lex(r"'\''");
+    assert!(matches!(&tokens[0], TokenKind::Char(_)));
+}
+
+#[test]
+fn test_char_zero() {
+    let tokens = lex(r"'\0'");
+    assert!(matches!(&tokens[0], TokenKind::Char(_)));
+}
+
+#[test]
+fn test_empty_char() {
+    let (_, errors) = lex_with_errors("''");
+    // Empty char should be an error
+    assert!(errors > 0);
+}
+
+#[test]
+fn test_multi_char() {
+    let (_, errors) = lex_with_errors("'abc'");
+    // Multi-char literal should be an error or handled specially
+    assert!(errors > 0);
+}
+
+#[test]
+fn test_string_with_interpolation_braces() {
+    // Test `{expr}` interpolation syntax in backtick strings
+    let tokens = lex("`hello {name}`");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_string_nested_braces_interpolation() {
+    let tokens = lex("`value: {#{ x = 1 }.x}`");
+    assert!(!tokens.is_empty());
+}
+
+// ============================================================================
+// Additional Edge Cases - Operators and Punctuation
+// ============================================================================
+
+#[test]
+fn test_power_operator() {
+    let tokens = lex("2 ^ 10");
+    assert!(tokens.contains(&TokenKind::Caret));
+}
+
+#[test]
+fn test_at_symbol() {
+    let tokens = lex("x @ pattern");
+    assert!(tokens.contains(&TokenKind::At));
+}
+
+#[test]
+fn test_dotdot() {
+    let tokens = lex("[head, ..tail]");
+    assert!(tokens.contains(&TokenKind::DotDot));
+}
+
+#[test]
+fn test_question_mark() {
+    let tokens = lex("result?");
+    assert!(tokens.contains(&TokenKind::Question));
+}
+
+#[test]
+fn test_hash_alone() {
+    let tokens = lex("#");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_all_brackets_together() {
+    let tokens = lex("#{ list = [( tuple )] }");
+    assert!(tokens.contains(&TokenKind::HashLBrace));
+    assert!(tokens.contains(&TokenKind::LBracket));
+    assert!(tokens.contains(&TokenKind::LParen));
+}
+
+#[test]
+fn test_pipe_operator() {
+    let tokens = lex("a | b");
+    assert!(tokens.contains(&TokenKind::Pipe));
+}
+
+#[test]
+fn test_consecutive_arrows() {
+    let tokens = lex("->->");
+    let arrow_count = tokens.iter().filter(|t| **t == TokenKind::Arrow).count();
+    assert_eq!(arrow_count, 2);
+}
+
+#[test]
+fn test_mixed_comparison() {
+    let tokens = lex("a < b > c <= d >= e == f != g");
+    assert!(tokens.contains(&TokenKind::Lt));
+    assert!(tokens.contains(&TokenKind::Gt));
+    assert!(tokens.contains(&TokenKind::LtEq));
+    assert!(tokens.contains(&TokenKind::GtEq));
+    assert!(tokens.contains(&TokenKind::EqEq));
+    assert!(tokens.contains(&TokenKind::BangEq));
+}
+
+// ============================================================================
+// Additional Edge Cases - Comments
+// ============================================================================
+
+#[test]
+fn test_nested_block_comment() {
+    let tokens = lex("-- outer -- inner -- still outer --\n42");
+    assert!(tokens.contains(&TokenKind::Int(42)));
+}
+
+#[test]
+fn test_comment_with_special_chars() {
+    let tokens = lex("-- 你好 🎉 @#$%^& --\n1");
+    assert!(tokens.contains(&TokenKind::Int(1)));
+}
+
+#[test]
+fn test_comment_immediately_after_token() {
+    let tokens = lex("42-- comment");
+    assert!(tokens.contains(&TokenKind::Int(42)));
+}
+
+#[test]
+fn test_multiple_line_comments() {
+    let tokens = lex("-- line 1\n-- line 2\n-- line 3\n42");
+    assert!(tokens.contains(&TokenKind::Int(42)));
+}
+
+// ============================================================================
+// Path Literals
+// ============================================================================
+
+#[test]
+fn test_dot_starts_range() {
+    // ./ is tokenized as Dot followed by other tokens
+    let tokens = lex("./path");
+    assert!(tokens.contains(&TokenKind::Dot));
+}
+
+#[test]
+fn test_dotdot_operator() {
+    // .. is a range operator
+    let tokens = lex("1..10");
+    assert!(tokens.contains(&TokenKind::DotDot));
+}
+
+#[test]
+fn test_slash_is_division() {
+    let tokens = lex("/absolute/path");
+    // / is parsed as division operator
+    assert!(tokens.contains(&TokenKind::Slash));
+}
+
+#[test]
+fn test_dot_chain() {
+    let tokens = lex("a.b.c");
+    let dot_count = tokens.iter().filter(|t| **t == TokenKind::Dot).count();
+    assert_eq!(dot_count, 2);
+}
+
+#[test]
+fn test_dotdot_range() {
+    let tokens = lex("0..100");
+    assert!(tokens.contains(&TokenKind::Int(0)));
+    assert!(tokens.contains(&TokenKind::DotDot));
+    assert!(tokens.contains(&TokenKind::Int(100)));
+}
+
+// ============================================================================
+// Whitespace and Line Handling
+// ============================================================================
+
+#[test]
+fn test_mixed_whitespace() {
+    let tokens = lex("1 \t \n \r\n 2");
+    assert!(tokens.contains(&TokenKind::Int(1)));
+    assert!(tokens.contains(&TokenKind::Int(2)));
+}
+
+#[test]
+fn test_trailing_whitespace() {
+    let tokens = lex("42   ");
+    assert_eq!(tokens[0], TokenKind::Int(42));
+}
+
+#[test]
+fn test_leading_whitespace() {
+    let tokens = lex("   42");
+    assert_eq!(tokens[0], TokenKind::Int(42));
+}
+
+#[test]
+fn test_only_newlines() {
+    let tokens = lex("\n\n\n");
+    assert_eq!(tokens, vec![TokenKind::Eof]);
+}
+
+#[test]
+fn test_blank_lines_between_tokens() {
+    let tokens = lex("1\n\n\n2");
+    assert!(tokens.contains(&TokenKind::Int(1)));
+    assert!(tokens.contains(&TokenKind::Int(2)));
+}
+
+// ============================================================================
+// Complex Real-World Patterns
+// ============================================================================
+
+#[test]
+fn test_function_definition_tokens() {
+    let tokens = lex("fn add(x: Int, y: Int) -> Int = x + y;");
+    assert!(tokens.contains(&TokenKind::Fn));
+    assert!(tokens.contains(&TokenKind::Arrow));
+    assert!(tokens.contains(&TokenKind::Semicolon));
+}
+
+#[test]
+fn test_let_binding_tokens() {
+    let tokens = lex("let x: Int = 42;");
+    assert!(tokens.contains(&TokenKind::Let));
+    assert!(tokens.contains(&TokenKind::Colon));
+    assert!(tokens.contains(&TokenKind::Eq));
+}
+
+#[test]
+fn test_match_expression_tokens() {
+    let tokens = lex("match x { 0 -> zero, _ -> other }");
+    assert!(tokens.contains(&TokenKind::Match));
+    assert!(tokens.contains(&TokenKind::Arrow));
+    assert!(tokens.contains(&TokenKind::Comma));
+}
+
+#[test]
+fn test_record_with_shorthand() {
+    let tokens = lex("#{ x, y, z = 3 }");
+    assert!(tokens.contains(&TokenKind::HashLBrace));
+    let comma_count = tokens.iter().filter(|t| **t == TokenKind::Comma).count();
+    assert_eq!(comma_count, 2);
+}
+
+#[test]
+fn test_list_comprehension_tokens() {
+    let tokens = lex("[x * 2 | x <- xs, x > 0]");
+    assert!(tokens.contains(&TokenKind::Pipe));
+    // <- is tokenized as Lt + Minus
+    assert!(tokens.contains(&TokenKind::Lt));
+    assert!(tokens.contains(&TokenKind::Minus));
+}
+
+#[test]
+fn test_type_annotation_tokens() {
+    let tokens = lex("x: List<Option<Int>>");
+    assert!(tokens.contains(&TokenKind::Colon));
+    assert!(tokens.contains(&TokenKind::Lt));
+    assert!(tokens.contains(&TokenKind::Gt));
+}
+
+#[test]
+fn test_import_statement_tokens() {
+    let tokens = lex("import std.list (map, filter);");
+    assert!(tokens.contains(&TokenKind::Import));
+    assert!(tokens.contains(&TokenKind::Dot));
+    assert!(tokens.contains(&TokenKind::Semicolon));
+}
+
+#[test]
+fn test_struct_definition_tokens() {
+    let tokens = lex("struct Point { x: Float, y: Float };");
+    assert!(tokens.contains(&TokenKind::Struct));
+    assert!(tokens.contains(&TokenKind::LBrace));
+    assert!(tokens.contains(&TokenKind::RBrace));
+}
+
+#[test]
+fn test_enum_definition_tokens() {
+    let tokens = lex("enum Option<T> { Some(T), None };");
+    assert!(tokens.contains(&TokenKind::Enum));
+    assert!(tokens.contains(&TokenKind::Lt));
+    assert!(tokens.contains(&TokenKind::Gt));
+}
+
+#[test]
+fn test_trait_definition_tokens() {
+    let tokens = lex("trait Show { fn show(self) -> String; };");
+    assert!(tokens.contains(&TokenKind::Trait));
+    assert!(tokens.contains(&TokenKind::SelfLower));
+}
+
+#[test]
+fn test_impl_block_tokens() {
+    let tokens = lex("impl Show for Int { fn show(self) -> String = toString(self); };");
+    assert!(tokens.contains(&TokenKind::Impl));
+    // "for" is parsed as an identifier since it's not a reserved keyword
+    assert!(tokens.contains(&TokenKind::Ident("for".to_string())));
+}
+
+// ============================================================================
+// Boundary and Corner Cases
+// ============================================================================
+
+#[test]
+fn test_max_int() {
+    let tokens = lex("9223372036854775807");
+    assert!(matches!(tokens[0], TokenKind::Int(_)));
+}
+
+#[test]
+fn test_min_negative_after_parse() {
+    // Lexer sees: Minus, Int
+    let tokens = lex("-9223372036854775808");
+    assert!(tokens.contains(&TokenKind::Minus));
+}
+
+#[test]
+fn test_unicode_identifiers() {
+    // Greek letters often used in math
+    let tokens = lex("α β γ δ");
+    // May or may not be valid identifiers
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_emoji_in_string() {
+    let tokens = lex(r#""👋🌍""#);
+    if let TokenKind::String(s) = &tokens[0] {
+        assert!(s.contains('👋'));
+    }
+}
+
+#[test]
+fn test_zero_width_chars() {
+    // Zero-width space between tokens
+    let tokens = lex("1\u{200B}2");
+    // Should parse as two separate integers or handle gracefully
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_bom_at_start() {
+    let tokens = lex("\u{FEFF}42");
+    // BOM should be ignored
+    assert!(tokens.contains(&TokenKind::Int(42)));
 }

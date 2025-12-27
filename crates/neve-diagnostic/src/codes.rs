@@ -39,6 +39,10 @@ pub enum ErrorCode {
     CannotInferType,
     RecursiveType,
     AmbiguousType,
+    NonExhaustiveMatch,
+    UnreachablePattern,
+    PrivateAccess,
+    CyclicDependency,
 
     // Eval errors (E0300 - E0399)
     DivisionByZero,
@@ -85,6 +89,10 @@ impl ErrorCode {
             ErrorCode::CannotInferType => "E0217",
             ErrorCode::RecursiveType => "E0218",
             ErrorCode::AmbiguousType => "E0219",
+            ErrorCode::NonExhaustiveMatch => "E0220",
+            ErrorCode::UnreachablePattern => "E0221",
+            ErrorCode::PrivateAccess => "E0222",
+            ErrorCode::CyclicDependency => "E0223",
 
             // Eval
             ErrorCode::DivisionByZero => "E0300",
@@ -132,6 +140,10 @@ impl ErrorCode {
             ErrorCode::CannotInferType => "cannot infer type",
             ErrorCode::RecursiveType => "recursive type detected",
             ErrorCode::AmbiguousType => "type is ambiguous",
+            ErrorCode::NonExhaustiveMatch => "match expression is not exhaustive",
+            ErrorCode::UnreachablePattern => "unreachable pattern in match",
+            ErrorCode::PrivateAccess => "cannot access private binding",
+            ErrorCode::CyclicDependency => "cyclic dependency detected",
 
             // Eval
             ErrorCode::DivisionByZero => "division by zero",
@@ -153,6 +165,10 @@ impl ErrorCode {
             ErrorCode::MissingField => Some("add the missing field to the record"),
             ErrorCode::MissingMethod => Some("implement all required methods for the trait"),
             ErrorCode::MissingAssocType => Some("specify all required associated types in the impl block"),
+            ErrorCode::NonExhaustiveMatch => Some("add patterns for all possible cases or use a wildcard `_` pattern"),
+            ErrorCode::UnreachablePattern => Some("remove the unreachable pattern or reorder the match arms"),
+            ErrorCode::PrivateAccess => Some("make the binding public with `pub` or access it from within the same module"),
+            ErrorCode::CyclicDependency => Some("break the cycle by restructuring the dependencies"),
             _ => None,
         }
     }

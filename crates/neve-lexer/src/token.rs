@@ -25,6 +25,18 @@ pub enum TokenKind {
     Char(char),
     Bool(bool),
 
+    // Interpolated string parts
+    /// Start of interpolated string `` ` ``
+    InterpolatedStart,
+    /// String part in interpolated string (between { })
+    InterpolatedPart(String),
+    /// End of interpolated string `` ` ``
+    InterpolatedEnd,
+    /// Start of interpolation `{`
+    InterpolationStart,
+    /// End of interpolation `}`
+    InterpolationEnd,
+
     // Identifiers
     Ident(String),
 

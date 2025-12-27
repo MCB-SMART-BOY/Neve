@@ -1,5 +1,6 @@
 //! The `neve config` commands.
 
+use crate::output;
 use neve_config::{
     generate::Generator,
     generation::{GenerationManager, GenerationMetadata},
@@ -54,14 +55,14 @@ fn build_dir() -> PathBuf {
 pub fn build() -> Result<(), String> {
     let config_path = default_config_path();
     
-    println!("Building system configuration from {}...", config_path.display());
+    output::info(&format!("Building system configuration from {}...", config_path.display()));
     
     // Load the configuration module
     let module = if config_path.exists() {
         Module::load(&config_path)
             .map_err(|e| format!("Failed to load configuration: {}", e))?
     } else {
-        println!("No configuration file found, using default configuration.");
+        output::warning("No configuration file found, using default configuration.");
         Module::new("default")
     };
     
@@ -75,7 +76,7 @@ pub fn build() -> Result<(), String> {
     let generated = generator.generate(&system_config)
         .map_err(|e| format!("Failed to generate configuration: {}", e))?;
     
-    println!("Generated {} configuration files.", generated.files.len());
+    output::info(&format!("Generated {} configuration files.", generated.files.len()));
     
     // Create a new generation
     let gen_manager = GenerationManager::new(generations_dir())
@@ -94,10 +95,10 @@ pub fn build() -> Result<(), String> {
     
     system_config.generation = generation.number;
     
-    println!("Created generation {}.", generation.number);
-    println!("Configuration built successfully.");
+    output::success(&format!("Created generation {}.", generation.number));
+    output::success("Configuration built successfully.");
     println!();
-    println!("To activate this configuration, run:");
+    output::info("To activate this configuration, run:");
     println!("  neve config switch");
     
     Ok(())

@@ -33,7 +33,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Float(f) => Ok(Value::Int(*f as i64)),
                     Value::String(s) => s.parse::<i64>()
                         .map(Value::Int)
-                        .map_err(|_| format!("cannot convert '{}' to Int", s)),
+                        .map_err(|_| format!("cannot convert '{s}' to Int")),
                     Value::Bool(b) => Ok(Value::Int(if *b { 1 } else { 0 })),
                     _ => Err("toInt expects Int, Float, String, or Bool".to_string()),
                 }
@@ -48,7 +48,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Float(f) => Ok(Value::Float(*f)),
                     Value::String(s) => s.parse::<f64>()
                         .map(Value::Float)
-                        .map_err(|_| format!("cannot convert '{}' to Float", s)),
+                        .map_err(|_| format!("cannot convert '{s}' to Float")),
                     _ => Err("toFloat expects Int, Float, or String".to_string()),
                 }
             },
@@ -540,7 +540,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Some(v) => Ok((**v).clone()),
                     Value::None => Err("unwrap called on None".to_string()),
                     Value::Ok(v) => Ok((**v).clone()),
-                    Value::Err(e) => Err(format!("unwrap called on Err: {:?}", e)),
+                    Value::Err(e) => Err(format!("unwrap called on Err: {e:?}")),
                     _ => Err("unwrap expects Option or Result".to_string()),
                 }
             },
@@ -716,7 +716,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 if args[0] == args[1] {
                     Ok(Value::Unit)
                 } else {
-                    Err(format!("assertion failed: {:?} != {:?}", args[0], args[1]))
+                    Err(format!("assertion failed: {:?} != {:?}", &args[0], &args[1]))
                 }
             },
         })),
@@ -744,7 +744,581 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 Ok(args[0].clone())
             },
         })),
+        
+        // === Type predicates ===
+        ("isInt", Value::Builtin(BuiltinFn {
+            name: "isInt",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::Int(_)))),
+        })),
+        ("isFloat", Value::Builtin(BuiltinFn {
+            name: "isFloat",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::Float(_)))),
+        })),
+        ("isBool", Value::Builtin(BuiltinFn {
+            name: "isBool",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::Bool(_)))),
+        })),
+        ("isString", Value::Builtin(BuiltinFn {
+            name: "isString",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::String(_)))),
+        })),
+        ("isList", Value::Builtin(BuiltinFn {
+            name: "isList",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::List(_)))),
+        })),
+        ("isRecord", Value::Builtin(BuiltinFn {
+            name: "isRecord",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::Record(_)))),
+        })),
+        ("isFunction", Value::Builtin(BuiltinFn {
+            name: "isFunction",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], 
+                Value::Closure { .. } | Value::AstClosure(_) | Value::Builtin(_) | Value::BuiltinFn(_, _)))),
+        })),
+        
+        // === Derivation helpers ===
+        ("derivation", Value::Builtin(BuiltinFn {
+            name: "derivation",
+            arity: 1,
+            func: |args| {
+                // This is a placeholder - real implementation would create a derivation
+                match &args[0] {
+                    Value::Record(attrs) => {
+                        // Validate required fields
+                        let name = attrs.get("name")
+                            .ok_or("derivation requires 'name' field")?;
+                        let builder = attrs.get("builder")
+                            .ok_or("derivation requires 'builder' field")?;
+                        let system = attrs.get("system")
+                            .ok_or("derivation requires 'system' field")?;
+                        
+                        // Return the derivation as a record with computed fields
+                        let mut result = (**attrs).clone();
+                        result.insert("type".to_string(), Value::String(Rc::new("derivation".to_string())));
+                        
+                        // Compute output path placeholder
+                        let out_path = format!("/neve/store/placeholder-{}", 
+                            match name {
+                                Value::String(s) => s.as_str(),
+                                _ => "unknown",
+                            });
+                        result.insert("outPath".to_string(), Value::String(Rc::new(out_path.clone())));
+                        result.insert("out".to_string(), Value::String(Rc::new(out_path)));
+                        
+                        let _ = (builder, system); // Mark as used
+                        Ok(Value::Record(Rc::new(result)))
+                    }
+                    _ => Err("derivation expects a record".to_string()),
+                }
+            },
+        })),
+        
+        // === Sequence/error handling ===
+        ("seq", Value::Builtin(BuiltinFn {
+            name: "seq",
+            arity: 2,
+            func: |args| {
+                // seq forces evaluation of first arg, returns second
+                let _ = &args[0]; // Force evaluation
+                Ok(args[1].clone())
+            },
+        })),
+        ("deepSeq", Value::Builtin(BuiltinFn {
+            name: "deepSeq",
+            arity: 2,
+            func: |args| {
+                // deepSeq forces deep evaluation of first arg, returns second
+                fn force_deep(v: &Value) {
+                    match v {
+                        Value::List(items) => items.iter().for_each(force_deep),
+                        Value::Record(fields) => fields.values().for_each(force_deep),
+                        Value::Tuple(items) => items.iter().for_each(force_deep),
+                        _ => {}
+                    }
+                }
+                force_deep(&args[0]);
+                Ok(args[1].clone())
+            },
+        })),
+        ("throw", Value::Builtin(BuiltinFn {
+            name: "throw",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::String(msg) => Err(msg.to_string()),
+                    _ => Err(format!("{:?}", args[0])),
+                }
+            },
+        })),
+        
+        // === JSON-like operations ===
+        ("toJSON", Value::Builtin(BuiltinFn {
+            name: "toJSON",
+            arity: 1,
+            func: |args| {
+                Ok(Value::String(Rc::new(value_to_json(&args[0]))))
+            },
+        })),
+        ("fromJSON", Value::Builtin(BuiltinFn {
+            name: "fromJSON",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::String(s) => json_to_value(s.as_str()),
+                    _ => Err("fromJSON expects a string".to_string()),
+                }
+            },
+        })),
+        
+        // === List higher-order operations (non-lazy versions) ===
+        ("concat", Value::Builtin(BuiltinFn {
+            name: "concat",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::List(lists) => {
+                        let mut result = Vec::new();
+                        for item in lists.iter() {
+                            match item {
+                                Value::List(inner) => result.extend(inner.iter().cloned()),
+                                _ => return Err("concat expects a list of lists".to_string()),
+                            }
+                        }
+                        Ok(Value::List(Rc::new(result)))
+                    }
+                    _ => Err("concat expects a list of lists".to_string()),
+                }
+            },
+        })),
+        ("flatten", Value::Builtin(BuiltinFn {
+            name: "flatten",
+            arity: 1,
+            func: |args| {
+                fn flatten_recursive(v: &Value, result: &mut Vec<Value>) {
+                    match v {
+                        Value::List(items) => {
+                            for item in items.iter() {
+                                flatten_recursive(item, result);
+                            }
+                        }
+                        other => result.push(other.clone()),
+                    }
+                }
+                let mut result = Vec::new();
+                flatten_recursive(&args[0], &mut result);
+                Ok(Value::List(Rc::new(result)))
+            },
+        })),
+        ("unique", Value::Builtin(BuiltinFn {
+            name: "unique",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::List(items) => {
+                        let mut seen = Vec::new();
+                        for item in items.iter() {
+                            if !seen.contains(item) {
+                                seen.push(item.clone());
+                            }
+                        }
+                        Ok(Value::List(Rc::new(seen)))
+                    }
+                    _ => Err("unique expects a list".to_string()),
+                }
+            },
+        })),
+        ("partition", Value::Builtin(BuiltinFn {
+            name: "partition",
+            arity: 2,
+            func: |args| {
+                // Note: This is a simplified version that works with boolean predicates
+                // In practice, you'd want to use the AST-based evaluation
+                match &args[1] {
+                    Value::List(items) => {
+                        // For now, partition by truthiness of first element comparison
+                        // Full implementation requires evaluating the predicate function
+                        let (left, right): (Vec<_>, Vec<_>) = items.iter()
+                            .cloned()
+                            .partition(|_| true); // Placeholder
+                        let mut result = std::collections::HashMap::new();
+                        result.insert("left".to_string(), Value::List(Rc::new(left)));
+                        result.insert("right".to_string(), Value::List(Rc::new(right)));
+                        Ok(Value::Record(Rc::new(result)))
+                    }
+                    _ => Err("partition expects (predicate, list)".to_string()),
+                }
+            },
+        })),
+        
+        // === Bitwise operations ===
+        ("bitAnd", Value::Builtin(BuiltinFn {
+            name: "bitAnd",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a & b)),
+                    _ => Err("bitAnd expects two integers".to_string()),
+                }
+            },
+        })),
+        ("bitOr", Value::Builtin(BuiltinFn {
+            name: "bitOr",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a | b)),
+                    _ => Err("bitOr expects two integers".to_string()),
+                }
+            },
+        })),
+        ("bitXor", Value::Builtin(BuiltinFn {
+            name: "bitXor",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a ^ b)),
+                    _ => Err("bitXor expects two integers".to_string()),
+                }
+            },
+        })),
+        ("bitNot", Value::Builtin(BuiltinFn {
+            name: "bitNot",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::Int(a) => Ok(Value::Int(!a)),
+                    _ => Err("bitNot expects an integer".to_string()),
+                }
+            },
+        })),
+        ("bitShiftLeft", Value::Builtin(BuiltinFn {
+            name: "bitShiftLeft",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a << b)),
+                    _ => Err("bitShiftLeft expects two integers".to_string()),
+                }
+            },
+        })),
+        ("bitShiftRight", Value::Builtin(BuiltinFn {
+            name: "bitShiftRight",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a >> b)),
+                    _ => Err("bitShiftRight expects two integers".to_string()),
+                }
+            },
+        })),
+        
+        // === String formatting ===
+        ("padLeft", Value::Builtin(BuiltinFn {
+            name: "padLeft",
+            arity: 3,
+            func: |args| {
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::Int(width), Value::String(pad), Value::String(s)) => {
+                        let width = *width as usize;
+                        if s.len() >= width {
+                            Ok(Value::String(s.clone()))
+                        } else {
+                            let pad_char = pad.chars().next().unwrap_or(' ');
+                            let padding: String = std::iter::repeat_n(pad_char, width - s.len()).collect();
+                            Ok(Value::String(Rc::new(format!("{}{}", padding, s))))
+                        }
+                    }
+                    _ => Err("padLeft expects (Int, String, String)".to_string()),
+                }
+            },
+        })),
+        ("padRight", Value::Builtin(BuiltinFn {
+            name: "padRight",
+            arity: 3,
+            func: |args| {
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::Int(width), Value::String(pad), Value::String(s)) => {
+                        let width = *width as usize;
+                        if s.len() >= width {
+                            Ok(Value::String(s.clone()))
+                        } else {
+                            let pad_char = pad.chars().next().unwrap_or(' ');
+                            let padding: String = std::iter::repeat_n(pad_char, width - s.len()).collect();
+                            Ok(Value::String(Rc::new(format!("{}{}", s, padding))))
+                        }
+                    }
+                    _ => Err("padRight expects (Int, String, String)".to_string()),
+                }
+            },
+        })),
+        
+        // === Comparison ===
+        ("compare", Value::Builtin(BuiltinFn {
+            name: "compare",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(match a.cmp(b) {
+                        std::cmp::Ordering::Less => -1,
+                        std::cmp::Ordering::Equal => 0,
+                        std::cmp::Ordering::Greater => 1,
+                    })),
+                    (Value::Float(a), Value::Float(b)) => {
+                        Ok(Value::Int(if a < b { -1 } else if a > b { 1 } else { 0 }))
+                    }
+                    (Value::String(a), Value::String(b)) => Ok(Value::Int(match a.cmp(b) {
+                        std::cmp::Ordering::Less => -1,
+                        std::cmp::Ordering::Equal => 0,
+                        std::cmp::Ordering::Greater => 1,
+                    })),
+                    _ => Err("compare expects two comparable values of same type".to_string()),
+                }
+            },
+        })),
+        
+        // === Record merging ===
+        ("merge", Value::Builtin(BuiltinFn {
+            name: "merge",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::Record(a), Value::Record(b)) => {
+                        let mut result = (**a).clone();
+                        result.extend((**b).clone());
+                        Ok(Value::Record(Rc::new(result)))
+                    }
+                    _ => Err("merge expects two records".to_string()),
+                }
+            },
+        })),
+        ("mergeRecursive", Value::Builtin(BuiltinFn {
+            name: "mergeRecursive",
+            arity: 2,
+            func: |args| {
+                fn merge_deep(a: &Value, b: &Value) -> Value {
+                    match (a, b) {
+                        (Value::Record(ra), Value::Record(rb)) => {
+                            let mut result = (**ra).clone();
+                            for (k, v) in rb.iter() {
+                                if let Some(existing) = result.get(k) {
+                                    result.insert(k.clone(), merge_deep(existing, v));
+                                } else {
+                                    result.insert(k.clone(), v.clone());
+                                }
+                            }
+                            Value::Record(Rc::new(result))
+                        }
+                        (_, b) => b.clone(),
+                    }
+                }
+                Ok(merge_deep(&args[0], &args[1]))
+            },
+        })),
     ]
+}
+
+/// Parse JSON string to value.
+fn json_to_value(s: &str) -> Result<Value, String> {
+    let s = s.trim();
+    
+    if s.is_empty() {
+        return Err("empty JSON string".to_string());
+    }
+    
+    // Parse based on first character
+    match s.chars().next().unwrap() {
+        'n' if s == "null" => Ok(Value::None),
+        't' if s == "true" => Ok(Value::Bool(true)),
+        'f' if s == "false" => Ok(Value::Bool(false)),
+        '"' => {
+            // Parse string
+            if s.len() < 2 || !s.ends_with('"') {
+                return Err("invalid JSON string".to_string());
+            }
+            let inner = &s[1..s.len()-1];
+            // Handle escape sequences
+            let mut result = String::new();
+            let mut chars = inner.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    match chars.next() {
+                        Some('n') => result.push('\n'),
+                        Some('r') => result.push('\r'),
+                        Some('t') => result.push('\t'),
+                        Some('\\') => result.push('\\'),
+                        Some('"') => result.push('"'),
+                        Some('/') => result.push('/'),
+                        Some('u') => {
+                            // Unicode escape
+                            let hex: String = chars.by_ref().take(4).collect();
+                            if let Ok(code) = u32::from_str_radix(&hex, 16)
+                                && let Some(c) = char::from_u32(code)
+                            {
+                                result.push(c);
+                            }
+                        }
+                        _ => return Err("invalid escape sequence".to_string()),
+                    }
+                } else {
+                    result.push(c);
+                }
+            }
+            Ok(Value::String(Rc::new(result)))
+        }
+        '[' => {
+            // Parse array
+            if !s.ends_with(']') {
+                return Err("invalid JSON array".to_string());
+            }
+            let inner = s[1..s.len()-1].trim();
+            if inner.is_empty() {
+                return Ok(Value::List(Rc::new(Vec::new())));
+            }
+            
+            let elements = split_json_elements(inner)?;
+            let values: Result<Vec<_>, _> = elements.iter().map(|e| json_to_value(e)).collect();
+            Ok(Value::List(Rc::new(values?)))
+        }
+        '{' => {
+            // Parse object
+            if !s.ends_with('}') {
+                return Err("invalid JSON object".to_string());
+            }
+            let inner = s[1..s.len()-1].trim();
+            if inner.is_empty() {
+                return Ok(Value::Record(Rc::new(std::collections::HashMap::new())));
+            }
+            
+            let pairs = split_json_elements(inner)?;
+            let mut record = std::collections::HashMap::new();
+            for pair in pairs {
+                let pair = pair.trim();
+                if let Some(colon_pos) = find_json_colon(pair) {
+                    let key = pair[..colon_pos].trim();
+                    let value = pair[colon_pos+1..].trim();
+                    
+                    // Key must be a string
+                    if !key.starts_with('"') || !key.ends_with('"') {
+                        return Err("JSON object keys must be strings".to_string());
+                    }
+                    let key_str = &key[1..key.len()-1];
+                    let value = json_to_value(value)?;
+                    record.insert(key_str.to_string(), value);
+                } else {
+                    return Err("invalid JSON object pair".to_string());
+                }
+            }
+            Ok(Value::Record(Rc::new(record)))
+        }
+        c if c == '-' || c.is_ascii_digit() => {
+            // Parse number
+            if s.contains('.') || s.contains('e') || s.contains('E') {
+                s.parse::<f64>()
+                    .map(Value::Float)
+                    .map_err(|_| "invalid JSON number".to_string())
+            } else {
+                s.parse::<i64>()
+                    .map(Value::Int)
+                    .map_err(|_| "invalid JSON number".to_string())
+            }
+        }
+        _ => Err(format!("unexpected JSON token: {}", s)),
+    }
+}
+
+/// Split JSON array/object elements respecting nesting.
+fn split_json_elements(s: &str) -> Result<Vec<&str>, String> {
+    let mut elements = Vec::new();
+    let mut start = 0;
+    let mut depth = 0;
+    let mut in_string = false;
+    let mut escape = false;
+    
+    for (i, c) in s.char_indices() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        
+        match c {
+            '\\' if in_string => escape = true,
+            '"' => in_string = !in_string,
+            '[' | '{' if !in_string => depth += 1,
+            ']' | '}' if !in_string => depth -= 1,
+            ',' if !in_string && depth == 0 => {
+                elements.push(s[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    
+    if start < s.len() {
+        elements.push(s[start..].trim());
+    }
+    
+    Ok(elements)
+}
+
+/// Find the colon in a JSON key-value pair respecting strings.
+fn find_json_colon(s: &str) -> Option<usize> {
+    let mut in_string = false;
+    let mut escape = false;
+    
+    for (i, c) in s.char_indices() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        
+        match c {
+            '\\' if in_string => escape = true,
+            '"' => in_string = !in_string,
+            ':' if !in_string => return Some(i),
+            _ => {}
+        }
+    }
+    
+    None
+}
+
+/// Convert a value to JSON string.
+fn value_to_json(v: &Value) -> String {
+    match v {
+        Value::Unit => "null".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Int(n) => n.to_string(),
+        Value::Float(f) => {
+            if f.is_nan() {
+                "null".to_string()
+            } else if f.is_infinite() {
+                if *f > 0.0 { "1e309".to_string() } else { "-1e309".to_string() }
+            } else {
+                f.to_string()
+            }
+        }
+        Value::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")),
+        Value::List(items) => {
+            let parts: Vec<String> = items.iter().map(value_to_json).collect();
+            format!("[{}]", parts.join(","))
+        }
+        Value::Record(fields) => {
+            let parts: Vec<String> = fields.iter()
+                .map(|(k, v)| format!("\"{}\":{}", k, value_to_json(v)))
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+        Value::None => "null".to_string(),
+        Value::Some(v) => value_to_json(v),
+        _ => "null".to_string(),
+    }
 }
 
 /// Format a value for display (user-friendly, not debug).
@@ -755,13 +1329,13 @@ pub fn format_value(v: &Value) -> String {
         Value::Int(n) => n.to_string(),
         Value::Float(f) => {
             if f.fract() == 0.0 {
-                format!("{}.0", f)
+                format!("{f}.0")
             } else {
                 f.to_string()
             }
         }
-        Value::Char(c) => format!("'{}'", c),
-        Value::String(s) => format!("\"{}\"", s),
+        Value::Char(c) => format!("'{c}'"),
+        Value::String(s) => format!("\"{s}\""),
         Value::List(items) => {
             let parts: Vec<String> = items.iter().map(format_value).collect();
             format!("[{}]", parts.join(", "))
@@ -789,7 +1363,7 @@ pub fn format_value(v: &Value) -> String {
         Value::Closure { .. } => "<function>".to_string(),
         Value::AstClosure(_) => "<function>".to_string(),
         Value::Builtin(f) => format!("<builtin:{}>", f.name),
-        Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
+        Value::BuiltinFn(name, _) => format!("<builtin:{name}>"),
         Value::Variant(tag, payload) => {
             if matches!(**payload, Value::Unit) {
                 tag.clone()
@@ -804,7 +1378,7 @@ pub fn format_value(v: &Value) -> String {
     }
 }
 
-#[allow(dead_code)]
+/// Extension trait for functional pipe-style chaining.
 trait Pipe: Sized {
     fn pipe<F, R>(self, f: F) -> R
     where

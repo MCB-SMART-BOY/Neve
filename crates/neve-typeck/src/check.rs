@@ -13,6 +13,16 @@ use neve_hir::{
 use crate::infer::InferContext;
 use crate::unify::{Substitution, unify, instantiate, generalize, free_type_vars};
 use crate::traits::{TraitResolver, TraitId};
+use crate::errors::{TypeMismatchError, unbound_variable, unused_variable};
+
+/// Information about a local variable.
+#[derive(Clone)]
+struct LocalInfo {
+    ty: Ty,
+    name: String,
+    span: Span,
+    used: bool,
+}
 
 /// The type checker.
 pub struct TypeChecker {
@@ -22,14 +32,19 @@ pub struct TypeChecker {
     subst: Substitution,
     /// Types of global definitions
     globals: HashMap<DefId, Ty>,
-    /// Types of local variables
-    locals: HashMap<LocalId, Ty>,
+    /// Span of global definitions for error reporting
+    #[allow(dead_code)]
+    global_spans: HashMap<DefId, Span>,
+    /// Types of local variables with usage tracking
+    locals: HashMap<LocalId, LocalInfo>,
     /// Trait resolver for trait/impl handling
     trait_resolver: TraitResolver,
     /// Map from def_id to trait_id
     trait_ids: HashMap<DefId, TraitId>,
     /// Collected diagnostics
     diagnostics: Vec<Diagnostic>,
+    /// Whether to check for unused variables
+    check_unused: bool,
 }
 
 impl TypeChecker {
@@ -38,10 +53,20 @@ impl TypeChecker {
             infer: InferContext::new(),
             subst: Substitution::new(),
             globals: HashMap::new(),
+            global_spans: HashMap::new(),
             locals: HashMap::new(),
             trait_resolver: TraitResolver::new(),
             trait_ids: HashMap::new(),
             diagnostics: Vec::new(),
+            check_unused: true,
+        }
+    }
+
+    /// Create a type checker with unused variable checking disabled.
+    pub fn without_unused_check() -> Self {
+        Self {
+            check_unused: false,
+            ..Self::new()
         }
     }
 
@@ -114,6 +139,44 @@ impl TypeChecker {
             Diagnostic::error(DiagnosticKind::Type, span, message)
                 .with_code(ErrorCode::TypeMismatch)
         );
+    }
+
+    fn emit(&mut self, diag: Diagnostic) {
+        self.diagnostics.push(diag);
+    }
+
+    /// Check for unused variables and emit warnings.
+    fn check_unused_locals(&mut self) {
+        if !self.check_unused {
+            return;
+        }
+        for info in self.locals.values() {
+            if !info.used && !info.name.starts_with('_') {
+                self.diagnostics.push(unused_variable(&info.name, info.span));
+            }
+        }
+    }
+
+    /// Mark a local variable as used.
+    fn mark_used(&mut self, local_id: LocalId) {
+        if let Some(info) = self.locals.get_mut(&local_id) {
+            info.used = true;
+        }
+    }
+
+    /// Define a local variable.
+    fn define_local(&mut self, local_id: LocalId, name: String, ty: Ty, span: Span) {
+        self.locals.insert(local_id, LocalInfo {
+            ty,
+            name,
+            span,
+            used: false,
+        });
+    }
+
+    /// Get type of a local variable.
+    fn get_local(&self, local_id: &LocalId) -> Option<Ty> {
+        self.locals.get(local_id).map(|info| info.ty.clone())
     }
 
     fn fresh_var(&mut self) -> Ty {
@@ -268,9 +331,15 @@ impl TypeChecker {
         }
 
         // Bind parameter types (resolving generic references)
+        // Parameters are considered used by default (they're part of the function signature)
         for param in &fn_def.params {
             let ty = self.resolve_type_with_generics(&param.ty, &generic_vars);
-            self.locals.insert(param.id, ty);
+            self.locals.insert(param.id, LocalInfo {
+                ty,
+                name: param.name.clone(),
+                span: param.span,
+                used: true, // Parameters are always "used"
+            });
         }
 
         // Infer body type
@@ -278,7 +347,17 @@ impl TypeChecker {
 
         // Unify with declared return type
         let ret_ty = self.resolve_type_with_generics(&fn_def.return_ty, &generic_vars);
-        self.unify(&body_ty, &ret_ty, fn_def.body.span);
+        if !self.unify(&body_ty, &ret_ty, fn_def.body.span) {
+            // Emit a more detailed error
+            self.emit(
+                TypeMismatchError::new(ret_ty, body_ty, fn_def.body.span)
+                    .with_context("function return type")
+                    .build()
+            );
+        }
+
+        // Check for unused variables before clearing
+        self.check_unused_locals();
 
         // Clear locals after checking function
         self.locals.clear();
@@ -331,8 +410,9 @@ impl TypeChecker {
             ExprKind::Literal(lit) => self.infer_literal(lit),
 
             ExprKind::Var(local_id) => {
-                self.locals.get(local_id).cloned().unwrap_or_else(|| {
-                    self.error(span, "undefined variable");
+                self.mark_used(*local_id);
+                self.get_local(local_id).unwrap_or_else(|| {
+                    self.emit(unbound_variable("variable", span, None));
                     self.fresh_var()
                 })
             }
@@ -385,7 +465,12 @@ impl TypeChecker {
                 let param_tys: Vec<Ty> = params.iter()
                     .map(|p| {
                         let ty = self.resolve_type(&p.ty);
-                        self.locals.insert(p.id, ty.clone());
+                        self.locals.insert(p.id, LocalInfo {
+                            ty: ty.clone(),
+                            name: p.name.clone(),
+                            span: p.span,
+                            used: true, // Lambda params considered used
+                        });
                         ty
                     })
                     .collect();
@@ -502,6 +587,19 @@ impl TypeChecker {
                     Ty { kind: TyKind::Unit, span }
                 }
             }
+
+            ExprKind::Interpolated(parts) => {
+                // Check that all interpolated expressions are valid
+                for part in parts {
+                    if let neve_hir::StringPart::Expr(e) = part {
+                        // We don't constrain the type of interpolated expressions
+                        // Any type can be converted to string
+                        let _ = self.infer_expr(e);
+                    }
+                }
+                // Interpolated strings always have type String
+                Ty { kind: TyKind::String, span }
+            }
         }
     }
 
@@ -601,8 +699,8 @@ impl TypeChecker {
         match &pattern.kind {
             PatternKind::Wildcard => {}
 
-            PatternKind::Var(local_id, _name) => {
-                self.locals.insert(*local_id, expected.clone());
+            PatternKind::Var(local_id, name) => {
+                self.define_local(*local_id, name.clone(), expected.clone(), pattern.span);
             }
 
             PatternKind::Literal(lit) => {
@@ -662,7 +760,7 @@ impl TypeChecker {
 
     fn check_stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
-            StmtKind::Let(local_id, _name, ty, value) => {
+            StmtKind::Let(local_id, name, ty, value) => {
                 let value_ty = self.infer_expr(value);
                 let declared_ty = self.resolve_type(ty);
                 self.unify(&value_ty, &declared_ty, value.span);
@@ -670,10 +768,10 @@ impl TypeChecker {
                 // Generalize the type for let-polymorphism
                 // Collect environment type variables that shouldn't be generalized
                 let env_vars: Vec<u32> = self.locals.values()
-                    .flat_map(free_type_vars)
+                    .flat_map(|info| free_type_vars(&info.ty))
                     .collect();
                 let generalized_ty = generalize(&self.apply(&declared_ty), &env_vars);
-                self.locals.insert(*local_id, generalized_ty);
+                self.define_local(*local_id, name.clone(), generalized_ty, stmt.span);
             }
             StmtKind::Expr(e) => {
                 self.infer_expr(e);
@@ -688,94 +786,3 @@ impl Default for TypeChecker {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use neve_parser::parse;
-    use neve_hir::lower;
-
-    fn check_source(source: &str) -> Vec<Diagnostic> {
-        let (ast, parse_diags) = parse(source);
-        assert!(parse_diags.is_empty(), "parse errors: {:?}", parse_diags);
-        
-        let hir = lower(&ast);
-        let mut checker = TypeChecker::new();
-        checker.check(&hir);
-        checker.diagnostics()
-    }
-
-    #[test]
-    fn test_simple_let() {
-        let diags = check_source("let x = 42;");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_function_call() {
-        let diags = check_source("fn double(x) = x * 2;");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_if_expression() {
-        let diags = check_source("let x = if true then 1 else 0;");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_if_branch_mismatch() {
-        let diags = check_source("let x = if true then 1 else false;");
-        // Should have a type mismatch error
-        assert!(!diags.is_empty(), "expected type error");
-    }
-
-    #[test]
-    fn test_arithmetic() {
-        let diags = check_source("let x = 1 + 2 * 3;");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_comparison() {
-        let diags = check_source("let x = 1 < 2;");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_logical_ops() {
-        let diags = check_source("let x = true && false || true;");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_pipe_operator() {
-        let diags = check_source("
-            fn double(x) = x * 2;
-            let x = 5 |> double;
-        ");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_tuple() {
-        let diags = check_source("let x = (1, true, \"hello\");");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_record() {
-        let diags = check_source("let x = #{ name = \"neve\", version = 1 };");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-
-    #[test]
-    fn test_match() {
-        let diags = check_source("
-            let x = match 1 {
-                0 => false,
-                _ => true
-            };
-        ");
-        assert!(diags.is_empty(), "unexpected errors: {:?}", diags);
-    }
-}

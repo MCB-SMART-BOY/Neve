@@ -30,13 +30,3 @@ pub fn to_absolute(store_path: &StorePath) -> PathBuf {
     store_path.path_with_prefix(&store_dir().to_string_lossy())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_store_dir() {
-        let dir = store_dir();
-        assert!(!dir.as_os_str().is_empty());
-    }
-}

@@ -4,13 +4,23 @@
 
 use neve_parser::parse;
 use neve_hir::lower;
-use neve_eval::{Evaluator, Value, EvalError};
+use neve_eval::{Evaluator, Value, EvalError, AstEvaluator};
 
 fn eval_source(source: &str) -> Result<Value, EvalError> {
     let (ast, _) = parse(source);
     let hir = lower(&ast);
     let mut eval = Evaluator::new();
     eval.eval_module(&hir)
+}
+
+/// Evaluate source with builtins available (using AstEvaluator).
+fn eval_with_builtins(source: &str) -> Result<Value, String> {
+    let (ast, errors) = parse(source);
+    if !errors.is_empty() {
+        return Err(format!("parse error: {:?}", errors));
+    }
+    let mut eval = AstEvaluator::new();
+    eval.eval_file(&ast).map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -44,9 +54,8 @@ fn test_eval_integer_large() {
 fn test_eval_integer_min() {
     // Note: Parser might handle this differently
     let result = eval_source("let x = -9223372036854775807;");
-    match result {
-        Ok(Value::Int(n)) => assert_eq!(n, -9223372036854775807),
-        _ => {}
+    if let Ok(Value::Int(n)) = result {
+        assert_eq!(n, -9223372036854775807);
     }
 }
 
@@ -64,16 +73,16 @@ fn test_eval_float_zero() {
 
 #[test]
 fn test_eval_float_positive() {
-    match eval_source("let x = 3.14159;") {
-        Ok(Value::Float(f)) => assert!((f - 3.14159).abs() < 0.00001),
+    match eval_source("let x = 3.25;") {
+        Ok(Value::Float(f)) => assert!((f - 3.25).abs() < 0.00001),
         other => panic!("expected float, got {:?}", other),
     }
 }
 
 #[test]
 fn test_eval_float_negative() {
-    match eval_source("let x = -2.718;") {
-        Ok(Value::Float(f)) => assert!((f - (-2.718)).abs() < 0.001),
+    match eval_source("let x = -2.5;") {
+        Ok(Value::Float(f)) => assert!((f - (-2.5)).abs() < 0.001),
         other => panic!("expected float, got {:?}", other),
     }
 }
@@ -300,9 +309,8 @@ fn test_eval_negative_division() {
 #[test]
 fn test_eval_negative_modulo() {
     let result = eval_source("let x = -17 % 5;");
-    match result {
-        Ok(Value::Int(n)) => assert_eq!(n, -17 % 5),
-        _ => {}
+    if let Ok(Value::Int(n)) = result {
+        assert_eq!(n, -17 % 5);
     }
 }
 
@@ -937,9 +945,8 @@ fn test_eval_match_tuple_nested() {
 fn test_eval_match_list_pattern() {
     // Match a specific list
     let result = eval_source("let x = match [1, 2] { [a, b] => a + b, _ => 0 };");
-    match result {
-        Ok(Value::Int(n)) => assert_eq!(n, 3),
-        _ => {}
+    if let Ok(Value::Int(n)) = result {
+        assert_eq!(n, 3);
     }
 }
 
@@ -1204,5 +1211,568 @@ fn test_eval_float_int_addition() {
     match eval_source("let x = 2.5 + 1;") {
         Ok(Value::Float(f)) => assert!((f - 3.5).abs() < f64::EPSILON),
         other => panic!("expected float, got {:?}", other),
+    }
+}
+
+// ============================================================================
+// Builtin 函数测试 - 新增函数 (使用 AstEvaluator)
+// ============================================================================
+
+#[test]
+fn test_eval_builtin_length_string() {
+    let result = eval_with_builtins("let x = length(\"hello\");");
+    assert!(matches!(result, Ok(Value::Int(5))));
+}
+
+#[test]
+fn test_eval_builtin_length_list() {
+    assert!(matches!(eval_with_builtins("let x = length([1, 2, 3, 4, 5]);"), Ok(Value::Int(5))));
+}
+
+#[test]
+fn test_eval_builtin_length_empty_list() {
+    assert!(matches!(eval_with_builtins("let x = length([]);"), Ok(Value::Int(0))));
+}
+
+#[test]
+fn test_eval_builtin_head() {
+    assert!(matches!(eval_with_builtins("let x = head([1, 2, 3]);"), Ok(Value::Int(1))));
+}
+
+#[test]
+fn test_eval_builtin_tail() {
+    let result = eval_with_builtins("let x = tail([1, 2, 3]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 2);
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_null_empty() {
+    assert!(matches!(eval_with_builtins("let x = null([]);"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_null_nonempty() {
+    assert!(matches!(eval_with_builtins("let x = null([1]);"), Ok(Value::Bool(false))));
+}
+
+#[test]
+fn test_eval_builtin_elem_found() {
+    assert!(matches!(eval_with_builtins("let x = elem(2, [1, 2, 3]);"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_elem_not_found() {
+    assert!(matches!(eval_with_builtins("let x = elem(5, [1, 2, 3]);"), Ok(Value::Bool(false))));
+}
+
+#[test]
+fn test_eval_builtin_to_string_int() {
+    assert!(matches!(eval_with_builtins("let x = toString(42);"), Ok(Value::String(s)) if s.as_str() == "42"));
+}
+
+#[test]
+fn test_eval_builtin_to_string_bool() {
+    assert!(matches!(eval_with_builtins("let x = toString(true);"), Ok(Value::String(s)) if s.as_str() == "true"));
+}
+
+#[test]
+fn test_eval_builtin_type_of_int() {
+    assert!(matches!(eval_with_builtins("let x = typeOf(42);"), Ok(Value::String(s)) if s.as_str() == "int"));
+}
+
+#[test]
+fn test_eval_builtin_type_of_string() {
+    assert!(matches!(eval_with_builtins("let x = typeOf(\"hello\");"), Ok(Value::String(s)) if s.as_str() == "string"));
+}
+
+#[test]
+fn test_eval_builtin_type_of_list() {
+    assert!(matches!(eval_with_builtins("let x = typeOf([1, 2]);"), Ok(Value::String(s)) if s.as_str() == "list"));
+}
+
+#[test]
+fn test_eval_builtin_type_of_bool() {
+    assert!(matches!(eval_with_builtins("let x = typeOf(true);"), Ok(Value::String(s)) if s.as_str() == "bool"));
+}
+
+#[test]
+fn test_eval_builtin_is_int_true() {
+    assert!(matches!(eval_with_builtins("let x = isInt(42);"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_is_int_false() {
+    assert!(matches!(eval_with_builtins("let x = isInt(\"hello\");"), Ok(Value::Bool(false))));
+}
+
+#[test]
+fn test_eval_builtin_is_string_true() {
+    assert!(matches!(eval_with_builtins("let x = isString(\"hello\");"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_is_list_true() {
+    assert!(matches!(eval_with_builtins("let x = isList([1, 2]);"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_is_bool_true() {
+    assert!(matches!(eval_with_builtins("let x = isBool(false);"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_abs_positive() {
+    assert!(matches!(eval_with_builtins("let x = abs(42);"), Ok(Value::Int(42))));
+}
+
+#[test]
+fn test_eval_builtin_abs_negative() {
+    assert!(matches!(eval_with_builtins("let x = abs(-42);"), Ok(Value::Int(42))));
+}
+
+#[test]
+fn test_eval_builtin_min_two() {
+    assert!(matches!(eval_with_builtins("let x = min(3, 7);"), Ok(Value::Int(3))));
+}
+
+#[test]
+fn test_eval_builtin_max_two() {
+    assert!(matches!(eval_with_builtins("let x = max(3, 7);"), Ok(Value::Int(7))));
+}
+
+#[test]
+fn test_eval_builtin_floor() {
+    assert!(matches!(eval_with_builtins("let x = floor(3.7);"), Ok(Value::Int(3))));
+}
+
+#[test]
+fn test_eval_builtin_ceil() {
+    assert!(matches!(eval_with_builtins("let x = ceil(3.2);"), Ok(Value::Int(4))));
+}
+
+#[test]
+fn test_eval_builtin_round() {
+    assert!(matches!(eval_with_builtins("let x = round(3.5);"), Ok(Value::Int(4))));
+}
+
+#[test]
+fn test_eval_builtin_to_int() {
+    assert!(matches!(eval_with_builtins("let x = toInt(3.9);"), Ok(Value::Int(3))));
+}
+
+#[test]
+fn test_eval_builtin_to_float() {
+    match eval_with_builtins("let x = toFloat(42);") {
+        Ok(Value::Float(f)) => assert!((f - 42.0).abs() < f64::EPSILON),
+        other => panic!("expected float, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_map() {
+    let result = eval_with_builtins("
+        let double = fn(x) x * 2;
+        let x = map(double, [1, 2, 3]);
+    ");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], Value::Int(2)));
+            assert!(matches!(items[1], Value::Int(4)));
+            assert!(matches!(items[2], Value::Int(6)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_filter() {
+    let result = eval_with_builtins("
+        let isEven = fn(x) x % 2 == 0;
+        let x = filter(isEven, [1, 2, 3, 4, 5, 6]);
+    ");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], Value::Int(2)));
+            assert!(matches!(items[1], Value::Int(4)));
+            assert!(matches!(items[2], Value::Int(6)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_foldl() {
+    let result = eval_with_builtins("
+        let add = fn(a, b) a + b;
+        let x = foldl(add, 0, [1, 2, 3, 4, 5]);
+    ");
+    assert!(matches!(result, Ok(Value::Int(15))));
+}
+
+#[test]
+fn test_eval_builtin_foldr() {
+    let result = eval_with_builtins("
+        let sub = fn(a, b) a - b;
+        let x = foldr(sub, 0, [1, 2, 3]);
+    ");
+    // foldr sub 0 [1, 2, 3] = 1 - (2 - (3 - 0)) = 1 - (2 - 3) = 1 - (-1) = 2
+    assert!(matches!(result, Ok(Value::Int(2))));
+}
+
+#[test]
+fn test_eval_builtin_reverse() {
+    let result = eval_with_builtins("let x = reverse([1, 2, 3]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], Value::Int(3)));
+            assert!(matches!(items[1], Value::Int(2)));
+            assert!(matches!(items[2], Value::Int(1)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_sort() {
+    let result = eval_with_builtins("let x = sort([3, 1, 4, 1, 5, 9, 2, 6]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 8);
+            assert!(matches!(items[0], Value::Int(1)));
+            assert!(matches!(items[1], Value::Int(1)));
+            assert!(matches!(items[2], Value::Int(2)));
+            assert!(matches!(items[7], Value::Int(9)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_take() {
+    let result = eval_with_builtins("let x = take(3, [1, 2, 3, 4, 5]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], Value::Int(1)));
+            assert!(matches!(items[2], Value::Int(3)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_drop() {
+    let result = eval_with_builtins("let x = drop(2, [1, 2, 3, 4, 5]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], Value::Int(3)));
+            assert!(matches!(items[2], Value::Int(5)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_any() {
+    let result = eval_with_builtins("
+        let isNegative = fn(x) x < 0;
+        let x = any(isNegative, [1, -2, 3]);
+    ");
+    assert!(matches!(result, Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_any_false() {
+    let result = eval_with_builtins("
+        let isNegative = fn(x) x < 0;
+        let x = any(isNegative, [1, 2, 3]);
+    ");
+    assert!(matches!(result, Ok(Value::Bool(false))));
+}
+
+#[test]
+fn test_eval_builtin_all() {
+    let result = eval_with_builtins("
+        let isPositive = fn(x) x > 0;
+        let x = all(isPositive, [1, 2, 3]);
+    ");
+    assert!(matches!(result, Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_all_false() {
+    let result = eval_with_builtins("
+        let isPositive = fn(x) x > 0;
+        let x = all(isPositive, [1, -2, 3]);
+    ");
+    assert!(matches!(result, Ok(Value::Bool(false))));
+}
+
+#[test]
+fn test_eval_builtin_string_length() {
+    assert!(matches!(eval_with_builtins("let x = stringLength(\"hello\");"), Ok(Value::Int(5))));
+}
+
+#[test]
+fn test_eval_builtin_substring() {
+    let result = eval_with_builtins("let x = substring(1, 3, \"hello\");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "ell"));
+}
+
+#[test]
+fn test_eval_builtin_split() {
+    let result = eval_with_builtins("let x = split(\",\", \"a,b,c\");");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(&items[0], Value::String(s) if s.as_str() == "a"));
+            assert!(matches!(&items[1], Value::String(s) if s.as_str() == "b"));
+            assert!(matches!(&items[2], Value::String(s) if s.as_str() == "c"));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_replace() {
+    let result = eval_with_builtins("let x = replace(\"world\", \"Neve\", \"hello world\");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "hello Neve"));
+}
+
+#[test]
+fn test_eval_builtin_to_upper() {
+    let result = eval_with_builtins("let x = toUpper(\"hello\");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "HELLO"));
+}
+
+#[test]
+fn test_eval_builtin_to_lower() {
+    let result = eval_with_builtins("let x = toLower(\"HELLO\");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "hello"));
+}
+
+#[test]
+fn test_eval_builtin_trim() {
+    let result = eval_with_builtins("let x = trim(\"  hello  \");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "hello"));
+}
+
+#[test]
+fn test_eval_builtin_starts_with() {
+    assert!(matches!(eval_with_builtins("let x = startsWith(\"hel\", \"hello\");"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_ends_with() {
+    assert!(matches!(eval_with_builtins("let x = endsWith(\"llo\", \"hello\");"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_contains() {
+    assert!(matches!(eval_with_builtins("let x = contains(\"ell\", \"hello\");"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_has_attr() {
+    assert!(matches!(eval_with_builtins("let x = hasAttr(\"name\", { name = \"test\" });"), Ok(Value::Bool(true))));
+}
+
+#[test]
+fn test_eval_builtin_has_attr_false() {
+    assert!(matches!(eval_with_builtins("let x = hasAttr(\"age\", { name = \"test\" });"), Ok(Value::Bool(false))));
+}
+
+#[test]
+fn test_eval_builtin_get_attr() {
+    let result = eval_with_builtins("let x = getAttr(\"name\", { name = \"test\" });");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "test"));
+}
+
+#[test]
+fn test_eval_builtin_attr_names() {
+    let result = eval_with_builtins("let x = attrNames({ a = 1, b = 2 });");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 2);
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_attr_values() {
+    let result = eval_with_builtins("let x = attrValues({ a = 1, b = 2 });");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 2);
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_to_json() {
+    let result = eval_with_builtins("let x = toJSON({ name = \"test\", value = 42 });");
+    match result {
+        Ok(Value::String(s)) => {
+            assert!(s.contains("\"name\""));
+            assert!(s.contains("\"test\""));
+            assert!(s.contains("42"));
+        }
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_from_json() {
+    let result = eval_with_builtins("let x = fromJSON(\"{\\\"a\\\": 1, \\\"b\\\": 2}\");");
+    match result {
+        Ok(Value::Record(fields)) => {
+            assert_eq!(fields.len(), 2);
+        }
+        other => panic!("expected record, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_concat() {
+    let result = eval_with_builtins("let x = concat([[1, 2], [3, 4], [5]]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 5);
+            assert!(matches!(items[0], Value::Int(1)));
+            assert!(matches!(items[4], Value::Int(5)));
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_flatten() {
+    let result = eval_with_builtins("let x = flatten([[1, [2, 3]], [[4], 5]]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 5);
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_unique() {
+    let result = eval_with_builtins("let x = unique([1, 2, 2, 3, 1, 3, 4]);");
+    match result {
+        Ok(Value::List(items)) => {
+            assert_eq!(items.len(), 4);
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_partition() {
+    let result = eval_with_builtins("
+        let isEven = fn(x) x % 2 == 0;
+        let x = partition(isEven, [1, 2, 3, 4, 5, 6]);
+    ");
+    match result {
+        Ok(Value::Record(fields)) => {
+            assert_eq!(fields.len(), 2);
+        }
+        other => panic!("expected record, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_bit_and() {
+    assert!(matches!(eval_with_builtins("let x = bitAnd(12, 10);"), Ok(Value::Int(8))));
+}
+
+#[test]
+fn test_eval_builtin_bit_or() {
+    assert!(matches!(eval_with_builtins("let x = bitOr(12, 10);"), Ok(Value::Int(14))));
+}
+
+#[test]
+fn test_eval_builtin_bit_xor() {
+    assert!(matches!(eval_with_builtins("let x = bitXor(12, 10);"), Ok(Value::Int(6))));
+}
+
+#[test]
+fn test_eval_builtin_bit_not() {
+    // bitNot of 0 should give -1 (all bits set in two's complement)
+    assert!(matches!(eval_with_builtins("let x = bitNot(0);"), Ok(Value::Int(-1))));
+}
+
+#[test]
+fn test_eval_builtin_bit_shift_left() {
+    assert!(matches!(eval_with_builtins("let x = bitShiftLeft(1, 4);"), Ok(Value::Int(16))));
+}
+
+#[test]
+fn test_eval_builtin_bit_shift_right() {
+    assert!(matches!(eval_with_builtins("let x = bitShiftRight(16, 2);"), Ok(Value::Int(4))));
+}
+
+#[test]
+fn test_eval_builtin_pad_left() {
+    let result = eval_with_builtins("let x = padLeft(5, \"0\", \"42\");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "00042"));
+}
+
+#[test]
+fn test_eval_builtin_pad_right() {
+    let result = eval_with_builtins("let x = padRight(5, \".\", \"hi\");");
+    assert!(matches!(result, Ok(Value::String(s)) if s.as_str() == "hi..."));
+}
+
+#[test]
+fn test_eval_builtin_compare_less() {
+    assert!(matches!(eval_with_builtins("let x = compare(1, 2);"), Ok(Value::Int(-1))));
+}
+
+#[test]
+fn test_eval_builtin_compare_equal() {
+    assert!(matches!(eval_with_builtins("let x = compare(2, 2);"), Ok(Value::Int(0))));
+}
+
+#[test]
+fn test_eval_builtin_compare_greater() {
+    assert!(matches!(eval_with_builtins("let x = compare(3, 2);"), Ok(Value::Int(1))));
+}
+
+#[test]
+fn test_eval_builtin_merge() {
+    let result = eval_with_builtins("let x = merge({ a = 1 }, { b = 2 });");
+    match result {
+        Ok(Value::Record(fields)) => {
+            assert_eq!(fields.len(), 2);
+        }
+        other => panic!("expected record, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_builtin_merge_recursive() {
+    let result = eval_with_builtins("
+        let x = mergeRecursive(
+            { a = { x = 1, y = 2 } }, 
+            { a = { y = 3, z = 4 } }
+        );
+    ");
+    match result {
+        Ok(Value::Record(_)) => {
+            // Success - just check it returns a record
+        }
+        other => panic!("expected record, got {:?}", other),
     }
 }

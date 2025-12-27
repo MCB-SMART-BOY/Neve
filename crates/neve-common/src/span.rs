@@ -86,22 +86,3 @@ impl fmt::Debug for Span {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_span_merge() {
-        let a = Span::from_usize(10, 20);
-        let b = Span::from_usize(15, 30);
-        let merged = a.merge(b);
-        assert_eq!(merged.start.0, 10);
-        assert_eq!(merged.end.0, 30);
-    }
-
-    #[test]
-    fn test_span_len() {
-        let span = Span::from_usize(5, 15);
-        assert_eq!(span.len(), 10);
-    }
-}

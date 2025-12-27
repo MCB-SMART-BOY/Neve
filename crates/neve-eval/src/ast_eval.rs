@@ -11,10 +11,20 @@ use crate::value::Value;
 use crate::builtin::builtins;
 use crate::EvalError;
 
+// Re-import StringPart from syntax since we use it here
+use neve_syntax::StringPart;
+
+/// A binding with visibility information.
+#[derive(Clone)]
+struct Binding {
+    value: Value,
+    is_public: bool,
+}
+
 /// Environment for AST evaluation.
 #[derive(Clone, Default)]
 pub struct AstEnv {
-    bindings: HashMap<String, Value>,
+    bindings: HashMap<String, Binding>,
     parent: Option<Rc<AstEnv>>,
 }
 
@@ -25,9 +35,9 @@ impl AstEnv {
 
     pub fn with_builtins() -> Self {
         let mut env = Self::new();
-        // Load all builtins from the central registry
+        // Load all builtins from the central registry - all are public
         for (name, value) in builtins() {
-            env.bindings.insert(name.to_string(), value);
+            env.bindings.insert(name.to_string(), Binding { value, is_public: true });
         }
         env
     }
@@ -39,13 +49,24 @@ impl AstEnv {
         }
     }
 
+    /// Define a binding (private by default).
     pub fn define(&mut self, name: String, value: Value) {
-        self.bindings.insert(name, value);
+        self.bindings.insert(name, Binding { value, is_public: false });
+    }
+    
+    /// Define a public binding.
+    pub fn define_pub(&mut self, name: String, value: Value) {
+        self.bindings.insert(name, Binding { value, is_public: true });
+    }
+    
+    /// Define a binding with explicit visibility.
+    pub fn define_with_visibility(&mut self, name: String, value: Value, is_public: bool) {
+        self.bindings.insert(name, Binding { value, is_public });
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
-        if let Some(value) = self.bindings.get(name) {
-            return Some(value.clone());
+        if let Some(binding) = self.bindings.get(name) {
+            return Some(binding.value.clone());
         }
         if let Some(parent) = &self.parent {
             return parent.get(name);
@@ -56,7 +77,23 @@ impl AstEnv {
     /// Get all bindings in this environment (not including parent).
     /// Used for module exports.
     pub fn all_bindings(&self) -> HashMap<String, Value> {
-        self.bindings.clone()
+        self.bindings.iter()
+            .map(|(k, v)| (k.clone(), v.value.clone()))
+            .collect()
+    }
+    
+    /// Get only public bindings in this environment.
+    /// Used for module exports when respecting visibility.
+    pub fn public_bindings(&self) -> HashMap<String, Value> {
+        self.bindings.iter()
+            .filter(|(_, v)| v.is_public)
+            .map(|(k, v)| (k.clone(), v.value.clone()))
+            .collect()
+    }
+    
+    /// Check if a binding is public.
+    pub fn is_public(&self, name: &str) -> bool {
+        self.bindings.get(name).map(|b| b.is_public).unwrap_or(false)
     }
 }
 
@@ -89,6 +126,25 @@ impl AstEvaluator {
     pub fn with_base_path(mut self, path: PathBuf) -> Self {
         self.base_path = Some(path);
         self
+    }
+    
+    /// Call an AstClosure with the given arguments.
+    pub fn call_closure(&mut self, closure: &AstClosure, args: Vec<Value>) -> Result<Value, EvalError> {
+        if args.len() != closure.params.len() {
+            return Err(EvalError::WrongArity);
+        }
+        
+        let mut new_env = AstEnv::child(closure.env.clone());
+        for (param, arg) in closure.params.iter().zip(args) {
+            let name = pattern_name(&param.pattern);
+            new_env.define(name, arg);
+        }
+        
+        let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
+        if let Some(ref base) = self.base_path {
+            body_eval.base_path = Some(base.clone());
+        }
+        body_eval.eval_expr(&closure.body)
     }
 
     /// Evaluate a source file.
@@ -125,13 +181,14 @@ impl AstEvaluator {
         match &item.kind {
             ItemKind::Let(let_def) => {
                 let value = self.eval_expr(&let_def.value)?;
-                self.bind_pattern(&let_def.pattern, value.clone())?;
+                self.bind_pattern_with_visibility(&let_def.pattern, value.clone(), let_def.is_pub)?;
                 Ok(value)
             }
             ItemKind::Fn(fn_def) => {
                 // For recursive functions, we need to define the function first,
                 // then update the closure to capture the environment that includes itself.
                 let name = fn_def.name.name.clone();
+                let is_pub = fn_def.is_pub;
                 
                 // Create a placeholder closure first
                 let func = AstClosure {
@@ -141,7 +198,7 @@ impl AstEvaluator {
                 };
                 
                 // Define the function in the environment
-                Rc::make_mut(&mut self.env).define(name.clone(), Value::AstClosure(Rc::new(func)));
+                Rc::make_mut(&mut self.env).define_with_visibility(name.clone(), Value::AstClosure(Rc::new(func)), is_pub);
                 
                 // Now update the closure to have the environment that includes itself
                 let recursive_func = AstClosure {
@@ -149,7 +206,7 @@ impl AstEvaluator {
                     body: fn_def.body.clone(),
                     env: self.env.clone(), // Now includes the function itself
                 };
-                Rc::make_mut(&mut self.env).define(name, Value::AstClosure(Rc::new(recursive_func)));
+                Rc::make_mut(&mut self.env).define_with_visibility(name, Value::AstClosure(Rc::new(recursive_func)), is_pub);
                 
                 Ok(Value::Unit)
             }
@@ -240,7 +297,7 @@ impl AstEvaluator {
         match &import_def.items {
             ImportItems::Module => {
                 // Import the module as a namespace
-                // For now, we'll import all public bindings with a prefix
+                // Only include public bindings
                 let module_name = if let Some(alias) = &import_def.alias {
                     alias.name.clone()
                 } else {
@@ -249,28 +306,35 @@ impl AstEvaluator {
                         .unwrap_or_else(|| "module".to_string())
                 };
                 
-                // For simplicity, we create a record with all module bindings
-                let bindings = module_env.all_bindings();
+                // Create a record with only public module bindings
+                let bindings = module_env.public_bindings();
                 let record = Value::Record(Rc::new(bindings));
                 Rc::make_mut(&mut self.env).define(module_name, record);
             }
             ImportItems::Items(items) => {
-                // Import specific items
+                // Import specific items (must be public)
                 for item in items {
                     let name = &item.name;
+                    // Check if the item exists and is public
+                    if !module_env.is_public(name) {
+                        if module_env.get(name).is_some() {
+                            return Err(EvalError::TypeError(format!(
+                                "'{}' is private and cannot be imported", name
+                            )));
+                        } else {
+                            return Err(EvalError::TypeError(format!(
+                                "module does not export '{}'", name
+                            )));
+                        }
+                    }
                     if let Some(value) = module_env.get(name) {
-                        // No alias support for now (Vec<Ident> doesn't have aliases)
                         Rc::make_mut(&mut self.env).define(name.clone(), value);
-                    } else {
-                        return Err(EvalError::TypeError(format!(
-                            "module does not export '{}'", name
-                        )));
                     }
                 }
             }
             ImportItems::All => {
-                // Import all bindings
-                for (name, value) in module_env.all_bindings() {
+                // Import all public bindings
+                for (name, value) in module_env.public_bindings() {
                     Rc::make_mut(&mut self.env).define(name, value);
                 }
             }
@@ -540,6 +604,20 @@ impl AstEvaluator {
                 Ok(value)
             }
 
+            ExprKind::Interpolated(parts) => {
+                let mut result = String::new();
+                for part in parts {
+                    match part {
+                        StringPart::Literal(s) => result.push_str(s),
+                        StringPart::Expr(e) => {
+                            let val = self.eval_expr(e)?;
+                            result.push_str(&Self::value_to_string(&val));
+                        }
+                    }
+                }
+                Ok(Value::String(Rc::new(result)))
+            }
+
             _ => Err(EvalError::TypeError("unsupported expression".to_string())),
         }
     }
@@ -783,11 +861,16 @@ impl AstEvaluator {
         }
     }
 
+    #[allow(dead_code)]
     fn bind_pattern(&mut self, pattern: &Pattern, value: Value) -> Result<(), EvalError> {
+        self.bind_pattern_with_visibility(pattern, value, false)
+    }
+    
+    fn bind_pattern_with_visibility(&mut self, pattern: &Pattern, value: Value, is_public: bool) -> Result<(), EvalError> {
         let bindings = Self::match_pattern(pattern, &value)
             .ok_or(EvalError::PatternMatchFailed)?;
         for (name, val) in bindings {
-            Rc::make_mut(&mut self.env).define(name, val);
+            Rc::make_mut(&mut self.env).define_with_visibility(name, val, is_public);
         }
         Ok(())
     }
@@ -799,6 +882,63 @@ impl AstEvaluator {
             env.define(name, val);
         }
         Ok(())
+    }
+
+    /// Convert a value to its string representation for interpolation.
+    fn value_to_string(value: &Value) -> String {
+        match value {
+            Value::Int(n) => n.to_string(),
+            Value::Float(f) => {
+                if f.fract() == 0.0 {
+                    format!("{:.1}", f)
+                } else {
+                    f.to_string()
+                }
+            }
+            Value::Bool(b) => b.to_string(),
+            Value::Char(c) => c.to_string(),
+            Value::String(s) => s.to_string(),
+            Value::Unit => "()".to_string(),
+            Value::None => "None".to_string(),
+            Value::Some(v) => format!("Some({})", Self::value_to_string(v)),
+            Value::Ok(v) => format!("Ok({})", Self::value_to_string(v)),
+            Value::Err(v) => format!("Err({})", Self::value_to_string(v)),
+            Value::List(items) => {
+                let strs: Vec<String> = items.iter().map(Self::value_to_string).collect();
+                format!("[{}]", strs.join(", "))
+            }
+            Value::Tuple(items) => {
+                let strs: Vec<String> = items.iter().map(Self::value_to_string).collect();
+                format!("({})", strs.join(", "))
+            }
+            Value::Record(fields) => {
+                let strs: Vec<String> = fields.iter()
+                    .map(|(k, v)| format!("{} = {}", k, Self::value_to_string(v)))
+                    .collect();
+                format!("#{{ {} }}", strs.join(", "))
+            }
+            Value::Map(map) => {
+                let strs: Vec<String> = map.iter()
+                    .map(|(k, v)| format!("{} => {}", k, Self::value_to_string(v)))
+                    .collect();
+                format!("Map{{ {} }}", strs.join(", "))
+            }
+            Value::Set(set) => {
+                let strs: Vec<String> = set.iter().cloned().collect();
+                format!("Set{{ {} }}", strs.join(", "))
+            }
+            Value::Variant(tag, payload) => {
+                if matches!(**payload, Value::Unit) {
+                    tag.clone()
+                } else {
+                    format!("{}({})", tag, Self::value_to_string(payload))
+                }
+            }
+            Value::Builtin(b) => format!("<builtin:{}>", b.name),
+            Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
+            Value::AstClosure(_) => "<function>".to_string(),
+            Value::Closure { .. } => "<function>".to_string(),
+        }
     }
 }
 

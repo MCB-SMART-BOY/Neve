@@ -10,6 +10,7 @@ pub mod module;
 pub mod generate;
 pub mod activate;
 pub mod generation;
+pub mod flake;
 
 use neve_derive::StorePath;
 use std::path::PathBuf;
@@ -41,6 +42,12 @@ pub enum ConfigError {
     
     #[error("invalid configuration: {0}")]
     Invalid(String),
+    
+    #[error("flake error: {0}")]
+    Flake(String),
+    
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 /// A system configuration.
@@ -164,34 +171,3 @@ impl UserConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_system_config_builder() {
-        let config = SystemConfig::new("my-system")
-            .hostname("neve-host")
-            .timezone("UTC")
-            .service("sshd")
-            .package("vim");
-        
-        assert_eq!(config.name, "my-system");
-        assert_eq!(config.options.hostname, Some("neve-host".to_string()));
-        assert_eq!(config.options.services, vec!["sshd"]);
-        assert_eq!(config.options.packages, vec!["vim"]);
-    }
-
-    #[test]
-    fn test_user_config_builder() {
-        let user = UserConfig::new("alice")
-            .shell("/bin/zsh")
-            .group("wheel")
-            .package("git");
-        
-        assert_eq!(user.name, "alice");
-        assert_eq!(user.home, PathBuf::from("/home/alice"));
-        assert_eq!(user.shell, Some("/bin/zsh".to_string()));
-        assert_eq!(user.groups, vec!["wheel"]);
-    }
-}

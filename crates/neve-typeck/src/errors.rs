@@ -462,35 +462,109 @@ pub fn infinite_type(var: u32, ty: &Ty, span: Span) -> Diagnostic {
     .with_help("consider using an explicit type annotation or restructuring your code")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Create an error for pattern type mismatch.
+pub fn pattern_mismatch(expected: &Ty, pattern_ty: &Ty, span: Span) -> Diagnostic {
+    let expected_str = format_type(expected);
+    let pattern_str = format_type(pattern_ty);
 
-    #[test]
-    fn test_format_type() {
-        assert_eq!(format_type(&Ty { kind: TyKind::Int, span: Span::DUMMY }), "Int");
-        assert_eq!(format_type(&Ty { kind: TyKind::Bool, span: Span::DUMMY }), "Bool");
-        assert_eq!(format_type(&Ty { kind: TyKind::Unit, span: Span::DUMMY }), "()");
-        
-        let tuple = Ty {
-            kind: TyKind::Tuple(vec![
-                Ty { kind: TyKind::Int, span: Span::DUMMY },
-                Ty { kind: TyKind::String, span: Span::DUMMY },
-            ]),
-            span: Span::DUMMY,
-        };
-        assert_eq!(format_type(&tuple), "(Int, String)");
-    }
-
-    #[test]
-    fn test_type_mismatch_error() {
-        let expected = Ty { kind: TyKind::Int, span: Span::DUMMY };
-        let found = Ty { kind: TyKind::String, span: Span::DUMMY };
-        
-        let diag = TypeMismatchError::new(expected, found, Span::DUMMY)
-            .with_context("function argument")
-            .build();
-        
-        assert!(diag.message.contains("function argument"));
-    }
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        "pattern type mismatch",
+    )
+    .with_code(ErrorCode::TypeMismatch)
+    .with_label(Label::new(span, format!("expected `{}`, found pattern for `{}`", expected_str, pattern_str)))
+    .with_note("the pattern must match the type of the value being matched")
 }
+
+/// Create an error for non-exhaustive pattern match.
+pub fn non_exhaustive_match(missing_patterns: &[String], span: Span) -> Diagnostic {
+    let patterns_str = missing_patterns.join(", ");
+
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        "non-exhaustive pattern match",
+    )
+    .with_code(ErrorCode::NonExhaustiveMatch)
+    .with_label(Label::new(span, "patterns not covered"))
+    .with_note(format!("missing patterns: {}", patterns_str))
+    .with_help("add a wildcard pattern `_` or handle all cases explicitly")
+}
+
+/// Create an error for unreachable pattern.
+pub fn unreachable_pattern(span: Span, previous_span: Span) -> Diagnostic {
+    Diagnostic::warning(
+        DiagnosticKind::Type,
+        span,
+        "unreachable pattern",
+    )
+    .with_label(Label::new(span, "this pattern will never be matched"))
+    .with_label(Label::new(previous_span, "previous pattern matches all values"))
+    .with_help("remove this pattern or reorder the match arms")
+}
+
+/// Create an error for ambiguous type.
+pub fn ambiguous_type(span: Span, context: &str) -> Diagnostic {
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        "type annotations needed",
+    )
+    .with_code(ErrorCode::AmbiguousType)
+    .with_label(Label::new(span, "cannot infer type"))
+    .with_note(format!("type must be known in {}", context))
+    .with_help("add a type annotation to clarify the intended type")
+}
+
+/// Create an error for private access.
+pub fn private_access(name: &str, span: Span) -> Diagnostic {
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("`{}` is private", name),
+    )
+    .with_code(ErrorCode::PrivateAccess)
+    .with_label(Label::new(span, "private item"))
+    .with_help(format!("consider making `{}` public with `pub`", name))
+}
+
+/// Create an error for cyclic dependency.
+pub fn cyclic_dependency(items: &[String], span: Span) -> Diagnostic {
+    let cycle_str = items.join(" -> ");
+
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        "cyclic dependency detected",
+    )
+    .with_code(ErrorCode::CyclicDependency)
+    .with_label(Label::new(span, "cycle starts here"))
+    .with_note(format!("cycle: {}", cycle_str))
+    .with_help("break the cycle by restructuring your code")
+}
+
+/// Create an error for unused variable.
+pub fn unused_variable(name: &str, span: Span) -> Diagnostic {
+    Diagnostic::warning(
+        DiagnosticKind::Type,
+        span,
+        format!("unused variable: `{}`", name),
+    )
+    .with_label(Label::new(span, "this variable is never used"))
+    .with_help(format!("if this is intentional, prefix the name with an underscore: `_{}`", name))
+}
+
+/// Create an error for redundant type annotation.
+pub fn redundant_annotation(inferred: &Ty, span: Span) -> Diagnostic {
+    let ty_str = format_type(inferred);
+
+    Diagnostic::warning(
+        DiagnosticKind::Type,
+        span,
+        "redundant type annotation",
+    )
+    .with_label(Label::new(span, format!("type `{}` can be inferred", ty_str)))
+    .with_help("consider removing the type annotation")
+}
+

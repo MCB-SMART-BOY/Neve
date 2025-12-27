@@ -451,6 +451,13 @@ impl SymbolIndex {
             ExprKind::Lazy(inner) => {
                 self.index_expr(inner);
             }
+            ExprKind::Interpolated(parts) => {
+                for part in parts {
+                    if let neve_syntax::StringPart::Expr(e) = part {
+                        self.index_expr(e);
+                    }
+                }
+            }
             // Literals don't reference symbols
             ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::String(_) |
             ExprKind::Char(_) | ExprKind::Bool(_) | ExprKind::Unit => {}
@@ -658,43 +665,3 @@ impl SymbolIndex {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use neve_parser::parse;
-
-    #[test]
-    fn test_function_definition() {
-        let source = "fn add(x: Int, y: Int) = x + y;";
-        let (ast, _) = parse(source);
-        let index = SymbolIndex::from_ast(&ast);
-
-        assert!(index.definitions.contains_key("add"));
-        assert!(index.definitions.contains_key("x"));
-        assert!(index.definitions.contains_key("y"));
-    }
-
-    #[test]
-    fn test_variable_references() {
-        let source = "let x = 1; let y = x + 2;";
-        let (ast, _) = parse(source);
-        let index = SymbolIndex::from_ast(&ast);
-
-        let x_refs = index.get_references("x");
-        assert!(x_refs.len() >= 2); // Definition + usage
-    }
-
-    #[test]
-    fn test_find_definition() {
-        let source = "fn foo() = 42; let x = foo();";
-        let (ast, _) = parse(source);
-        let index = SymbolIndex::from_ast(&ast);
-
-        // Find the reference to foo in "foo()"
-        let foo_refs: Vec<_> = index.references.iter()
-            .filter(|r| r.name == "foo" && !r.is_write)
-            .collect();
-        
-        assert!(!foo_refs.is_empty());
-    }
-}

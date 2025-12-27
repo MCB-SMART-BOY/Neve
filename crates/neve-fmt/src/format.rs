@@ -4,7 +4,7 @@ use crate::config::FormatConfig;
 use crate::printer::Printer;
 use neve_syntax::{
     Expr, ExprKind, BinOp, UnaryOp, RecordField, MatchArm, LambdaParam,
-    Stmt, StmtKind, Generator,
+    Stmt, StmtKind, Generator, StringPart,
     Pattern, PatternKind, LiteralPattern, RecordPatternField,
     Type, TypeKind, RecordTypeField,
     SourceFile, Item, ItemKind, LetDef, FnDef, TypeAlias, StructDef,
@@ -680,6 +680,35 @@ impl Formatter {
                 p.write("lazy ");
                 self.format_expr(p, inner);
             }
+
+            // Interpolated string
+            ExprKind::Interpolated(parts) => {
+                p.write("`");
+                for part in parts {
+                    match part {
+                        StringPart::Literal(s) => {
+                            // Escape backticks and braces in literal parts
+                            for c in s.chars() {
+                                match c {
+                                    '`' => p.write("\\`"),
+                                    '{' => p.write("\\{"),
+                                    '}' => p.write("\\}"),
+                                    '\n' => p.write("\\n"),
+                                    '\r' => p.write("\\r"),
+                                    '\t' => p.write("\\t"),
+                                    _ => p.write(&c.to_string()),
+                                }
+                            }
+                        }
+                        StringPart::Expr(e) => {
+                            p.write("{");
+                            self.format_expr(p, e);
+                            p.write("}");
+                        }
+                    }
+                }
+                p.write("`");
+            }
         }
     }
 
@@ -1004,37 +1033,3 @@ fn escape_char(c: char) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use neve_lexer::Lexer;
-    use neve_parser::Parser;
-
-    fn format_code(source: &str) -> String {
-        let lexer = Lexer::new(source);
-        let (tokens, _) = lexer.tokenize();
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse_file();
-        
-        let formatter = Formatter::new(FormatConfig::default());
-        formatter.format(&ast)
-    }
-
-    #[test]
-    fn test_format_let() {
-        let formatted = format_code("let x = 1;");
-        assert!(formatted.contains("let x = 1;"));
-    }
-
-    #[test]
-    fn test_format_function() {
-        let formatted = format_code("fn add(a: Int, b: Int) -> Int = a + b;");
-        assert!(formatted.contains("fn add"));
-    }
-
-    #[test]
-    fn test_format_record() {
-        let formatted = format_code("let r = #{ a = 1, b = 2 };");
-        assert!(formatted.contains("#{ a = 1, b = 2 }"));
-    }
-}

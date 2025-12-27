@@ -95,5 +95,109 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 }
             },
         })),
+        ("string.contains", Value::Builtin(BuiltinFn {
+            name: "string.contains",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::String(haystack), Value::String(needle)) => {
+                        Ok(Value::Bool(haystack.contains(needle.as_str())))
+                    }
+                    _ => Err("string.contains expects two strings".to_string()),
+                }
+            },
+        })),
+        ("string.startsWith", Value::Builtin(BuiltinFn {
+            name: "string.startsWith",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::String(s), Value::String(prefix)) => {
+                        Ok(Value::Bool(s.starts_with(prefix.as_str())))
+                    }
+                    _ => Err("string.startsWith expects two strings".to_string()),
+                }
+            },
+        })),
+        ("string.endsWith", Value::Builtin(BuiltinFn {
+            name: "string.endsWith",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::String(s), Value::String(suffix)) => {
+                        Ok(Value::Bool(s.ends_with(suffix.as_str())))
+                    }
+                    _ => Err("string.endsWith expects two strings".to_string()),
+                }
+            },
+        })),
+        ("string.replace", Value::Builtin(BuiltinFn {
+            name: "string.replace",
+            arity: 3,
+            func: |args| {
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::String(s), Value::String(from), Value::String(to)) => {
+                        Ok(Value::String(Rc::new(s.replace(from.as_str(), to.as_str()))))
+                    }
+                    _ => Err("string.replace expects three strings".to_string()),
+                }
+            },
+        })),
+        ("string.substring", Value::Builtin(BuiltinFn {
+            name: "string.substring",
+            arity: 3,
+            func: |args| {
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::String(s), Value::Int(start), Value::Int(end)) => {
+                        let start = (*start as usize).min(s.len());
+                        let end = (*end as usize).min(s.len());
+                        if start <= end {
+                            Ok(Value::String(Rc::new(s[start..end].to_string())))
+                        } else {
+                            Ok(Value::String(Rc::new(String::new())))
+                        }
+                    }
+                    _ => Err("string.substring expects (string, start, end)".to_string()),
+                }
+            },
+        })),
+        ("string.isEmpty", Value::Builtin(BuiltinFn {
+            name: "string.isEmpty",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::String(s) => Ok(Value::Bool(s.is_empty())),
+                    _ => Err("string.isEmpty expects a string".to_string()),
+                }
+            },
+        })),
+        ("string.repeat", Value::Builtin(BuiltinFn {
+            name: "string.repeat",
+            arity: 2,
+            func: |args| {
+                match (&args[0], &args[1]) {
+                    (Value::String(s), Value::Int(n)) => {
+                        Ok(Value::String(Rc::new(s.repeat(*n as usize))))
+                    }
+                    _ => Err("string.repeat expects (string, count)".to_string()),
+                }
+            },
+        })),
+        ("string.lines", Value::Builtin(BuiltinFn {
+            name: "string.lines",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::String(s) => {
+                        let lines: Vec<Value> = s
+                            .lines()
+                            .map(|l| Value::String(Rc::new(l.to_string())))
+                            .collect();
+                        Ok(Value::List(Rc::new(lines)))
+                    }
+                    _ => Err("string.lines expects a string".to_string()),
+                }
+            },
+        })),
     ]
 }

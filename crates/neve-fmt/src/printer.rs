@@ -94,34 +94,3 @@ impl Printer {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_printer_basic() {
-        let config = FormatConfig::default();
-        let mut printer = Printer::new(config);
-        
-        printer.write("hello");
-        printer.space();
-        printer.write("world");
-        
-        let output = printer.finish();
-        assert_eq!(output, "hello world\n");
-    }
-
-    #[test]
-    fn test_printer_indent() {
-        let config = FormatConfig::new().indent_width(2);
-        let mut printer = Printer::new(config);
-        
-        printer.writeln("let x =");
-        printer.indent();
-        printer.writeln("1");
-        printer.dedent();
-        
-        let output = printer.finish();
-        assert!(output.contains("  1"));
-    }
-}

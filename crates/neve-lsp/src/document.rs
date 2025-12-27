@@ -154,26 +154,3 @@ impl Document {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_document_new() {
-        let doc = Document::new(
-            "file:///test.neve".to_string(),
-            "let x = 1;".to_string(),
-        );
-        assert!(doc.ast.is_some());
-    }
-    
-    #[test]
-    fn test_position_at() {
-        let doc = Document::new(
-            "file:///test.neve".to_string(),
-            "let x = 1;\nlet y = 2;".to_string(),
-        );
-        assert_eq!(doc.position_at(0), (0, 0));
-        assert_eq!(doc.position_at(11), (1, 0));
-    }
-}

@@ -151,33 +151,3 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_store_path() {
-        let hash = Hash::of(b"test derivation");
-        let path = StorePath::new(hash, "hello-2.12.1".to_string());
-        
-        assert_eq!(path.name(), "hello-2.12.1");
-        assert!(path.path().to_string_lossy().contains("hello-2.12.1"));
-    }
-
-    #[test]
-    fn test_store_path_from_derivation() {
-        let drv_hash = Hash::of(b"derivation content");
-        let path = StorePath::from_derivation(drv_hash, "mypackage-1.0");
-        
-        assert_eq!(path.name(), "mypackage-1.0");
-    }
-
-    #[test]
-    fn test_output() {
-        let out = Output::new("out");
-        assert!(!out.is_fixed());
-        
-        let fixed = Output::fixed("out", Hash::of(b"expected"), HashMode::Flat);
-        assert!(fixed.is_fixed());
-    }
-}

@@ -2,6 +2,7 @@
 //!
 //! Removes packages from the user environment.
 
+use crate::output;
 use std::path::PathBuf;
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -102,7 +103,7 @@ pub fn run(package: &str) -> Result<(), String> {
     symlink(&gen_dir, &current_link)
         .map_err(|e| format!("Failed to create current link: {}", e))?;
     
-    println!("Removed '{}' (generation {})", package, generation);
+    output::success(&format!("Removed '{package}' (generation {generation})"));
     println!("  Removed: {}", removed_path.display());
     
     Ok(())
@@ -176,7 +177,7 @@ pub fn rollback() -> Result<(), String> {
     symlink(&prev_gen, &current_link)
         .map_err(|e| format!("Failed to create current link: {}", e))?;
     
-    println!("Rolled back to generation {}", current_num - 1);
+    output::success(&format!("Rolled back to generation {}", current_num - 1));
     
     Ok(())
 }

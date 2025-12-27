@@ -4,22 +4,46 @@ use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use crate::token::{Token, TokenKind};
 
+/// Mode for lexer state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LexerMode {
+    /// Normal mode
+    Normal,
+    /// Inside interpolated string, expecting string parts or `{`
+    InInterpolatedString,
+    /// Inside interpolation `{...}`, counting brace depth
+    InInterpolation { depth: u32 },
+}
+
 /// The Neve lexer.
 pub struct Lexer<'src> {
-    #[allow(dead_code)]
-    source: &'src str,
     chars: std::iter::Peekable<std::str::CharIndices<'src>>,
     pos: usize,
     diagnostics: Vec<Diagnostic>,
+    mode_stack: Vec<LexerMode>,
 }
 
 impl<'src> Lexer<'src> {
     pub fn new(source: &'src str) -> Self {
         Self {
-            source,
             chars: source.char_indices().peekable(),
             pos: 0,
             diagnostics: Vec::new(),
+            mode_stack: vec![LexerMode::Normal],
+        }
+    }
+
+    fn current_mode(&self) -> LexerMode {
+        *self.mode_stack.last().unwrap_or(&LexerMode::Normal)
+    }
+
+    fn push_mode(&mut self, mode: LexerMode) {
+        self.mode_stack.push(mode);
+    }
+
+    fn pop_mode(&mut self) {
+        if self.mode_stack.len() > 1 {
+            self.mode_stack.pop();
         }
     }
 
@@ -40,6 +64,40 @@ impl<'src> Lexer<'src> {
     }
 
     fn next_token(&mut self) -> Token {
+        match self.current_mode() {
+            LexerMode::InInterpolatedString => return self.interpolated_string_part(),
+            LexerMode::InInterpolation { depth } => {
+                // Handle brace counting for nested braces inside interpolation
+                let token = self.next_token_normal();
+                match token.kind {
+                    TokenKind::LBrace | TokenKind::HashLBrace => {
+                        let new_depth = depth + 1;
+                        self.mode_stack.pop();
+                        self.push_mode(LexerMode::InInterpolation { depth: new_depth });
+                    }
+                    TokenKind::RBrace => {
+                        if depth == 0 {
+                            // End of interpolation, return to string mode
+                            self.pop_mode();
+                            self.push_mode(LexerMode::InInterpolatedString);
+                            return Token::new(TokenKind::InterpolationEnd, token.span);
+                        } else {
+                            let new_depth = depth - 1;
+                            self.mode_stack.pop();
+                            self.push_mode(LexerMode::InInterpolation { depth: new_depth });
+                        }
+                    }
+                    _ => {}
+                }
+                return token;
+            }
+            LexerMode::Normal => {}
+        }
+
+        self.next_token_normal()
+    }
+
+    fn next_token_normal(&mut self) -> Token {
         self.skip_whitespace();
 
         let start = self.pos;
@@ -385,20 +443,54 @@ impl<'src> Lexer<'src> {
     }
 
     fn interpolated_string(&mut self) -> TokenKind {
-        // For now, treat as regular string
-        // TODO: Proper interpolation parsing
-        let mut value = String::new();
+        // Start of interpolated string - enter interpolated string mode
+        self.push_mode(LexerMode::InInterpolatedString);
+        TokenKind::InterpolatedStart
+    }
+
+    fn interpolated_string_part(&mut self) -> Token {
         let start = self.pos;
+        let mut value = String::new();
 
         loop {
-            match self.advance() {
-                Some((_, '`')) => break,
-                Some((_, '\\')) => {
+            match self.peek_char() {
+                Some('`') => {
+                    // End of interpolated string
+                    if !value.is_empty() {
+                        // Emit accumulated string part first
+                        return Token::new(
+                            TokenKind::InterpolatedPart(value),
+                            Span::from_usize(start, self.pos),
+                        );
+                    }
+                    self.advance();
+                    self.pop_mode();
+                    return Token::new(TokenKind::InterpolatedEnd, Span::from_usize(start, self.pos));
+                }
+                Some('{') => {
+                    // Start of interpolation
+                    if !value.is_empty() {
+                        // Emit accumulated string part first
+                        return Token::new(
+                            TokenKind::InterpolatedPart(value),
+                            Span::from_usize(start, self.pos),
+                        );
+                    }
+                    self.advance();
+                    self.pop_mode();
+                    self.push_mode(LexerMode::InInterpolation { depth: 0 });
+                    return Token::new(TokenKind::InterpolationStart, Span::from_usize(start, self.pos));
+                }
+                Some('\\') => {
+                    self.advance();
                     if let Some(escaped) = self.escape_char() {
                         value.push(escaped);
                     }
                 }
-                Some((_, ch)) => value.push(ch),
+                Some(ch) => {
+                    self.advance();
+                    value.push(ch);
+                }
                 None => {
                     let span = Span::from_usize(start, self.pos);
                     self.diagnostics.push(
@@ -409,12 +501,11 @@ impl<'src> Lexer<'src> {
                         )
                         .with_code(ErrorCode::UnterminatedString),
                     );
-                    return TokenKind::Error;
+                    self.pop_mode();
+                    return Token::new(TokenKind::Error, span);
                 }
             }
         }
-
-        TokenKind::String(value)
     }
 
     fn number(&mut self, first: char) -> TokenKind {
@@ -595,91 +686,6 @@ impl<'src> Lexer<'src> {
             )
             .with_code(ErrorCode::UnexpectedCharacter)
             .with_label(Label::new(span, "unexpected character here")),
-        );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn lex(source: &str) -> Vec<TokenKind> {
-        let lexer = Lexer::new(source);
-        let (tokens, _) = lexer.tokenize();
-        tokens.into_iter().map(|t| t.kind).collect()
-    }
-
-    #[test]
-    fn test_keywords() {
-        assert_eq!(
-            lex("let fn if then else match"),
-            vec![
-                TokenKind::Let,
-                TokenKind::Fn,
-                TokenKind::If,
-                TokenKind::Then,
-                TokenKind::Else,
-                TokenKind::Match,
-                TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_numbers() {
-        assert_eq!(
-            lex("42 3.14 0xFF 0b1010"),
-            vec![
-                TokenKind::Int(42),
-                TokenKind::Float(3.14),
-                TokenKind::Int(255),
-                TokenKind::Int(10),
-                TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_strings() {
-        assert_eq!(
-            lex(r#""hello" 'a'"#),
-            vec![
-                TokenKind::String("hello".to_string()),
-                TokenKind::Char('a'),
-                TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_operators() {
-        assert_eq!(
-            lex("+ ++ -> |> // ?? ?."),
-            vec![
-                TokenKind::Plus,
-                TokenKind::PlusPlus,
-                TokenKind::Arrow,
-                TokenKind::PipeGt,
-                TokenKind::SlashSlash,
-                TokenKind::QuestionQuestion,
-                TokenKind::QuestionDot,
-                TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn test_record_literal() {
-        assert_eq!(
-            lex("#{ x = 1 }"),
-            vec![
-                TokenKind::HashLBrace,
-                TokenKind::Ident("x".to_string()),
-                TokenKind::Eq,
-                TokenKind::Int(1),
-                TokenKind::RBrace,
-                TokenKind::Eof,
-            ]
         );
     }
 }

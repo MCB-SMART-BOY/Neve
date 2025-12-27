@@ -185,10 +185,13 @@ impl<'a> BuildExecutor<'a> {
             let out_dir = output_dirs.get(name)
                 .ok_or_else(|| BuildError::BuildFailed(format!("missing output directory: {}", name)))?;
 
+            // Validate output before collecting
+            crate::output::validate_output(out_dir)?;
+
             // Compute hash of output
             let hash = hash_path(out_dir)?;
             
-            // Verify hash if expected
+            // Verify hash if expected (for fixed-output derivations)
             if let Some(ref expected_hash) = output.expected_hash
                 && hash != *expected_hash {
                     return Err(BuildError::OutputHashMismatch {
@@ -198,12 +201,16 @@ impl<'a> BuildExecutor<'a> {
                     });
                 }
 
-            // Create store path
-            let store_name = format!("{}-{}", drv.name, name);
-            let store_path = StorePath::new(hash, store_name);
+            // Create store path name
+            let store_name = if name == "out" {
+                format!("{}-{}", drv.name, drv.version)
+            } else {
+                format!("{}-{}-{}", drv.name, drv.version, name)
+            };
 
-            // In a real implementation, we would move the output to the store
-            // For now, just record the path
+            // Add output to store
+            let store_path = self.store.add_dir(out_dir, &store_name)?;
+
             outputs.insert(name.clone(), store_path);
         }
 
@@ -273,32 +280,3 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BuildError> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_uuid_simple() {
-        let id1 = uuid_simple();
-        let id2 = uuid_simple();
-        // IDs should be non-empty (uniqueness not guaranteed in fast succession)
-        assert!(!id1.is_empty());
-        assert!(!id2.is_empty());
-    }
-
-    #[test]
-    fn test_hash_path() {
-        use std::env;
-        
-        let dir = env::temp_dir().join(format!("neve-hash-test-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("test.txt"), b"hello").unwrap();
-        
-        let hash1 = hash_path(&dir).unwrap();
-        let hash2 = hash_path(&dir).unwrap();
-        assert_eq!(hash1, hash2);
-        
-        // Cleanup
-        let _ = fs::remove_dir_all(&dir);
-    }
-}

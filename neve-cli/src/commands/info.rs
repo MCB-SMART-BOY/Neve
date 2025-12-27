@@ -2,6 +2,7 @@
 //!
 //! Shows detailed information about a package.
 
+use crate::output;
 use std::path::PathBuf;
 use std::fs;
 
@@ -21,7 +22,7 @@ pub fn run(package: &str) -> Result<(), String> {
             if name_str.contains(package) {
                 let path = entry.path();
                 
-                println!("Package: {}", name_str);
+                output::info(&format!("Package: {name_str}"));
                 println!("Path: {}", path.display());
                 
                 // Read derivation info if available
@@ -33,10 +34,10 @@ pub fn run(package: &str) -> Result<(), String> {
                         // Parse JSON derivation
                         if let Ok(drv) = serde_json::from_str::<serde_json::Value>(&drv_content) {
                             if let Some(name) = drv.get("name").and_then(|v| v.as_str()) {
-                                println!("Name: {}", name);
+                                println!("Name: {name}");
                             }
                             if let Some(system) = drv.get("system").and_then(|v| v.as_str()) {
-                                println!("System: {}", system);
+                                println!("System: {system}");
                             }
                         }
                     }

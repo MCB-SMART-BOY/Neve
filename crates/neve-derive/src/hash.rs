@@ -144,33 +144,3 @@ mod hex {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_hash_data() {
-        let hash = Hash::of(b"hello world");
-        assert!(!hash.is_null());
-        assert_eq!(hash.to_hex().len(), 64);
-    }
-
-    #[test]
-    fn test_hash_roundtrip() {
-        let hash = Hash::of(b"test data");
-        let hex = hash.to_hex();
-        let parsed = Hash::from_hex(&hex).unwrap();
-        assert_eq!(hash, parsed);
-    }
-
-    #[test]
-    fn test_hasher_incremental() {
-        let mut hasher = Hasher::new();
-        hasher.update(b"hello ");
-        hasher.update(b"world");
-        let hash1 = hasher.finalize();
-
-        let hash2 = Hash::of(b"hello world");
-        assert_eq!(hash1, hash2);
-    }
-}

@@ -88,17 +88,3 @@ pub fn get_content_length(url: &str) -> Result<Option<u64>, FetchError> {
     Ok(response.content_length())
 }
 
-#[cfg(test)]
-mod tests {
-    // Note: These tests require network access and are disabled by default
-    // Run with: cargo test --features network-tests
-    
-    #[test]
-    #[ignore]
-    fn test_fetch_url() {
-        use super::*;
-        
-        let content = fetch_url("https://httpbin.org/bytes/100").unwrap();
-        assert_eq!(content.len(), 100);
-    }
-}

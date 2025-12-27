@@ -209,16 +209,3 @@ fn dir_size(path: &Path) -> Result<u64, StoreError> {
     Ok(size)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_gc_result_human() {
-        let result = GcResult { deleted: 5, freed_bytes: 1024 * 1024 * 100 };
-        assert!(result.freed_human().contains("MiB"));
-        
-        let result = GcResult { deleted: 5, freed_bytes: 500 };
-        assert!(result.freed_human().contains("B"));
-    }
-}

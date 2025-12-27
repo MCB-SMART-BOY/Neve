@@ -2,6 +2,7 @@
 //!
 //! Searches for packages in the store and available package sources.
 
+use crate::output;
 use std::path::PathBuf;
 use std::fs;
 
@@ -9,7 +10,8 @@ use std::fs;
 pub fn run(query: &str) -> Result<(), String> {
     let store_dir = get_store_dir();
     
-    println!("Searching for '{}'...\n", query);
+    output::info(&format!("Searching for '{query}'..."));
+    println!();
     
     let mut found = false;
     

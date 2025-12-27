@@ -55,6 +55,9 @@ pub fn server_capabilities() -> ServerCapabilities {
         // Document formatting
         document_formatting_provider: Some(OneOf::Left(true)),
         
+        // Workspace symbol
+        workspace_symbol_provider: Some(OneOf::Left(true)),
+        
         // Semantic tokens
         semantic_tokens_provider: Some(
             SemanticTokensServerCapabilities::SemanticTokensOptions(

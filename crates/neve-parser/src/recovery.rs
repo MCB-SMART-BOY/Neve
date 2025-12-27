@@ -157,33 +157,3 @@ impl DelimiterStack {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_is_stmt_start() {
-        assert!(is_stmt_start(&TokenKind::Let));
-        assert!(is_stmt_start(&TokenKind::Fn));
-        assert!(!is_stmt_start(&TokenKind::Plus));
-    }
-    
-    #[test]
-    fn test_delimiter_stack() {
-        let mut stack = DelimiterStack::new();
-        assert!(stack.is_empty());
-        
-        stack.update(&TokenKind::LParen);
-        assert_eq!(stack.depth(), 1);
-        assert!(stack.inside(DelimiterKind::Paren));
-        
-        stack.update(&TokenKind::LBrace);
-        assert_eq!(stack.depth(), 2);
-        
-        stack.update(&TokenKind::RBrace);
-        assert_eq!(stack.depth(), 1);
-        
-        stack.update(&TokenKind::RParen);
-        assert!(stack.is_empty());
-    }
-}

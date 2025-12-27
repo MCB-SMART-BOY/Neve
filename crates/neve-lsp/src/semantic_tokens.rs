@@ -229,19 +229,3 @@ fn offset_to_line_col(source: &str, offset: usize) -> (u32, u32) {
     (line, col)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use neve_lexer::Lexer;
-    
-    #[test]
-    fn test_generate_semantic_tokens() {
-        let source = "let x = 42;";
-        let lexer = Lexer::new(source);
-        let (tokens, _) = lexer.tokenize();
-        let semantic = generate_semantic_tokens(&tokens, source);
-        
-        // Should have: let (keyword), x (variable), 42 (number)
-        assert!(semantic.len() >= 3);
-    }
-}

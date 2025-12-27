@@ -217,23 +217,64 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        // Basic keyword completion
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params.text_document_position.text_document.uri.to_string();
+        let pos = params.text_document_position.position;
+        
+        let mut items = Vec::new();
+        
+        // Get context for smarter completion
+        let trigger_char = params.context
+            .as_ref()
+            .and_then(|c| c.trigger_character.as_deref());
+        
+        // Check if we're after a dot (member access)
+        let is_dot_completion = trigger_char == Some(".");
+        
+        if is_dot_completion {
+            // Method completion based on type
+            items.extend(self.get_method_completions());
+        } else {
+            // Keywords
+            items.extend(self.get_keyword_completions());
+            
+            // Standard library functions
+            items.extend(self.get_stdlib_completions());
+            
+            // Types
+            items.extend(self.get_type_completions());
+            
+            // Document symbols (variables, functions from current file)
+            if let Some(doc) = self.documents.get(&uri) {
+                items.extend(self.get_document_completions(&doc, pos));
+            }
+        }
+        
+        Ok(Some(CompletionResponse::Array(items)))
+    }
+}
+
+impl Backend {
+    /// Get keyword completions.
+    fn get_keyword_completions(&self) -> Vec<CompletionItem> {
         let keywords = vec![
             ("let", "Let binding", "let ${1:name} = ${2:value};"),
             ("fn", "Function definition", "fn ${1:name}(${2:params}) = ${3:body};"),
             ("if", "If expression", "if ${1:condition} then ${2:then_branch} else ${3:else_branch}"),
-            ("match", "Match expression", "match ${1:expr} {\n\t${2:pattern} => ${3:body},\n}"),
+            ("match", "Match expression", "match ${1:expr} {\n\t${2:pattern} -> ${3:body},\n}"),
             ("type", "Type alias", "type ${1:Name} = ${2:Type};"),
-            ("struct", "Struct definition", "struct ${1:Name} {\n\t${2:field}: ${3:Type},\n}"),
-            ("enum", "Enum definition", "enum ${1:Name} {\n\t${2:Variant},\n}"),
-            ("trait", "Trait definition", "trait ${1:Name} {\n\t${2:items}\n}"),
-            ("impl", "Implementation", "impl ${1:Trait} for ${2:Type} {\n\t${3:items}\n}"),
+            ("struct", "Struct definition", "struct ${1:Name} {\n\t${2:field}: ${3:Type},\n};"),
+            ("enum", "Enum definition", "enum ${1:Name} {\n\t${2:Variant},\n};"),
+            ("trait", "Trait definition", "trait ${1:Name} {\n\t${2:items}\n};"),
+            ("impl", "Implementation", "impl ${1:Trait} for ${2:Type} {\n\t${3:items}\n};"),
             ("import", "Import statement", "import ${1:module};"),
+            ("pub", "Public visibility", "pub "),
+            ("lazy", "Lazy evaluation", "lazy ${1:expr}"),
+            ("true", "Boolean true", "true"),
+            ("false", "Boolean false", "false"),
         ];
         
-        let items: Vec<CompletionItem> = keywords
-            .into_iter()
+        keywords.into_iter()
             .map(|(label, detail, snippet)| CompletionItem {
                 label: label.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
@@ -242,11 +283,229 @@ impl LanguageServer for Backend {
                 insert_text_format: Some(InsertTextFormat::SNIPPET),
                 ..Default::default()
             })
-            .collect();
+            .collect()
+    }
+    
+    /// Get standard library completions.
+    fn get_stdlib_completions(&self) -> Vec<CompletionItem> {
+        let stdlib_functions = vec![
+            // IO functions
+            ("io.readFile", "Read file contents", "io.readFile(${1:path})", "String"),
+            ("io.readDir", "List directory contents", "io.readDir(${1:path})", "List<String>"),
+            ("io.pathExists", "Check if path exists", "io.pathExists(${1:path})", "Bool"),
+            ("io.isDir", "Check if path is directory", "io.isDir(${1:path})", "Bool"),
+            ("io.isFile", "Check if path is file", "io.isFile(${1:path})", "Bool"),
+            ("io.getEnv", "Get environment variable", "io.getEnv(${1:name})", "Option<String>"),
+            ("io.currentDir", "Get current directory", "io.currentDir()", "String"),
+            ("io.homeDir", "Get home directory", "io.homeDir()", "Option<String>"),
+            ("io.hashFile", "Hash file contents", "io.hashFile(${1:path})", "String"),
+            ("io.hashString", "Hash a string", "io.hashString(${1:str})", "String"),
+            ("io.currentSystem", "Get current system", "io.currentSystem()", "String"),
+            
+            // Math functions
+            ("math.abs", "Absolute value", "math.abs(${1:x})", "Number"),
+            ("math.floor", "Floor of number", "math.floor(${1:x})", "Int"),
+            ("math.ceil", "Ceiling of number", "math.ceil(${1:x})", "Int"),
+            ("math.round", "Round number", "math.round(${1:x})", "Int"),
+            ("math.sqrt", "Square root", "math.sqrt(${1:x})", "Float"),
+            ("math.pow", "Power", "math.pow(${1:base}, ${2:exp})", "Number"),
+            ("math.log", "Natural logarithm", "math.log(${1:x})", "Float"),
+            ("math.sin", "Sine", "math.sin(${1:x})", "Float"),
+            ("math.cos", "Cosine", "math.cos(${1:x})", "Float"),
+            ("math.tan", "Tangent", "math.tan(${1:x})", "Float"),
+            ("math.max", "Maximum of two numbers", "math.max(${1:a}, ${2:b})", "Number"),
+            ("math.min", "Minimum of two numbers", "math.min(${1:a}, ${2:b})", "Number"),
+            ("math.clamp", "Clamp to range", "math.clamp(${1:x}, ${2:min}, ${3:max})", "Number"),
+            ("math.pi", "Pi constant", "math.pi", "Float"),
+            ("math.e", "Euler's number", "math.e", "Float"),
+            ("math.toInt", "Convert to integer", "math.toInt(${1:x})", "Int"),
+            ("math.toFloat", "Convert to float", "math.toFloat(${1:x})", "Float"),
+            
+            // String functions
+            ("string.len", "String length", "string.len(${1:s})", "Int"),
+            ("string.concat", "Concatenate strings", "string.concat(${1:a}, ${2:b})", "String"),
+            ("string.split", "Split string", "string.split(${1:s}, ${2:sep})", "List<String>"),
+            ("string.join", "Join strings", "string.join(${1:list}, ${2:sep})", "String"),
+            ("string.trim", "Trim whitespace", "string.trim(${1:s})", "String"),
+            ("string.upper", "To uppercase", "string.upper(${1:s})", "String"),
+            ("string.lower", "To lowercase", "string.lower(${1:s})", "String"),
+            ("string.contains", "Check if contains", "string.contains(${1:s}, ${2:sub})", "Bool"),
+            ("string.startsWith", "Check prefix", "string.startsWith(${1:s}, ${2:prefix})", "Bool"),
+            ("string.endsWith", "Check suffix", "string.endsWith(${1:s}, ${2:suffix})", "Bool"),
+            ("string.replace", "Replace substring", "string.replace(${1:s}, ${2:from}, ${3:to})", "String"),
+            
+            // List functions
+            ("list.len", "List length", "list.len(${1:xs})", "Int"),
+            ("list.head", "First element", "list.head(${1:xs})", "Option<T>"),
+            ("list.tail", "All but first", "list.tail(${1:xs})", "List<T>"),
+            ("list.last", "Last element", "list.last(${1:xs})", "Option<T>"),
+            ("list.init", "All but last", "list.init(${1:xs})", "List<T>"),
+            ("list.reverse", "Reverse list", "list.reverse(${1:xs})", "List<T>"),
+            ("list.map", "Map function over list", "list.map(${1:f}, ${2:xs})", "List<U>"),
+            ("list.filter", "Filter list", "list.filter(${1:pred}, ${2:xs})", "List<T>"),
+            ("list.fold", "Fold list", "list.fold(${1:init}, ${2:f}, ${3:xs})", "U"),
+            ("list.concat", "Concatenate lists", "list.concat(${1:xss})", "List<T>"),
+            ("list.range", "Create range", "list.range(${1:start}, ${2:end})", "List<Int>"),
+            ("list.elem", "Check membership", "list.elem(${1:x}, ${2:xs})", "Bool"),
+            
+            // Option functions
+            ("option.some", "Wrap in Some", "option.some(${1:x})", "Option<T>"),
+            ("option.none", "None value", "option.none", "Option<T>"),
+            ("option.isSome", "Check if Some", "option.isSome(${1:opt})", "Bool"),
+            ("option.isNone", "Check if None", "option.isNone(${1:opt})", "Bool"),
+            ("option.unwrap", "Unwrap or panic", "option.unwrap(${1:opt})", "T"),
+            ("option.unwrapOr", "Unwrap or default", "option.unwrapOr(${1:opt}, ${2:default})", "T"),
+            ("option.map", "Map over option", "option.map(${1:f}, ${2:opt})", "Option<U>"),
+            
+            // Result functions
+            ("result.ok", "Wrap in Ok", "result.ok(${1:x})", "Result<T, E>"),
+            ("result.err", "Wrap in Err", "result.err(${1:e})", "Result<T, E>"),
+            ("result.isOk", "Check if Ok", "result.isOk(${1:res})", "Bool"),
+            ("result.isErr", "Check if Err", "result.isErr(${1:res})", "Bool"),
+            ("result.unwrap", "Unwrap or panic", "result.unwrap(${1:res})", "T"),
+            ("result.map", "Map over result", "result.map(${1:f}, ${2:res})", "Result<U, E>"),
+            
+            // Path functions
+            ("path.join", "Join paths", "path.join(${1:base}, ${2:part})", "Path"),
+            ("path.parent", "Get parent directory", "path.parent(${1:p})", "Option<Path>"),
+            ("path.fileName", "Get file name", "path.fileName(${1:p})", "Option<String>"),
+            ("path.extension", "Get extension", "path.extension(${1:p})", "Option<String>"),
+            ("path.isAbsolute", "Check if absolute", "path.isAbsolute(${1:p})", "Bool"),
+            
+            // Builtins
+            ("assert", "Assert condition", "assert(${1:cond}, ${2:msg})", "Unit"),
+            ("force", "Force lazy value", "force(${1:lazy_expr})", "T"),
+        ];
         
-        Ok(Some(CompletionResponse::Array(items)))
+        stdlib_functions.into_iter()
+            .map(|(label, detail, snippet, ret_type)| CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some(format!("{} -> {}", detail, ret_type)),
+                insert_text: Some(snippet.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            })
+            .collect()
+    }
+    
+    /// Get type completions.
+    fn get_type_completions(&self) -> Vec<CompletionItem> {
+        let types = vec![
+            ("Int", "Arbitrary precision integer"),
+            ("Float", "64-bit floating point"),
+            ("Bool", "Boolean"),
+            ("Char", "Unicode character"),
+            ("String", "UTF-8 string"),
+            ("Path", "File system path"),
+            ("Unit", "Unit type ()"),
+            ("List", "List<T>"),
+            ("Option", "Option<T> - Some or None"),
+            ("Result", "Result<T, E> - Ok or Err"),
+        ];
+        
+        types.into_iter()
+            .map(|(label, detail)| CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                detail: Some(detail.to_string()),
+                insert_text: Some(label.to_string()),
+                ..Default::default()
+            })
+            .collect()
+    }
+    
+    /// Get method completions for dot-triggered completion.
+    fn get_method_completions(&self) -> Vec<CompletionItem> {
+        let methods = vec![
+            // List methods
+            ("map", "Map function over elements", "map(${1:fn(x) x})", "List<U>"),
+            ("filter", "Filter elements", "filter(${1:fn(x) true})", "List<T>"),
+            ("fold", "Fold with accumulator", "fold(${1:init}, ${2:fn(acc, x) acc})", "U"),
+            ("len", "Get length", "len()", "Int"),
+            ("first", "Get first element", "first()", "Option<T>"),
+            ("last", "Get last element", "last()", "Option<T>"),
+            ("get", "Get element at index", "get(${1:index})", "Option<T>"),
+            ("reverse", "Reverse elements", "reverse()", "List<T>"),
+            ("sum", "Sum of elements", "sum()", "Number"),
+            ("all", "Check if all match", "all(${1:fn(x) true})", "Bool"),
+            ("any", "Check if any matches", "any(${1:fn(x) false})", "Bool"),
+            ("zip", "Zip with another list", "zip(${1:other})", "List<(T, U)>"),
+            ("take", "Take first n elements", "take(${1:n})", "List<T>"),
+            ("drop", "Drop first n elements", "drop(${1:n})", "List<T>"),
+            ("join", "Join with separator", "join(${1:sep})", "String"),
+            
+            // String methods
+            ("split", "Split by separator", "split(${1:sep})", "List<String>"),
+            ("trim", "Trim whitespace", "trim()", "String"),
+            ("upper", "To uppercase", "upper()", "String"),
+            ("lower", "To lowercase", "lower()", "String"),
+            ("contains", "Check if contains", "contains(${1:sub})", "Bool"),
+            ("startsWith", "Check prefix", "startsWith(${1:prefix})", "Bool"),
+            ("endsWith", "Check suffix", "endsWith(${1:suffix})", "Bool"),
+            ("replace", "Replace substring", "replace(${1:from}, ${2:to})", "String"),
+            ("chars", "Get characters", "chars()", "List<Char>"),
+            
+            // Option/Result methods
+            ("unwrap", "Unwrap value", "unwrap()", "T"),
+            ("unwrapOr", "Unwrap or default", "unwrapOr(${1:default})", "T"),
+            ("isSome", "Check if Some", "isSome()", "Bool"),
+            ("isNone", "Check if None", "isNone()", "Bool"),
+            ("isOk", "Check if Ok", "isOk()", "Bool"),
+            ("isErr", "Check if Err", "isErr()", "Bool"),
+            
+            // Record methods  
+            ("keys", "Get record keys", "keys()", "List<String>"),
+            ("values", "Get record values", "values()", "List<T>"),
+            ("hasField", "Check if has field", "hasField(${1:name})", "Bool"),
+        ];
+        
+        methods.into_iter()
+            .map(|(label, detail, snippet, ret_type)| CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some(format!("{} -> {}", detail, ret_type)),
+                insert_text: Some(snippet.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            })
+            .collect()
+    }
+    
+    /// Get completions from document symbols.
+    fn get_document_completions(&self, doc: &Document, _pos: Position) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+        
+        if let Some(ref index) = doc.symbol_index {
+            for (name, defs) in &index.definitions {
+                if let Some(def) = defs.first() {
+                    let kind = match def.kind {
+                        IndexSymbolKind::Function => CompletionItemKind::FUNCTION,
+                        IndexSymbolKind::Variable => CompletionItemKind::VARIABLE,
+                        IndexSymbolKind::Parameter => CompletionItemKind::VARIABLE,
+                        IndexSymbolKind::TypeAlias => CompletionItemKind::TYPE_PARAMETER,
+                        IndexSymbolKind::Struct => CompletionItemKind::STRUCT,
+                        IndexSymbolKind::Enum => CompletionItemKind::ENUM,
+                        IndexSymbolKind::Variant => CompletionItemKind::ENUM_MEMBER,
+                        IndexSymbolKind::Trait => CompletionItemKind::INTERFACE,
+                        IndexSymbolKind::Field => CompletionItemKind::FIELD,
+                        IndexSymbolKind::Method => CompletionItemKind::METHOD,
+                    };
+                    
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(kind),
+                        detail: Some(format!("{:?}", def.kind)),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+        
+        items
     }
 
+    #[allow(dead_code)]
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri.to_string();
         
@@ -269,6 +528,7 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    #[allow(dead_code)]
     async fn semantic_tokens_full(
         &self,
         params: SemanticTokensParams,
@@ -289,6 +549,7 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    #[allow(dead_code)]
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
@@ -357,6 +618,7 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    #[allow(dead_code)]
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
@@ -387,6 +649,7 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    #[allow(dead_code)]
     async fn references(
         &self,
         params: ReferenceParams,
@@ -425,6 +688,7 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    #[allow(dead_code)]
     async fn rename(
         &self,
         params: RenameParams,
@@ -490,6 +754,7 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    #[allow(dead_code)]
     async fn prepare_rename(
         &self,
         params: TextDocumentPositionParams,
@@ -524,6 +789,59 @@ impl LanguageServer for Backend {
             }
         
         Ok(None)
+    }
+
+    #[allow(dead_code)]
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let query = params.query.to_lowercase();
+        let mut symbols = Vec::new();
+        
+        // Search across all open documents
+        for entry in self.documents.iter() {
+            let doc = entry.value();
+            let uri = Url::parse(&doc.uri).unwrap_or_else(|_| {
+                Url::parse("file:///unknown").unwrap()
+            });
+            
+            if let Some(ref index) = doc.symbol_index {
+                for (name, defs) in &index.definitions {
+                    // Filter by query
+                    if query.is_empty() || name.to_lowercase().contains(&query) {
+                        for def in defs {
+                            let start: usize = def.def_span.start.into();
+                            let end: usize = def.def_span.end.into();
+                            let (start_line, start_col) = doc.position_at(start);
+                            let (end_line, end_col) = doc.position_at(end);
+                            
+                            #[allow(deprecated)]
+                            symbols.push(SymbolInformation {
+                                name: name.clone(),
+                                kind: convert_symbol_kind(def.kind),
+                                tags: None,
+                                deprecated: None,
+                                location: Location {
+                                    uri: uri.clone(),
+                                    range: Range {
+                                        start: Position::new(start_line, start_col),
+                                        end: Position::new(end_line, end_col),
+                                    },
+                                },
+                                container_name: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        if symbols.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(symbols))
+        }
     }
 }
 

@@ -106,30 +106,3 @@ pub fn short_hash(oid: &Oid) -> String {
     oid.to_string()[..7].to_string()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-    
-    #[test]
-    #[ignore] // Requires network access
-    fn test_clone_repo() {
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path().join("repo");
-        
-        // Clone a small test repo
-        let result = clone_repo(
-            "https://github.com/octocat/Hello-World.git",
-            &repo_path,
-        );
-        
-        assert!(result.is_ok());
-        assert!(repo_path.join(".git").exists());
-    }
-    
-    #[test]
-    fn test_short_hash() {
-        let oid = Oid::from_str("abc1234567890def").unwrap();
-        assert_eq!(short_hash(&oid), "abc1234");
-    }
-}

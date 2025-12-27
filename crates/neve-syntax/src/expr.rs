@@ -24,6 +24,8 @@ pub enum ExprKind {
     Float(f64),
     /// String literal
     String(String),
+    /// Interpolated string `` `hello {name}` ``
+    Interpolated(Vec<StringPart>),
     /// Character literal
     Char(char),
     /// Boolean literal
@@ -241,4 +243,13 @@ pub enum BinOp {
 pub enum UnaryOp {
     Neg,    // -
     Not,    // !
+}
+
+/// A part of an interpolated string.
+#[derive(Debug, Clone)]
+pub enum StringPart {
+    /// Literal string part
+    Literal(String),
+    /// Interpolated expression `{expr}`
+    Expr(Expr),
 }

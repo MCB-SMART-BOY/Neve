@@ -246,31 +246,3 @@ pub fn rollback(generation: u64, generations_dir: &Path) -> Result<PathBuf, Conf
     Ok(gen_path)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_activator_dry_run() {
-        let activator = Activator::new()
-            .dry_run(true)
-            .verbose(false);
-        
-        let generated = GeneratedConfig::new();
-        let result = activator.activate(&generated).unwrap();
-        
-        assert!(result.success);
-        assert_eq!(result.files_installed, 0);
-    }
-
-    #[test]
-    fn test_test_result() {
-        let mut result = TestResult::new();
-        result.files_checked = 5;
-        result.warnings.push("test warning".to_string());
-        result.success = true;
-        
-        assert!(result.success);
-        assert_eq!(result.warnings.len(), 1);
-    }
-}

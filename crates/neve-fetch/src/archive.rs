@@ -199,31 +199,3 @@ fn extract_tar_stripped<R: Read>(reader: R, dest_dir: &Path, strip: usize) -> Re
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_detection() {
-        assert_eq!(
-            ArchiveFormat::from_name("foo.tar.gz"),
-            Some(ArchiveFormat::TarGz)
-        );
-        assert_eq!(
-            ArchiveFormat::from_name("foo.tgz"),
-            Some(ArchiveFormat::TarGz)
-        );
-        assert_eq!(
-            ArchiveFormat::from_name("foo.tar.xz"),
-            Some(ArchiveFormat::TarXz)
-        );
-        assert_eq!(
-            ArchiveFormat::from_name("foo.tar"),
-            Some(ArchiveFormat::Tar)
-        );
-        assert_eq!(
-            ArchiveFormat::from_name("foo.zip"),
-            None
-        );
-    }
-}

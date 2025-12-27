@@ -2,6 +2,7 @@
 //!
 //! Installs packages into the user environment.
 
+use crate::output;
 use std::path::PathBuf;
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -50,7 +51,7 @@ pub fn run(package: &str) -> Result<(), String> {
     
     // Check if already installed
     if manifest.lines().any(|line| line == package_path.to_string_lossy()) {
-        println!("Package '{}' is already installed", package);
+        output::info(&format!("Package '{package}' is already installed"));
         // Clean up empty generation
         let _ = fs::remove_dir_all(&gen_dir);
         return Ok(());
@@ -94,8 +95,8 @@ pub fn run(package: &str) -> Result<(), String> {
     symlink(&gen_dir, &current_link)
         .map_err(|e| format!("Failed to create current link: {}", e))?;
     
-    println!("Installed '{}' to generation {}", package, generation);
-    println!("  {} -> {}", package, package_path.display());
+    output::success(&format!("Installed '{package}' to generation {generation}"));
+    println!("  {package} -> {}", package_path.display());
     
     Ok(())
 }
@@ -168,7 +169,7 @@ pub fn list() -> Result<(), String> {
     let current_link = profile_dir.join("current");
     
     if !current_link.exists() {
-        println!("No packages installed");
+        output::info("No packages installed");
         return Ok(());
     }
     
@@ -177,7 +178,7 @@ pub fn list() -> Result<(), String> {
     
     let manifest_path = current_gen.join("manifest");
     if !manifest_path.exists() {
-        println!("No packages installed");
+        output::info("No packages installed");
         return Ok(());
     }
     

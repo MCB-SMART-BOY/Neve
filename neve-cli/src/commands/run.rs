@@ -5,11 +5,12 @@ use std::path::Path;
 use neve_parser::parse;
 use neve_diagnostic::emit;
 use neve_eval::AstEvaluator;
+use crate::output;
 
 pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let path = Path::new(file);
     let source = fs::read_to_string(path)
-        .map_err(|e| format!("cannot read file '{}': {}", file, e))?;
+        .map_err(|e| format!("cannot read file '{file}': {e}"))?;
 
     let (ast, diagnostics) = parse(&source);
 
@@ -22,7 +23,7 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     }
 
     if verbose {
-        println!("Parsed {} items", ast.items.len());
+        output::info(&format!("Parsed {} items", ast.items.len()));
     }
 
     // Evaluate using the AST evaluator with base path for imports
@@ -36,11 +37,11 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         Ok(value) => {
             // Only print non-unit values
             if !matches!(value, neve_eval::Value::Unit) {
-                println!("{:?}", value);
+                output::success(&format!("{value:?}"));
             }
         }
         Err(e) => {
-            eprintln!("Error: {:?}", e);
+            output::error(&format!("{e:?}"));
             return Err("evaluation error".to_string());
         }
     }

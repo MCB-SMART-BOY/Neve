@@ -11,6 +11,7 @@ use crate::{
     Pattern, PatternKind, MatchArm,
     Stmt, StmtKind,
     Ty, TyKind,
+    StringPart,
 };
 
 /// Name resolver that builds HIR from AST.
@@ -39,6 +40,13 @@ impl Resolver {
             scopes: Vec::new(),
             imported: HashMap::new(),
         }
+    }
+
+    /// Create an unknown type with the given span.
+    /// Used during lowering when the type will be inferred later.
+    #[inline]
+    fn unknown_ty(span: neve_common::Span) -> Ty {
+        Ty { kind: TyKind::Unknown, span }
     }
 
     /// Resolve an AST source file to HIR.
@@ -239,7 +247,7 @@ impl Resolver {
                         name,
                         generics: Vec::new(),
                         params: Vec::new(),
-                        return_ty: Ty { kind: TyKind::Unknown, span: item.span },
+                        return_ty: Self::unknown_ty(item.span),
                         body,
                     }),
                     span: item.span,
@@ -257,7 +265,7 @@ impl Resolver {
                 
                 let return_ty = def.return_type.as_ref()
                     .map(|t| self.lower_type(t))
-                    .unwrap_or(Ty { kind: TyKind::Unknown, span: def.name.span });
+                    .unwrap_or_else(|| Self::unknown_ty(def.name.span));
                 
                 let body = self.lower_expr(&def.body);
                 
@@ -505,7 +513,7 @@ impl Resolver {
                     for part in &parts[1..] {
                         let base_expr = Expr {
                             kind: result_kind,
-                            ty: Ty { kind: TyKind::Unknown, span },
+                            ty: Self::unknown_ty(span),
                             span,
                         };
                         result_kind = ExprKind::Field(Box::new(base_expr), part.name.clone());
@@ -536,19 +544,19 @@ impl Resolver {
                                 if let Some(local_id) = self.lookup_local(name) {
                                     Expr {
                                         kind: ExprKind::Var(local_id),
-                                        ty: Ty { kind: TyKind::Unknown, span },
+                                        ty: Self::unknown_ty(span),
                                         span,
                                     }
                                 } else if let Some(def_id) = self.lookup_global(name) {
                                     Expr {
                                         kind: ExprKind::Global(def_id),
-                                        ty: Ty { kind: TyKind::Unknown, span },
+                                        ty: Self::unknown_ty(span),
                                         span,
                                     }
                                 } else {
                                     Expr {
                                         kind: ExprKind::Global(DefId(u32::MAX)),
-                                        ty: Ty { kind: TyKind::Unknown, span },
+                                        ty: Self::unknown_ty(span),
                                         span,
                                     }
                                 }
@@ -583,7 +591,7 @@ impl Resolver {
                         Param {
                             id,
                             name,
-                            ty: Ty { kind: TyKind::Unknown, span: p.span },
+                            ty: Self::unknown_ty(p.span),
                             span: p.span,
                         }
                     })
@@ -608,13 +616,13 @@ impl Resolver {
                 let func = if let Some(def_id) = self.lookup_global(&method.name) {
                     Expr {
                         kind: ExprKind::Global(def_id),
-                        ty: Ty { kind: TyKind::Unknown, span },
+                        ty: Self::unknown_ty(span),
                         span,
                     }
                 } else {
                     Expr {
                         kind: ExprKind::Global(DefId(u32::MAX)),
-                        ty: Ty { kind: TyKind::Unknown, span },
+                        ty: Self::unknown_ty(span),
                         span,
                     }
                 };
@@ -638,7 +646,7 @@ impl Resolver {
                 let index = self.lower_expr(index);
                 let index_fn = Expr {
                     kind: ExprKind::Global(DefId(u32::MAX)), // TODO: resolve index function
-                    ty: Ty { kind: TyKind::Unknown, span },
+                    ty: Self::unknown_ty(span),
                     span,
                 };
                 ExprKind::Call(Box::new(index_fn), vec![base, index])
@@ -703,7 +711,7 @@ impl Resolver {
                         guard: None,
                         body: Expr {
                             kind: ExprKind::Var(x_id),
-                            ty: Ty { kind: TyKind::Unknown, span },
+                            ty: Self::unknown_ty(span),
                             span,
                         },
                         span,
@@ -741,7 +749,7 @@ impl Resolver {
                         guard: None,
                         body: Expr {
                             kind: ExprKind::Var(x_id),
-                            ty: Ty { kind: TyKind::Unknown, span },
+                            ty: Self::unknown_ty(span),
                             span,
                         },
                         span,
@@ -751,12 +759,22 @@ impl Resolver {
                 ExprKind::Match(Box::new(inner), arms)
             }
 
+            ast::ExprKind::Interpolated(parts) => {
+                let parts = parts.iter()
+                    .map(|part| match part {
+                        ast::StringPart::Literal(s) => StringPart::Literal(s.clone()),
+                        ast::StringPart::Expr(e) => StringPart::Expr(self.lower_expr(e)),
+                    })
+                    .collect();
+                ExprKind::Interpolated(parts)
+            }
+
             _ => ExprKind::Literal(Literal::Unit),
         };
 
         Expr {
             kind,
-            ty: Ty { kind: TyKind::Unknown, span },
+            ty: Self::unknown_ty(span),
             span,
         }
     }
@@ -769,7 +787,7 @@ impl Resolver {
                 let id = self.define_local(name.clone());
                 let ty = ty.as_ref()
                     .map(|t| self.lower_type(t))
-                    .unwrap_or(Ty { kind: TyKind::Unknown, span });
+                    .unwrap_or_else(|| Self::unknown_ty(span));
                 let value = self.lower_expr(value);
                 StmtKind::Let(id, name, ty, value)
             }

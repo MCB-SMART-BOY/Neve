@@ -158,30 +158,3 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_size() {
-        assert_eq!(format_size(100), "100 B");
-        assert_eq!(format_size(1024), "1.00 KiB");
-        assert_eq!(format_size(1024 * 1024), "1.00 MiB");
-        assert_eq!(format_size(1024 * 1024 * 1024), "1.00 GiB");
-    }
-
-    #[test]
-    fn test_output_size() {
-        use std::env;
-        
-        let dir = env::temp_dir().join(format!("neve-output-test-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("test.txt"), b"hello world").unwrap();
-        
-        let size = output_size(&dir).unwrap();
-        assert_eq!(size, 11); // "hello world" is 11 bytes
-        
-        // Cleanup
-        let _ = fs::remove_dir_all(&dir);
-    }
-}

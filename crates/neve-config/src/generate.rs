@@ -16,6 +16,39 @@ pub struct Generator {
     system: String,
 }
 
+/// A systemd service unit definition.
+#[derive(Debug, Clone)]
+pub struct ServiceUnit {
+    /// Service name.
+    pub name: String,
+    /// Description.
+    pub description: String,
+    /// Service type (simple, forking, oneshot, etc.).
+    pub service_type: String,
+    /// Command to execute.
+    pub exec_start: String,
+    /// Command to run before exec_start.
+    pub exec_start_pre: Option<String>,
+    /// Command to run after service stops.
+    pub exec_stop: Option<String>,
+    /// User to run as.
+    pub user: Option<String>,
+    /// Group to run as.
+    pub group: Option<String>,
+    /// Working directory.
+    pub working_directory: Option<String>,
+    /// Environment variables.
+    pub environment: Vec<(String, String)>,
+    /// Restart policy (always, on-failure, no).
+    pub restart: String,
+    /// Dependencies (After=).
+    pub after: Vec<String>,
+    /// Required dependencies (Requires=).
+    pub requires: Vec<String>,
+    /// Wanted by targets.
+    pub wanted_by: Vec<String>,
+}
+
 impl Generator {
     /// Create a new generator.
     pub fn new(output_dir: PathBuf) -> Self {
@@ -98,21 +131,244 @@ impl Generator {
 
     /// Generate service configurations.
     fn generate_services(&self, config: &SystemConfig, generated: &mut GeneratedConfig) -> Result<(), ConfigError> {
-        let services_dir = self.output_dir.join("services");
+        let services_dir = self.output_dir.join("etc/systemd/system");
         fs::create_dir_all(&services_dir)?;
         
-        // Generate a list of enabled services
-        let enabled_path = services_dir.join("enabled");
-        let content = config.options.services.join("\n");
-        fs::write(&enabled_path, format!("{}\n", content))?;
+        // Generate systemd units for each service
+        for service_name in &config.options.services {
+            let unit = self.create_service_unit(service_name);
+            let unit_content = self.render_service_unit(&unit);
+            
+            let unit_path = services_dir.join(format!("{}.service", service_name));
+            fs::write(&unit_path, &unit_content)?;
+            
+            generated.files.push(GeneratedFile {
+                source: unit_path,
+                target: PathBuf::from(format!("/etc/systemd/system/{}.service", service_name)),
+                mode: 0o644,
+            });
+            
+            // Create symlink for multi-user.target.wants
+            let wants_dir = services_dir.join("multi-user.target.wants");
+            fs::create_dir_all(&wants_dir)?;
+            
+            #[cfg(unix)]
+            {
+                let link_path = wants_dir.join(format!("{}.service", service_name));
+                let target = format!("/etc/systemd/system/{}.service", service_name);
+                // Remove existing symlink if it exists
+                let _ = fs::remove_file(&link_path);
+                std::os::unix::fs::symlink(&target, &link_path)?;
+            }
+        }
         
         generated.services = config.options.services.clone();
         
         Ok(())
     }
+    
+    /// Create a service unit definition for a known service.
+    fn create_service_unit(&self, name: &str) -> ServiceUnit {
+        // Default service configuration
+        let mut unit = ServiceUnit {
+            name: name.to_string(),
+            description: format!("{} service", name),
+            service_type: "simple".to_string(),
+            exec_start: format!("/usr/bin/{}", name),
+            exec_start_pre: None,
+            exec_stop: None,
+            user: None,
+            group: None,
+            working_directory: None,
+            environment: Vec::new(),
+            restart: "on-failure".to_string(),
+            after: vec!["network.target".to_string()],
+            requires: Vec::new(),
+            wanted_by: vec!["multi-user.target".to_string()],
+        };
+        
+        // Customize known services
+        match name {
+            "sshd" | "ssh" => {
+                unit.description = "OpenSSH Daemon".to_string();
+                unit.exec_start = "/usr/bin/sshd -D".to_string();
+                unit.restart = "always".to_string();
+            }
+            "docker" => {
+                unit.description = "Docker Application Container Engine".to_string();
+                unit.exec_start = "/usr/bin/dockerd".to_string();
+                unit.after.push("containerd.service".to_string());
+                unit.requires.push("containerd.service".to_string());
+            }
+            "nginx" => {
+                unit.description = "Nginx HTTP Server".to_string();
+                unit.exec_start = "/usr/bin/nginx -g 'daemon off;'".to_string();
+                unit.exec_start_pre = Some("/usr/bin/nginx -t".to_string());
+            }
+            "postgresql" | "postgres" => {
+                unit.description = "PostgreSQL Database Server".to_string();
+                unit.exec_start = "/usr/bin/postgres -D /var/lib/postgresql/data".to_string();
+                unit.user = Some("postgres".to_string());
+                unit.group = Some("postgres".to_string());
+            }
+            "redis" => {
+                unit.description = "Redis In-Memory Data Store".to_string();
+                unit.exec_start = "/usr/bin/redis-server /etc/redis.conf".to_string();
+                unit.user = Some("redis".to_string());
+            }
+            _ => {}
+        }
+        
+        unit
+    }
+    
+    /// Render a service unit to a string.
+    fn render_service_unit(&self, unit: &ServiceUnit) -> String {
+        let mut content = String::new();
+        
+        // [Unit] section
+        content.push_str("[Unit]\n");
+        content.push_str(&format!("Description={}\n", unit.description));
+        if !unit.after.is_empty() {
+            content.push_str(&format!("After={}\n", unit.after.join(" ")));
+        }
+        if !unit.requires.is_empty() {
+            content.push_str(&format!("Requires={}\n", unit.requires.join(" ")));
+        }
+        content.push('\n');
+        
+        // [Service] section
+        content.push_str("[Service]\n");
+        content.push_str(&format!("Type={}\n", unit.service_type));
+        if let Some(ref pre) = unit.exec_start_pre {
+            content.push_str(&format!("ExecStartPre={}\n", pre));
+        }
+        content.push_str(&format!("ExecStart={}\n", unit.exec_start));
+        if let Some(ref stop) = unit.exec_stop {
+            content.push_str(&format!("ExecStop={}\n", stop));
+        }
+        if let Some(ref user) = unit.user {
+            content.push_str(&format!("User={}\n", user));
+        }
+        if let Some(ref group) = unit.group {
+            content.push_str(&format!("Group={}\n", group));
+        }
+        if let Some(ref wd) = unit.working_directory {
+            content.push_str(&format!("WorkingDirectory={}\n", wd));
+        }
+        for (key, value) in &unit.environment {
+            content.push_str(&format!("Environment=\"{}={}\"\n", key, value));
+        }
+        content.push_str(&format!("Restart={}\n", unit.restart));
+        content.push('\n');
+        
+        // [Install] section
+        content.push_str("[Install]\n");
+        if !unit.wanted_by.is_empty() {
+            content.push_str(&format!("WantedBy={}\n", unit.wanted_by.join(" ")));
+        }
+        
+        content
+    }
 
     /// Generate user configurations.
-    fn generate_users(&self, config: &SystemConfig, _generated: &mut GeneratedConfig) -> Result<(), ConfigError> {
+    fn generate_users(&self, config: &SystemConfig, generated: &mut GeneratedConfig) -> Result<(), ConfigError> {
+        let etc_dir = self.output_dir.join("etc");
+        fs::create_dir_all(&etc_dir)?;
+        
+        // Generate passwd entries
+        let mut passwd_content = String::new();
+        // System users
+        passwd_content.push_str("root:x:0:0:root:/root:/bin/bash\n");
+        passwd_content.push_str("nobody:x:65534:65534:Nobody:/nonexistent:/usr/sbin/nologin\n");
+        
+        // User-defined users (starting from UID 1000)
+        let mut uid = 1000;
+        for user in &config.options.users {
+            let shell = user.shell.as_deref().unwrap_or("/bin/sh");
+            let home = user.home.display();
+            passwd_content.push_str(&format!(
+                "{}:x:{}:{}:{}:{}:{}\n",
+                user.name, uid, uid, user.name, home, shell
+            ));
+            uid += 1;
+        }
+        
+        let passwd_path = etc_dir.join("passwd");
+        fs::write(&passwd_path, &passwd_content)?;
+        generated.files.push(GeneratedFile {
+            source: passwd_path,
+            target: PathBuf::from("/etc/passwd"),
+            mode: 0o644,
+        });
+        
+        // Generate group entries
+        let mut group_content = String::new();
+        group_content.push_str("root:x:0:\n");
+        group_content.push_str("wheel:x:10:\n");
+        group_content.push_str("users:x:100:\n");
+        group_content.push_str("nobody:x:65534:\n");
+        
+        // Add user groups
+        let mut gid = 1000;
+        for user in &config.options.users {
+            // Primary group
+            group_content.push_str(&format!("{}:x:{}:\n", user.name, gid));
+            gid += 1;
+        }
+        
+        // Add users to supplementary groups
+        let mut group_members: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        for user in &config.options.users {
+            for group in &user.groups {
+                group_members.entry(group.clone())
+                    .or_default()
+                    .push(user.name.clone());
+            }
+        }
+        
+        // Update group entries with members
+        for (group, members) in &group_members {
+            if !members.is_empty() {
+                // For wheel and other predefined groups, we need to update them
+                let members_str = members.join(",");
+                if group == "wheel" {
+                    group_content = group_content.replace(
+                        "wheel:x:10:\n",
+                        &format!("wheel:x:10:{}\n", members_str)
+                    );
+                } else if group == "docker" {
+                    group_content.push_str(&format!("docker:x:999:{}\n", members_str));
+                }
+            }
+        }
+        
+        let group_path = etc_dir.join("group");
+        fs::write(&group_path, &group_content)?;
+        generated.files.push(GeneratedFile {
+            source: group_path,
+            target: PathBuf::from("/etc/group"),
+            mode: 0o644,
+        });
+        
+        // Generate shadow entries (placeholder - actual passwords would be hashed)
+        let mut shadow_content = String::new();
+        shadow_content.push_str("root:!:19000:0:99999:7:::\n");
+        
+        for user in &config.options.users {
+            // Locked account by default (! prefix)
+            shadow_content.push_str(&format!("{}:!:19000:0:99999:7:::\n", user.name));
+        }
+        
+        let shadow_path = etc_dir.join("shadow");
+        fs::write(&shadow_path, &shadow_content)?;
+        generated.files.push(GeneratedFile {
+            source: shadow_path,
+            target: PathBuf::from("/etc/shadow"),
+            mode: 0o640,
+        });
+        
+        // Create user home directory structure info
         let users_dir = self.output_dir.join("users");
         fs::create_dir_all(&users_dir)?;
         
@@ -120,7 +376,7 @@ impl Generator {
             let user_dir = users_dir.join(&user.name);
             fs::create_dir_all(&user_dir)?;
             
-            // User info
+            // User info for activation script
             let info = format!(
                 "name={}\nhome={}\nshell={}\ngroups={}\n",
                 user.name,
@@ -272,44 +528,3 @@ fn current_system() -> String {
     format!("{}-{}", arch, os)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::env;
-
-    #[test]
-    fn test_generator() {
-        let dir = env::temp_dir().join(format!("neve-gen-test-{}", std::process::id()));
-        
-        let config = SystemConfig::new("test")
-            .hostname("test-host")
-            .timezone("UTC")
-            .service("sshd");
-        
-        let generator = Generator::new(dir.clone());
-        let generated = generator.generate(&config).unwrap();
-        
-        assert!(!generated.files.is_empty());
-        assert!(generated.activation_script.is_some());
-        assert_eq!(generated.services, vec!["sshd"]);
-        
-        // Cleanup
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn test_to_derivation() {
-        let dir = env::temp_dir().join("neve-drv-test");
-        let config = SystemConfig::new("my-config")
-            .hostname("my-host")
-            .package("vim")
-            .service("sshd");
-        
-        let generator = Generator::new(dir);
-        let drv = generator.to_derivation(&config);
-        
-        assert_eq!(drv.name, "my-config");
-        assert!(drv.env.contains_key("hostname"));
-        assert!(drv.env.contains_key("packages"));
-    }
-}

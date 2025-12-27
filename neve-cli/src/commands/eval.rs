@@ -3,10 +3,11 @@
 use neve_parser::parse;
 use neve_diagnostic::emit;
 use neve_eval::AstEvaluator;
+use crate::output;
 
 pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
     // Wrap expression in a let binding so it can be parsed as an item
-    let source = format!("let __result__ = {};", expr);
+    let source = format!("let __result__ = {expr};");
     
     let (file, diagnostics) = parse(&source);
 
@@ -19,7 +20,7 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
     }
 
     if verbose {
-        println!("AST: {:?}", file);
+        output::info(&format!("AST: {file:?}"));
     }
 
     // Evaluate using the AST evaluator
@@ -27,10 +28,10 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
     
     match evaluator.eval_file(&file) {
         Ok(value) => {
-            println!("{:?}", value);
+            output::success(&format!("{value:?}"));
         }
         Err(e) => {
-            eprintln!("Error: {:?}", e);
+            output::error(&format!("{e:?}"));
             return Err("evaluation error".to_string());
         }
     }

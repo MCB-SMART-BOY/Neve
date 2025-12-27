@@ -1,5 +1,6 @@
 //! The `neve repl` command.
 
+use crate::output;
 use std::rc::Rc;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
@@ -8,7 +9,7 @@ use neve_diagnostic::emit;
 use neve_eval::{AstEvaluator, AstEnv, Value};
 
 pub fn run() -> Result<(), String> {
-    println!("Neve REPL v{}", env!("CARGO_PKG_VERSION"));
+    output::info(&format!("Neve REPL v{}", env!("CARGO_PKG_VERSION")));
     println!("Type :help for help, :quit to exit");
     println!();
 

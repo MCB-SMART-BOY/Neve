@@ -1,5 +1,6 @@
 //! The `neve fmt` command.
 
+use crate::output;
 use std::fs;
 use std::path::Path;
 
@@ -21,9 +22,9 @@ pub fn run(file: &str, write: bool) -> Result<(), String> {
         if formatted != source {
             fs::write(path, &formatted)
                 .map_err(|e| format!("Failed to write file: {}", e))?;
-            println!("Formatted: {}", file);
+            output::success(&format!("Formatted: {file}"));
         } else {
-            println!("Already formatted: {}", file);
+            output::info(&format!("Already formatted: {file}"));
         }
     } else {
         // Print the formatted code
@@ -48,10 +49,10 @@ pub fn check(file: &str) -> Result<(), String> {
         .map_err(|e| format!("Format error: {}", e))?;
     
     if is_formatted {
-        println!("OK: {}", file);
+        output::success(&format!("OK: {file}"));
         Ok(())
     } else {
-        Err(format!("Would reformat: {}", file))
+        Err(format!("Would reformat: {file}"))
     }
 }
 

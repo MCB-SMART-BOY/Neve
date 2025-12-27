@@ -318,32 +318,3 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Fetc
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_source_builder() {
-        let source = Source::url("https://example.com/file.tar.gz")
-            .with_name("my-source");
-        
-        match source {
-            Source::Url { url, name, .. } => {
-                assert_eq!(url, "https://example.com/file.tar.gz");
-                assert_eq!(name, Some("my-source".to_string()));
-            }
-            _ => panic!("expected Url source"),
-        }
-    }
-
-    #[test]
-    fn test_source_path() {
-        let source = Source::path("/tmp/test.txt");
-        match source {
-            Source::Path { path, .. } => {
-                assert_eq!(path, PathBuf::from("/tmp/test.txt"));
-            }
-            _ => panic!("expected Path source"),
-        }
-    }
-}

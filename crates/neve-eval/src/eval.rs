@@ -260,6 +260,20 @@ impl Evaluator {
                 }
                 Err(EvalError::PatternMatchFailed)
             }
+
+            ExprKind::Interpolated(parts) => {
+                let mut result = String::new();
+                for part in parts {
+                    match part {
+                        neve_hir::StringPart::Literal(s) => result.push_str(s),
+                        neve_hir::StringPart::Expr(e) => {
+                            let val = self.eval(e)?;
+                            result.push_str(&Self::value_to_string(&val));
+                        }
+                    }
+                }
+                Ok(Value::String(Rc::new(result)))
+            }
         }
     }
 
@@ -505,97 +519,67 @@ impl Evaluator {
             }
         }
     }
+
+    /// Convert a value to its string representation for interpolation.
+    fn value_to_string(value: &Value) -> String {
+        match value {
+            Value::Int(n) => n.to_string(),
+            Value::Float(f) => {
+                if f.fract() == 0.0 {
+                    format!("{:.1}", f)
+                } else {
+                    f.to_string()
+                }
+            }
+            Value::Bool(b) => b.to_string(),
+            Value::Char(c) => c.to_string(),
+            Value::String(s) => s.to_string(),
+            Value::Unit => "()".to_string(),
+            Value::None => "None".to_string(),
+            Value::Some(v) => format!("Some({})", Self::value_to_string(v)),
+            Value::Ok(v) => format!("Ok({})", Self::value_to_string(v)),
+            Value::Err(v) => format!("Err({})", Self::value_to_string(v)),
+            Value::List(items) => {
+                let strs: Vec<String> = items.iter().map(Self::value_to_string).collect();
+                format!("[{}]", strs.join(", "))
+            }
+            Value::Tuple(items) => {
+                let strs: Vec<String> = items.iter().map(Self::value_to_string).collect();
+                format!("({})", strs.join(", "))
+            }
+            Value::Record(fields) => {
+                let strs: Vec<String> = fields.iter()
+                    .map(|(k, v)| format!("{} = {}", k, Self::value_to_string(v)))
+                    .collect();
+                format!("#{{ {} }}", strs.join(", "))
+            }
+            Value::Map(map) => {
+                let strs: Vec<String> = map.iter()
+                    .map(|(k, v)| format!("{} => {}", k, Self::value_to_string(v)))
+                    .collect();
+                format!("Map{{ {} }}", strs.join(", "))
+            }
+            Value::Set(set) => {
+                let strs: Vec<String> = set.iter().cloned().collect();
+                format!("Set{{ {} }}", strs.join(", "))
+            }
+            Value::Variant(tag, payload) => {
+                if matches!(**payload, Value::Unit) {
+                    tag.clone()
+                } else {
+                    format!("{}({})", tag, Self::value_to_string(payload))
+                }
+            }
+            Value::Builtin(b) => format!("<builtin:{}>", b.name),
+            Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
+            Value::AstClosure(_) => "<function>".to_string(),
+            Value::Closure { .. } => "<function>".to_string(),
+        }
+    }
 }
 
 impl Default for Evaluator {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use neve_parser::parse;
-    use neve_hir::lower;
-
-    fn eval_source(source: &str) -> Result<Value, EvalError> {
-        let (ast, _) = parse(source);
-        let hir = lower(&ast);
-        let mut eval = Evaluator::new();
-        eval.eval_module(&hir)
-    }
-
-    #[test]
-    fn test_eval_literal() {
-        assert!(matches!(eval_source("let x = 42;"), Ok(Value::Int(42))));
-    }
-
-    #[test]
-    fn test_eval_arithmetic() {
-        assert!(matches!(eval_source("let x = 1 + 2 * 3;"), Ok(Value::Int(7))));
-    }
-
-    #[test]
-    fn test_eval_if() {
-        assert!(matches!(eval_source("let x = if true then 1 else 0;"), Ok(Value::Int(1))));
-        assert!(matches!(eval_source("let x = if false then 1 else 0;"), Ok(Value::Int(0))));
-    }
-
-    #[test]
-    fn test_eval_function_call() {
-        let result = eval_source("
-            fn double(x) = x * 2;
-            let y = double(21);
-        ");
-        assert!(matches!(result, Ok(Value::Int(42))));
-    }
-
-    #[test]
-    fn test_eval_recursive() {
-        let result = eval_source("
-            fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);
-            let x = fact(5);
-        ");
-        assert!(matches!(result, Ok(Value::Int(120))));
-    }
-
-    #[test]
-    fn test_eval_list() {
-        let result = eval_source("let x = [1, 2, 3];");
-        match result {
-            Ok(Value::List(items)) => {
-                assert_eq!(items.len(), 3);
-            }
-            other => panic!("expected list, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_eval_record() {
-        let result = eval_source("let x = #{ a = 1, b = 2 };");
-        match result {
-            Ok(Value::Record(fields)) => {
-                assert_eq!(fields.len(), 2);
-            }
-            other => panic!("expected record, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_eval_match() {
-        assert!(matches!(
-            eval_source("let x = match 1 { 0 => 0, 1 => 10, _ => 100 };"),
-            Ok(Value::Int(10))
-        ));
-    }
-
-    #[test]
-    fn test_eval_pipe() {
-        let result = eval_source("
-            fn double(x) = x * 2;
-            let x = 5 |> double;
-        ");
-        assert!(matches!(result, Ok(Value::Int(10))));
     }
 }

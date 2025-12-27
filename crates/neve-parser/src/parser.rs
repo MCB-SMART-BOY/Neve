@@ -886,6 +886,9 @@ impl Parser {
                 let span = start.merge(expr.span);
                 Expr::new(ExprKind::Lazy(Box::new(expr)), span)
             }
+            TokenKind::InterpolatedStart => {
+                self.parse_interpolated_string()
+            }
             _ => {
                 self.error("expected expression");
                 self.recover_expr()
@@ -1277,6 +1280,45 @@ impl Parser {
         }
 
         params
+    }
+
+    fn parse_interpolated_string(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // InterpolatedStart
+
+        let mut parts = Vec::new();
+
+        loop {
+            match self.current_kind().clone() {
+                TokenKind::InterpolatedPart(s) => {
+                    self.advance();
+                    parts.push(StringPart::Literal(s));
+                }
+                TokenKind::InterpolationStart => {
+                    self.advance();
+                    let expr = self.parse_expr();
+                    parts.push(StringPart::Expr(expr));
+                    if !self.eat(TokenKind::InterpolationEnd) {
+                        self.error("expected `}` to close interpolation");
+                    }
+                }
+                TokenKind::InterpolatedEnd => {
+                    self.advance();
+                    break;
+                }
+                TokenKind::Eof => {
+                    self.error("unterminated interpolated string");
+                    break;
+                }
+                _ => {
+                    self.error("unexpected token in interpolated string");
+                    self.advance();
+                }
+            }
+        }
+
+        let span = start.merge(self.previous_span());
+        Expr::new(ExprKind::Interpolated(parts), span)
     }
 
     fn parse_args(&mut self) -> Vec<Expr> {
@@ -1714,7 +1756,6 @@ impl Parser {
     
     /// Check if we're at the end of a statement.
     /// Uses STMT_ENDS constant for the token set.
-    #[allow(dead_code)]
     fn at_stmt_end(&self) -> bool {
         STMT_ENDS.iter().any(|k| 
             std::mem::discriminant(self.current_kind()) == std::mem::discriminant(k)
@@ -1728,7 +1769,12 @@ impl Parser {
                 return;
             }
             
-            // Also stop at statement boundaries
+            // Stop at statement-ending tokens
+            if self.at_stmt_end() {
+                return;
+            }
+            
+            // Also stop at statement boundaries (sync tokens like keywords)
             if is_sync_token(self.current_kind()) {
                 return;
             }
@@ -1821,76 +1867,6 @@ impl Parser {
         }
         
         items
-    }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use crate::parse;
-
-    #[test]
-    fn test_parse_let() {
-        let (file, diags) = parse("let x = 42;");
-        assert!(diags.is_empty());
-        assert_eq!(file.items.len(), 1);
-    }
-
-    #[test]
-    fn test_parse_fn() {
-        let (file, diags) = parse("fn add(x: Int, y: Int) -> Int = x + y;");
-        assert!(diags.is_empty());
-        assert_eq!(file.items.len(), 1);
-    }
-
-    #[test]
-    fn test_parse_record() {
-        let (file, diags) = parse("let r = #{ x = 1, y = 2 };");
-        assert!(diags.is_empty());
-        assert_eq!(file.items.len(), 1);
-    }
-
-    // Error recovery tests
-
-    #[test]
-    fn test_recovery_missing_semicolon() {
-        // Parser should recover and parse the second let
-        let (file, diags) = parse("let x = 42 let y = 10;");
-        assert!(!diags.is_empty()); // Should have error
-        assert!(file.items.len() >= 1); // Should still parse something
-    }
-
-    #[test]
-    fn test_recovery_invalid_expression() {
-        // Parser should recover from invalid token in expression
-        let (file, diags) = parse("let x = @@@; let y = 10;");
-        assert!(!diags.is_empty());
-        // Should still try to parse second let
-        assert!(file.items.len() >= 1);
-    }
-
-    #[test]
-    fn test_recovery_multiple_errors() {
-        // Parser should report multiple errors
-        let (file, diags) = parse("let x = ; let y = ; let z = 42;");
-        assert!(diags.len() >= 2); // At least 2 errors
-        assert!(file.items.len() >= 1); // Should parse at least the valid let
-    }
-
-    #[test]
-    fn test_recovery_unbalanced_parens() {
-        let (file, diags) = parse("let x = (1 + 2; let y = 3;");
-        assert!(!diags.is_empty());
-        // Parser should recover
-        assert!(file.items.len() >= 1);
-    }
-
-    #[test]
-    fn test_recovery_unbalanced_braces() {
-        let (file, diags) = parse("let x = #{ a = 1; let y = 3;");
-        assert!(!diags.is_empty());
-        assert!(file.items.len() >= 1);
     }
 }
 

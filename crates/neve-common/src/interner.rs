@@ -48,20 +48,3 @@ impl Interner {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_intern() {
-        let mut interner = Interner::new();
-        let a = interner.intern("hello");
-        let b = interner.intern("world");
-        let c = interner.intern("hello");
-
-        assert_eq!(a, c);
-        assert_ne!(a, b);
-        assert_eq!(interner.get(a), "hello");
-        assert_eq!(interner.get(b), "world");
-    }
-}

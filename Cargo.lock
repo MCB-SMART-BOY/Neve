@@ -1066,6 +1066,7 @@ name = "neve"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "neve-builder",
  "neve-common",
  "neve-config",
  "neve-derive",

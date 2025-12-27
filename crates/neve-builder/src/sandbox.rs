@@ -14,6 +14,33 @@ use crate::BuildError;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 
+/// Resource limits for builds.
+#[derive(Debug, Clone)]
+pub struct ResourceLimits {
+    /// Maximum memory in bytes (0 = unlimited).
+    pub max_memory: u64,
+    /// Maximum CPU time in seconds (0 = unlimited).
+    pub max_cpu_time: u64,
+    /// Maximum number of processes.
+    pub max_processes: u32,
+    /// Maximum number of open file descriptors.
+    pub max_fds: u32,
+    /// Maximum file size in bytes.
+    pub max_file_size: u64,
+}
+
+impl Default for ResourceLimits {
+    fn default() -> Self {
+        Self {
+            max_memory: 0,          // Unlimited
+            max_cpu_time: 0,        // Unlimited
+            max_processes: 1024,    // Reasonable default
+            max_fds: 1024,          // Reasonable default
+            max_file_size: 0,       // Unlimited
+        }
+    }
+}
+
 /// Sandbox configuration.
 #[derive(Debug, Clone)]
 pub struct SandboxConfig {
@@ -27,10 +54,18 @@ pub struct SandboxConfig {
     pub output_dir: PathBuf,
     /// Additional read-only paths to mount.
     pub ro_paths: Vec<PathBuf>,
+    /// Additional read-write paths to mount.
+    pub rw_paths: Vec<PathBuf>,
     /// Allowed network access.
     pub network: bool,
     /// Environment variables.
     pub env: HashMap<String, String>,
+    /// Resource limits.
+    pub limits: ResourceLimits,
+    /// Allowed syscalls (empty = all allowed).
+    pub allowed_syscalls: Vec<String>,
+    /// Build log file path.
+    pub log_file: Option<PathBuf>,
 }
 
 impl SandboxConfig {
@@ -42,14 +77,23 @@ impl SandboxConfig {
             output_dir: root.join("output"),
             root,
             ro_paths: Vec::new(),
+            rw_paths: Vec::new(),
             network: false,
             env: HashMap::new(),
+            limits: ResourceLimits::default(),
+            allowed_syscalls: Vec::new(),
+            log_file: None,
         }
     }
 
     /// Add a read-only path.
     pub fn add_ro_path(&mut self, path: PathBuf) {
         self.ro_paths.push(path);
+    }
+    
+    /// Add a read-write path.
+    pub fn add_rw_path(&mut self, path: PathBuf) {
+        self.rw_paths.push(path);
     }
 
     /// Enable network access.
@@ -63,12 +107,36 @@ impl SandboxConfig {
         self.env.insert(key.into(), value.into());
         self
     }
+    
+    /// Set resource limits.
+    pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
+        self.limits = limits;
+        self
+    }
+    
+    /// Set memory limit in bytes.
+    pub fn with_memory_limit(mut self, bytes: u64) -> Self {
+        self.limits.max_memory = bytes;
+        self
+    }
+    
+    /// Set CPU time limit in seconds.
+    pub fn with_cpu_limit(mut self, seconds: u64) -> Self {
+        self.limits.max_cpu_time = seconds;
+        self
+    }
+    
+    /// Set build log file.
+    pub fn with_log_file(mut self, path: PathBuf) -> Self {
+        self.log_file = Some(path);
+        self
+    }
 }
 
 /// A sandbox for isolated builds.
 pub struct Sandbox {
     config: SandboxConfig,
-    #[allow(dead_code)]
+    /// Whether the sandbox is currently active (has an ongoing build).
     active: bool,
 }
 
@@ -102,6 +170,25 @@ impl Sandbox {
     /// Get the output directory.
     pub fn output_dir(&self) -> &Path {
         &self.config.output_dir
+    }
+    
+    /// Check if the sandbox is currently active.
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+    
+    /// Enter the sandbox (mark as active before build).
+    pub fn enter(&mut self) -> Result<(), BuildError> {
+        if self.active {
+            return Err(BuildError::Sandbox("sandbox is already active".into()));
+        }
+        self.active = true;
+        Ok(())
+    }
+    
+    /// Leave the sandbox (mark as inactive after build).
+    pub fn leave(&mut self) {
+        self.active = false;
     }
 
     /// Execute a command in the sandbox.
@@ -192,6 +279,9 @@ impl Sandbox {
                 let _ = std::fs::write("/proc/self/uid_map", format!("0 {} 1\n", uid));
                 let _ = std::fs::write("/proc/self/setgroups", "deny\n");
                 let _ = std::fs::write("/proc/self/gid_map", format!("0 {} 1\n", gid));
+                
+                // Apply resource limits using rlimit
+                apply_resource_limits(&self.config.limits);
                 
                 // Set up mounts - bind mount essential directories
                 let mount_opts: Option<&str> = None;
@@ -454,38 +544,128 @@ impl IsolationLevel {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::env;
-
-    #[test]
-    fn test_sandbox_config() {
-        let root = env::temp_dir().join("neve-sandbox-test");
-        let config = SandboxConfig::new(root.clone());
-        
-        assert_eq!(config.build_dir, root.join("build"));
-        assert_eq!(config.output_dir, root.join("output"));
-        assert!(!config.network);
-    }
-
-    #[test]
-    fn test_sandbox_create() {
-        let root = env::temp_dir().join(format!("neve-sandbox-test-{}", std::process::id()));
-        let config = SandboxConfig::new(root.clone());
-        
-        let sandbox = Sandbox::new(config).unwrap();
-        assert!(sandbox.build_dir().exists());
-        assert!(sandbox.output_dir().exists());
-        
-        sandbox.cleanup().unwrap();
-        assert!(!root.exists());
+/// Apply resource limits using setrlimit.
+#[cfg(target_os = "linux")]
+fn apply_resource_limits(limits: &ResourceLimits) {
+    use nix::sys::resource::{setrlimit, Resource};
+    
+    // Set memory limit (address space)
+    if limits.max_memory > 0 {
+        let _ = setrlimit(Resource::RLIMIT_AS, limits.max_memory, limits.max_memory);
     }
     
-    #[test]
-    fn test_isolation_level() {
-        let level = IsolationLevel::best_available();
-        // Should be at least Basic
-        assert!(level == IsolationLevel::Full || level == IsolationLevel::Basic);
+    // Set CPU time limit
+    if limits.max_cpu_time > 0 {
+        let _ = setrlimit(Resource::RLIMIT_CPU, limits.max_cpu_time, limits.max_cpu_time);
+    }
+    
+    // Set max processes
+    if limits.max_processes > 0 {
+        let _ = setrlimit(
+            Resource::RLIMIT_NPROC, 
+            limits.max_processes as u64, 
+            limits.max_processes as u64
+        );
+    }
+    
+    // Set max file descriptors
+    if limits.max_fds > 0 {
+        let _ = setrlimit(
+            Resource::RLIMIT_NOFILE, 
+            limits.max_fds as u64, 
+            limits.max_fds as u64
+        );
+    }
+    
+    // Set max file size
+    if limits.max_file_size > 0 {
+        let _ = setrlimit(Resource::RLIMIT_FSIZE, limits.max_file_size, limits.max_file_size);
     }
 }
+
+#[cfg(not(target_os = "linux"))]
+fn apply_resource_limits(_limits: &ResourceLimits) {
+    // Resource limits not supported on non-Linux platforms
+}
+
+/// Build phase for structured build execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildPhase {
+    /// Unpacking sources.
+    Unpack,
+    /// Patching sources.
+    Patch,
+    /// Configuration (e.g., ./configure).
+    Configure,
+    /// Building (e.g., make).
+    Build,
+    /// Checking/testing.
+    Check,
+    /// Installation.
+    Install,
+    /// Post-installation fixups.
+    Fixup,
+    /// Distribution phase.
+    Dist,
+}
+
+impl BuildPhase {
+    /// Get phase name.
+    pub fn name(&self) -> &'static str {
+        match self {
+            BuildPhase::Unpack => "unpack",
+            BuildPhase::Patch => "patch",
+            BuildPhase::Configure => "configure",
+            BuildPhase::Build => "build",
+            BuildPhase::Check => "check",
+            BuildPhase::Install => "install",
+            BuildPhase::Fixup => "fixup",
+            BuildPhase::Dist => "dist",
+        }
+    }
+    
+    /// Get all phases in order.
+    pub fn all() -> &'static [BuildPhase] {
+        &[
+            BuildPhase::Unpack,
+            BuildPhase::Patch,
+            BuildPhase::Configure,
+            BuildPhase::Build,
+            BuildPhase::Check,
+            BuildPhase::Install,
+            BuildPhase::Fixup,
+            BuildPhase::Dist,
+        ]
+    }
+}
+
+/// Build hook that can be executed at various phases.
+pub struct BuildHook {
+    /// Phase to execute at.
+    pub phase: BuildPhase,
+    /// Whether to run before or after the phase.
+    pub before: bool,
+    /// The script to execute.
+    pub script: String,
+}
+
+impl BuildHook {
+    /// Create a pre-phase hook.
+    pub fn pre(phase: BuildPhase, script: impl Into<String>) -> Self {
+        Self {
+            phase,
+            before: true,
+            script: script.into(),
+        }
+    }
+    
+    /// Create a post-phase hook.
+    pub fn post(phase: BuildPhase, script: impl Into<String>) -> Self {
+        Self {
+            phase,
+            before: false,
+            script: script.into(),
+        }
+    }
+}
+

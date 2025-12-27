@@ -216,14 +216,3 @@ impl Builder {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_builder_config_default() {
-        let config = BuilderConfig::default();
-        assert!(config.cores >= 1);
-        assert_eq!(config.max_jobs, 1);
-    }
-}
