@@ -489,13 +489,17 @@ impl Resolver {
                     .filter_map(|ti| self.lower_trait_item(ti))
                     .collect();
 
+                let assoc_types = def.assoc_types.iter()
+                    .map(|at| self.lower_assoc_type_def(at))
+                    .collect();
+
                 Some(Item {
                     id,
                     kind: ItemKind::Trait(TraitDef {
                         name: def.name.name.clone(),
                         generics,
                         items,
-                        assoc_types: Vec::new(), // TODO: parse associated types from AST
+                        assoc_types,
                     }),
                     span: item.span,
                 })
@@ -513,6 +517,10 @@ impl Resolver {
                     .filter_map(|ii| self.lower_impl_item(ii))
                     .collect();
 
+                let assoc_type_impls = def.assoc_type_impls.iter()
+                    .map(|ati| self.lower_assoc_type_impl(ati))
+                    .collect();
+
                 Some(Item {
                     id,
                     kind: ItemKind::Impl(ImplDef {
@@ -520,7 +528,7 @@ impl Resolver {
                         trait_ref,
                         self_ty,
                         items,
-                        assoc_type_impls: Vec::new(), // TODO: parse associated type impls from AST
+                        assoc_type_impls,
                     }),
                     span: item.span,
                 })
@@ -599,6 +607,23 @@ impl Resolver {
             body,
             span: item.span,
         })
+    }
+
+    fn lower_assoc_type_def(&self, assoc_type: &ast::AssocTypeDef) -> AssocTypeDef {
+        AssocTypeDef {
+            name: assoc_type.name.name.clone(),
+            bounds: assoc_type.bounds.iter().map(|b| self.lower_type(b)).collect(),
+            default: assoc_type.default.as_ref().map(|t| self.lower_type(t)),
+            span: assoc_type.span,
+        }
+    }
+
+    fn lower_assoc_type_impl(&self, assoc_type_impl: &ast::AssocTypeImpl) -> AssocTypeImpl {
+        AssocTypeImpl {
+            name: assoc_type_impl.name.name.clone(),
+            ty: self.lower_type(&assoc_type_impl.ty),
+            span: assoc_type_impl.span,
+        }
     }
 
     // === Lower expressions ===

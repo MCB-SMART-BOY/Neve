@@ -214,8 +214,14 @@ impl Parser {
         self.expect(TokenKind::LBrace);
 
         let mut items = Vec::new();
+        let mut assoc_types = Vec::new();
+
         while !self.check(TokenKind::RBrace) && !self.at_end() {
-            items.push(self.parse_trait_item());
+            if self.check(TokenKind::Type) {
+                assoc_types.push(self.parse_assoc_type_def());
+            } else {
+                items.push(self.parse_trait_item());
+            }
         }
 
         self.expect(TokenKind::RBrace);
@@ -226,6 +232,7 @@ impl Parser {
             name,
             generics,
             items,
+            assoc_types,
         }
     }
 
@@ -242,8 +249,14 @@ impl Parser {
         self.expect(TokenKind::LBrace);
 
         let mut items = Vec::new();
+        let mut assoc_type_impls = Vec::new();
+
         while !self.check(TokenKind::RBrace) && !self.at_end() {
-            items.push(self.parse_impl_item());
+            if self.check(TokenKind::Type) {
+                assoc_type_impls.push(self.parse_assoc_type_impl());
+            } else {
+                items.push(self.parse_impl_item());
+            }
         }
 
         self.expect(TokenKind::RBrace);
@@ -254,6 +267,7 @@ impl Parser {
             trait_,
             target,
             items,
+            assoc_type_impls,
         }
     }
 
@@ -516,6 +530,56 @@ impl Parser {
             params,
             return_type,
             body,
+            span: start.merge(end),
+        }
+    }
+
+    fn parse_assoc_type_def(&mut self) -> AssocTypeDef {
+        let start = self.current_span();
+        self.expect(TokenKind::Type);
+        let name = self.parse_ident();
+
+        // Parse bounds: `type Item: Eq + Show`
+        let bounds = if self.eat(TokenKind::Colon) {
+            let mut bounds = vec![self.parse_type()];
+            while self.eat(TokenKind::Plus) {
+                bounds.push(self.parse_type());
+            }
+            bounds
+        } else {
+            Vec::new()
+        };
+
+        // Parse default: `type Item = Int`
+        let default = if self.eat(TokenKind::Eq) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        self.expect(TokenKind::Semicolon);
+        let end = self.previous_span();
+
+        AssocTypeDef {
+            name,
+            bounds,
+            default,
+            span: start.merge(end),
+        }
+    }
+
+    fn parse_assoc_type_impl(&mut self) -> AssocTypeImpl {
+        let start = self.current_span();
+        self.expect(TokenKind::Type);
+        let name = self.parse_ident();
+        self.expect(TokenKind::Eq);
+        let ty = self.parse_type();
+        self.expect(TokenKind::Semicolon);
+        let end = self.previous_span();
+
+        AssocTypeImpl {
+            name,
+            ty,
             span: start.merge(end),
         }
     }
@@ -1899,4 +1963,77 @@ impl Parser {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_associated_types() {
+        let source = r#"
+trait Iterator {
+    type Item;
+    fn next(self) -> Option<Self.Item>;
+};
+
+trait Container {
+    type Item: Show;
+    type Error = String;
+};
+
+impl<T> Iterator for List<T> {
+    type Item = T;
+    fn next(self) -> Option<T> { None };
+};
+"#;
+
+        let tokens = neve_lexer::lex(source);
+        let mut parser = Parser::new(tokens);
+        let source_file = parser.parse();
+
+        // Check for no errors
+        assert!(parser.diagnostics().is_empty(), "Parser should not produce errors");
+
+        // Verify we parsed 3 items
+        assert_eq!(source_file.items.len(), 3);
+
+        // Check first trait (Iterator)
+        if let ast::ItemKind::Trait(trait_def) = &source_file.items[0].kind {
+            assert_eq!(trait_def.name.name, "Iterator");
+            assert_eq!(trait_def.assoc_types.len(), 1);
+            assert_eq!(trait_def.assoc_types[0].name.name, "Item");
+            assert_eq!(trait_def.assoc_types[0].bounds.len(), 0);
+            assert!(trait_def.assoc_types[0].default.is_none());
+            assert_eq!(trait_def.items.len(), 1);
+        } else {
+            panic!("First item should be a trait");
+        }
+
+        // Check second trait (Container)
+        if let ast::ItemKind::Trait(trait_def) = &source_file.items[1].kind {
+            assert_eq!(trait_def.name.name, "Container");
+            assert_eq!(trait_def.assoc_types.len(), 2);
+
+            // First assoc type with bound
+            assert_eq!(trait_def.assoc_types[0].name.name, "Item");
+            assert_eq!(trait_def.assoc_types[0].bounds.len(), 1);
+            assert!(trait_def.assoc_types[0].default.is_none());
+
+            // Second assoc type with default
+            assert_eq!(trait_def.assoc_types[1].name.name, "Error");
+            assert_eq!(trait_def.assoc_types[1].bounds.len(), 0);
+            assert!(trait_def.assoc_types[1].default.is_some());
+        } else {
+            panic!("Second item should be a trait");
+        }
+
+        // Check impl block
+        if let ast::ItemKind::Impl(impl_def) = &source_file.items[2].kind {
+            assert_eq!(impl_def.assoc_type_impls.len(), 1);
+            assert_eq!(impl_def.assoc_type_impls[0].name.name, "Item");
+            assert_eq!(impl_def.items.len(), 1);
+        } else {
+            panic!("Third item should be an impl");
+        }
+    }
+}
 

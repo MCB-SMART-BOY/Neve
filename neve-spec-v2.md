@@ -217,12 +217,31 @@ trait Eq {
     fn eq(self, other: Self) -> Bool;
 };
 
+-- Associated types allow traits to define type placeholders
+trait Iterator {
+    type Item;
+    fn next(self) -> Option<Self.Item>;
+};
+
+-- Associated types can have bounds and defaults
+trait Container {
+    type Item: Show;
+    type Error = String;
+    fn get(self, index: Int) -> Result<Self.Item, Self.Error>;
+};
+
 impl Show for Point {
     fn show(self) -> String = `({self.x}, {self.y})`;
 };
 
 impl<T: Show> Show for List<T> {
     fn show(self) -> String = `[{self.map(Show.show).join(", ")}]`;
+};
+
+-- Implement traits with associated types
+impl<T> Iterator for List<T> {
+    type Item = T;
+    fn next(self) -> Option<T> = -- implementation
 };
 ```
 

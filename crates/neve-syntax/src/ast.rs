@@ -40,7 +40,7 @@ pub enum ItemKind {
 /// A let binding at the top level.
 #[derive(Debug, Clone)]
 pub struct LetDef {
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub pattern: Pattern,
     pub ty: Option<Type>,
     pub value: Expr,
@@ -49,7 +49,7 @@ pub struct LetDef {
 /// A function definition.
 #[derive(Debug, Clone)]
 pub struct FnDef {
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
@@ -77,7 +77,7 @@ pub struct GenericParam {
 /// A type alias.
 #[derive(Debug, Clone)]
 pub struct TypeAlias {
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub ty: Type,
@@ -86,7 +86,7 @@ pub struct TypeAlias {
 /// A struct definition.
 #[derive(Debug, Clone)]
 pub struct StructDef {
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<FieldDef>,
@@ -104,7 +104,7 @@ pub struct FieldDef {
 /// An enum definition.
 #[derive(Debug, Clone)]
 pub struct EnumDef {
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
@@ -131,10 +131,11 @@ pub enum VariantKind {
 /// A trait definition.
 #[derive(Debug, Clone)]
 pub struct TraitDef {
-    pub is_pub: bool,
+    pub visibility: Visibility,
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub items: Vec<TraitItem>,
+    pub assoc_types: Vec<AssocTypeDef>,
 }
 
 /// A trait item (method signature).
@@ -148,6 +149,15 @@ pub struct TraitItem {
     pub span: Span,
 }
 
+/// An associated type definition in a trait.
+#[derive(Debug, Clone)]
+pub struct AssocTypeDef {
+    pub name: Ident,
+    pub bounds: Vec<Type>,
+    pub default: Option<Type>,
+    pub span: Span,
+}
+
 /// An impl block.
 #[derive(Debug, Clone)]
 pub struct ImplDef {
@@ -155,6 +165,7 @@ pub struct ImplDef {
     pub trait_: Option<Type>,
     pub target: Type,
     pub items: Vec<ImplItem>,
+    pub assoc_type_impls: Vec<AssocTypeImpl>,
 }
 
 /// An impl item (method implementation).
@@ -165,6 +176,14 @@ pub struct ImplItem {
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub body: Expr,
+    pub span: Span,
+}
+
+/// An associated type implementation in an impl block.
+#[derive(Debug, Clone)]
+pub struct AssocTypeImpl {
+    pub name: Ident,
+    pub ty: Type,
     pub span: Span,
 }
 
@@ -179,8 +198,8 @@ pub struct ImportDef {
     pub items: ImportItems,
     /// Optional alias for the import
     pub alias: Option<Ident>,
-    /// Whether this is a re-export (`pub import`)
-    pub is_pub: bool,
+    /// Visibility for re-exports (`pub import`)
+    pub visibility: Visibility,
 }
 
 /// Path prefix for imports and module paths.
