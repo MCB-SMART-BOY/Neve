@@ -3,11 +3,81 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
+use std::cell::RefCell;
 use neve_hir::{Expr, Param};
 use crate::Environment;
 
 // Forward declaration for AstClosure
 pub use crate::ast_eval::AstClosure;
+
+/// A thunk represents a suspended computation for lazy evaluation.
+/// It can be in one of three states:
+/// - Unevaluated: contains the expression and environment to evaluate
+/// - Evaluating: currently being evaluated (used to detect cycles)
+/// - Evaluated: contains the cached result
+#[derive(Clone)]
+pub struct Thunk {
+    inner: Rc<RefCell<ThunkState>>,
+}
+
+#[derive(Clone)]
+pub enum ThunkState {
+    /// Unevaluated thunk with AST expression
+    Unevaluated {
+        expr: neve_syntax::Expr,
+        env: Rc<crate::ast_eval::AstEnv>,
+    },
+    /// Currently being evaluated (for cycle detection)
+    Evaluating,
+    /// Already evaluated and cached
+    Evaluated(Value),
+}
+
+impl Thunk {
+    /// Create a new unevaluated thunk from an AST expression.
+    pub fn new(expr: neve_syntax::Expr, env: Rc<crate::ast_eval::AstEnv>) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(ThunkState::Unevaluated { expr, env })),
+        }
+    }
+
+    /// Create a thunk that is already evaluated.
+    pub fn evaluated(value: Value) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(ThunkState::Evaluated(value))),
+        }
+    }
+
+    /// Check if the thunk has been evaluated.
+    pub fn is_evaluated(&self) -> bool {
+        matches!(&*self.inner.borrow(), ThunkState::Evaluated(_))
+    }
+
+    /// Check if the thunk is currently being evaluated (cycle detection).
+    pub fn is_evaluating(&self) -> bool {
+        matches!(&*self.inner.borrow(), ThunkState::Evaluating)
+    }
+
+    /// Get the state for inspection.
+    pub fn state(&self) -> std::cell::Ref<'_, ThunkState> {
+        self.inner.borrow()
+    }
+
+    /// Get mutable state for force evaluation.
+    pub fn state_mut(&self) -> std::cell::RefMut<'_, ThunkState> {
+        self.inner.borrow_mut()
+    }
+}
+
+impl fmt::Debug for Thunk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &*self.inner.borrow() {
+            ThunkState::Unevaluated { .. } => write!(f, "<thunk:unevaluated>"),
+            ThunkState::Evaluating => write!(f, "<thunk:evaluating>"),
+            ThunkState::Evaluated(v) => write!(f, "<thunk:{:?}>", v),
+        }
+    }
+}
 
 /// A runtime value.
 #[derive(Clone)]
@@ -56,6 +126,8 @@ pub enum Value {
     Ok(Box<Value>),
     /// Result::Err
     Err(Box<Value>),
+    /// Thunk (lazy value)
+    Thunk(Thunk),
 }
 
 /// A built-in function.
@@ -140,6 +212,7 @@ impl fmt::Debug for Value {
             Value::None => write!(f, "None"),
             Value::Ok(v) => write!(f, "Ok({:?})", v),
             Value::Err(v) => write!(f, "Err({:?})", v),
+            Value::Thunk(thunk) => write!(f, "{:?}", thunk),
         }
     }
 }
@@ -163,6 +236,13 @@ impl PartialEq for Value {
             (Value::None, Value::None) => true,
             (Value::Ok(a), Value::Ok(b)) => a == b,
             (Value::Err(a), Value::Err(b)) => a == b,
+            // Thunks: compare by evaluated value if both are evaluated
+            (Value::Thunk(a), Value::Thunk(b)) => {
+                match (&*a.state(), &*b.state()) {
+                    (ThunkState::Evaluated(va), ThunkState::Evaluated(vb)) => va == vb,
+                    _ => false, // Unevaluated thunks are not equal
+                }
+            }
             // Closures and builtins are never equal
             _ => false,
         }

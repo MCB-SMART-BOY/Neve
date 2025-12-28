@@ -94,9 +94,9 @@ impl Parser {
                 self.advance();
                 Some(ItemKind::Impl(self.parse_impl_def()))
             }
-            TokenKind::Import if !is_pub => {
+            TokenKind::Import => {
                 self.advance();
-                Some(ItemKind::Import(self.parse_import_def()))
+                Some(ItemKind::Import(self.parse_import_def(is_pub)))
             }
             _ => {
                 if is_pub {
@@ -257,9 +257,34 @@ impl Parser {
         }
     }
 
-    fn parse_import_def(&mut self) -> ImportDef {
+    fn parse_import_def(&mut self, is_pub: bool) -> ImportDef {
+        // Parse optional path prefix (self, super, crate)
+        let prefix = match self.current().kind {
+            TokenKind::SelfLower => {
+                self.advance();
+                self.expect(TokenKind::Dot);
+                PathPrefix::Self_
+            }
+            TokenKind::Super => {
+                self.advance();
+                self.expect(TokenKind::Dot);
+                PathPrefix::Super
+            }
+            TokenKind::Crate => {
+                self.advance();
+                self.expect(TokenKind::Dot);
+                PathPrefix::Crate
+            }
+            _ => PathPrefix::Absolute,
+        };
+
+        // Parse the path segments
         let mut path = vec![self.parse_ident()];
         while self.eat(TokenKind::Dot) {
+            // Check if next token is '(' for import items, not a path segment
+            if matches!(self.current().kind, TokenKind::LParen) {
+                break;
+            }
             path.push(self.parse_ident());
         }
 
@@ -287,7 +312,7 @@ impl Parser {
 
         self.expect(TokenKind::Semicolon);
 
-        ImportDef { path, items, alias }
+        ImportDef { prefix, path, items, alias, is_pub }
     }
 
     // ========== Helpers ==========
@@ -888,6 +913,10 @@ impl Parser {
             }
             TokenKind::InterpolatedStart => {
                 self.parse_interpolated_string()
+            }
+            TokenKind::PathLit(p) => {
+                self.advance();
+                Expr::new(ExprKind::PathLit(p), start)
             }
             _ => {
                 self.error("expected expression");

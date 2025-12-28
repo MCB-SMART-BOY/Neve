@@ -171,9 +171,30 @@ pub struct ImplItem {
 /// An import statement.
 #[derive(Debug, Clone)]
 pub struct ImportDef {
+    /// Path prefix (self, super, crate, or absolute)
+    pub prefix: PathPrefix,
+    /// The import path segments (e.g., ["utils", "helpers"])
     pub path: Vec<Ident>,
+    /// What to import from the module
     pub items: ImportItems,
+    /// Optional alias for the import
     pub alias: Option<Ident>,
+    /// Whether this is a re-export (`pub import`)
+    pub is_pub: bool,
+}
+
+/// Path prefix for imports and module paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PathPrefix {
+    /// Absolute path (no prefix, starts from root)
+    #[default]
+    Absolute,
+    /// `self::` - relative to current module
+    Self_,
+    /// `super::` - relative to parent module
+    Super,
+    /// `crate::` - relative to crate root
+    Crate,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +205,20 @@ pub enum ImportItems {
     Items(Vec<Ident>),
     /// Import all: `import a.b (*)`
     All,
+}
+
+/// Visibility level for items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Visibility {
+    /// Private to the current module (default)
+    #[default]
+    Private,
+    /// Public (visible everywhere)
+    Public,
+    /// Visible only within the crate: `pub(crate)`
+    Crate,
+    /// Visible to parent module: `pub(super)`
+    Super,
 }
 
 /// An identifier.

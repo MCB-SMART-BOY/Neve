@@ -131,11 +131,19 @@ impl<'src> Lexer<'src> {
                 }
             }
 
-            // Dot or DotDot
+            // Dot, DotDot, or path starting with ./ or ../
             '.' => {
                 if self.peek_char() == Some('.') {
                     self.advance();
-                    TokenKind::DotDot
+                    if self.peek_char() == Some('/') {
+                        // Path starting with ../
+                        self.scan_path(start, "..")
+                    } else {
+                        TokenKind::DotDot
+                    }
+                } else if self.peek_char() == Some('/') {
+                    // Path starting with ./
+                    self.scan_path(start, ".")
                 } else {
                     TokenKind::Dot
                 }
@@ -181,11 +189,14 @@ impl<'src> Lexer<'src> {
             // Star
             '*' => TokenKind::Star,
 
-            // Slash or SlashSlash
+            // Slash, SlashSlash, or absolute path
             '/' => {
                 if self.peek_char() == Some('/') {
                     self.advance();
                     TokenKind::SlashSlash
+                } else if Self::is_path_start_char(self.peek_char()) {
+                    // Absolute path starting with /
+                    self.scan_absolute_path()
                 } else {
                     TokenKind::Slash
                 }
@@ -687,5 +698,57 @@ impl<'src> Lexer<'src> {
             .with_code(ErrorCode::UnexpectedCharacter)
             .with_label(Label::new(span, "unexpected character here")),
         );
+    }
+
+    /// Check if a character can start a path component after /
+    fn is_path_start_char(ch: Option<char>) -> bool {
+        match ch {
+            Some(c) => c.is_alphanumeric() || c == '_' || c == '-' || c == '.',
+            None => false,
+        }
+    }
+
+    /// Check if a character is valid in a path
+    fn is_path_char(ch: char) -> bool {
+        ch.is_alphanumeric() || matches!(ch, '/' | '_' | '-' | '.' | '+' | '~')
+    }
+
+    /// Scan a path literal starting with prefix (., ..)
+    fn scan_path(&mut self, _start: usize, prefix: &str) -> TokenKind {
+        let mut path = String::from(prefix);
+        
+        // Consume the initial / after prefix
+        if let Some((_, '/')) = self.advance() {
+            path.push('/');
+        }
+        
+        // Consume path characters
+        while let Some(ch) = self.peek_char() {
+            if Self::is_path_char(ch) {
+                path.push(ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        
+        TokenKind::PathLit(path)
+    }
+
+    /// Scan an absolute path starting with / (already consumed)
+    fn scan_absolute_path(&mut self) -> TokenKind {
+        let mut path = String::from("/");
+        
+        // Consume path characters
+        while let Some(ch) = self.peek_char() {
+            if Self::is_path_char(ch) {
+                path.push(ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        
+        TokenKind::PathLit(path)
     }
 }

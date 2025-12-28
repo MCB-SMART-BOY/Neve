@@ -895,10 +895,10 @@ fn test_multiple_line_comments() {
 // ============================================================================
 
 #[test]
-fn test_dot_starts_range() {
-    // ./ is tokenized as Dot followed by other tokens
+fn test_relative_path_literal() {
+    // ./ is tokenized as a PathLit
     let tokens = lex("./path");
-    assert!(tokens.contains(&TokenKind::Dot));
+    assert!(tokens.iter().any(|t| matches!(t, TokenKind::PathLit(p) if p == "./path")));
 }
 
 #[test]
@@ -909,10 +909,19 @@ fn test_dotdot_operator() {
 }
 
 #[test]
-fn test_slash_is_division() {
+fn test_absolute_path_literal() {
     let tokens = lex("/absolute/path");
-    // / is parsed as division operator
+    // /absolute/path is parsed as PathLit
+    assert!(tokens.iter().any(|t| matches!(t, TokenKind::PathLit(p) if p == "/absolute/path")));
+}
+
+#[test]
+fn test_slash_is_division() {
+    // Standalone slash in arithmetic context is division
+    let tokens = lex("10 / 2");
     assert!(tokens.contains(&TokenKind::Slash));
+    assert!(tokens.contains(&TokenKind::Int(10)));
+    assert!(tokens.contains(&TokenKind::Int(2)));
 }
 
 #[test]

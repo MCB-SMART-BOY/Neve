@@ -1,6 +1,7 @@
 //! Built-in functions.
 
 use crate::value::{Value, BuiltinFn};
+use neve_derive::Derivation;
 use std::rc::Rc;
 
 /// Get all built-in functions.
@@ -692,6 +693,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::None => "None",
                     Value::Ok(_) => "Ok",
                     Value::Err(_) => "Err",
+                    Value::Thunk(_) => "Thunk",
                 };
                 Ok(Value::String(Rc::new(type_name.to_string())))
             },
@@ -782,37 +784,126 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             func: |args| Ok(Value::Bool(matches!(&args[0], 
                 Value::Closure { .. } | Value::AstClosure(_) | Value::Builtin(_) | Value::BuiltinFn(_, _)))),
         })),
+        ("isLazy", Value::Builtin(BuiltinFn {
+            name: "isLazy",
+            arity: 1,
+            func: |args| Ok(Value::Bool(matches!(&args[0], Value::Thunk(_)))),
+        })),
+        
+        // === Lazy evaluation ===
+        // `force` forces evaluation of a thunk. The actual implementation is in
+        // AstEvaluator::apply which intercepts calls to this builtin and handles
+        // them specially since they need evaluator access.
+        ("force", Value::Builtin(BuiltinFn {
+            name: "force",
+            arity: 1,
+            func: |args| {
+                // This is a fallback for when force is called outside of AstEvaluator.
+                // The real implementation is in AstEvaluator::force_value.
+                match &args[0] {
+                    Value::Thunk(thunk) => {
+                        // If already evaluated, return the cached value
+                        use crate::value::ThunkState;
+                        match &*thunk.state() {
+                            ThunkState::Evaluated(v) => Ok(v.clone()),
+                            _ => Err("cannot force unevaluated thunk in this context".to_string()),
+                        }
+                    }
+                    other => Ok(other.clone()), // Non-thunks are returned as-is
+                }
+            },
+        })),
+        ("isEvaluated", Value::Builtin(BuiltinFn {
+            name: "isEvaluated",
+            arity: 1,
+            func: |args| {
+                match &args[0] {
+                    Value::Thunk(thunk) => Ok(Value::Bool(thunk.is_evaluated())),
+                    _ => Ok(Value::Bool(true)), // Non-thunks are always "evaluated"
+                }
+            },
+        })),
         
         // === Derivation helpers ===
         ("derivation", Value::Builtin(BuiltinFn {
             name: "derivation",
             arity: 1,
             func: |args| {
-                // This is a placeholder - real implementation would create a derivation
                 match &args[0] {
                     Value::Record(attrs) => {
-                        // Validate required fields
-                        let name = attrs.get("name")
-                            .ok_or("derivation requires 'name' field")?;
-                        let builder = attrs.get("builder")
-                            .ok_or("derivation requires 'builder' field")?;
-                        let system = attrs.get("system")
-                            .ok_or("derivation requires 'system' field")?;
+                        // Extract required fields
+                        let name = match attrs.get("name") {
+                            Some(Value::String(s)) => s.to_string(),
+                            Some(_) => return Err("derivation 'name' must be a string".to_string()),
+                            None => return Err("derivation requires 'name' field".to_string()),
+                        };
+                        
+                        let builder = match attrs.get("builder") {
+                            Some(Value::String(s)) => s.to_string(),
+                            Some(_) => return Err("derivation 'builder' must be a string".to_string()),
+                            None => return Err("derivation requires 'builder' field".to_string()),
+                        };
+                        
+                        let system = match attrs.get("system") {
+                            Some(Value::String(s)) => s.to_string(),
+                            Some(_) => return Err("derivation 'system' must be a string".to_string()),
+                            None => return Err("derivation requires 'system' field".to_string()),
+                        };
+                        
+                        // Extract optional version
+                        let version = match attrs.get("version") {
+                            Some(Value::String(s)) => s.to_string(),
+                            _ => "0.0.0".to_string(),
+                        };
+                        
+                        // Extract args if present
+                        let args_list = match attrs.get("args") {
+                            Some(Value::List(items)) => {
+                                items.iter().filter_map(|v| {
+                                    if let Value::String(s) = v {
+                                        Some(s.to_string())
+                                    } else {
+                                        None
+                                    }
+                                }).collect()
+                            }
+                            _ => Vec::new(),
+                        };
+                        
+                        // Build the derivation using neve-derive
+                        let mut drv_builder = Derivation::builder(&name, &version)
+                            .system(&system)
+                            .builder_path(&builder);
+                        
+                        for arg in &args_list {
+                            drv_builder = drv_builder.arg(arg);
+                        }
+                        
+                        // Add environment variables from attrs (excluding special fields)
+                        let special_fields = ["name", "version", "system", "builder", "args", "outputs"];
+                        for (key, value) in attrs.iter() {
+                            if !special_fields.contains(&key.as_str()) {
+                                if let Value::String(s) = value {
+                                    drv_builder = drv_builder.env(key, s.as_str());
+                                }
+                            }
+                        }
+                        
+                        let drv = drv_builder.build();
+                        
+                        // Get computed paths
+                        let drv_path = drv.drv_path();
+                        let out_path = drv.out_path()
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| format!("/neve/store/{}-{}", drv.hash(), name));
                         
                         // Return the derivation as a record with computed fields
                         let mut result = (**attrs).clone();
                         result.insert("type".to_string(), Value::String(Rc::new("derivation".to_string())));
-                        
-                        // Compute output path placeholder
-                        let out_path = format!("/neve/store/placeholder-{}", 
-                            match name {
-                                Value::String(s) => s.as_str(),
-                                _ => "unknown",
-                            });
+                        result.insert("drvPath".to_string(), Value::String(Rc::new(drv_path.to_string())));
                         result.insert("outPath".to_string(), Value::String(Rc::new(out_path.clone())));
                         result.insert("out".to_string(), Value::String(Rc::new(out_path)));
                         
-                        let _ = (builder, system); // Mark as used
                         Ok(Value::Record(Rc::new(result)))
                     }
                     _ => Err("derivation expects a record".to_string()),
@@ -934,27 +1025,73 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 }
             },
         })),
+        // === Higher-order functions ===
+        // These are stub definitions - actual implementation is in AstEvaluator::apply
+        // which intercepts calls to these builtins and evaluates them with evaluator access.
+        ("map", Value::Builtin(BuiltinFn {
+            name: "map",
+            arity: 2,
+            func: |_| Err("map requires evaluator context".to_string()),
+        })),
+        ("filter", Value::Builtin(BuiltinFn {
+            name: "filter",
+            arity: 2,
+            func: |_| Err("filter requires evaluator context".to_string()),
+        })),
+        ("all", Value::Builtin(BuiltinFn {
+            name: "all",
+            arity: 2,
+            func: |_| Err("all requires evaluator context".to_string()),
+        })),
+        ("any", Value::Builtin(BuiltinFn {
+            name: "any",
+            arity: 2,
+            func: |_| Err("any requires evaluator context".to_string()),
+        })),
+        ("foldl", Value::Builtin(BuiltinFn {
+            name: "foldl",
+            arity: 3,
+            func: |_| Err("foldl requires evaluator context".to_string()),
+        })),
+        ("foldr", Value::Builtin(BuiltinFn {
+            name: "foldr",
+            arity: 3,
+            func: |_| Err("foldr requires evaluator context".to_string()),
+        })),
+        ("genList", Value::Builtin(BuiltinFn {
+            name: "genList",
+            arity: 2,
+            func: |_| Err("genList requires evaluator context".to_string()),
+        })),
+        ("mapAttrs", Value::Builtin(BuiltinFn {
+            name: "mapAttrs",
+            arity: 2,
+            func: |_| Err("mapAttrs requires evaluator context".to_string()),
+        })),
+        ("filterAttrs", Value::Builtin(BuiltinFn {
+            name: "filterAttrs",
+            arity: 2,
+            func: |_| Err("filterAttrs requires evaluator context".to_string()),
+        })),
+        ("concatMap", Value::Builtin(BuiltinFn {
+            name: "concatMap",
+            arity: 2,
+            func: |_| Err("concatMap requires evaluator context".to_string()),
+        })),
         ("partition", Value::Builtin(BuiltinFn {
             name: "partition",
             arity: 2,
-            func: |args| {
-                // Note: This is a simplified version that works with boolean predicates
-                // In practice, you'd want to use the AST-based evaluation
-                match &args[1] {
-                    Value::List(items) => {
-                        // For now, partition by truthiness of first element comparison
-                        // Full implementation requires evaluating the predicate function
-                        let (left, right): (Vec<_>, Vec<_>) = items.iter()
-                            .cloned()
-                            .partition(|_| true); // Placeholder
-                        let mut result = std::collections::HashMap::new();
-                        result.insert("left".to_string(), Value::List(Rc::new(left)));
-                        result.insert("right".to_string(), Value::List(Rc::new(right)));
-                        Ok(Value::Record(Rc::new(result)))
-                    }
-                    _ => Err("partition expects (predicate, list)".to_string()),
-                }
-            },
+            func: |_| Err("partition requires evaluator context".to_string()),
+        })),
+        ("groupBy", Value::Builtin(BuiltinFn {
+            name: "groupBy",
+            arity: 2,
+            func: |_| Err("groupBy requires evaluator context".to_string()),
+        })),
+        ("sort", Value::Builtin(BuiltinFn {
+            name: "sort",
+            arity: 2,
+            func: |_| Err("sort requires evaluator context".to_string()),
         })),
         
         // === Bitwise operations ===
@@ -1375,6 +1512,14 @@ pub fn format_value(v: &Value) -> String {
         Value::None => "None".to_string(),
         Value::Ok(v) => format!("Ok({})", format_value(v)),
         Value::Err(v) => format!("Err({})", format_value(v)),
+        Value::Thunk(thunk) => {
+            use crate::value::ThunkState;
+            match &*thunk.state() {
+                ThunkState::Evaluated(v) => format_value(v),
+                ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
+                ThunkState::Unevaluated { .. } => "<thunk>".to_string(),
+            }
+        }
     }
 }
 

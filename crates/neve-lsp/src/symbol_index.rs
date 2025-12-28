@@ -460,7 +460,8 @@ impl SymbolIndex {
             }
             // Literals don't reference symbols
             ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::String(_) |
-            ExprKind::Char(_) | ExprKind::Bool(_) | ExprKind::Unit => {}
+            ExprKind::Char(_) | ExprKind::Bool(_) | ExprKind::Unit |
+            ExprKind::PathLit(_) => {}
         }
     }
 

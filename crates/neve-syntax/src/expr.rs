@@ -152,8 +152,11 @@ pub enum ExprKind {
     /// Lazy expression `lazy expr`
     Lazy(Box<Expr>),
 
-    /// Path expression `std.list.map`
+    /// Dotted path expression `std.list.map`
     Path(Vec<Ident>),
+
+    /// File system path literal `./foo`, `/bar`, `../baz`
+    PathLit(String),
 }
 
 /// A record field `name = value`.

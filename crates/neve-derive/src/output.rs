@@ -92,6 +92,12 @@ impl StorePath {
     }
 }
 
+impl std::fmt::Display for StorePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path().display())
+    }
+}
+
 /// An output specification for a derivation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Output {

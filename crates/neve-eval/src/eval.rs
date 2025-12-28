@@ -574,6 +574,14 @@ impl Evaluator {
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
             Value::AstClosure(_) => "<function>".to_string(),
             Value::Closure { .. } => "<function>".to_string(),
+            Value::Thunk(thunk) => {
+                use crate::value::ThunkState;
+                match &*thunk.state() {
+                    ThunkState::Evaluated(v) => Self::value_to_string(v),
+                    ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
+                    ThunkState::Unevaluated { .. } => "<thunk>".to_string(),
+                }
+            }
         }
     }
 }

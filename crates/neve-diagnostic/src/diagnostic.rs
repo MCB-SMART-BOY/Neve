@@ -18,6 +18,7 @@ pub enum DiagnosticKind {
     Parser,
     Type,
     Eval,
+    Module,
 }
 
 /// A labeled span within a diagnostic.

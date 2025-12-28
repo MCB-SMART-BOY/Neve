@@ -709,6 +709,11 @@ impl Formatter {
                 }
                 p.write("`");
             }
+
+            // Path literal (./foo, ../bar, /absolute/path)
+            ExprKind::PathLit(path) => {
+                p.write(path);
+            }
         }
     }
 

@@ -12,4 +12,5 @@ neve-syntax.workspace = true
 neve-hir.workspace = true
 neve-parser.workspace = true
 neve-diagnostic.workspace = true
+neve-derive.workspace = true
 thiserror.workspace = true

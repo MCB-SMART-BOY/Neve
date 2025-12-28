@@ -153,31 +153,38 @@ Prioritized phased implementation:
 
 ### Roadmap
 
-#### Completed
+#### Completed ✅
 
-- [x] Lexer
-- [x] Parser
-- [x] Type inference
-- [x] Interpreter
+- [x] Lexer (logos-based, full Unicode support)
+- [x] Parser (recursive descent LL(1) with error recovery)
+- [x] Type inference (Hindley-Milner with trait constraints)
+- [x] Interpreter (tree-walking with lazy evaluation)
 - [x] Standard library (io, list, map, math, option, path, result, set, string)
-- [x] Derivation model
+- [x] Derivation model (with hash verification)
 - [x] Content-addressed store
-- [x] Sandboxed builder
-- [x] Source fetching (URL, Git, local)
-- [x] Language Server Protocol support
+- [x] Sandboxed builder (Linux namespaces)
+- [x] Source fetching (URL, Git, local paths)
+- [x] Language Server Protocol support (semantic tokens, symbols)
 - [x] Code formatter
 - [x] Interactive REPL
 - [x] System configuration framework
 - [x] Generation management
+- [x] Module system (import, export, visibility)
+- [x] Trait system (definitions, impls, resolution)
 
-#### In Progress
+#### In Progress 🔄
 
-- [ ] Flake support refinement
-- [ ] Nix ecosystem compatibility layer
+- [ ] Module loader refinement
+- [ ] Associated types in traits
+- [ ] LSP enhancements (go-to-definition, completion)
+- [ ] Tail call optimization
+
+#### Future 📋
+
+- [ ] Macro system
 - [ ] Bootstrap package set
-- [ ] Incremental compilation
-- [ ] Distributed builds
 - [ ] Binary cache service
+- [ ] Higher-kinded types
 
 #### Operating System Integration
 
@@ -386,31 +393,38 @@ Neve 将作为类 Unix 操作系统的核心组件，承担：
 
 ### 发展路线
 
-#### 已完成
+#### 已完成 ✅
 
-- [x] 完成词法分析器
-- [x] 完成语法分析器
-- [x] 实现类型推导
-- [x] 实现解释器
+- [x] 词法分析器（基于 logos，完整 Unicode 支持）
+- [x] 语法分析器（递归下降 LL(1)，错误恢复）
+- [x] 类型推导（Hindley-Milner + Trait 约束）
+- [x] 解释器（树遍历 + 惰性求值）
 - [x] 标准库（io、list、map、math、option、path、result、set、string）
-- [x] Derivation 模型
+- [x] Derivation 模型（哈希验证）
 - [x] Content-addressed store
-- [x] 沙箱构建器
+- [x] 沙箱构建器（Linux 命名空间）
 - [x] 源码获取（URL、Git、本地路径）
-- [x] Language Server Protocol 支持
+- [x] Language Server Protocol 支持（语义高亮、符号索引）
 - [x] 代码格式化器
 - [x] 交互式 REPL
 - [x] 系统配置框架
 - [x] 代际管理
+- [x] 模块系统（import、export、可见性）
+- [x] Trait 系统（定义、实现、解析）
 
-#### 进行中
+#### 进行中 🔄
 
-- [ ] Flake 支持完善
-- [ ] 与现有 Nix 生态的兼容层
-- [ ] 基础包集合（bootstrap）
-- [ ] 增量编译
-- [ ] 分布式构建
+- [ ] 模块加载器完善
+- [ ] Trait 关联类型
+- [ ] LSP 增强（跳转定义、自动补全）
+- [ ] 尾调用优化
+
+#### 未来 📋
+
+- [ ] 宏系统
+- [ ] Bootstrap 包集合
 - [ ] 二进制缓存服务
+- [ ] 高阶类型 (HKT)
 
 #### 操作系统集成
 

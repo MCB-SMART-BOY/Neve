@@ -1144,6 +1144,7 @@ name = "neve-eval"
 version = "0.1.0"
 dependencies = [
  "neve-common",
+ "neve-derive",
  "neve-diagnostic",
  "neve-hir",
  "neve-parser",

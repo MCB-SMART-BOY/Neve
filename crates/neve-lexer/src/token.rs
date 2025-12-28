@@ -24,6 +24,8 @@ pub enum TokenKind {
     String(String),
     Char(char),
     Bool(bool),
+    /// Path literal (e.g., `./foo`, `/bar`, `../baz`)
+    PathLit(String),
 
     // Interpolated string parts
     /// Start of interpolated string `` ` ``
@@ -52,7 +54,8 @@ pub enum TokenKind {
     Import,
     As,
     SelfLower,  // self
-    Super,
+    Super,      // super
+    Crate,      // crate
     If,
     Then,
     Else,
@@ -127,6 +130,7 @@ impl TokenKind {
                 | TokenKind::As
                 | TokenKind::SelfLower
                 | TokenKind::Super
+                | TokenKind::Crate
                 | TokenKind::If
                 | TokenKind::Then
                 | TokenKind::Else
@@ -152,6 +156,7 @@ impl TokenKind {
             "as" => Some(TokenKind::As),
             "self" => Some(TokenKind::SelfLower),
             "super" => Some(TokenKind::Super),
+            "crate" => Some(TokenKind::Crate),
             "if" => Some(TokenKind::If),
             "then" => Some(TokenKind::Then),
             "else" => Some(TokenKind::Else),

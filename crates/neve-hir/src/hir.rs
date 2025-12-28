@@ -46,14 +46,32 @@ impl Module {
 /// An import declaration in HIR.
 #[derive(Debug, Clone)]
 pub struct Import {
-    /// The module path (e.g., ["std", "list"])
+    /// Path prefix (self, super, crate, or absolute)
+    pub prefix: ImportPathPrefix,
+    /// The module path segments (e.g., ["list"] for `std.list`)
     pub path: Vec<String>,
     /// What to import from the module
     pub kind: ImportKind,
     /// Optional alias for the import
     pub alias: Option<String>,
+    /// Whether this is a re-export (`pub import`)
+    pub is_pub: bool,
     /// Source location
     pub span: Span,
+}
+
+/// Path prefix for imports in HIR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImportPathPrefix {
+    /// Absolute path (no prefix)
+    #[default]
+    Absolute,
+    /// `self.` - relative to current module
+    Self_,
+    /// `super.` - relative to parent module
+    Super,
+    /// `crate.` - relative to crate root
+    Crate,
 }
 
 /// What kind of import this is.
@@ -174,6 +192,115 @@ impl ModuleRegistry {
             ItemKind::TypeAlias(t) => Some(t.name.clone()),
             ItemKind::Trait(t) => Some(t.name.clone()),
             ItemKind::Impl(_) => None, // Impls don't have names
+        }
+    }
+
+    /// Insert a fully resolved module into the registry.
+    pub fn insert(&mut self, path: Vec<String>, module: Module) {
+        let id = module.id;
+        self.modules.insert(id, module);
+        self.path_to_id.insert(path, id);
+    }
+
+    /// Get the number of registered modules.
+    pub fn len(&self) -> usize {
+        self.modules.len()
+    }
+
+    /// Check if the registry is empty.
+    pub fn is_empty(&self) -> bool {
+        self.modules.is_empty()
+    }
+
+    /// Get all module paths.
+    pub fn all_paths(&self) -> impl Iterator<Item = &Vec<String>> {
+        self.path_to_id.keys()
+    }
+
+    /// Find an item by DefId across all modules.
+    pub fn find_item(&self, def_id: DefId) -> Option<(&Module, &Item)> {
+        for module in self.modules.values() {
+            if let Some(item) = module.items.iter().find(|item| item.id == def_id) {
+                return Some((module, item));
+            }
+        }
+        None
+    }
+
+    /// Get the module path for a given module ID.
+    pub fn module_path(&self, id: ModuleId) -> Option<&Vec<String>> {
+        self.path_to_id.iter()
+            .find(|&(_, &mid)| mid == id)
+            .map(|(path, _)| path)
+    }
+
+    /// Resolve an import with path prefix support.
+    pub fn resolve_import_with_prefix(
+        &self,
+        import: &Import,
+        current_module_path: &[String],
+    ) -> Vec<(String, DefId)> {
+        // Compute the absolute path based on prefix
+        let absolute_path = match import.prefix {
+            ImportPathPrefix::Absolute => import.path.clone(),
+            ImportPathPrefix::Crate => import.path.clone(),
+            ImportPathPrefix::Self_ => {
+                let mut path = current_module_path.to_vec();
+                path.extend(import.path.iter().cloned());
+                path
+            }
+            ImportPathPrefix::Super => {
+                if current_module_path.is_empty() {
+                    return Vec::new(); // Can't go above root
+                }
+                let mut path = current_module_path[..current_module_path.len() - 1].to_vec();
+                path.extend(import.path.iter().cloned());
+                path
+            }
+        };
+
+        // Look up the target module
+        let Some(module_id) = self.lookup(&absolute_path) else {
+            return Vec::new();
+        };
+
+        let Some(module) = self.get(module_id) else {
+            return Vec::new();
+        };
+
+        match &import.kind {
+            ImportKind::Module => {
+                // Import module as a namespace - return module binding
+                let alias = import.alias.clone()
+                    .or_else(|| absolute_path.last().cloned())
+                    .unwrap_or_else(|| "module".to_string());
+                
+                // For module imports, we need special handling
+                // Return empty for now - the caller should handle namespace creation
+                vec![(alias, DefId(u32::MAX))] // Sentinel for module namespace
+            }
+            ImportKind::Items(names) => {
+                names.iter()
+                    .filter_map(|name| {
+                        self.find_exported_def(module, name)
+                            .map(|def_id| (name.clone(), def_id))
+                    })
+                    .collect()
+            }
+            ImportKind::All => {
+                module.items.iter()
+                    .filter_map(|item| {
+                        // Only export if in the export list (or no explicit exports)
+                        let name = self.item_name(item)?;
+                        if let Some(exports) = &module.exports {
+                            if !exports.contains(&name) {
+                                return None;
+                            }
+                        }
+                        Some((name, item.id))
+                    })
+                    .collect()
+            }
         }
     }
 }

@@ -10,6 +10,4 @@ repository.workspace = true
 neve-common.workspace = true
 neve-syntax.workspace = true
 neve-diagnostic.workspace = true
-
-[dev-dependencies]
 neve-parser.workspace = true

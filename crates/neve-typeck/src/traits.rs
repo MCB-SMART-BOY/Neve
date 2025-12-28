@@ -152,7 +152,9 @@ impl TraitResolver {
         let assoc_types: Vec<AssocType> = def.assoc_types.iter()
             .map(|at| AssocType {
                 name: at.name.clone(),
-                bounds: Vec::new(), // TODO: resolve trait bounds
+                bounds: at.bounds.iter()
+                    .filter_map(|bound_ty| self.ty_to_trait_bound(bound_ty))
+                    .collect(),
                 default: at.default.clone(),
             })
             .collect();
@@ -240,6 +242,14 @@ impl TraitResolver {
             }
             _ => None,
         }
+    }
+
+    /// Convert a type (representing a trait bound) to a TraitBound.
+    fn ty_to_trait_bound(&self, ty: &Ty) -> Option<TraitBound> {
+        self.resolve_trait_ref(ty).map(|trait_ref| TraitBound {
+            trait_id: trait_ref.trait_id,
+            args: trait_ref.args,
+        })
     }
 
     /// Get a simple key for a type (for inherent impl lookup).

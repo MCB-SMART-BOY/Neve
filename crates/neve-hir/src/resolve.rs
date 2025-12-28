@@ -1,10 +1,11 @@
 //! Name resolution and AST to HIR lowering.
 
 use std::collections::HashMap;
+use std::path::Path;
 use neve_syntax::{self as ast, SourceFile};
 use crate::{
     Module, ModuleId, Item, ItemKind, DefId, LocalId,
-    Import, ImportKind,
+    Import, ImportKind, ImportPathPrefix,
     FnDef, StructDef, EnumDef, TypeAlias, TraitDef, ImplDef,
     Param, GenericParam, FieldDef, VariantDef, TraitItem, ImplItem,
     Expr, ExprKind, Literal, BinOp, UnaryOp,
@@ -12,6 +13,7 @@ use crate::{
     Stmt, StmtKind,
     Ty, TyKind,
     StringPart,
+    ModuleLoader,
 };
 
 /// Name resolver that builds HIR from AST.
@@ -28,6 +30,10 @@ pub struct Resolver {
     scopes: Vec<HashMap<String, LocalId>>,
     /// Imported names from other modules
     imported: HashMap<String, DefId>,
+    /// Current module path (for relative imports)
+    current_module_path: Vec<String>,
+    /// Module loader for resolving imports
+    module_loader: Option<ModuleLoader>,
 }
 
 impl Resolver {
@@ -39,7 +45,48 @@ impl Resolver {
             globals: HashMap::new(),
             scopes: Vec::new(),
             imported: HashMap::new(),
+            current_module_path: Vec::new(),
+            module_loader: None,
         }
+    }
+
+    /// Create a new resolver with a module loader for the given root directory.
+    pub fn with_root_dir(root_dir: impl AsRef<Path>) -> Self {
+        Self {
+            next_def_id: 0,
+            next_local_id: 0,
+            next_module_id: 0,
+            globals: HashMap::new(),
+            scopes: Vec::new(),
+            imported: HashMap::new(),
+            current_module_path: Vec::new(),
+            module_loader: Some(ModuleLoader::new(root_dir)),
+        }
+    }
+
+    /// Set the module loader.
+    pub fn set_module_loader(&mut self, loader: ModuleLoader) {
+        self.module_loader = Some(loader);
+    }
+
+    /// Get the module loader.
+    pub fn module_loader(&self) -> Option<&ModuleLoader> {
+        self.module_loader.as_ref()
+    }
+
+    /// Get mutable access to the module loader.
+    pub fn module_loader_mut(&mut self) -> Option<&mut ModuleLoader> {
+        self.module_loader.as_mut()
+    }
+
+    /// Set the current module path for relative import resolution.
+    pub fn set_current_module_path(&mut self, path: Vec<String>) {
+        self.current_module_path = path;
+    }
+
+    /// Get the current module path.
+    pub fn current_module_path(&self) -> &[String] {
+        &self.current_module_path
     }
 
     /// Create an unknown type with the given span.
@@ -56,10 +103,21 @@ impl Resolver {
 
     /// Resolve an AST source file to HIR with a specific module name.
     pub fn resolve_with_name(&mut self, file: &SourceFile, name: String) -> Module {
-        let module_id = self.fresh_module_id();
+        self.resolve_with_path(file, name, Vec::new())
+    }
 
-        // First pass: collect imports
+    /// Resolve an AST source file to HIR with module path for relative imports.
+    pub fn resolve_with_path(&mut self, file: &SourceFile, name: String, module_path: Vec<String>) -> Module {
+        let module_id = self.fresh_module_id();
+        
+        // Set current module path for relative import resolution
+        self.current_module_path = module_path;
+
+        // First pass: collect imports and resolve them
         let imports = self.collect_imports(file);
+        
+        // Process imports to bring names into scope
+        self.process_imports(&imports);
 
         // Second pass: collect all global definitions
         for item in &file.items {
@@ -71,12 +129,75 @@ impl Resolver {
             .filter_map(|item| self.lower_item(item))
             .collect();
 
+        // Collect exports based on visibility
+        let exports = self.collect_exports(file);
+
         Module {
             id: module_id,
             name,
             items,
             imports,
-            exports: None, // TODO: Parse explicit exports
+            exports,
+        }
+    }
+
+    /// Process imports to bring names into scope.
+    fn process_imports(&mut self, imports: &[Import]) {
+        for import in imports {
+            if let Some(ref loader) = self.module_loader {
+                // Use the module loader to resolve the import
+                match loader.resolve_import(import, &self.current_module_path) {
+                    Ok(resolved) => {
+                        for (name, def_id) in resolved {
+                            self.imported.insert(name, def_id);
+                        }
+                    }
+                    Err(_e) => {
+                        // Import resolution failed - will be reported during type checking
+                    }
+                }
+            }
+        }
+    }
+
+    /// Collect exported items based on visibility.
+    fn collect_exports(&self, file: &SourceFile) -> Option<Vec<String>> {
+        let mut exports = Vec::new();
+        
+        for item in &file.items {
+            match &item.kind {
+                ast::ItemKind::Let(def) if def.is_pub => {
+                    if let Some(name) = self.pattern_name(&def.pattern) {
+                        exports.push(name);
+                    }
+                }
+                ast::ItemKind::Fn(def) if def.is_pub => {
+                    exports.push(def.name.name.clone());
+                }
+                ast::ItemKind::Struct(def) if def.is_pub => {
+                    exports.push(def.name.name.clone());
+                }
+                ast::ItemKind::Enum(def) if def.is_pub => {
+                    exports.push(def.name.name.clone());
+                    // Also export variants
+                    for variant in &def.variants {
+                        exports.push(variant.name.name.clone());
+                    }
+                }
+                ast::ItemKind::TypeAlias(def) if def.is_pub => {
+                    exports.push(def.name.name.clone());
+                }
+                ast::ItemKind::Trait(def) if def.is_pub => {
+                    exports.push(def.name.name.clone());
+                }
+                _ => {}
+            }
+        }
+        
+        if exports.is_empty() {
+            None
+        } else {
+            Some(exports)
         }
     }
 
@@ -92,6 +213,13 @@ impl Resolver {
             .filter_map(|item| {
                 match &item.kind {
                     ast::ItemKind::Import(import_def) => {
+                        let prefix = match import_def.prefix {
+                            ast::PathPrefix::Absolute => ImportPathPrefix::Absolute,
+                            ast::PathPrefix::Self_ => ImportPathPrefix::Self_,
+                            ast::PathPrefix::Super => ImportPathPrefix::Super,
+                            ast::PathPrefix::Crate => ImportPathPrefix::Crate,
+                        };
+                        
                         let path: Vec<String> = import_def.path.iter()
                             .map(|p| p.name.clone())
                             .collect();
@@ -107,9 +235,11 @@ impl Resolver {
                         let alias = import_def.alias.as_ref().map(|a| a.name.clone());
                         
                         Some(Import {
+                            prefix,
                             path,
                             kind,
                             alias,
+                            is_pub: import_def.is_pub,
                             span: item.span,
                         })
                     }
