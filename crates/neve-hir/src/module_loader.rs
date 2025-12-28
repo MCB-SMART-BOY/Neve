@@ -157,7 +157,10 @@ pub struct ModuleLoader {
     /// Diagnostics collected during loading
     diagnostics: Vec<Diagnostic>,
     /// Modules currently being loaded (for cycle detection)
+    /// Maps module path to its loading stack for detailed error messages
     loading: HashSet<Vec<String>>,
+    /// Loading stack to track the import chain
+    loading_stack: Vec<Vec<String>>,
 }
 
 impl ModuleLoader {
@@ -172,6 +175,7 @@ impl ModuleLoader {
             std_path: None,
             diagnostics: Vec::new(),
             loading: HashSet::new(),
+            loading_stack: Vec::new(),
         }
     }
 
@@ -300,7 +304,13 @@ impl ModuleLoader {
 
         // Check for circular dependency
         if self.loading.contains(path) {
-            return Err(ModuleLoadError::CircularDependency(path.to_vec()));
+            // Build the circular dependency chain
+            let mut chain = self.loading_stack.clone();
+            chain.push(path.to_vec());
+            return Err(ModuleLoadError::CircularDependency {
+                module: path.to_vec(),
+                chain,
+            });
         }
 
         // Find the file
@@ -308,8 +318,9 @@ impl ModuleLoader {
         let file_path = self.find_module_file(path)
             .ok_or_else(|| ModuleLoadError::NotFound(path.to_vec()))?;
 
-        // Mark as loading
+        // Mark as loading and add to stack
         self.loading.insert(path.to_vec());
+        self.loading_stack.push(path.to_vec());
 
         // Read and parse the file
         let source = fs::read_to_string(&file_path)
@@ -369,8 +380,9 @@ impl ModuleLoader {
             }
         }
 
-        // Remove from loading set
+        // Remove from loading set and stack
         self.loading.remove(path);
+        self.loading_stack.pop();
 
         Ok(module_id)
     }
@@ -580,7 +592,12 @@ pub enum ModuleLoadError {
     /// Module file not found
     NotFound(Vec<String>),
     /// Circular dependency detected
-    CircularDependency(Vec<String>),
+    CircularDependency {
+        /// The module that caused the cycle
+        module: Vec<String>,
+        /// The full import chain showing the cycle
+        chain: Vec<Vec<String>>,
+    },
     /// IO error reading file
     IoError(PathBuf, String),
     /// No root module found
@@ -595,8 +612,17 @@ impl std::fmt::Display for ModuleLoadError {
             ModuleLoadError::NotFound(path) => {
                 write!(f, "module not found: {}", path.join("."))
             }
-            ModuleLoadError::CircularDependency(path) => {
-                write!(f, "circular dependency detected: {}", path.join("."))
+            ModuleLoadError::CircularDependency { module, chain } => {
+                writeln!(f, "circular dependency detected when importing module: {}", module.join("."))?;
+                writeln!(f, "\nImport chain:")?;
+                for (i, m) in chain.iter().enumerate() {
+                    if i == chain.len() - 1 {
+                        writeln!(f, "  {} -> {} (cycle!)", m.join("."), module.join("."))?;
+                    } else {
+                        writeln!(f, "  {}", m.join("."))?;
+                    }
+                }
+                Ok(())
             }
             ModuleLoadError::IoError(path, msg) => {
                 write!(f, "error reading {}: {}", path.display(), msg)
@@ -684,5 +710,50 @@ mod tests {
         let path = ModulePath::super_(vec!["common".into()]);
         let result = loader.make_absolute(&path, Some(&["parent".into(), "child".into()]));
         assert_eq!(result, Some(vec!["parent".into(), "common".into()]));
+    }
+
+    #[test]
+    fn test_circular_dependency_error_message() {
+        // Test that circular dependency error includes the full chain
+        let error = ModuleLoadError::CircularDependency {
+            module: vec!["a".into()],
+            chain: vec![
+                vec!["a".into()],
+                vec!["b".into()],
+                vec!["c".into()],
+            ],
+        };
+
+        let message = format!("{}", error);
+        assert!(message.contains("circular dependency"));
+        assert!(message.contains("Import chain"));
+        assert!(message.contains("(cycle!)"));
+    }
+
+    #[test]
+    fn test_loading_stack_management() {
+        let mut loader = ModuleLoader::new("/tmp");
+
+        // Initially empty
+        assert!(loader.loading.is_empty());
+        assert!(loader.loading_stack.is_empty());
+
+        // Simulate loading a module
+        let path = vec!["test".into()];
+        loader.loading.insert(path.clone());
+        loader.loading_stack.push(path.clone());
+
+        assert!(loader.loading.contains(&path));
+        assert_eq!(loader.loading_stack.len(), 1);
+
+        // Detect cycle if trying to load the same module
+        assert!(loader.loading.contains(&path));
+
+        // Cleanup
+        loader.loading.remove(&path);
+        loader.loading_stack.pop();
+
+        assert!(loader.loading.is_empty());
+        assert!(loader.loading_stack.is_empty());
     }
 }
