@@ -119,7 +119,7 @@ fn update_input(
         .unwrap_or(0);
     
     // Extract name from URL
-    let name = url.split('/').last()
+    let name = url.split('/').next_back()
         .unwrap_or("unknown")
         .trim_end_matches(".git")
         .to_string();

@@ -23,6 +23,9 @@ struct Binding {
 }
 
 /// Environment for AST evaluation.
+///
+/// Note: For REPL usage, AstEnv can be wrapped in Rc<RefCell<AstEnv>>
+/// to allow persistent state across evaluations.
 #[derive(Clone, Default)]
 pub struct AstEnv {
     bindings: HashMap<String, Binding>,
@@ -192,17 +195,30 @@ impl AstEvaluator {
         if let Some(parent) = path.parent() {
             self.base_path = Some(parent.to_path_buf());
         }
-        
+
         let source = std::fs::read_to_string(path)
             .map_err(|e| EvalError::TypeError(format!("cannot read file: {}", e)))?;
-        
+
         let (file, diagnostics) = neve_parser::parse(&source);
-        
+
         if !diagnostics.is_empty() {
             return Err(EvalError::TypeError(format!("parse error in {}", path.display())));
         }
-        
+
         self.eval_file(&file)
+    }
+
+    /// Evaluate a function definition and return its closure value.
+    /// Useful for REPL to capture function definitions.
+    pub fn eval_fn_def(&mut self, fn_def: &FnDef) -> Result<Value, EvalError> {
+        // Create a closure that captures the current environment
+        let func = AstClosure {
+            params: fn_def.params.clone(),
+            body: fn_def.body.clone(),
+            env: self.env.clone(),
+        };
+
+        Ok(Value::AstClosure(Rc::new(func)))
     }
 
     fn eval_item(&mut self, item: &Item) -> Result<Value, EvalError> {

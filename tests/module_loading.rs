@@ -31,6 +31,7 @@ fn test_simple_module_loading() {
         root,
         &["math"],
         r#"
+
             pub fn add(x, y) = x + y;
             pub fn multiply(x, y) = x * y;
         "#,
@@ -41,14 +42,15 @@ fn test_simple_module_loading() {
         root,
         &["main"],
         r#"
-            use math::{add, multiply};
+
+            import math (add, multiply);
 
             fn compute(a, b) = multiply(add(a, b), 2);
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["main".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["main".into()]);
 
     assert!(result.is_ok());
 }
@@ -64,6 +66,7 @@ fn test_nested_module_loading() {
         root,
         &["utils", "string"],
         r#"
+
             pub fn toUpper(s) = s;  // Simplified
         "#,
     );
@@ -73,7 +76,8 @@ fn test_nested_module_loading() {
         root,
         &["utils", "mod"],
         r#"
-            pub use self::string::toUpper;
+
+            pub import self.string (toUpper);
         "#,
     );
 
@@ -82,14 +86,15 @@ fn test_nested_module_loading() {
         root,
         &["main"],
         r#"
-            use utils::toUpper;
+
+            import utils (toUpper);
 
             fn process(text) = toUpper(text);
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["main".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["main".into()]);
 
     assert!(result.is_ok());
 }
@@ -104,7 +109,8 @@ fn test_circular_dependency_detection() {
         root,
         &["a"],
         r#"
-            use b::funcB;
+
+            import b (funcB);
             pub fn funcA() = funcB();
         "#,
     );
@@ -113,7 +119,8 @@ fn test_circular_dependency_detection() {
         root,
         &["b"],
         r#"
-            use c::funcC;
+
+            import c (funcC);
             pub fn funcB() = funcC();
         "#,
     );
@@ -122,13 +129,14 @@ fn test_circular_dependency_detection() {
         root,
         &["c"],
         r#"
-            use a::funcA;
+
+            import a (funcA);
             pub fn funcC() = funcA();
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["a".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["a".into()]);
 
     // Should detect circular dependency
     assert!(result.is_err());
@@ -152,7 +160,8 @@ fn test_circular_dependency_error_message() {
         root,
         &["a"],
         r#"
-            use b::funcB;
+
+            import b (funcB);
             pub fn funcA() = funcB();
         "#,
     );
@@ -161,19 +170,20 @@ fn test_circular_dependency_error_message() {
         root,
         &["b"],
         r#"
-            use a::funcA;
+
+            import a (funcA);
             pub fn funcB() = funcA();
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["a".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["a".into()]);
 
     assert!(result.is_err());
     match result {
         Err(ModuleLoadError::CircularDependency { module, chain }) => {
-            let error_msg = format!("{:?}", ModuleLoadError::CircularDependency { module, chain });
-            // Should contain "(cycle!)" marker
+            let error_msg = format!("{}", ModuleLoadError::CircularDependency { module, chain });
+            // Should contain "(cycle!)" or "circular" marker
             assert!(error_msg.contains("cycle") || error_msg.contains("circular"));
         }
         _ => panic!("Expected CircularDependency error"),
@@ -191,6 +201,7 @@ fn test_self_import() {
         root,
         &["mylib", "utils"],
         r#"
+
             pub fn helper(x) = x + 1;
         "#,
     );
@@ -199,14 +210,15 @@ fn test_self_import() {
         root,
         &["mylib", "mod"],
         r#"
-            use self::utils::helper;
+
+            import self.utils (helper);
 
             pub fn process(x) = helper(x) * 2;
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["mylib".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["mylib".into()]);
 
     assert!(result.is_ok());
 }
@@ -223,6 +235,7 @@ fn test_super_import() {
         root,
         &["mylib", "config"],
         r#"
+
             pub let DEBUG = true;
         "#,
     );
@@ -231,14 +244,15 @@ fn test_super_import() {
         root,
         &["mylib", "submod", "worker"],
         r#"
-            use super::config::DEBUG;
+
+            import super.config (DEBUG);
 
             pub fn run() = if DEBUG then "debug" else "release";
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["mylib".into(), "submod".into(), "worker".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["mylib".into(), "submod".into(), "worker".into()]);
 
     assert!(result.is_ok());
 }
@@ -248,29 +262,32 @@ fn test_crate_import() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
 
-    // Create crate root module
+    // Create a top-level module with the function
     create_test_module(
         root,
         &["lib"],
         r#"
+
             pub fn rootFunc() = 42;
         "#,
     );
 
     // Create nested module that imports from crate root
+    // Using crate.lib since crate root helpers aren't parsed as `crate (item)` syntax
     fs::create_dir_all(root.join("deep").join("nested")).unwrap();
     create_test_module(
         root,
         &["deep", "nested", "worker"],
         r#"
-            use crate::rootFunc;
+
+            import crate.lib (rootFunc);
 
             pub fn work() = rootFunc() + 1;
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["deep".into(), "nested".into(), "worker".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["deep".into(), "nested".into(), "worker".into()]);
 
     assert!(result.is_ok());
 }
@@ -284,14 +301,15 @@ fn test_module_not_found() {
         root,
         &["main"],
         r#"
-            use nonexistent::func;
+
+            import nonexistent (func);
 
             fn test() = func();
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["main".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["main".into()]);
 
     // Should fail with module not found error
     assert!(result.is_err());
@@ -313,6 +331,7 @@ fn test_diamond_dependency() {
         root,
         &["c"],
         r#"
+
             pub fn funcC() = 42;
         "#,
     );
@@ -321,7 +340,8 @@ fn test_diamond_dependency() {
         root,
         &["a"],
         r#"
-            use c::funcC;
+
+            import c (funcC);
             pub fn funcA() = funcC() + 1;
         "#,
     );
@@ -330,7 +350,8 @@ fn test_diamond_dependency() {
         root,
         &["b"],
         r#"
-            use c::funcC;
+
+            import c (funcC);
             pub fn funcB() = funcC() * 2;
         "#,
     );
@@ -339,15 +360,16 @@ fn test_diamond_dependency() {
         root,
         &["main"],
         r#"
-            use a::funcA;
-            use b::funcB;
+
+            import a (funcA);
+            import b (funcB);
 
             fn compute() = funcA() + funcB();
         "#,
     );
 
-    let mut loader = ModuleLoader::new(root.to_path_buf());
-    let result = loader.load_module(&vec!["main".into()]);
+    let mut loader = ModuleLoader::new(root);
+    let result = loader.load_module(&["main".into()]);
 
     // Diamond dependencies are fine, not circular
     assert!(result.is_ok());

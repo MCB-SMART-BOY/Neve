@@ -106,15 +106,17 @@ impl ModulePath {
         }
     }
 
-    /// Convert to a display string.
-    pub fn to_string(&self) -> String {
+}
+
+impl std::fmt::Display for ModulePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = match self.kind {
             ModulePathKind::Absolute => "",
             ModulePathKind::Self_ => "self.",
             ModulePathKind::Super => "super.",
             ModulePathKind::Crate => "crate.",
         };
-        format!("{}{}", prefix, self.segments.join("."))
+        write!(f, "{}{}", prefix, self.segments.join("."))
     }
 }
 
@@ -225,12 +227,14 @@ impl ModuleLoader {
             }
             ModulePathKind::Super => {
                 let from = from_module?;
-                if from.is_empty() {
-                    return None; // Can't go above root
+                if from.len() < 2 {
+                    return None; // Can't go above root or single-level module
                 }
-                let mut result = from[..from.len() - 1].to_vec();
-                
-                // Handle multiple super
+                // Go up two levels: remove current file and then go to parent directory
+                // E.g., from ["mylib", "submod", "worker"] -> ["mylib"]
+                let mut result = from[..from.len() - 2].to_vec();
+
+                // Handle multiple super or additional path segments
                 for seg in &path.segments {
                     if seg == "super" {
                         if result.is_empty() {
@@ -253,21 +257,21 @@ impl ModuleLoader {
         }
 
         // Check if it's a standard library module
-        if module_path.first().map(|s| s.as_str()) == Some("std") {
-            if let Some(std_path) = &self.std_path {
-                let relative: PathBuf = module_path[1..].iter().collect();
-                
-                // Try module_name.neve
-                let file_path = std_path.join(&relative).with_extension("neve");
-                if file_path.exists() {
-                    return Some(file_path);
-                }
-                
-                // Try module_name/mod.neve
-                let mod_path = std_path.join(&relative).join("mod.neve");
-                if mod_path.exists() {
-                    return Some(mod_path);
-                }
+        if module_path.first().map(|s| s.as_str()) == Some("std")
+            && let Some(std_path) = &self.std_path
+        {
+            let relative: PathBuf = module_path[1..].iter().collect();
+
+            // Try module_name.neve
+            let file_path = std_path.join(&relative).with_extension("neve");
+            if file_path.exists() {
+                return Some(file_path);
+            }
+
+            // Try module_name/mod.neve
+            let mod_path = std_path.join(&relative).join("mod.neve");
+            if mod_path.exists() {
+                return Some(mod_path);
             }
         }
 
@@ -337,6 +341,56 @@ impl ModuleLoader {
         // Allocate module ID
         let module_id = self.fresh_module_id();
 
+        // Load dependencies (imports) BEFORE registering the module as loaded
+        // This allows circular dependency detection to work correctly
+        //
+        // IMPORTANT: For `pub import` (re-exports), we need special handling to avoid
+        // infinite loops when modules re-export each other's symbols.
+        for item in &source_file.items {
+            if let neve_syntax::ItemKind::Import(import_def) = &item.kind {
+                let import_path = ModulePath::from_import_def(import_def);
+
+                // Check if this is a re-export (pub import)
+                let is_reexport = import_def.visibility != neve_syntax::Visibility::Private;
+
+                #[allow(clippy::collapsible_if)]
+                if let Some(abs_path) = self.make_absolute(&import_path, Some(path))
+                    && abs_path != path  // Only load if not a self-reference
+                {
+                    // For re-exports, check if the target module is already being loaded
+                    // in our dependency chain. If so, we can safely skip loading it now
+                    // and defer symbol resolution to later.
+                    if is_reexport && self.loading.contains(&abs_path) {
+                        // This is a re-export of a module that's currently being loaded.
+                        // This is safe - we'll resolve the symbols later after all modules
+                        // are loaded. This breaks the infinite loop.
+                        continue;
+                    }
+
+                    // Propagate circular dependency errors immediately
+                    if let Err(e) = self.load_module(&abs_path) {
+                        match &e {
+                            // Circular dependencies and module not found should fail immediately
+                            ModuleLoadError::CircularDependency { .. } | ModuleLoadError::NotFound(_) => {
+                                // Remove from loading set and stack before returning error
+                                self.loading.remove(path);
+                                self.loading_stack.pop();
+                                return Err(e);
+                            }
+                            // Other errors get logged but don't block loading
+                            _ => {
+                                self.diagnostics.push(Diagnostic::error(
+                                    neve_diagnostic::DiagnosticKind::Module,
+                                    item.span,
+                                    format!("Failed to load module '{}': {}", abs_path.join("."), e),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Create module info
         let info = ModuleInfo {
             id: module_id,
@@ -348,36 +402,16 @@ impl ModuleLoader {
             items: HashMap::new(),
         };
 
-        // Register the module
+        // Register the module as loaded (only after dependencies are loaded)
         self.modules.insert(module_id, info);
         self.path_to_id.insert(path.to_vec(), module_id);
         self.file_to_id.insert(file_path, module_id);
 
         // Update parent's children list
-        if let Some(parent_id) = self.find_parent_module(path) {
-            if let Some(parent_info) = self.modules.get_mut(&parent_id) {
-                parent_info.children.push(module_id);
-            }
-        }
-
-        // Load dependencies (imports)
-        for item in &source_file.items {
-            if let neve_syntax::ItemKind::Import(import_def) = &item.kind {
-                let import_path = ModulePath::from_import_def(import_def);
-                
-                if let Some(abs_path) = self.make_absolute(&import_path, Some(path)) {
-                    // Only load if not a wildcard import from current module
-                    if abs_path != path {
-                        if let Err(e) = self.load_module(&abs_path) {
-                            self.diagnostics.push(Diagnostic::error(
-                                neve_diagnostic::DiagnosticKind::Module,
-                                item.span,
-                                format!("Failed to load module '{}': {}", abs_path.join("."), e),
-                            ));
-                        }
-                    }
-                }
-            }
+        if let Some(parent_id) = self.find_parent_module(path)
+            && let Some(parent_info) = self.modules.get_mut(&parent_id)
+        {
+            parent_info.children.push(module_id);
         }
 
         // Remove from loading set and stack
@@ -451,10 +485,10 @@ impl ModuleLoader {
                 Visibility::Crate => true, // Within same crate
                 Visibility::Super => {
                     // Check if from_module is a child of target's parent
-                    if let Some(parent) = &target_info.parent {
-                        if let Some(parent_info) = self.modules.get(parent) {
-                            return from_module.starts_with(&parent_info.path);
-                        }
+                    if let Some(parent) = &target_info.parent
+                        && let Some(parent_info) = self.modules.get(parent)
+                    {
+                        return from_module.starts_with(&parent_info.path);
                     }
                     false
                 }

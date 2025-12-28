@@ -230,9 +230,9 @@ fn test_parse_pipe_operator() {
         ItemKind::Fn(func) => {
             assert_eq!(&func.name.name, "process");
             // Pipe operator creates binary operations
-            match &func.body.kind {
-                ExprKind::Binary { .. } => {} // Success
-                _ => {} // Pipe may desugar to Call, accept either
+            // Pipe may desugar to Binary or Call, both are acceptable
+            if let ExprKind::Binary { .. } = &func.body.kind {
+                // Success - it's a binary operation (pipe)
             }
         }
         _ => panic!("Expected function definition"),

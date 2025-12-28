@@ -156,42 +156,42 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
             let current_system = current_system();
             
             // Check for flake-style outputs
-            if let Some(Value::Record(packages)) = fields.get("packages") {
-                if let Some(Value::Record(system_pkgs)) = packages.get(&current_system) {
-                    // Get the default package
-                    if let Some(pkg) = system_pkgs.get("default") {
+            if let Some(Value::Record(packages)) = fields.get("packages")
+                && let Some(Value::Record(system_pkgs)) = packages.get(&current_system)
+            {
+                // Get the default package
+                if let Some(pkg) = system_pkgs.get("default")
+                    && let Some(drv) = value_to_derivation(pkg)?
+                {
+                    derivations.push(drv);
+                }
+                // Or get all packages
+                if derivations.is_empty() {
+                    for (name, pkg) in system_pkgs.iter() {
                         if let Some(drv) = value_to_derivation(pkg)? {
                             derivations.push(drv);
-                        }
-                    }
-                    // Or get all packages
-                    if derivations.is_empty() {
-                        for (name, pkg) in system_pkgs.iter() {
-                            if let Some(drv) = value_to_derivation(pkg)? {
-                                derivations.push(drv);
-                            } else {
-                                output::warning(&format!("skipping non-derivation: {}", name));
-                            }
+                        } else {
+                            output::warning(&format!("skipping non-derivation: {}", name));
                         }
                     }
                 }
             }
             
             // Check for derivation-like structure directly
-            if derivations.is_empty() {
-                if let Some(drv) = value_to_derivation(value)? {
-                    derivations.push(drv);
-                }
+            if derivations.is_empty()
+                && let Some(drv) = value_to_derivation(value)?
+            {
+                derivations.push(drv);
             }
             
             // Look for 'output' or 'package' attribute
             if derivations.is_empty() {
                 for attr in &["output", "package", "default"] {
-                    if let Some(val) = fields.get(*attr) {
-                        if let Some(drv) = value_to_derivation(val)? {
-                            derivations.push(drv);
-                            break;
-                        }
+                    if let Some(val) = fields.get(*attr)
+                        && let Some(drv) = value_to_derivation(val)?
+                    {
+                        derivations.push(drv);
+                        break;
                     }
                 }
             }

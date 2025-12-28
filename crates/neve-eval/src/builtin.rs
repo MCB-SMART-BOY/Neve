@@ -882,10 +882,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         // Add environment variables from attrs (excluding special fields)
                         let special_fields = ["name", "version", "system", "builder", "args", "outputs"];
                         for (key, value) in attrs.iter() {
-                            if !special_fields.contains(&key.as_str()) {
-                                if let Value::String(s) = value {
-                                    drv_builder = drv_builder.env(key, s.as_str());
-                                }
+                            if !special_fields.contains(&key.as_str())
+                                && let Value::String(s) = value
+                            {
+                                drv_builder = drv_builder.env(key, s.as_str());
                             }
                         }
                         
