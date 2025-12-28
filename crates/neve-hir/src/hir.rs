@@ -292,10 +292,10 @@ impl ModuleRegistry {
                     .filter_map(|item| {
                         // Only export if in the export list (or no explicit exports)
                         let name = self.item_name(item)?;
-                        if let Some(exports) = &module.exports {
-                            if !exports.contains(&name) {
-                                return None;
-                            }
+                        if let Some(exports) = &module.exports
+                            && !exports.contains(&name)
+                        {
+                            return None;
                         }
                         Some((name, item.id))
                     })
