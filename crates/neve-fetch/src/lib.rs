@@ -298,6 +298,25 @@ impl Fetcher {
         let hash_prefix = &hash.to_hex()[..2];
         self.cache_dir.join(hash_prefix).join(format!("{}-{}", hash.to_hex(), name))
     }
+
+    /// Fetch text content from a URL.
+    pub fn fetch_text(&self, url: &str) -> Result<String, FetchError> {
+        let content = url::fetch_url(url)?;
+        String::from_utf8(content)
+            .map_err(|e| FetchError::Verification(format!("Invalid UTF-8: {}", e)))
+    }
+
+    /// Fetch a file from a URL and save to destination.
+    pub fn fetch_file(&self, url: &str, dest: &std::path::Path) -> Result<(), FetchError> {
+        let content = url::fetch_url(url)?;
+
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        std::fs::write(dest, &content)?;
+        Ok(())
+    }
 }
 
 /// Recursively copy a directory.

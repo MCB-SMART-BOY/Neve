@@ -8,8 +8,10 @@ mod store;
 mod path;
 pub mod gc;
 mod db;
+pub mod cache;
 
 pub use store::*;
 pub use path::*;
 pub use gc::*;
 pub use db::*;
+pub use cache::*;
