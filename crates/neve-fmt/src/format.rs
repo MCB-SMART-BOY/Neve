@@ -11,6 +11,7 @@ use neve_syntax::{
     EnumDef, TraitDef, ImplDef, ImportDef, ImportItems,
     Param, GenericParam, FieldDef, VariantKind,
     TraitItem, ImplItem,
+    Visibility,
 };
 
 /// Code formatter.
@@ -61,7 +62,7 @@ impl Formatter {
 
     /// Format a let binding.
     fn format_let(&self, p: &mut Printer, def: &LetDef) {
-        if def.is_pub {
+        if def.visibility == Visibility::Public {
             p.write("pub ");
         }
         p.write("let ");
@@ -80,7 +81,7 @@ impl Formatter {
 
     /// Format a function definition.
     fn format_fn(&self, p: &mut Printer, def: &FnDef) {
-        if def.is_pub {
+        if def.visibility == Visibility::Public {
             p.write("pub ");
         }
         p.write("fn ");
@@ -114,7 +115,7 @@ impl Formatter {
 
     /// Format a type alias.
     fn format_type_alias(&self, p: &mut Printer, def: &TypeAlias) {
-        if def.is_pub {
+        if def.visibility == Visibility::Public {
             p.write("pub ");
         }
         p.write("type ");
@@ -128,7 +129,7 @@ impl Formatter {
 
     /// Format a struct definition.
     fn format_struct(&self, p: &mut Printer, def: &StructDef) {
-        if def.is_pub {
+        if def.visibility == Visibility::Public {
             p.write("pub ");
         }
         p.write("struct ");
@@ -154,7 +155,7 @@ impl Formatter {
 
     /// Format an enum definition.
     fn format_enum(&self, p: &mut Printer, def: &EnumDef) {
-        if def.is_pub {
+        if def.visibility == Visibility::Public {
             p.write("pub ");
         }
         p.write("enum ");
@@ -200,7 +201,7 @@ impl Formatter {
 
     /// Format a trait definition.
     fn format_trait(&self, p: &mut Printer, def: &TraitDef) {
-        if def.is_pub {
+        if def.visibility == Visibility::Public {
             p.write("pub ");
         }
         p.write("trait ");

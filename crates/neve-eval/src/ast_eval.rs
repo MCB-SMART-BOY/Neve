@@ -209,14 +209,15 @@ impl AstEvaluator {
         match &item.kind {
             ItemKind::Let(let_def) => {
                 let value = self.eval_expr(&let_def.value)?;
-                self.bind_pattern_with_visibility(&let_def.pattern, value.clone(), let_def.is_pub)?;
+                let is_pub = let_def.visibility == Visibility::Public;
+                self.bind_pattern_with_visibility(&let_def.pattern, value.clone(), is_pub)?;
                 Ok(value)
             }
             ItemKind::Fn(fn_def) => {
                 // For recursive functions, we need to define the function first,
                 // then update the closure to capture the environment that includes itself.
                 let name = fn_def.name.name.clone();
-                let is_pub = fn_def.is_pub;
+                let is_pub = fn_def.visibility == Visibility::Public;
                 
                 // Create a placeholder closure first
                 let func = AstClosure {

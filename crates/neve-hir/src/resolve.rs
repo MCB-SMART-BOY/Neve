@@ -8,6 +8,7 @@ use crate::{
     Import, ImportKind, ImportPathPrefix,
     FnDef, StructDef, EnumDef, TypeAlias, TraitDef, ImplDef,
     Param, GenericParam, FieldDef, VariantDef, TraitItem, ImplItem,
+    AssocTypeDef, AssocTypeImpl,
     Expr, ExprKind, Literal, BinOp, UnaryOp,
     Pattern, PatternKind, MatchArm,
     Stmt, StmtKind,
@@ -163,31 +164,31 @@ impl Resolver {
     /// Collect exported items based on visibility.
     fn collect_exports(&self, file: &SourceFile) -> Option<Vec<String>> {
         let mut exports = Vec::new();
-        
+
         for item in &file.items {
             match &item.kind {
-                ast::ItemKind::Let(def) if def.is_pub => {
+                ast::ItemKind::Let(def) if def.visibility == ast::Visibility::Public => {
                     if let Some(name) = self.pattern_name(&def.pattern) {
                         exports.push(name);
                     }
                 }
-                ast::ItemKind::Fn(def) if def.is_pub => {
+                ast::ItemKind::Fn(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
                 }
-                ast::ItemKind::Struct(def) if def.is_pub => {
+                ast::ItemKind::Struct(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
                 }
-                ast::ItemKind::Enum(def) if def.is_pub => {
+                ast::ItemKind::Enum(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
                     // Also export variants
                     for variant in &def.variants {
                         exports.push(variant.name.name.clone());
                     }
                 }
-                ast::ItemKind::TypeAlias(def) if def.is_pub => {
+                ast::ItemKind::TypeAlias(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
                 }
-                ast::ItemKind::Trait(def) if def.is_pub => {
+                ast::ItemKind::Trait(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
                 }
                 _ => {}
@@ -239,7 +240,7 @@ impl Resolver {
                             path,
                             kind,
                             alias,
-                            is_pub: import_def.is_pub,
+                            is_pub: import_def.visibility == ast::Visibility::Public,
                             span: item.span,
                         })
                     }

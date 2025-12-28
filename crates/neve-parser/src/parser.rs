@@ -127,7 +127,7 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         LetDef {
-            is_pub,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
             pattern,
             ty,
             value,
@@ -152,7 +152,7 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         FnDef {
-            is_pub,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
             name,
             generics,
             params,
@@ -169,7 +169,7 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         TypeAlias {
-            is_pub,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
             name,
             generics,
             ty,
@@ -185,7 +185,7 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         StructDef {
-            is_pub,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
             name,
             generics,
             fields,
@@ -201,7 +201,7 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         EnumDef {
-            is_pub,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
             name,
             generics,
             variants,
@@ -228,7 +228,7 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         TraitDef {
-            is_pub,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
             name,
             generics,
             items,
@@ -326,7 +326,13 @@ impl Parser {
 
         self.expect(TokenKind::Semicolon);
 
-        ImportDef { prefix, path, items, alias, is_pub }
+        ImportDef {
+            prefix,
+            path,
+            items,
+            alias,
+            visibility: if is_pub { Visibility::Public } else { Visibility::Private }
+        }
     }
 
     // ========== Helpers ==========

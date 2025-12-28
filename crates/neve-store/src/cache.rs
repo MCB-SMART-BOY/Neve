@@ -7,7 +7,7 @@ use crate::{Store, StoreError};
 use neve_derive::{Derivation, Hash, StorePath};
 use neve_fetch::Fetcher;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -156,7 +156,7 @@ impl BinaryCache {
         fs::create_dir_all(&cache_dir)?;
 
         let fetcher = Fetcher::new(cache_dir.clone())
-            .map_err(|e| CacheError::Fetch(e.to_string()))?;
+            .map_err(|e: neve_fetch::FetchError| CacheError::Fetch(e.to_string()))?;
 
         Ok(Self {
             store,
@@ -253,14 +253,14 @@ impl BinaryCache {
         if !dest.exists() {
             self.fetcher
                 .fetch_file(url, &dest)
-                .map_err(|e| CacheError::Fetch(e.to_string()))?;
+                .map_err(|e: neve_fetch::FetchError| CacheError::Fetch(e.to_string()))?;
         }
 
         Ok(dest)
     }
 
     /// Extract a NAR archive to the store.
-    fn extract_nar(&self, nar_file: &Path, path: &StorePath) -> Result<(), CacheError> {
+    fn extract_nar(&self, _nar_file: &Path, path: &StorePath) -> Result<(), CacheError> {
         let dest = self.store.to_path(path);
 
         // Create parent directory
@@ -281,7 +281,7 @@ impl BinaryCache {
     }
 
     /// Compute the hash of a store path.
-    fn compute_path_hash(&self, path: &Path) -> Result<Hash, CacheError> {
+    fn compute_path_hash(&self, _path: &Path) -> Result<Hash, CacheError> {
         // This would recursively hash all files in the path
         // For now, return a placeholder
         Ok(Hash::of(b"placeholder"))
@@ -303,7 +303,7 @@ impl BinaryCache {
                     "References" => {
                         references = value
                             .split_whitespace()
-                            .filter_map(|s| StorePath::parse(s).ok())
+                            .filter_map(|s| StorePath::parse(Path::new(s)))
                             .collect();
                     }
                     "Compression" => {
@@ -379,7 +379,7 @@ impl BinaryCache {
 
     /// Create a NAR archive of a store path.
     fn create_nar(&self, path: &StorePath) -> Result<PathBuf, CacheError> {
-        let store_path = self.store.to_path(path);
+        let _store_path = self.store.to_path(path);
         let nar_file = self.cache_dir.join(format!("{}.nar.xz", path.hash()));
 
         // In a real implementation, this would:

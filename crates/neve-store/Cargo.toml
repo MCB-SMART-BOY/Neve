@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 neve-common.workspace = true
 neve-derive.workspace = true
+neve-fetch.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

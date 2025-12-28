@@ -1239,6 +1239,7 @@ version = "0.1.0"
 dependencies = [
  "neve-common",
  "neve-derive",
+ "neve-fetch",
  "serde",
  "serde_json",
  "thiserror",
