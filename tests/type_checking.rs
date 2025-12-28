@@ -3,8 +3,6 @@
 // Tests Hindley-Milner type inference, trait constraints,
 // associated types, and type error reporting.
 
-use neve_typeck::TypeChecker;
-
 /// Helper to type check Neve source code
 /// Returns Ok if there are no type errors, Err if there are diagnostics
 fn typecheck_source(_source: &str) -> Result<(), String> {

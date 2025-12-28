@@ -1992,9 +1992,10 @@ impl<T> Iterator for List<T> {
 };
 "#;
 
-        let tokens = neve_lexer::lex(source);
+        let lexer = neve_lexer::Lexer::new(source);
+        let (tokens, _diags) = lexer.tokenize();
         let mut parser = Parser::new(tokens);
-        let source_file = parser.parse();
+        let source_file = parser.parse_file();
 
         // Check for no errors
         assert!(parser.diagnostics().is_empty(), "Parser should not produce errors");
@@ -2003,7 +2004,7 @@ impl<T> Iterator for List<T> {
         assert_eq!(source_file.items.len(), 3);
 
         // Check first trait (Iterator)
-        if let ast::ItemKind::Trait(trait_def) = &source_file.items[0].kind {
+        if let ItemKind::Trait(trait_def) = &source_file.items[0].kind {
             assert_eq!(trait_def.name.name, "Iterator");
             assert_eq!(trait_def.assoc_types.len(), 1);
             assert_eq!(trait_def.assoc_types[0].name.name, "Item");
@@ -2015,7 +2016,7 @@ impl<T> Iterator for List<T> {
         }
 
         // Check second trait (Container)
-        if let ast::ItemKind::Trait(trait_def) = &source_file.items[1].kind {
+        if let ItemKind::Trait(trait_def) = &source_file.items[1].kind {
             assert_eq!(trait_def.name.name, "Container");
             assert_eq!(trait_def.assoc_types.len(), 2);
 
@@ -2033,7 +2034,7 @@ impl<T> Iterator for List<T> {
         }
 
         // Check impl block
-        if let ast::ItemKind::Impl(impl_def) = &source_file.items[2].kind {
+        if let ItemKind::Impl(impl_def) = &source_file.items[2].kind {
             assert_eq!(impl_def.assoc_type_impls.len(), 1);
             assert_eq!(impl_def.assoc_type_impls[0].name.name, "Item");
             assert_eq!(impl_def.items.len(), 1);

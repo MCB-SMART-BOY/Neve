@@ -730,8 +730,6 @@ impl AstEvaluator {
                 }
                 body_eval.eval_expr(body)
             }
-
-            _ => Err(EvalError::TypeError("unsupported expression".to_string())),
         }
     }
 

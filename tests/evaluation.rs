@@ -8,20 +8,14 @@ use neve_eval::{Evaluator, Value, EvalError};
 /// Helper to evaluate Neve source code
 /// Note: This is a simplified version for testing - actual evaluation would require
 /// full lexer, parser, and HIR resolution which may not be fully implemented yet.
-fn eval_source(source: &str) -> Result<Value, EvalError> {
+fn eval_source(_source: &str) -> Result<Value, EvalError> {
     // For now, we test that the types and error handling work correctly
     // The actual implementation will require the full pipeline
-    let mut evaluator = Evaluator::new();
+    let _evaluator = Evaluator::new();
 
     // Return a dummy value for now - in real implementation this would
     // go through: Lexer → Parser → HIR → Eval
     Ok(Value::Unit)
-}
-
-/// Helper to check if source would compile
-fn check_source_compiles(_source: &str) -> bool {
-    // This is a placeholder - actual implementation would parse and check
-    true
 }
 
 #[test]

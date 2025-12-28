@@ -3,8 +3,7 @@
 // Tests the module system including circular dependency detection,
 // path resolution, and import chains.
 
-use neve_hir::module_loader::{ModuleLoader, ModuleLoadError};
-use std::collections::HashMap;
+use neve_hir::{ModuleLoader, ModuleLoadError};
 use tempfile::TempDir;
 use std::fs;
 use std::path::Path;
