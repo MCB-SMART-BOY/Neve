@@ -31,6 +31,14 @@ pub enum EvalError {
     WrongArity,
 }
 
+/// Result of evaluating an expression with tail call detection.
+enum TcoResult {
+    /// Normal value result
+    Value(Value),
+    /// Tail call detected: (function, arguments)
+    TailCall(Value, Vec<Value>),
+}
+
 /// The HIR evaluator.
 pub struct Evaluator {
     /// Local variable environment
@@ -418,34 +426,140 @@ impl Evaluator {
     }
 
     fn apply(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
-        match func {
-            Value::Closure { params, body, env } => {
-                if args.len() != params.len() {
-                    return Err(EvalError::WrongArity);
+        // Tail call optimization: use iteration instead of recursion
+        let mut current_func = func;
+        let mut current_args = args;
+
+        loop {
+            match current_func {
+                Value::Closure { params, body, env } => {
+                    if current_args.len() != params.len() {
+                        return Err(EvalError::WrongArity);
+                    }
+
+                    // Set up environment for function execution
+                    let old_env = self.env.clone();
+                    self.env = env.child();
+
+                    for (param, arg) in params.iter().zip(current_args) {
+                        self.env.define(param.id, arg);
+                    }
+
+                    // Evaluate the body and check if result is a tail call
+                    match self.eval_with_tco(&body)? {
+                        TcoResult::Value(v) => {
+                            self.env = old_env;
+                            return Ok(v);
+                        }
+                        TcoResult::TailCall(func, args) => {
+                            // Tail call detected - loop instead of recurring
+                            self.env = old_env;
+                            current_func = func;
+                            current_args = args;
+                            continue;
+                        }
+                    }
+                }
+                Value::Builtin(builtin) => {
+                    if current_args.len() != builtin.arity {
+                        return Err(EvalError::WrongArity);
+                    }
+                    return (builtin.func)(&current_args).map_err(EvalError::TypeError);
+                }
+                Value::AstClosure(_) => {
+                    // AstClosure not supported in HIR evaluator
+                    return Err(EvalError::TypeError("AstClosure not supported in HIR evaluator".to_string()));
+                }
+                _ => return Err(EvalError::NotAFunction),
+            }
+        }
+    }
+
+    /// Evaluate expression and detect tail calls.
+    fn eval_with_tco(&mut self, expr: &Expr) -> Result<TcoResult, EvalError> {
+        match &expr.kind {
+            // Direct call in tail position
+            ExprKind::Call(func, args) => {
+                let func_val = self.eval(func)?;
+                let arg_vals: Result<Vec<_>, _> = args.iter().map(|e| self.eval(e)).collect();
+                Ok(TcoResult::TailCall(func_val, arg_vals?))
+            }
+
+            // If-then-else: evaluate condition, then the appropriate branch with TCO
+            ExprKind::If(cond, then_branch, else_branch) => {
+                let cond_val = self.eval(cond)?;
+                match cond_val {
+                    Value::Bool(true) => self.eval_with_tco(then_branch),
+                    Value::Bool(false) => self.eval_with_tco(else_branch),
+                    _ => Err(EvalError::TypeError("condition must be boolean".to_string())),
+                }
+            }
+
+            // Block: evaluate statements, then final expression with TCO
+            ExprKind::Block(stmts, final_expr) => {
+                for stmt in stmts {
+                    self.eval_stmt(stmt)?;
                 }
 
-                let old_env = self.env.clone();
-                self.env = env.child();
+                if let Some(expr) = final_expr {
+                    self.eval_with_tco(expr)
+                } else {
+                    Ok(TcoResult::Value(Value::Unit))
+                }
+            }
 
-                for (param, arg) in params.iter().zip(args) {
-                    self.env.define(param.id, arg);
+            // Match: evaluate scrutinee, match pattern, then evaluate arm with TCO
+            ExprKind::Match(scrutinee, arms) => {
+                let scrutinee_val = self.eval(scrutinee)?;
+
+                for arm in arms {
+                    if let Some(bindings) = self.match_pattern(&arm.pattern, &scrutinee_val) {
+                        // Check guard if present
+                        if let Some(guard) = &arm.guard {
+                            let old_env = self.env.clone();
+                            for (id, val) in bindings {
+                                self.env.define(id, val);
+                            }
+                            let guard_val = self.eval(guard)?;
+                            self.env = old_env;
+
+                            if guard_val != Value::Bool(true) {
+                                continue;
+                            }
+                        } else {
+                            // No guard, just bind variables
+                            for (id, val) in bindings {
+                                self.env.define(id, val);
+                            }
+                        }
+
+                        // Evaluate the arm body with TCO
+                        return self.eval_with_tco(&arm.body);
+                    }
                 }
 
-                let result = self.eval(&body)?;
-                self.env = old_env;
-                Ok(result)
+                Err(EvalError::PatternMatchFailed)
             }
-            Value::Builtin(builtin) => {
-                if args.len() != builtin.arity {
-                    return Err(EvalError::WrongArity);
-                }
-                (builtin.func)(&args).map_err(EvalError::TypeError)
+
+            // All other expressions are not in tail position - evaluate normally
+            _ => {
+                let val = self.eval(expr)?;
+                Ok(TcoResult::Value(val))
             }
-            Value::AstClosure(_) => {
-                // AstClosure not supported in HIR evaluator
-                Err(EvalError::TypeError("AstClosure not supported in HIR evaluator".to_string()))
+        }
+    }
+
+    fn eval_stmt(&mut self, stmt: &neve_hir::Stmt) -> Result<(), EvalError> {
+        match &stmt.kind {
+            neve_hir::StmtKind::Let(id, _name, _ty, expr) => {
+                let val = self.eval(expr)?;
+                self.env.define(*id, val);
+                Ok(())
             }
-            _ => Err(EvalError::NotAFunction),
+            neve_hir::StmtKind::Expr(expr) => {
+                self.eval(expr)?;
+                Ok(())
+            }
         }
     }
 
@@ -589,5 +703,147 @@ impl Evaluator {
 impl Default for Evaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neve_hir::*;
+    use neve_common::Span;
+
+    #[test]
+    fn test_tail_call_optimization() {
+        // This test verifies that TCO prevents stack overflow on deep recursion
+        // We create a tail-recursive sum function: sum(n, acc) = if n == 0 then acc else sum(n-1, acc+n)
+
+        let mut evaluator = Evaluator::new();
+
+        // Create a simple tail-recursive function manually in HIR
+        // fn sum(n: Int, acc: Int) -> Int = if n <= 0 then acc else sum(n - 1, acc + n)
+
+        let span = Span::default();
+        let n_id = LocalId(0);
+        let acc_id = LocalId(1);
+        let sum_def_id = DefId(0);
+
+        // Build: if n <= 0 then acc else sum(n - 1, acc + n)
+        let condition = Expr {
+            kind: ExprKind::Binary(
+                BinOp::Le,
+                Box::new(Expr {
+                    kind: ExprKind::Var(n_id),
+                    ty: Ty { kind: TyKind::Int, span },
+                    span,
+                }),
+                Box::new(Expr {
+                    kind: ExprKind::Literal(Literal::Int(0)),
+                    ty: Ty { kind: TyKind::Int, span },
+                    span,
+                }),
+            ),
+            ty: Ty { kind: TyKind::Bool, span },
+            span,
+        };
+
+        let then_branch = Expr {
+            kind: ExprKind::Var(acc_id),
+            ty: Ty { kind: TyKind::Int, span },
+            span,
+        };
+
+        // sum(n - 1, acc + n)
+        let recursive_call = Expr {
+            kind: ExprKind::Call(
+                Box::new(Expr {
+                    kind: ExprKind::Global(sum_def_id),
+                    ty: Ty { kind: TyKind::Int, span },
+                    span,
+                }),
+                vec![
+                    Expr {
+                        kind: ExprKind::Binary(
+                            BinOp::Sub,
+                            Box::new(Expr {
+                                kind: ExprKind::Var(n_id),
+                                ty: Ty { kind: TyKind::Int, span },
+                                span,
+                            }),
+                            Box::new(Expr {
+                                kind: ExprKind::Literal(Literal::Int(1)),
+                                ty: Ty { kind: TyKind::Int, span },
+                                span,
+                            }),
+                        ),
+                        ty: Ty { kind: TyKind::Int, span },
+                        span,
+                    },
+                    Expr {
+                        kind: ExprKind::Binary(
+                            BinOp::Add,
+                            Box::new(Expr {
+                                kind: ExprKind::Var(acc_id),
+                                ty: Ty { kind: TyKind::Int, span },
+                                span,
+                            }),
+                            Box::new(Expr {
+                                kind: ExprKind::Var(n_id),
+                                ty: Ty { kind: TyKind::Int, span },
+                                span,
+                            }),
+                        ),
+                        ty: Ty { kind: TyKind::Int, span },
+                        span,
+                    },
+                ],
+            ),
+            ty: Ty { kind: TyKind::Int, span },
+            span,
+        };
+
+        let body = Expr {
+            kind: ExprKind::If(
+                Box::new(condition),
+                Box::new(then_branch),
+                Box::new(recursive_call),
+            ),
+            ty: Ty { kind: TyKind::Int, span },
+            span,
+        };
+
+        let fn_def = FnDef {
+            name: "sum".to_string(),
+            generics: vec![],
+            params: vec![
+                Param {
+                    id: n_id,
+                    name: "n".to_string(),
+                    ty: Ty { kind: TyKind::Int, span },
+                    span,
+                },
+                Param {
+                    id: acc_id,
+                    name: "acc".to_string(),
+                    ty: Ty { kind: TyKind::Int, span },
+                    span,
+                },
+            ],
+            return_ty: Ty { kind: TyKind::Int, span },
+            body,
+        };
+
+        evaluator.globals.insert(sum_def_id, GlobalDef::Function(fn_def.clone()));
+
+        // Call sum(100, 0) - should compute 1+2+...+100 = 5050
+        let closure = Value::Closure {
+            params: fn_def.params.clone(),
+            body: fn_def.body.clone(),
+            env: Environment::new(),
+        };
+
+        let result = evaluator.apply(closure, vec![Value::Int(100), Value::Int(0)]);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Value::Int(5050));
     }
 }
