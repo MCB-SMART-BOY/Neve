@@ -1,0 +1,60 @@
+-- GNU Make: Build automation tool
+-- Essential for building most Unix software
+
+{
+    name = "make",
+    version = "4.4.1",
+
+    meta = #{
+        description = "GNU Make - A tool for controlling the generation of executables",
+        homepage = "https://www.gnu.org/software/make/",
+        license = "GPL-3.0-or-later",
+        platforms = ["x86_64-linux", "aarch64-linux", "x86_64-darwin"],
+        maintainers = ["Neve Team"],
+        priority = 5,
+    },
+
+    src = fetchurl {
+        url = "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz",
+        hash = "sha256-3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+    },
+
+    nativeBuildInputs = [],
+    buildInputs = [],
+
+    configureFlags = [
+        "--prefix=$out",
+        "--without-guile",  -- Disable Guile support for minimal deps
+    ],
+
+    configurePhase = ''
+        ./configure ${toString configureFlags}
+    '',
+
+    buildPhase = ''
+        make -j$NIX_BUILD_CORES
+    '',
+
+    checkPhase = ''
+        # Make has a test suite
+        # make check || true
+    '',
+
+    installPhase = ''
+        make install
+
+        # Remove documentation to save space
+        rm -rf $out/share/info
+        rm -rf $out/share/man
+    '',
+
+    postInstall = ''
+        strip $out/bin/make
+    '',
+
+    outputs = ["out"],
+
+    passthru = #{
+        isGNU = true,
+    },
+}

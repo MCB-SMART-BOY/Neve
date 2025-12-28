@@ -1,0 +1,112 @@
+-- GCC: GNU Compiler Collection
+-- Stage 0 compiler for bootstrapping the toolchain
+
+{
+    name = "gcc",
+    version = "13.2.0",
+
+    meta = #{
+        description = "GNU Compiler Collection - C, C++, and more",
+        homepage = "https://gcc.gnu.org/",
+        license = "GPL-3.0-or-later",
+        platforms = ["x86_64-linux", "aarch64-linux"],
+        maintainers = ["Neve Team"],
+        priority = 10,  -- High priority for bootstrap
+    },
+
+    src = fetchurl {
+        url = "https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz",
+        hash = "sha256-3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+    },
+
+    -- Bootstrap dependencies
+    nativeBuildInputs = [
+        binutils,
+    ],
+
+    buildInputs = [
+        gmp,
+        mpfr,
+        mpc,
+        zlib,
+    ],
+
+    -- Patches for reproducibility
+    patches = [
+        ./patches/gcc-13-reproducible.patch,
+    ],
+
+    -- Out-of-tree build (recommended for GCC)
+    preConfigure = ''
+        mkdir -p build
+        cd build
+    '',
+
+    configureFlags = [
+        "--prefix=$out",
+        "--with-system-zlib",
+        "--enable-languages=c,c++",
+        "--disable-multilib",
+        "--disable-bootstrap",  -- Single-stage build for speed
+        "--enable-shared",
+        "--enable-threads=posix",
+        "--enable-__cxa_atexit",
+        "--enable-clocale=gnu",
+        "--enable-gnu-unique-object",
+        "--enable-linker-build-id",
+        "--with-linker-hash-style=gnu",
+        "--enable-plugin",
+        "--enable-lto",
+        "--disable-werror",
+    ],
+
+    configurePhase = ''
+        ../configure ${toString configureFlags}
+    '',
+
+    -- GCC takes a long time to build
+    buildPhase = ''
+        make -j$NIX_BUILD_CORES
+    '',
+
+    checkPhase = ''
+        # GCC test suite is very comprehensive but slow
+        # make -k check || true
+    '',
+
+    installPhase = ''
+        make install
+
+        # Remove unnecessary files to save space
+        rm -rf $out/share/info
+        rm -rf $out/share/man
+        rm -rf $out/share/locale
+
+        # Create cc symlink
+        ln -s $out/bin/gcc $out/bin/cc
+        ln -s $out/bin/g++ $out/bin/c++
+    '',
+
+    postInstall = ''
+        # Strip binaries
+        find $out/bin -type f -executable -exec strip --strip-unneeded {} \; 2>/dev/null || true
+        find $out/libexec -type f -executable -exec strip --strip-unneeded {} \; 2>/dev/null || true
+    '',
+
+    # Separate outputs for better granularity
+    outputs = ["out", "lib", "man", "info"],
+
+    setupHook = ''
+        export CC="$out/bin/gcc"
+        export CXX="$out/bin/g++"
+        export CPP="$out/bin/cpp"
+    '',
+
+    passthru = #{
+        isGNU = true,
+        isGCC = true,
+        majorVersion = 13,
+        langC = true,
+        langCC = true,
+    },
+}

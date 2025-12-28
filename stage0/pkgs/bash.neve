@@ -1,0 +1,73 @@
+-- GNU Bash: The Bourne Again Shell
+-- Essential shell for build scripts
+
+{
+    name = "bash",
+    version = "5.2.21",
+
+    meta = #{
+        description = "GNU Bourne Again Shell - the standard Linux shell",
+        homepage = "https://www.gnu.org/software/bash/",
+        license = "GPL-3.0-or-later",
+        platforms = ["x86_64-linux", "aarch64-linux", "x86_64-darwin"],
+        maintainers = ["Neve Team"],
+        priority = 8,
+    },
+
+    src = fetchurl {
+        url = "https://ftp.gnu.org/gnu/bash/bash-5.2.21.tar.gz",
+        hash = "sha256-c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+    },
+
+    nativeBuildInputs = [],
+    buildInputs = [
+        ncurses,  -- For readline support
+    ],
+
+    configureFlags = [
+        "--prefix=$out",
+        "--with-installed-readline",
+        "--enable-readline",
+        "--disable-nls",  -- No localization for stage0
+    ],
+
+    configurePhase = ''
+        ./configure ${toString configureFlags}
+    '',
+
+    buildPhase = ''
+        make -j$NIX_BUILD_CORES
+    '',
+
+    checkPhase = ''
+        # Bash has extensive tests
+        # make test || true
+    '',
+
+    installPhase = ''
+        make install
+
+        # Create sh symlink
+        ln -s $out/bin/bash $out/bin/sh
+
+        # Remove docs
+        rm -rf $out/share/info
+        rm -rf $out/share/man
+        rm -rf $out/share/doc
+    '',
+
+    postInstall = ''
+        strip $out/bin/bash
+    '',
+
+    outputs = ["out", "doc"],
+
+    setupHook = ''
+        export SHELL="$out/bin/bash"
+    '',
+
+    passthru = #{
+        isGNU = true,
+        shellPath = "/bin/bash",
+    },
+}

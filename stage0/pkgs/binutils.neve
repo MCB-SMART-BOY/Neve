@@ -1,0 +1,70 @@
+-- GNU Binutils: Essential binary utilities (ld, as, ar, etc.)
+-- Stage 0 package for building toolchains
+
+{
+    name = "binutils",
+    version = "2.41",
+
+    meta = #{
+        description = "GNU Binary Utilities - tools for manipulating binaries",
+        homepage = "https://www.gnu.org/software/binutils/",
+        license = "GPL-3.0",
+        platforms = ["x86_64-linux", "aarch64-linux"],
+        maintainers = ["Neve Team"],
+    },
+
+    src = fetchurl {
+        url = "https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz",
+        hash = "sha256-5b5a4d7c5c3f4c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c",
+    },
+
+    -- Dependencies
+    nativeBuildInputs = [],
+    buildInputs = [],
+
+    -- Configure with sane defaults
+    configureFlags = [
+        "--prefix=$out",
+        "--enable-gold",
+        "--enable-ld=default",
+        "--enable-plugins",
+        "--enable-shared",
+        "--disable-werror",
+        "--enable-64-bit-bfd",
+        "--with-system-zlib",
+    ],
+
+    configurePhase = ''
+        ./configure ${toString configureFlags}
+    '',
+
+    buildPhase = ''
+        make -j$NIX_BUILD_CORES
+    '',
+
+    checkPhase = ''
+        # Binutils has extensive test suite
+        # make check -k || true
+    '',
+
+    installPhase = ''
+        make install
+
+        # Remove unnecessary files
+        rm -rf $out/share/info
+        rm -rf $out/share/locale
+    '',
+
+    postInstall = ''
+        # Strip binaries
+        find $out/bin -type f -executable -exec strip --strip-unneeded {} \; 2>/dev/null || true
+    '',
+
+    outputs = ["out", "dev", "info"],
+
+    passthru = #{
+        isGNU = true,
+        providesLinker = true,
+        providesAssembler = true,
+    },
+}

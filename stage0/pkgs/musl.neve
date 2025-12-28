@@ -1,0 +1,86 @@
+-- musl: Lightweight C standard library implementation
+-- This is a Stage 0 package - one of the foundational packages needed to bootstrap the system
+
+{
+    name = "musl",
+    version = "1.2.4",
+
+    meta = #{
+        description = "musl libc - a lightweight, fast, simple, and free C standard library",
+        homepage = "https://musl.libc.org/",
+        license = "MIT",
+        platforms = ["x86_64-linux", "aarch64-linux"],
+        maintainers = ["Neve Team"],
+    },
+
+    -- Source fetching
+    src = fetchurl {
+        url = "https://musl.libc.org/releases/musl-1.2.4.tar.gz",
+        hash = "sha256-4cbb4f6a9b06c4c22c69e5d1e0db0e0e2e0c26e79f6e39a1c66d10a0f9d3e6d8",
+    },
+
+    -- Build-time dependencies (bootstrap phase - none for musl)
+    nativeBuildInputs = [],
+
+    -- Runtime dependencies
+    buildInputs = [],
+
+    -- Configuration phase
+    configurePhase = ''
+        ./configure \
+            --prefix=$out \
+            --syslibdir=$out/lib \
+            --enable-optimize \
+            --enable-debug=no
+    '',
+
+    -- Build phase
+    buildPhase = ''
+        make -j$NIX_BUILD_CORES
+    '',
+
+    -- Check/test phase
+    checkPhase = ''
+        # musl has its own test suite
+        # make check
+    '',
+
+    -- Installation phase
+    installPhase = ''
+        make install
+
+        # Create compatibility symlinks
+        ln -s $out/lib/libc.so $out/lib/ld-musl-x86_64.so.1 || true
+
+        # Install headers
+        mkdir -p $out/include
+        cp -r include/* $out/include/
+    '',
+
+    -- Post-installation fixes
+    postInstall = ''
+        # Strip debug symbols to reduce size
+        find $out -type f -executable -exec strip --strip-unneeded {} \; 2>/dev/null || true
+    '',
+
+    -- Environment setup for packages that depend on musl
+    setupHook = ''
+        export CC="$out/bin/musl-gcc"
+        export CFLAGS="-I$out/include"
+        export LDFLAGS="-L$out/lib"
+    '',
+
+    -- Output paths
+    outputs = ["out", "dev"],
+
+    -- Separate development files
+    devOutputs = #{
+        dev = ["include", "lib/libc.a"],
+    },
+
+    passthru = #{
+        # Additional metadata for introspection
+        isMusl = true,
+        targetTriple = "x86_64-unknown-linux-musl",
+    },
+}

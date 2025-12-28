@@ -1,0 +1,58 @@
+-- zlib: Compression library
+-- Widely used dependency for many packages
+
+{
+    name = "zlib",
+    version = "1.3.1",
+
+    meta = #{
+        description = "A massively spiffy yet delicately unobtrusive compression library",
+        homepage = "https://zlib.net/",
+        license = "Zlib",
+        platforms = ["x86_64-linux", "aarch64-linux", "x86_64-darwin"],
+        maintainers = ["Neve Team"],
+    },
+
+    src = fetchurl {
+        url = "https://zlib.net/zlib-1.3.1.tar.gz",
+        hash = "sha256-9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+    },
+
+    nativeBuildInputs = [],
+    buildInputs = [],
+
+    -- zlib uses custom configure script
+    configurePhase = ''
+        ./configure \
+            --prefix=$out \
+            --shared \
+            --static
+    '',
+
+    buildPhase = ''
+        make -j$NIX_BUILD_CORES
+    '',
+
+    checkPhase = ''
+        make test
+    '',
+
+    installPhase = ''
+        make install
+    '',
+
+    postInstall = ''
+        # Strip libraries
+        strip --strip-unneeded $out/lib/*.so* || true
+    '',
+
+    outputs = ["out", "dev"],
+
+    devOutputs = #{
+        dev = ["include", "lib/libz.a"],
+    },
+
+    passthru = #{
+        pkgconfig = "zlib",
+    },
+}
