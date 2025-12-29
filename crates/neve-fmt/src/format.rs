@@ -3,15 +3,11 @@
 use crate::config::FormatConfig;
 use crate::printer::Printer;
 use neve_syntax::{
-    Expr, ExprKind, BinOp, UnaryOp, RecordField, MatchArm, LambdaParam,
-    Stmt, StmtKind, Generator, StringPart,
-    Pattern, PatternKind, LiteralPattern, RecordPatternField,
-    Type, TypeKind, RecordTypeField,
-    SourceFile, Item, ItemKind, LetDef, FnDef, TypeAlias, StructDef,
-    EnumDef, TraitDef, ImplDef, ImportDef, ImportItems,
-    Param, GenericParam, FieldDef, VariantKind,
-    TraitItem, ImplItem,
-    Visibility,
+    BinOp, EnumDef, Expr, ExprKind, FieldDef, FnDef, Generator, GenericParam, ImplDef, ImplItem,
+    ImportDef, ImportItems, Item, ItemKind, LambdaParam, LetDef, LiteralPattern, MatchArm, Param,
+    Pattern, PatternKind, RecordField, RecordPatternField, RecordTypeField, SourceFile, Stmt,
+    StmtKind, StringPart, StructDef, TraitDef, TraitItem, Type, TypeAlias, TypeKind, UnaryOp,
+    VariantKind, Visibility,
 };
 
 /// Code formatter.
@@ -28,7 +24,7 @@ impl Formatter {
     /// Format a source file.
     pub fn format(&self, file: &SourceFile) -> String {
         let mut printer = Printer::new(self.config.clone());
-        
+
         for (i, item) in file.items.iter().enumerate() {
             if i > 0 {
                 // Add extra blank line between top-level items if configured
@@ -39,10 +35,10 @@ impl Formatter {
             }
             self.format_item(&mut printer, item);
         }
-        
+
         // Ensure we're at indent level 0 at end of file
         debug_assert_eq!(printer.current_indent(), 0, "unbalanced indentation");
-        
+
         printer.finish()
     }
 
@@ -67,12 +63,12 @@ impl Formatter {
         }
         p.write("let ");
         self.format_pattern(p, &def.pattern);
-        
+
         if let Some(ref ty) = def.ty {
             p.write(": ");
             self.format_type(p, ty);
         }
-        
+
         p.write(" = ");
         self.format_expr(p, &def.value);
         p.write(";");
@@ -86,10 +82,10 @@ impl Formatter {
         }
         p.write("fn ");
         p.write(&def.name.name);
-        
+
         // Generics
         self.format_generics(p, &def.generics);
-        
+
         // Parameters
         p.write("(");
         for (i, param) in def.params.iter().enumerate() {
@@ -99,13 +95,13 @@ impl Formatter {
             self.format_param(p, param);
         }
         p.write(")");
-        
+
         // Return type
         if let Some(ref ret_ty) = def.return_type {
             p.write(" -> ");
             self.format_type(p, ret_ty);
         }
-        
+
         // Body
         p.write(" = ");
         self.format_expr(p, &def.body);
@@ -135,7 +131,7 @@ impl Formatter {
         p.write("struct ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
-        
+
         if def.fields.is_empty() {
             p.write(";");
         } else {
@@ -164,7 +160,7 @@ impl Formatter {
         p.write(" {");
         p.newline();
         p.indent();
-        
+
         for variant in &def.variants {
             p.write(&variant.name.name);
             match &variant.kind {
@@ -193,7 +189,7 @@ impl Formatter {
             p.write(",");
             p.newline();
         }
-        
+
         p.dedent();
         p.write("}");
         p.newline();
@@ -210,11 +206,11 @@ impl Formatter {
         p.write(" {");
         p.newline();
         p.indent();
-        
+
         for item in &def.items {
             self.format_trait_item(p, item);
         }
-        
+
         p.dedent();
         p.write("}");
         p.newline();
@@ -225,21 +221,21 @@ impl Formatter {
         p.write("impl");
         self.format_generics(p, &def.generics);
         p.write(" ");
-        
+
         if let Some(ref trait_) = def.trait_ {
             self.format_type(p, trait_);
             p.write(" for ");
         }
-        
+
         self.format_type(p, &def.target);
         p.write(" {");
         p.newline();
         p.indent();
-        
+
         for item in &def.items {
             self.format_impl_item(p, item);
         }
-        
+
         p.dedent();
         p.write("}");
         p.newline();
@@ -254,7 +250,7 @@ impl Formatter {
             }
             p.write(&part.name);
         }
-        
+
         match &def.items {
             ImportItems::Module => {}
             ImportItems::Items(items) => {
@@ -271,12 +267,12 @@ impl Formatter {
                 p.write(" (*)");
             }
         }
-        
+
         if let Some(ref alias) = def.alias {
             p.write(" as ");
             p.write(&alias.name);
         }
-        
+
         p.write(";");
         p.newline();
     }
@@ -338,17 +334,17 @@ impl Formatter {
             self.format_param(p, param);
         }
         p.write(")");
-        
+
         if let Some(ref ret_ty) = item.return_type {
             p.write(" -> ");
             self.format_type(p, ret_ty);
         }
-        
+
         if let Some(ref default) = item.default {
             p.write(" = ");
             self.format_expr(p, default);
         }
-        
+
         p.write(";");
         p.newline();
     }
@@ -366,12 +362,12 @@ impl Formatter {
             self.format_param(p, param);
         }
         p.write(")");
-        
+
         if let Some(ref ret_ty) = item.return_type {
             p.write(" -> ");
             self.format_type(p, ret_ty);
         }
-        
+
         p.write(" = ");
         self.format_expr(p, &item.body);
         p.write(";");
@@ -416,10 +412,11 @@ impl Formatter {
                     p.write("#{}");
                 } else {
                     // Check if we should break to multiple lines
-                    let estimated_len: usize = fields.iter()
+                    let estimated_len: usize = fields
+                        .iter()
                         .map(|f| f.name.name.len() + 4) // " = " + ", "
                         .sum();
-                    
+
                     if p.would_exceed_width(estimated_len + 4) && fields.len() > 1 {
                         // Multi-line format
                         p.writeln("#{");
@@ -547,7 +544,11 @@ impl Formatter {
             }
 
             // Method call
-            ExprKind::MethodCall { receiver, method, args } => {
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
                 self.format_expr(p, receiver);
                 p.write(".");
                 p.write(&method.name);
@@ -619,7 +620,11 @@ impl Formatter {
             }
 
             // If
-            ExprKind::If { condition, then_branch, else_branch } => {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 p.write("if ");
                 self.format_expr(p, condition);
                 p.write(" then ");
@@ -663,7 +668,12 @@ impl Formatter {
             }
 
             // Let expression
-            ExprKind::Let { pattern, ty, value, body } => {
+            ExprKind::Let {
+                pattern,
+                ty,
+                value,
+                body,
+            } => {
                 p.write("let ");
                 self.format_pattern(p, pattern);
                 if let Some(t) = ty {
@@ -1038,4 +1048,3 @@ fn escape_char(c: char) -> String {
         _ => c.to_string(),
     }
 }
-

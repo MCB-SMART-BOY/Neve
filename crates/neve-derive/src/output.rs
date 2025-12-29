@@ -32,7 +32,7 @@ impl StorePath {
         hasher.update(drv_hash.as_bytes());
         hasher.update_str("out");
         hasher.update_str(name);
-        
+
         Self {
             hash: hasher.finalize(),
             name: name.to_string(),
@@ -79,12 +79,12 @@ impl StorePath {
         }
         let hash_str = &name[..32];
         let name_part = &name[33..];
-        
+
         // Reconstruct full hash from short hex (pad with zeros for now)
         let mut hash_bytes = [0u8; 32];
         let short_bytes = hex_decode(hash_str)?;
         hash_bytes[..16].copy_from_slice(&short_bytes);
-        
+
         Some(Self {
             hash: Hash::from_bytes(hash_bytes),
             name: name_part.to_string(),
@@ -156,4 +156,3 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
         .collect()
 }
-

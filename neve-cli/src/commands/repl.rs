@@ -1,13 +1,14 @@
 //! The `neve repl` command.
 
 use crate::output;
-use std::rc::Rc;
-use std::cell::RefCell;
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
-use neve_parser::parse;
 use neve_diagnostic::emit;
-use neve_eval::{AstEvaluator, AstEnv, Value};
+use neve_eval::{AstEnv, AstEvaluator, Value, builtins};
+use neve_parser::parse;
+use neve_syntax::PatternKind;
+use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub fn run() -> Result<(), String> {
     output::info(&format!("Neve REPL v{}", env!("CARGO_PKG_VERSION")));
@@ -33,7 +34,7 @@ pub fn run() -> Result<(), String> {
                 // If line ends with backslash, continue on next line
                 if line.trim_end().ends_with('\\') {
                     let trimmed = line.trim_end();
-                    input_buffer.push_str(&trimmed[..trimmed.len()-1]);
+                    input_buffer.push_str(&trimmed[..trimmed.len() - 1]);
                     input_buffer.push('\n');
                     in_multiline = true;
                     continue;
@@ -86,7 +87,8 @@ pub fn run() -> Result<(), String> {
 
                             // Separate builtins from user-defined
                             let builtins_count = builtins().len();
-                            let user_bindings: Vec<_> = bindings.keys()
+                            let user_bindings: Vec<_> = bindings
+                                .keys()
                                 .filter(|k| !builtins().iter().any(|(b, _)| b == *k))
                                 .collect();
 
@@ -103,7 +105,11 @@ pub fn run() -> Result<(), String> {
                                 }
                             }
                             println!();
-                            println!("({} builtins, {} user-defined)", builtins_count, user_bindings.len());
+                            println!(
+                                "({} builtins, {} user-defined)",
+                                builtins_count,
+                                user_bindings.len()
+                            );
                             input_buffer.clear();
                             continue;
                         }
@@ -138,33 +144,51 @@ pub fn run() -> Result<(), String> {
 
                                     // Evaluate the file in current environment
                                     let current_env = env.borrow().clone();
-                                    let mut evaluator = AstEvaluator::with_env(Rc::new(current_env));
+                                    let mut evaluator =
+                                        AstEvaluator::with_env(Rc::new(current_env));
                                     match evaluator.eval_file(&ast) {
                                         Ok(_) => {
                                             // Extract and store new bindings
                                             for item in &ast.items {
-                                                if let neve_syntax::ItemKind::Let(let_def) = &item.kind {
-                                                    if let neve_syntax::Pattern::Ident(ident) = &let_def.pattern {
+                                                if let neve_syntax::ItemKind::Let(let_def) =
+                                                    &item.kind
+                                                {
+                                                    if let PatternKind::Var(ident) =
+                                                        &let_def.pattern.kind
+                                                    {
                                                         let current_env = env.borrow().clone();
-                                                        let mut temp_eval = AstEvaluator::with_env(Rc::new(current_env));
-                                                        if let Ok(val) = temp_eval.eval_expr(&let_def.value) {
-                                                            let is_pub = let_def.visibility != neve_syntax::Visibility::Private;
-                                                            env.borrow_mut().define_with_visibility(
-                                                                ident.name.clone(),
-                                                                val,
-                                                                is_pub
-                                                            );
+                                                        let mut temp_eval = AstEvaluator::with_env(
+                                                            Rc::new(current_env),
+                                                        );
+                                                        if let Ok(val) =
+                                                            temp_eval.eval_expr(&let_def.value)
+                                                        {
+                                                            let is_pub = let_def.visibility
+                                                                != neve_syntax::Visibility::Private;
+                                                            env.borrow_mut()
+                                                                .define_with_visibility(
+                                                                    ident.name.clone(),
+                                                                    val,
+                                                                    is_pub,
+                                                                );
                                                         }
                                                     }
-                                                } else if let neve_syntax::ItemKind::Fn(fn_def) = &item.kind {
+                                                } else if let neve_syntax::ItemKind::Fn(fn_def) =
+                                                    &item.kind
+                                                {
                                                     let current_env = env.borrow().clone();
-                                                    let mut temp_eval = AstEvaluator::with_env(Rc::new(current_env));
-                                                    if let Ok(fn_value) = temp_eval.eval_fn_def(fn_def) {
-                                                        let is_pub = fn_def.visibility != neve_syntax::Visibility::Private;
+                                                    let mut temp_eval = AstEvaluator::with_env(
+                                                        Rc::new(current_env),
+                                                    );
+                                                    if let Ok(fn_value) =
+                                                        temp_eval.eval_fn_def(fn_def)
+                                                    {
+                                                        let is_pub = fn_def.visibility
+                                                            != neve_syntax::Visibility::Private;
                                                         env.borrow_mut().define_with_visibility(
                                                             fn_def.name.name.clone(),
                                                             fn_value,
-                                                            is_pub
+                                                            is_pub,
                                                         );
                                                     }
                                                 }
@@ -225,17 +249,19 @@ pub fn run() -> Result<(), String> {
                         for item in &ast.items {
                             if let neve_syntax::ItemKind::Let(let_def) = &item.kind {
                                 // Extract the binding name from the pattern
-                                if let neve_syntax::Pattern::Ident(ident) = &let_def.pattern {
+                                if let PatternKind::Var(ident) = &let_def.pattern.kind {
                                     // Re-evaluate just this binding in the persistent env
                                     let current_env = env.borrow().clone();
-                                    let mut temp_eval = AstEvaluator::with_env(Rc::new(current_env));
+                                    let mut temp_eval =
+                                        AstEvaluator::with_env(Rc::new(current_env));
 
                                     if let Ok(val) = temp_eval.eval_expr(&let_def.value) {
-                                        let is_pub = let_def.visibility != neve_syntax::Visibility::Private;
+                                        let is_pub =
+                                            let_def.visibility != neve_syntax::Visibility::Private;
                                         env.borrow_mut().define_with_visibility(
                                             ident.name.clone(),
                                             val,
-                                            is_pub
+                                            is_pub,
                                         );
                                     }
                                 }
@@ -246,11 +272,12 @@ pub fn run() -> Result<(), String> {
 
                                 // Create a closure value for the function
                                 if let Ok(fn_value) = temp_eval.eval_fn_def(fn_def) {
-                                    let is_pub = fn_def.visibility != neve_syntax::Visibility::Private;
+                                    let is_pub =
+                                        fn_def.visibility != neve_syntax::Visibility::Private;
                                     env.borrow_mut().define_with_visibility(
                                         fn_def.name.name.clone(),
                                         fn_value,
-                                        is_pub
+                                        is_pub,
                                     );
                                 }
                             }

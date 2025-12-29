@@ -3,7 +3,7 @@
 // Tests the evaluator's ability to execute Neve code correctly,
 // including TCO to prevent stack overflow in deep recursion.
 
-use neve_eval::{Evaluator, Value, EvalError};
+use neve_eval::{EvalError, Evaluator, Value};
 
 /// Helper to evaluate Neve source code
 /// Note: This is a simplified version for testing - actual evaluation would require

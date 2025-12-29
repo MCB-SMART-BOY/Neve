@@ -109,11 +109,7 @@ fn test_record_literal() {
 fn test_comments() {
     assert_eq!(
         lex("1 -- comment\n2"),
-        vec![
-            TokenKind::Int(1),
-            TokenKind::Int(2),
-            TokenKind::Eof,
-        ]
+        vec![TokenKind::Int(1), TokenKind::Int(2), TokenKind::Eof,]
     );
 }
 
@@ -266,10 +262,7 @@ fn test_string_unicode() {
 
 #[test]
 fn test_string_emoji() {
-    assert_eq!(
-        lex(r#""🎉🚀""#)[0],
-        TokenKind::String("🎉🚀".to_string())
-    );
+    assert_eq!(lex(r#""🎉🚀""#)[0], TokenKind::String("🎉🚀".to_string()));
 }
 
 #[test]
@@ -307,22 +300,34 @@ fn test_ident_starting_with_keyword() {
     // "letter" starts with "let" but should be an identifier
     assert_eq!(lex("letter")[0], TokenKind::Ident("letter".to_string()));
     assert_eq!(lex("iffoo")[0], TokenKind::Ident("iffoo".to_string()));
-    assert_eq!(lex("matchmaking")[0], TokenKind::Ident("matchmaking".to_string()));
+    assert_eq!(
+        lex("matchmaking")[0],
+        TokenKind::Ident("matchmaking".to_string())
+    );
 }
 
 #[test]
 fn test_ident_camel_case() {
-    assert_eq!(lex("myVariable")[0], TokenKind::Ident("myVariable".to_string()));
+    assert_eq!(
+        lex("myVariable")[0],
+        TokenKind::Ident("myVariable".to_string())
+    );
 }
 
 #[test]
 fn test_ident_snake_case() {
-    assert_eq!(lex("my_variable")[0], TokenKind::Ident("my_variable".to_string()));
+    assert_eq!(
+        lex("my_variable")[0],
+        TokenKind::Ident("my_variable".to_string())
+    );
 }
 
 #[test]
 fn test_ident_screaming_snake() {
-    assert_eq!(lex("MY_CONSTANT")[0], TokenKind::Ident("MY_CONSTANT".to_string()));
+    assert_eq!(
+        lex("MY_CONSTANT")[0],
+        TokenKind::Ident("MY_CONSTANT".to_string())
+    );
 }
 
 #[test]
@@ -465,8 +470,14 @@ fn test_only_comments() {
 #[test]
 fn test_nested_brackets() {
     let tokens = lex("((()))");
-    assert_eq!(tokens.iter().filter(|t| **t == TokenKind::LParen).count(), 3);
-    assert_eq!(tokens.iter().filter(|t| **t == TokenKind::RParen).count(), 3);
+    assert_eq!(
+        tokens.iter().filter(|t| **t == TokenKind::LParen).count(),
+        3
+    );
+    assert_eq!(
+        tokens.iter().filter(|t| **t == TokenKind::RParen).count(),
+        3
+    );
 }
 
 #[test]
@@ -510,7 +521,10 @@ fn test_chained_access() {
 #[test]
 fn test_pipe_chain() {
     let tokens = lex("x |> f |> g |> h");
-    assert_eq!(tokens.iter().filter(|t| **t == TokenKind::PipeGt).count(), 3);
+    assert_eq!(
+        tokens.iter().filter(|t| **t == TokenKind::PipeGt).count(),
+        3
+    );
 }
 
 // ============================================================================
@@ -898,7 +912,11 @@ fn test_multiple_line_comments() {
 fn test_relative_path_literal() {
     // ./ is tokenized as a PathLit
     let tokens = lex("./path");
-    assert!(tokens.iter().any(|t| matches!(t, TokenKind::PathLit(p) if p == "./path")));
+    assert!(
+        tokens
+            .iter()
+            .any(|t| matches!(t, TokenKind::PathLit(p) if p == "./path"))
+    );
 }
 
 #[test]
@@ -912,7 +930,11 @@ fn test_dotdot_operator() {
 fn test_absolute_path_literal() {
     let tokens = lex("/absolute/path");
     // /absolute/path is parsed as PathLit
-    assert!(tokens.iter().any(|t| matches!(t, TokenKind::PathLit(p) if p == "/absolute/path")));
+    assert!(
+        tokens
+            .iter()
+            .any(|t| matches!(t, TokenKind::PathLit(p) if p == "/absolute/path"))
+    );
 }
 
 #[test]

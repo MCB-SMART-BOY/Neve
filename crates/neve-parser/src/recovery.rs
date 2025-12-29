@@ -19,10 +19,7 @@ pub const STMT_STARTS: &[TokenKind] = &[
 ];
 
 /// Tokens that typically end a statement.
-pub const STMT_ENDS: &[TokenKind] = &[
-    TokenKind::Semicolon,
-    TokenKind::RBrace,
-];
+pub const STMT_ENDS: &[TokenKind] = &[TokenKind::Semicolon, TokenKind::RBrace];
 
 /// Tokens that are synchronization points.
 pub const SYNC_TOKENS: &[TokenKind] = &[
@@ -42,7 +39,8 @@ pub const SYNC_TOKENS: &[TokenKind] = &[
 
 /// Check if a token kind is in a set.
 pub fn is_in_set(kind: &TokenKind, set: &[TokenKind]) -> bool {
-    set.iter().any(|k| std::mem::discriminant(k) == std::mem::discriminant(kind))
+    set.iter()
+        .any(|k| std::mem::discriminant(k) == std::mem::discriminant(kind))
 }
 
 /// Check if a token starts a statement.
@@ -89,7 +87,7 @@ impl DelimiterKind {
             DelimiterKind::Brace => TokenKind::RBrace,
         }
     }
-    
+
     pub fn opening_token(&self) -> TokenKind {
         match self {
             DelimiterKind::Paren => TokenKind::LParen,
@@ -109,28 +107,28 @@ impl DelimiterStack {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn push(&mut self, kind: DelimiterKind) {
         self.stack.push(kind);
     }
-    
+
     pub fn pop(&mut self) -> Option<DelimiterKind> {
         self.stack.pop()
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.stack.is_empty()
     }
-    
+
     pub fn depth(&self) -> usize {
         self.stack.len()
     }
-    
+
     /// Check if we're inside a specific delimiter.
     pub fn inside(&self, kind: DelimiterKind) -> bool {
         self.stack.contains(&kind)
     }
-    
+
     /// Update stack based on current token.
     pub fn update(&mut self, token: &TokenKind) {
         match token {
@@ -156,4 +154,3 @@ impl DelimiterStack {
         }
     }
 }
-

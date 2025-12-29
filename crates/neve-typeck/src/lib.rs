@@ -3,19 +3,18 @@
 //! This crate implements Hindley-Milner type inference with extensions
 //! for records, traits, and other Neve-specific features.
 
-mod infer;
-mod unify;
 mod check;
-mod traits;
 pub mod errors;
+mod infer;
+mod traits;
+mod unify;
 
 pub use check::TypeChecker;
-pub use traits::{
-    TraitResolver, TraitId, ImplId, TraitInfo, ImplInfo,
-    TraitMethod, ImplMethod, TraitBound, TraitConstraint,
-    ConstraintSolver, MethodResolution, UnsatisfiedConstraint,
-};
 pub use errors::format_type;
+pub use traits::{
+    ConstraintSolver, ImplId, ImplInfo, ImplMethod, MethodResolution, TraitBound, TraitConstraint,
+    TraitId, TraitInfo, TraitMethod, TraitResolver, UnsatisfiedConstraint,
+};
 
 use neve_diagnostic::Diagnostic;
 use neve_hir::Module;

@@ -1,8 +1,8 @@
 //! The Neve lexer.
 
+use crate::token::{Token, TokenKind};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
-use crate::token::{Token, TokenKind};
 
 /// Mode for lexer state machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,7 +170,10 @@ impl<'src> Lexer<'src> {
                 } else if self.peek_char() == Some('-') {
                     // Could be line comment (-- ...) or block comment (-- -- ... -- --)
                     self.advance(); // consume second -
-                    if self.peek_char() == Some(' ') && self.peek_nth(1) == Some('-') && self.peek_nth(2) == Some('-') {
+                    if self.peek_char() == Some(' ')
+                        && self.peek_nth(1) == Some('-')
+                        && self.peek_nth(2) == Some('-')
+                    {
                         // Block comment: -- -- ... -- --
                         self.advance(); // skip space
                         self.advance(); // skip -
@@ -350,7 +353,10 @@ impl<'src> Lexer<'src> {
                     if self.peek_char() == Some('-') {
                         self.advance();
                         // Check for closing: -- -- (space then --)
-                        if self.peek_char() == Some(' ') && self.peek_nth(1) == Some('-') && self.peek_nth(2) == Some('-') {
+                        if self.peek_char() == Some(' ')
+                            && self.peek_nth(1) == Some('-')
+                            && self.peek_nth(2) == Some('-')
+                        {
                             self.advance(); // skip space
                             self.advance(); // skip -
                             self.advance(); // skip -
@@ -362,8 +368,12 @@ impl<'src> Lexer<'src> {
                     // Unterminated comment
                     let span = Span::from_usize(self.pos, self.pos);
                     self.diagnostics.push(
-                        Diagnostic::error(DiagnosticKind::Lexer, span, "unterminated block comment")
-                            .with_code(ErrorCode::UnterminatedComment),
+                        Diagnostic::error(
+                            DiagnosticKind::Lexer,
+                            span,
+                            "unterminated block comment",
+                        )
+                        .with_code(ErrorCode::UnterminatedComment),
                     );
                     break;
                 }
@@ -413,8 +423,12 @@ impl<'src> Lexer<'src> {
             _ => {
                 let span = Span::from_usize(start, self.pos);
                 self.diagnostics.push(
-                    Diagnostic::error(DiagnosticKind::Lexer, span, "unterminated character literal")
-                        .with_code(ErrorCode::UnterminatedString),
+                    Diagnostic::error(
+                        DiagnosticKind::Lexer,
+                        span,
+                        "unterminated character literal",
+                    )
+                    .with_code(ErrorCode::UnterminatedString),
                 );
                 return TokenKind::Error;
             }
@@ -476,7 +490,10 @@ impl<'src> Lexer<'src> {
                     }
                     self.advance();
                     self.pop_mode();
-                    return Token::new(TokenKind::InterpolatedEnd, Span::from_usize(start, self.pos));
+                    return Token::new(
+                        TokenKind::InterpolatedEnd,
+                        Span::from_usize(start, self.pos),
+                    );
                 }
                 Some('{') => {
                     // Start of interpolation
@@ -490,7 +507,10 @@ impl<'src> Lexer<'src> {
                     self.advance();
                     self.pop_mode();
                     self.push_mode(LexerMode::InInterpolation { depth: 0 });
-                    return Token::new(TokenKind::InterpolationStart, Span::from_usize(start, self.pos));
+                    return Token::new(
+                        TokenKind::InterpolationStart,
+                        Span::from_usize(start, self.pos),
+                    );
                 }
                 Some('\\') => {
                     self.advance();
@@ -560,22 +580,23 @@ impl<'src> Lexer<'src> {
             let mut chars = self.chars.clone();
             chars.next(); // skip .
             if let Some((_, ch)) = chars.next()
-                && ch.is_ascii_digit() {
-                    self.advance(); // consume .
-                    value.push('.');
-                    is_float = true;
+                && ch.is_ascii_digit()
+            {
+                self.advance(); // consume .
+                value.push('.');
+                is_float = true;
 
-                    while let Some(ch) = self.peek_char() {
-                        if ch.is_ascii_digit() || ch == '_' {
-                            if ch != '_' {
-                                value.push(ch);
-                            }
-                            self.advance();
-                        } else {
-                            break;
+                while let Some(ch) = self.peek_char() {
+                    if ch.is_ascii_digit() || ch == '_' {
+                        if ch != '_' {
+                            value.push(ch);
                         }
+                        self.advance();
+                    } else {
+                        break;
                     }
                 }
+            }
         }
 
         // Exponent
@@ -716,12 +737,12 @@ impl<'src> Lexer<'src> {
     /// Scan a path literal starting with prefix (., ..)
     fn scan_path(&mut self, _start: usize, prefix: &str) -> TokenKind {
         let mut path = String::from(prefix);
-        
+
         // Consume the initial / after prefix
         if let Some((_, '/')) = self.advance() {
             path.push('/');
         }
-        
+
         // Consume path characters
         while let Some(ch) = self.peek_char() {
             if Self::is_path_char(ch) {
@@ -731,14 +752,14 @@ impl<'src> Lexer<'src> {
                 break;
             }
         }
-        
+
         TokenKind::PathLit(path)
     }
 
     /// Scan an absolute path starting with / (already consumed)
     fn scan_absolute_path(&mut self) -> TokenKind {
         let mut path = String::from("/");
-        
+
         // Consume path characters
         while let Some(ch) = self.peek_char() {
             if Self::is_path_char(ch) {
@@ -748,7 +769,7 @@ impl<'src> Lexer<'src> {
                 break;
             }
         }
-        
+
         TokenKind::PathLit(path)
     }
 }

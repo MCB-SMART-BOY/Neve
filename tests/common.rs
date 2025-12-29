@@ -1,6 +1,6 @@
 //! Integration tests for neve-common crate.
 
-use neve_common::{BytePos, Span, Interner};
+use neve_common::{BytePos, Interner, Span};
 
 #[test]
 fn test_span_merge() {
@@ -55,7 +55,7 @@ fn test_symbol_as_u32() {
     let mut interner = Interner::new();
     let sym = interner.intern("test");
     assert_eq!(sym.as_u32(), 0);
-    
+
     let sym2 = interner.intern("another");
     assert_eq!(sym2.as_u32(), 1);
 }

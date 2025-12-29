@@ -52,10 +52,16 @@ impl Activator {
 
         // Copy files
         for file in &generated.files {
-            let target = self.root.join(file.target.strip_prefix("/").unwrap_or(&file.target));
-            
+            let target = self
+                .root
+                .join(file.target.strip_prefix("/").unwrap_or(&file.target));
+
             if self.verbose {
-                println!("Installing {} -> {}", file.source.display(), target.display());
+                println!(
+                    "Installing {} -> {}",
+                    file.source.display(),
+                    target.display()
+                );
             }
 
             if !self.dry_run {
@@ -63,7 +69,7 @@ impl Activator {
                     fs::create_dir_all(parent)?;
                 }
                 fs::copy(&file.source, &target)?;
-                
+
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -81,9 +87,7 @@ impl Activator {
             }
 
             if !self.dry_run {
-                let output = Command::new(script)
-                    .env("NEVE_ROOT", &self.root)
-                    .output()?;
+                let output = Command::new(script).env("NEVE_ROOT", &self.root).output()?;
 
                 if !output.status.success() {
                     return Err(ConfigError::Activation(format!(
@@ -113,7 +117,11 @@ impl Activator {
     }
 
     /// Switch to a new configuration.
-    pub fn switch(&self, from: Option<&GeneratedConfig>, to: &GeneratedConfig) -> Result<ActivationResult, ConfigError> {
+    pub fn switch(
+        &self,
+        from: Option<&GeneratedConfig>,
+        to: &GeneratedConfig,
+    ) -> Result<ActivationResult, ConfigError> {
         // If there's a previous configuration, we might need to handle rollback
         if let Some(_prev) = from {
             // In a real implementation, we'd save the current state for rollback
@@ -128,23 +136,24 @@ impl Activator {
 
         // Check all files can be installed
         for file in &generated.files {
-            let target = self.root.join(file.target.strip_prefix("/").unwrap_or(&file.target));
-            
+            let target = self
+                .root
+                .join(file.target.strip_prefix("/").unwrap_or(&file.target));
+
             // Check if target directory exists or can be created
             if let Some(parent) = target.parent()
-                && !parent.exists() {
-                    result.warnings.push(format!(
-                        "Directory will be created: {}",
-                        parent.display()
-                    ));
-                }
+                && !parent.exists()
+            {
+                result
+                    .warnings
+                    .push(format!("Directory will be created: {}", parent.display()));
+            }
 
             // Check if target exists and would be overwritten
             if target.exists() {
-                result.warnings.push(format!(
-                    "File will be overwritten: {}",
-                    target.display()
-                ));
+                result
+                    .warnings
+                    .push(format!("File will be overwritten: {}", target.display()));
             }
 
             result.files_checked += 1;
@@ -152,12 +161,12 @@ impl Activator {
 
         // Check activation script
         if let Some(ref script) = generated.activation_script
-            && !script.exists() {
-                result.errors.push(format!(
-                    "Activation script not found: {}",
-                    script.display()
-                ));
-            }
+            && !script.exists()
+        {
+            result
+                .errors
+                .push(format!("Activation script not found: {}", script.display()));
+        }
 
         result.success = result.errors.is_empty();
         Ok(result)
@@ -235,7 +244,7 @@ impl Default for TestResult {
 /// Rollback to a previous configuration.
 pub fn rollback(generation: u64, generations_dir: &Path) -> Result<PathBuf, ConfigError> {
     let gen_path = generations_dir.join(format!("generation-{}", generation));
-    
+
     if !gen_path.exists() {
         return Err(ConfigError::NotFound(format!(
             "generation {} not found",
@@ -245,4 +254,3 @@ pub fn rollback(generation: u64, generations_dir: &Path) -> Result<PathBuf, Conf
 
     Ok(gen_path)
 }
-

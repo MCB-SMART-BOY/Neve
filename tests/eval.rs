@@ -2,9 +2,9 @@
 //!
 //! This file contains extensive edge case tests for the evaluator.
 
-use neve_parser::parse;
+use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_hir::lower;
-use neve_eval::{Evaluator, Value, EvalError, AstEvaluator};
+use neve_parser::parse;
 
 fn eval_source(source: &str) -> Result<Value, EvalError> {
     let (ast, _) = parse(source);
@@ -133,67 +133,106 @@ fn test_eval_float_division() {
 
 #[test]
 fn test_eval_bool_true() {
-    assert!(matches!(eval_source("let x = true;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = true;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_false() {
-    assert!(matches!(eval_source("let x = false;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = false;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_bool_not_true() {
-    assert!(matches!(eval_source("let x = !true;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = !true;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_bool_not_false() {
-    assert!(matches!(eval_source("let x = !false;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = !false;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_double_not() {
-    assert!(matches!(eval_source("let x = !!true;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = !!true;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_and_true_true() {
-    assert!(matches!(eval_source("let x = true && true;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = true && true;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_and_true_false() {
-    assert!(matches!(eval_source("let x = true && false;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = true && false;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_bool_and_false_true() {
-    assert!(matches!(eval_source("let x = false && true;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = false && true;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_bool_and_false_false() {
-    assert!(matches!(eval_source("let x = false && false;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = false && false;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_bool_or_true_true() {
-    assert!(matches!(eval_source("let x = true || true;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = true || true;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_or_true_false() {
-    assert!(matches!(eval_source("let x = true || false;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = true || false;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_or_false_true() {
-    assert!(matches!(eval_source("let x = false || true;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = false || true;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_bool_or_false_false() {
-    assert!(matches!(eval_source("let x = false || false;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = false || false;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 // ============================================================================
@@ -303,7 +342,10 @@ fn test_eval_modulo_by_zero() {
 
 #[test]
 fn test_eval_negative_division() {
-    assert!(matches!(eval_source("let x = -10 / 2;"), Ok(Value::Int(-5))));
+    assert!(matches!(
+        eval_source("let x = -10 / 2;"),
+        Ok(Value::Int(-5))
+    ));
 }
 
 #[test]
@@ -316,8 +358,14 @@ fn test_eval_negative_modulo() {
 
 #[test]
 fn test_eval_operator_precedence() {
-    assert!(matches!(eval_source("let x = 1 + 2 * 3;"), Ok(Value::Int(7))));
-    assert!(matches!(eval_source("let x = (1 + 2) * 3;"), Ok(Value::Int(9))));
+    assert!(matches!(
+        eval_source("let x = 1 + 2 * 3;"),
+        Ok(Value::Int(7))
+    ));
+    assert!(matches!(
+        eval_source("let x = (1 + 2) * 3;"),
+        Ok(Value::Int(9))
+    ));
 }
 
 #[test]
@@ -342,67 +390,118 @@ fn test_eval_nested_parentheses() {
 
 #[test]
 fn test_eval_less_than_true() {
-    assert!(matches!(eval_source("let x = 1 < 2;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = 1 < 2;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_less_than_false() {
-    assert!(matches!(eval_source("let x = 2 < 1;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 2 < 1;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_less_than_equal() {
-    assert!(matches!(eval_source("let x = 1 < 1;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 1 < 1;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_greater_than_true() {
-    assert!(matches!(eval_source("let x = 2 > 1;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = 2 > 1;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_greater_than_false() {
-    assert!(matches!(eval_source("let x = 1 > 2;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 1 > 2;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_less_than_or_equal_true() {
-    assert!(matches!(eval_source("let x = 1 <= 2;"), Ok(Value::Bool(true))));
-    assert!(matches!(eval_source("let x = 1 <= 1;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = 1 <= 2;"),
+        Ok(Value::Bool(true))
+    ));
+    assert!(matches!(
+        eval_source("let x = 1 <= 1;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_less_than_or_equal_false() {
-    assert!(matches!(eval_source("let x = 2 <= 1;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 2 <= 1;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_greater_than_or_equal_true() {
-    assert!(matches!(eval_source("let x = 2 >= 1;"), Ok(Value::Bool(true))));
-    assert!(matches!(eval_source("let x = 1 >= 1;"), Ok(Value::Bool(true))));
+    assert!(matches!(
+        eval_source("let x = 2 >= 1;"),
+        Ok(Value::Bool(true))
+    ));
+    assert!(matches!(
+        eval_source("let x = 1 >= 1;"),
+        Ok(Value::Bool(true))
+    ));
 }
 
 #[test]
 fn test_eval_greater_than_or_equal_false() {
-    assert!(matches!(eval_source("let x = 1 >= 2;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 1 >= 2;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_equality_int() {
-    assert!(matches!(eval_source("let x = 42 == 42;"), Ok(Value::Bool(true))));
-    assert!(matches!(eval_source("let x = 42 == 43;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 42 == 42;"),
+        Ok(Value::Bool(true))
+    ));
+    assert!(matches!(
+        eval_source("let x = 42 == 43;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_inequality_int() {
-    assert!(matches!(eval_source("let x = 42 != 43;"), Ok(Value::Bool(true))));
-    assert!(matches!(eval_source("let x = 42 != 42;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = 42 != 43;"),
+        Ok(Value::Bool(true))
+    ));
+    assert!(matches!(
+        eval_source("let x = 42 != 42;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
 fn test_eval_equality_bool() {
-    assert!(matches!(eval_source("let x = true == true;"), Ok(Value::Bool(true))));
-    assert!(matches!(eval_source("let x = true == false;"), Ok(Value::Bool(false))));
+    assert!(matches!(
+        eval_source("let x = true == true;"),
+        Ok(Value::Bool(true))
+    ));
+    assert!(matches!(
+        eval_source("let x = true == false;"),
+        Ok(Value::Bool(false))
+    ));
 }
 
 #[test]
@@ -423,12 +522,18 @@ fn test_eval_equality_string() {
 
 #[test]
 fn test_eval_if_true_branch() {
-    assert!(matches!(eval_source("let x = if true then 1 else 0;"), Ok(Value::Int(1))));
+    assert!(matches!(
+        eval_source("let x = if true then 1 else 0;"),
+        Ok(Value::Int(1))
+    ));
 }
 
 #[test]
 fn test_eval_if_false_branch() {
-    assert!(matches!(eval_source("let x = if false then 1 else 0;"), Ok(Value::Int(0))));
+    assert!(matches!(
+        eval_source("let x = if false then 1 else 0;"),
+        Ok(Value::Int(0))
+    ));
 }
 
 #[test]
@@ -633,70 +738,84 @@ fn test_eval_record_single_field() {
 #[test]
 fn test_eval_lazy_basic() {
     // lazy creates a thunk, force evaluates it
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let thunk = lazy 42;
         let x = force(thunk);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(42))));
 }
 
 #[test]
 fn test_eval_lazy_is_lazy() {
     // isLazy should return true for thunks
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let thunk = lazy 42;
         let x = isLazy(thunk);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Bool(true))));
 }
 
 #[test]
 fn test_eval_lazy_is_lazy_non_thunk() {
     // isLazy should return false for non-thunks
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let x = isLazy(42);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Bool(false))));
 }
 
 #[test]
 fn test_eval_lazy_is_evaluated_before() {
     // isEvaluated should return false for unevaluated thunks
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let thunk = lazy 42;
         let x = isEvaluated(thunk);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Bool(false))));
 }
 
 #[test]
 fn test_eval_lazy_force_non_thunk() {
     // force on non-thunk should return the value as-is
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let x = force(42);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(42))));
 }
 
 #[test]
 fn test_eval_lazy_expression() {
     // lazy with complex expression
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let a = 10;
         let thunk = lazy (a + 5);
         let x = force(thunk);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(15))));
 }
 
 #[test]
 fn test_eval_lazy_function_call() {
     // lazy with function call
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let double = fn(x) x * 2;
         let thunk = lazy double(21);
         let x = force(thunk);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(42))));
 }
 
@@ -729,14 +848,12 @@ fn test_eval_record_mixed_types() {
 #[test]
 fn test_eval_record_nested() {
     match eval_source("let x = #{ inner = #{ a = 1 } };") {
-        Ok(Value::Record(fields)) => {
-            match fields.get("inner") {
-                Some(Value::Record(inner)) => {
-                    assert!(matches!(inner.get("a"), Some(Value::Int(1))));
-                }
-                _ => panic!("expected nested record"),
+        Ok(Value::Record(fields)) => match fields.get("inner") {
+            Some(Value::Record(inner)) => {
+                assert!(matches!(inner.get("a"), Some(Value::Int(1))));
             }
-        }
+            _ => panic!("expected nested record"),
+        },
         other => panic!("expected record, got {:?}", other),
     }
 }
@@ -777,46 +894,56 @@ fn test_eval_record_merge_override() {
 
 #[test]
 fn test_eval_function_simple() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn add_one(x) = x + 1;
         let y = add_one(5);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(6))));
 }
 
 #[test]
 fn test_eval_function_two_params() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn add(a, b) = a + b;
         let y = add(3, 4);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(7))));
 }
 
 #[test]
 fn test_eval_function_three_params() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn sum3(a, b, c) = a + b + c;
         let y = sum3(1, 2, 3);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(6))));
 }
 
 #[test]
 fn test_eval_function_returns_bool() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn is_positive(x) = x > 0;
         let y = is_positive(5);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Bool(true))));
 }
 
 #[test]
 fn test_eval_function_returns_string() {
-    match eval_source("
+    match eval_source(
+        "
         fn greet(name) = name;
         let y = greet(\"world\");
-    ") {
+    ",
+    ) {
         Ok(Value::String(s)) => assert_eq!(&*s, "world"),
         other => panic!("expected string, got {:?}", other),
     }
@@ -824,32 +951,38 @@ fn test_eval_function_returns_string() {
 
 #[test]
 fn test_eval_function_with_if() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn abs(x) = if x < 0 then -x else x;
         let y = abs(-5);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(5))));
 }
 
 #[test]
 fn test_eval_function_multiple_calls() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn double(x) = x * 2;
         let a = double(1);
         let b = double(2);
         let c = double(3);
         let y = a + b + c;
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(12))));
 }
 
 #[test]
 fn test_eval_function_composition() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn double(x) = x * 2;
         fn add_one(x) = x + 1;
         let y = add_one(double(5));
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(11))));
 }
 
@@ -859,64 +992,78 @@ fn test_eval_function_composition() {
 
 #[test]
 fn test_eval_recursive_factorial() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);
         let x = fact(5);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(120))));
 }
 
 #[test]
 fn test_eval_recursive_factorial_zero() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);
         let x = fact(0);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(1))));
 }
 
 #[test]
 fn test_eval_recursive_factorial_one() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);
         let x = fact(1);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(1))));
 }
 
 #[test]
 fn test_eval_recursive_fibonacci() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn fib(n) = if n <= 1 then n else fib(n - 1) + fib(n - 2);
         let x = fib(10);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(55))));
 }
 
 #[test]
 fn test_eval_recursive_fibonacci_zero() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn fib(n) = if n <= 1 then n else fib(n - 1) + fib(n - 2);
         let x = fib(0);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(0))));
 }
 
 #[test]
 fn test_eval_recursive_sum() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn sum_to(n) = if n <= 0 then 0 else n + sum_to(n - 1);
         let x = sum_to(10);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(55))));
 }
 
 #[test]
 fn test_eval_recursive_gcd() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn gcd(a, b) = if b == 0 then a else gcd(b, a % b);
         let x = gcd(48, 18);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(6))));
 }
 
@@ -926,40 +1073,48 @@ fn test_eval_recursive_gcd() {
 
 #[test]
 fn test_eval_pipe_simple() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn double(x) = x * 2;
         let x = 5 |> double;
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(10))));
 }
 
 #[test]
 fn test_eval_pipe_chain() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn double(x) = x * 2;
         fn add_one(x) = x + 1;
         let x = 5 |> double |> add_one;
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(11))));
 }
 
 #[test]
 fn test_eval_pipe_long_chain() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn double(x) = x * 2;
         fn add_one(x) = x + 1;
         let x = 1 |> double |> add_one |> double |> add_one;
-    ");
+    ",
+    );
     // 1 -> 2 -> 3 -> 6 -> 7
     assert!(matches!(result, Ok(Value::Int(7))));
 }
 
 #[test]
 fn test_eval_pipe_with_expression() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn double(x) = x * 2;
         let x = (1 + 2) |> double;
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(6))));
 }
 
@@ -1051,7 +1206,10 @@ fn test_eval_let_simple() {
 
 #[test]
 fn test_eval_let_with_expression() {
-    assert!(matches!(eval_source("let x = 1 + 2 + 3;"), Ok(Value::Int(6))));
+    assert!(matches!(
+        eval_source("let x = 1 + 2 + 3;"),
+        Ok(Value::Int(6))
+    ));
 }
 
 #[test]
@@ -1084,7 +1242,10 @@ fn test_eval_let_uses_previous() {
 
 #[test]
 fn test_eval_unary_minus_expression() {
-    assert!(matches!(eval_source("let x = -(1 + 2);"), Ok(Value::Int(-3))));
+    assert!(matches!(
+        eval_source("let x = -(1 + 2);"),
+        Ok(Value::Int(-3))
+    ));
 }
 
 #[test]
@@ -1147,20 +1308,23 @@ fn test_eval_deeply_nested_list() {
 
 #[test]
 fn test_eval_many_functions() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn f1(x) = x + 1;
         fn f2(x) = x + 2;
         fn f3(x) = x + 3;
         fn f4(x) = x + 4;
         fn f5(x) = x + 5;
         let x = f1(f2(f3(f4(f5(0)))));
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(15))));
 }
 
 #[test]
 fn test_eval_complex_record() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         let config = #{
             name = \"test\",
             version = 1,
@@ -1171,7 +1335,8 @@ fn test_eval_complex_record() {
             }
         };
         let x = config.settings.level;
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(5))));
 }
 
@@ -1217,30 +1382,36 @@ fn test_eval_pattern_match_failure() {
 
 #[test]
 fn test_eval_lambda_simple() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         let f = fn(x) x * 2;
         let y = f(21);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(42))));
 }
 
 #[test]
 fn test_eval_lambda_closure() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn make_adder(n) = fn(x) x + n;
         let add5 = make_adder(5);
         let result = add5(10);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(15))));
 }
 
 #[test]
 fn test_eval_lambda_higher_order() {
-    let result = eval_source("
+    let result = eval_source(
+        "
         fn apply(f, x) = f(x);
         let double = fn(x) x * 2;
         let result = apply(double, 21);
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::Int(42))));
 }
 
@@ -1265,7 +1436,10 @@ fn test_eval_power_one_exponent() {
 
 #[test]
 fn test_eval_power_larger() {
-    assert!(matches!(eval_source("let x = 2 ^ 10;"), Ok(Value::Int(1024))));
+    assert!(matches!(
+        eval_source("let x = 2 ^ 10;"),
+        Ok(Value::Int(1024))
+    ));
 }
 
 // ============================================================================
@@ -1294,10 +1468,12 @@ fn test_eval_float_int_addition() {
 
 #[test]
 fn test_eval_safe_field_on_record() {
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let r = #{ name = \"test\" };
         let x = r?.name;
-    ");
+    ",
+    );
     match result {
         Ok(Value::Some(inner)) => {
             if let Value::String(s) = *inner {
@@ -1312,19 +1488,23 @@ fn test_eval_safe_field_on_record() {
 
 #[test]
 fn test_eval_safe_field_missing() {
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let r = #{ name = \"test\" };
         let x = r?.missing;
-    ");
+    ",
+    );
     assert!(matches!(result, Ok(Value::None)));
 }
 
 #[test]
 fn test_eval_safe_field_with_coalesce() {
-    let result = eval_with_builtins("
+    let result = eval_with_builtins(
+        "
         let r = #{ name = \"test\" };
         let x = r?.missing ?? \"default\";
-    ");
+    ",
+    );
     match result {
         Ok(Value::String(s)) => assert_eq!(s.as_str(), "default"),
         other => panic!("expected String, got {:?}", other),
@@ -1332,7 +1512,7 @@ fn test_eval_safe_field_with_coalesce() {
 }
 
 // ============================================================================
-// Path literal tests  
+// Path literal tests
 // ============================================================================
 
 #[test]

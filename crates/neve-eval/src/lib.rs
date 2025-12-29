@@ -2,13 +2,14 @@
 //!
 //! This crate implements a tree-walking interpreter for HIR.
 
+pub mod ast_eval;
+mod builtin;
 mod env;
 mod eval;
-mod builtin;
-pub mod ast_eval;
 pub mod value;
 
-pub use value::{Value, BuiltinFn, AstClosure};
+pub use ast_eval::{AstEnv, AstEvaluator};
+pub use builtin::builtins;
 pub use env::Environment;
-pub use eval::{Evaluator, EvalError};
-pub use ast_eval::{AstEvaluator, AstEnv};
+pub use eval::{EvalError, Evaluator};
+pub use value::{AstClosure, BuiltinFn, Value};

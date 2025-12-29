@@ -13,7 +13,6 @@ pub use derivation::*;
 pub use hash::*;
 pub use output::*;
 pub use resolve::{
-    Resolver, Resolution, ResolveError,
-    PackageId, Version, VersionConstraint, VersionParseError,
-    Dependency, PackageMetadata, PackageRegistry, MemoryRegistry,
+    Dependency, MemoryRegistry, PackageId, PackageMetadata, PackageRegistry, Resolution,
+    ResolveError, Resolver, Version, VersionConstraint, VersionParseError,
 };

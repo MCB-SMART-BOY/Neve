@@ -1,10 +1,10 @@
 //! Integration tests for neve-builder crate.
 
+use neve_builder::BuilderConfig;
+use neve_builder::output::{format_size, output_size};
+use neve_builder::sandbox::{IsolationLevel, Sandbox, SandboxConfig};
 use std::env;
 use std::fs;
-use neve_builder::BuilderConfig;
-use neve_builder::sandbox::{SandboxConfig, Sandbox, IsolationLevel};
-use neve_builder::output::{format_size, output_size};
 
 // Config tests
 
@@ -200,10 +200,10 @@ fn test_format_size_fractional_mib() {
 fn test_output_size_empty_directory() {
     let dir = env::temp_dir().join(format!("neve-output-empty-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 0);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -212,10 +212,10 @@ fn test_output_size_single_file() {
     let dir = env::temp_dir().join(format!("neve-output-single-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("file.txt"), b"12345").unwrap();
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 5);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -225,10 +225,10 @@ fn test_output_size_multiple_files() {
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("a.txt"), b"aaa").unwrap(); // 3 bytes
     fs::write(dir.join("b.txt"), b"bbbbb").unwrap(); // 5 bytes
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 8);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -238,10 +238,10 @@ fn test_output_size_nested_directories() {
     fs::create_dir_all(dir.join("subdir")).unwrap();
     fs::write(dir.join("root.txt"), b"root").unwrap(); // 4 bytes
     fs::write(dir.join("subdir/nested.txt"), b"nested").unwrap(); // 6 bytes
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 10);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -250,10 +250,10 @@ fn test_output_size_deeply_nested() {
     let dir = env::temp_dir().join(format!("neve-output-deep-{}", std::process::id()));
     fs::create_dir_all(dir.join("a/b/c/d")).unwrap();
     fs::write(dir.join("a/b/c/d/deep.txt"), b"deep content").unwrap(); // 12 bytes
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 12);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -262,10 +262,10 @@ fn test_output_size_binary_file() {
     let dir = env::temp_dir().join(format!("neve-output-binary-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("binary.bin"), [0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 10);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -277,7 +277,7 @@ fn test_output_size_binary_file() {
 fn test_sandbox_config_paths() {
     let root = env::temp_dir().join("sandbox-paths-test");
     let config = SandboxConfig::new(root.clone());
-    
+
     assert!(config.build_dir.starts_with(&root));
     assert!(config.output_dir.starts_with(&root));
     assert_ne!(config.build_dir, config.output_dir);
@@ -287,7 +287,7 @@ fn test_sandbox_config_paths() {
 fn test_sandbox_config_network_default_off() {
     let root = env::temp_dir().join("sandbox-net-default");
     let config = SandboxConfig::new(root);
-    
+
     assert!(!config.network);
 }
 
@@ -295,7 +295,7 @@ fn test_sandbox_config_network_default_off() {
 fn test_sandbox_config_with_special_path() {
     let root = env::temp_dir().join("sandbox-special-chars-!@#");
     let config = SandboxConfig::new(root.clone());
-    
+
     assert!(config.build_dir.to_string_lossy().contains("!@#"));
 }
 
@@ -307,14 +307,14 @@ fn test_sandbox_config_with_special_path() {
 fn test_sandbox_directories_exist_after_create() {
     let root = env::temp_dir().join(format!("neve-sandbox-exist-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
-    
+
     let sandbox = Sandbox::new(config).unwrap();
-    
+
     assert!(sandbox.build_dir().exists());
     assert!(sandbox.build_dir().is_dir());
     assert!(sandbox.output_dir().exists());
     assert!(sandbox.output_dir().is_dir());
-    
+
     sandbox.cleanup().unwrap();
 }
 
@@ -322,15 +322,15 @@ fn test_sandbox_directories_exist_after_create() {
 fn test_sandbox_cleanup_removes_all() {
     let root = env::temp_dir().join(format!("neve-sandbox-cleanup-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
-    
+
     let sandbox = Sandbox::new(config).unwrap();
-    
+
     // Create some files in the sandbox
     fs::write(sandbox.build_dir().join("test.txt"), b"test").unwrap();
     fs::write(sandbox.output_dir().join("output.txt"), b"output").unwrap();
-    
+
     sandbox.cleanup().unwrap();
-    
+
     assert!(!root.exists());
 }
 
@@ -338,16 +338,16 @@ fn test_sandbox_cleanup_removes_all() {
 fn test_sandbox_cleanup_handles_nested_files() {
     let root = env::temp_dir().join(format!("neve-sandbox-nested-clean-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
-    
+
     let sandbox = Sandbox::new(config).unwrap();
-    
+
     // Create nested structure
     let nested = sandbox.build_dir().join("a/b/c");
     fs::create_dir_all(&nested).unwrap();
     fs::write(nested.join("deep.txt"), b"deep").unwrap();
-    
+
     sandbox.cleanup().unwrap();
-    
+
     assert!(!root.exists());
 }
 
@@ -355,17 +355,17 @@ fn test_sandbox_cleanup_handles_nested_files() {
 fn test_sandbox_multiple_instances() {
     let root1 = env::temp_dir().join(format!("neve-sandbox-multi1-{}", std::process::id()));
     let root2 = env::temp_dir().join(format!("neve-sandbox-multi2-{}", std::process::id()));
-    
+
     let sandbox1 = Sandbox::new(SandboxConfig::new(root1.clone())).unwrap();
     let sandbox2 = Sandbox::new(SandboxConfig::new(root2.clone())).unwrap();
-    
+
     // Both should exist independently
     assert!(sandbox1.build_dir().exists());
     assert!(sandbox2.build_dir().exists());
-    
+
     // Paths should be different
     assert_ne!(sandbox1.build_dir(), sandbox2.build_dir());
-    
+
     sandbox1.cleanup().unwrap();
     sandbox2.cleanup().unwrap();
 }
@@ -379,7 +379,7 @@ fn test_isolation_level_variants() {
     // Test that we can create both variants
     let full = IsolationLevel::Full;
     let basic = IsolationLevel::Basic;
-    
+
     assert!(full == IsolationLevel::Full);
     assert!(basic == IsolationLevel::Basic);
     assert!(full != basic);
@@ -388,7 +388,7 @@ fn test_isolation_level_variants() {
 #[test]
 fn test_isolation_level_best_available_is_valid() {
     let level = IsolationLevel::best_available();
-    
+
     // Should be one of the valid variants
     assert!(level == IsolationLevel::Full || level == IsolationLevel::Basic);
 }
@@ -401,15 +401,15 @@ fn test_isolation_level_best_available_is_valid() {
 fn test_output_size_many_small_files() {
     let dir = env::temp_dir().join(format!("neve-output-many-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    
+
     // Create 100 small files
     for i in 0..100 {
         fs::write(dir.join(format!("file{}.txt", i)), b"x").unwrap();
     }
-    
+
     let size = output_size(&dir).unwrap();
     assert_eq!(size, 100);
-    
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -418,10 +418,10 @@ fn test_sandbox_rapid_create_cleanup() {
     for i in 0..5 {
         let root = env::temp_dir().join(format!("neve-sandbox-rapid-{}-{}", std::process::id(), i));
         let config = SandboxConfig::new(root.clone());
-        
+
         let sandbox = Sandbox::new(config).unwrap();
         assert!(sandbox.build_dir().exists());
-        
+
         sandbox.cleanup().unwrap();
         assert!(!root.exists());
     }

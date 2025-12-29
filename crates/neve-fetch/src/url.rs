@@ -16,15 +16,13 @@ pub fn fetch_url(url: &str) -> Result<Vec<u8>, FetchError> {
         .timeout(DEFAULT_TIMEOUT)
         .user_agent(USER_AGENT)
         .build()?;
-    
+
     let response = client.get(url).send()?;
-    
+
     if !response.status().is_success() {
-        return Err(FetchError::Http(
-            response.error_for_status().unwrap_err()
-        ));
+        return Err(FetchError::Http(response.error_for_status().unwrap_err()));
     }
-    
+
     Ok(response.bytes()?.to_vec())
 }
 
@@ -37,25 +35,23 @@ where
         .timeout(DEFAULT_TIMEOUT)
         .user_agent(USER_AGENT)
         .build()?;
-    
+
     let response = client.get(url).send()?;
-    
+
     if !response.status().is_success() {
-        return Err(FetchError::Http(
-            response.error_for_status().unwrap_err()
-        ));
+        return Err(FetchError::Http(response.error_for_status().unwrap_err()));
     }
-    
+
     let total_size = response.content_length();
     let mut downloaded: u64 = 0;
     let mut content = Vec::new();
-    
+
     // Read in chunks
     let bytes = response.bytes()?;
     downloaded += bytes.len() as u64;
     content.extend_from_slice(&bytes);
     on_progress(downloaded, total_size);
-    
+
     Ok(content)
 }
 
@@ -65,7 +61,7 @@ pub fn check_url(url: &str) -> Result<bool, FetchError> {
         .timeout(Duration::from_secs(10))
         .user_agent(USER_AGENT)
         .build()?;
-    
+
     let response = client.head(url).send()?;
     Ok(response.status().is_success())
 }
@@ -76,15 +72,12 @@ pub fn get_content_length(url: &str) -> Result<Option<u64>, FetchError> {
         .timeout(Duration::from_secs(10))
         .user_agent(USER_AGENT)
         .build()?;
-    
+
     let response = client.head(url).send()?;
-    
+
     if !response.status().is_success() {
-        return Err(FetchError::Http(
-            response.error_for_status().unwrap_err()
-        ));
+        return Err(FetchError::Http(response.error_for_status().unwrap_err()));
     }
-    
+
     Ok(response.content_length())
 }
-

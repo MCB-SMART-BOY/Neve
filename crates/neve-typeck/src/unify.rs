@@ -241,7 +241,7 @@ pub fn generalize(ty: &Ty, env_vars: &[u32]) -> Ty {
         .filter(|v| !env_vars.contains(v))
         .map(|v| format!("t{}", v))
         .collect();
-    
+
     if params.is_empty() {
         ty.clone()
     } else {

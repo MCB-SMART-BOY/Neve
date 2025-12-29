@@ -3,12 +3,12 @@
 //! This crate provides functionality for formatting Neve source code
 //! according to a consistent style.
 
-mod format;
 mod config;
+mod format;
 pub mod printer;
 
-pub use format::Formatter;
 pub use config::FormatConfig;
+pub use format::Formatter;
 
 use neve_lexer::Lexer;
 use neve_parser::Parser;
@@ -22,14 +22,14 @@ pub fn format(source: &str) -> Result<String, FormatError> {
 pub fn format_with_config(source: &str, config: &FormatConfig) -> Result<String, FormatError> {
     let lexer = Lexer::new(source);
     let (tokens, errors) = lexer.tokenize();
-    
+
     if !errors.is_empty() {
         return Err(FormatError::Parse(format!("Lexer errors: {:?}", errors)));
     }
-    
+
     let mut parser = Parser::new(tokens);
     let ast = parser.parse_file();
-    
+
     let formatter = Formatter::new(config.clone());
     Ok(formatter.format(&ast))
 }
@@ -59,4 +59,3 @@ impl std::fmt::Display for FormatError {
 }
 
 impl std::error::Error for FormatError {}
-

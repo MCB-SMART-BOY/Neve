@@ -4,14 +4,14 @@
 //! Paths in the store are content-addressed, meaning their names
 //! include a hash of their contents.
 
-mod store;
-mod path;
-pub mod gc;
-mod db;
 pub mod cache;
+mod db;
+pub mod gc;
+mod path;
+mod store;
 
-pub use store::*;
-pub use path::*;
-pub use gc::*;
-pub use db::*;
 pub use cache::*;
+pub use db::*;
+pub use gc::*;
+pub use path::*;
+pub use store::*;

@@ -3,8 +3,8 @@
 //! This file contains extensive edge case tests for type checking.
 
 use neve_diagnostic::Diagnostic;
-use neve_parser::parse;
 use neve_hir::lower;
+use neve_parser::parse;
 use neve_typeck::TypeChecker;
 
 fn check_source(source: &str) -> Vec<Diagnostic> {
@@ -13,7 +13,7 @@ fn check_source(source: &str) -> Vec<Diagnostic> {
         // Return parse errors as diagnostics for tests that check parse failures
         return parse_diags;
     }
-    
+
     let hir = lower(&ast);
     let mut checker = TypeChecker::new();
     checker.check(&hir);
@@ -414,11 +414,13 @@ fn test_typeck_function_constant() {
 
 #[test]
 fn test_typeck_multiple_functions() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn double(x) = x * 2;
         fn triple(x) = x * 3;
         fn quadruple(x) = double(double(x));
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -427,29 +429,35 @@ fn test_typeck_multiple_functions() {
 
 #[test]
 fn test_typeck_function_call() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn double(x) = x * 2;
         let y = double(21);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_function_call_nested() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn double(x) = x * 2;
         fn add_one(x) = x + 1;
         let y = add_one(double(5));
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_function_call_chain() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn f(x) = x + 1;
         fn g(x) = x * 2;
         fn h(x) = x - 1;
         let y = h(g(f(10)));
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -458,31 +466,39 @@ fn test_typeck_function_call_chain() {
 
 #[test]
 fn test_typeck_recursive_factorial() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_recursive_fibonacci() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn fib(n) = if n <= 1 then n else fib(n - 1) + fib(n - 2);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_recursive_sum() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn sum_to(n) = if n <= 0 then 0 else n + sum_to(n - 1);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_mutually_recursive() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn is_even(n) = if n == 0 then true else is_odd(n - 1);
         fn is_odd(n) = if n == 0 then false else is_even(n - 1);
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -491,29 +507,35 @@ fn test_typeck_mutually_recursive() {
 
 #[test]
 fn test_typeck_pipe_simple() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn double(x) = x * 2;
         let x = 5 |> double;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_pipe_chain() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn double(x) = x * 2;
         fn add_one(x) = x + 1;
         let x = 5 |> double |> add_one;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_pipe_long_chain() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn f(x) = x + 1;
         fn g(x) = x * 2;
         fn h(x) = x - 1;
         let x = 10 |> f |> g |> h |> f |> g;
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -522,80 +544,96 @@ fn test_typeck_pipe_long_chain() {
 
 #[test]
 fn test_typeck_match_literal() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match 1 {
             0 => 100,
             1 => 200,
             _ => 300
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_wildcard() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match 5 {
             _ => 42
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_binding() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match 42 {
             n => n + 1
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_bool() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match true {
             true => 1,
             false => 0
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_tuple() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match (1, 2) {
             (a, b) => a + b
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_nested_tuple() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match ((1, 2), 3) {
             ((a, b), c) => a + b + c
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_arm_type_mismatch() {
-    check_has_errors("
+    check_has_errors(
+        "
         let x = match 1 {
             0 => 100,
             1 => true,
             _ => 300
         };
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_match_returns_consistent_type() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match 1 {
             0 => false,
             _ => true
         };
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -702,13 +740,15 @@ fn test_typeck_let_shadowing() {
 #[test]
 fn test_typeck_let_uses_previous() {
     // 在函数内部可以使用前面定义的变量
-    check_no_errors("
+    check_no_errors(
+        "
         fn test() = {
             let a = 10;
             let b = a * 2;
             a + b
         };
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -722,21 +762,25 @@ fn test_typeck_complex_expression_1() {
 
 #[test]
 fn test_typeck_complex_expression_2() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn f(x) = x * 2;
         let x = if true then f(5) else f(10);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_complex_expression_3() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match (1, 2) {
             (0, _) => 0,
             (_, 0) => 0,
             (a, b) => a * b
         };
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -756,9 +800,11 @@ fn test_typeck_lambda_multiple_params() {
 #[test]
 fn test_typeck_closure_in_function() {
     // 在函数内定义闭包
-    check_no_errors("
+    check_no_errors(
+        "
         fn make_adder(n) = fn(x) x + n;
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -768,28 +814,34 @@ fn test_typeck_closure_in_function() {
 #[test]
 fn test_typeck_polymorphic_identity() {
     // 单次调用多态函数是可以的
-    check_no_errors("
+    check_no_errors(
+        "
         fn id(x) = x;
         let a = id(42);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_polymorphic_const() {
     // 单次调用多态函数是可以的
-    check_no_errors("
+    check_no_errors(
+        "
         fn const_val(x, y) = x;
         let a = const_val(1, true);
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_higher_order_function() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn apply(f, x) = f(x);
         fn double(x) = x * 2;
         let y = apply(double, 21);
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -798,31 +850,36 @@ fn test_typeck_higher_order_function() {
 
 #[test]
 fn test_typeck_many_lets() {
-    check_no_errors("
+    check_no_errors(
+        "
         let a = 1;
         let b = 2;
         let c = 3;
         let d = 4;
         let e = 5;
         let f = a + b + c + d + e;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_many_functions() {
-    check_no_errors("
+    check_no_errors(
+        "
         fn f1(x) = x + 1;
         fn f2(x) = x + 2;
         fn f3(x) = x + 3;
         fn f4(x) = x + 4;
         fn f5(x) = x + 5;
         let y = f1(f2(f3(f4(f5(0)))));
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_deeply_nested_if() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = if true then
             if true then
                 if true then
@@ -836,19 +893,22 @@ fn test_typeck_deeply_nested_if() {
                 4
         else
             5;
-    ");
+    ",
+    );
 }
 
 #[test]
 fn test_typeck_complex_match() {
-    check_no_errors("
+    check_no_errors(
+        "
         let x = match (1, (2, 3)) {
             (0, _) => 0,
             (_, (0, _)) => 1,
             (_, (_, 0)) => 2,
             (a, (b, c)) => a + b + c
         };
-    ");
+    ",
+    );
 }
 
 // ============================================================================
@@ -882,10 +942,12 @@ fn test_typeck_detects_not_on_non_bool() {
 
 #[test]
 fn test_typeck_detects_match_arm_mismatch() {
-    check_has_errors("
+    check_has_errors(
+        "
         let x = match 1 {
             0 => 0,
             _ => \"not zero\"
         };
-    ");
+    ",
+    );
 }

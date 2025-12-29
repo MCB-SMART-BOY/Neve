@@ -5,8 +5,8 @@
 //! - `Interner`: String interning for efficient symbol handling
 //! - `Arena`: Memory arena for AST allocation
 
-mod span;
 mod interner;
+mod span;
 
-pub use span::{Span, BytePos};
 pub use interner::{Interner, Symbol};
+pub use span::{BytePos, Span};

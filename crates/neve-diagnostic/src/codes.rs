@@ -130,7 +130,9 @@ impl ErrorCode {
             ErrorCode::UnknownField => "unknown field in record",
             ErrorCode::TraitNotImplemented => "trait is not implemented for type",
             ErrorCode::MissingMethod => "missing required method in trait implementation",
-            ErrorCode::MissingAssocType => "missing required associated type in trait implementation",
+            ErrorCode::MissingAssocType => {
+                "missing required associated type in trait implementation"
+            }
             ErrorCode::IfBranchMismatch => "if and else branches have incompatible types",
             ErrorCode::MatchArmMismatch => "match arms have incompatible types",
             ErrorCode::ReturnTypeMismatch => "return type does not match function signature",
@@ -155,20 +157,36 @@ impl ErrorCode {
     /// Get a suggested fix for the error, if available.
     pub fn suggestion(&self) -> Option<&'static str> {
         match self {
-            ErrorCode::UnterminatedString => Some("add a closing quote `\"` to terminate the string"),
+            ErrorCode::UnterminatedString => {
+                Some("add a closing quote `\"` to terminate the string")
+            }
             ErrorCode::UnterminatedComment => Some("add `*/` to close the comment"),
             ErrorCode::MissingSemicolon => Some("add `;` at the end of the statement"),
             ErrorCode::UnclosedDelimiter => Some("add the matching closing delimiter"),
-            ErrorCode::UnboundVariable => Some("check the spelling or ensure the variable is in scope"),
+            ErrorCode::UnboundVariable => {
+                Some("check the spelling or ensure the variable is in scope")
+            }
             ErrorCode::UnboundType => Some("check the spelling or import the type"),
-            ErrorCode::WrongArity => Some("check the function signature for the expected number of arguments"),
+            ErrorCode::WrongArity => {
+                Some("check the function signature for the expected number of arguments")
+            }
             ErrorCode::MissingField => Some("add the missing field to the record"),
             ErrorCode::MissingMethod => Some("implement all required methods for the trait"),
-            ErrorCode::MissingAssocType => Some("specify all required associated types in the impl block"),
-            ErrorCode::NonExhaustiveMatch => Some("add patterns for all possible cases or use a wildcard `_` pattern"),
-            ErrorCode::UnreachablePattern => Some("remove the unreachable pattern or reorder the match arms"),
-            ErrorCode::PrivateAccess => Some("make the binding public with `pub` or access it from within the same module"),
-            ErrorCode::CyclicDependency => Some("break the cycle by restructuring the dependencies"),
+            ErrorCode::MissingAssocType => {
+                Some("specify all required associated types in the impl block")
+            }
+            ErrorCode::NonExhaustiveMatch => {
+                Some("add patterns for all possible cases or use a wildcard `_` pattern")
+            }
+            ErrorCode::UnreachablePattern => {
+                Some("remove the unreachable pattern or reorder the match arms")
+            }
+            ErrorCode::PrivateAccess => {
+                Some("make the binding public with `pub` or access it from within the same module")
+            }
+            ErrorCode::CyclicDependency => {
+                Some("break the cycle by restructuring the dependencies")
+            }
             _ => None,
         }
     }

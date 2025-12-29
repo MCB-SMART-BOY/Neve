@@ -85,4 +85,3 @@ impl fmt::Debug for Span {
         write!(f, "{}..{}", self.start.0, self.end.0)
     }
 }
-

@@ -1,7 +1,7 @@
 //! Type AST nodes.
 
-use neve_common::Span;
 use crate::Ident;
+use neve_common::Span;
 
 /// A type expression.
 #[derive(Debug, Clone)]
@@ -19,10 +19,7 @@ impl Type {
 #[derive(Debug, Clone)]
 pub enum TypeKind {
     /// A named type `Int`, `String`, `List<T>`
-    Named {
-        path: Vec<Ident>,
-        args: Vec<Type>,
-    },
+    Named { path: Vec<Ident>, args: Vec<Type> },
 
     /// A function type `A -> B`
     Function {

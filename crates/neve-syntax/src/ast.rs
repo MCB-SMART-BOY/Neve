@@ -1,7 +1,7 @@
 //! Top-level AST definitions.
 
-use neve_common::Span;
 use crate::{Expr, Pattern, Type};
+use neve_common::Span;
 
 /// A complete source file.
 #[derive(Debug, Clone)]

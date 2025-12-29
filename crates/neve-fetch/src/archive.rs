@@ -28,7 +28,7 @@ impl ArchiveFormat {
     /// Detect archive format from file name.
     pub fn from_name(name: &str) -> Option<Self> {
         let name = name.to_lowercase();
-        
+
         if name.ends_with(".tar.gz") || name.ends_with(".tgz") {
             Some(ArchiveFormat::TarGz)
         } else if name.ends_with(".tar.xz") || name.ends_with(".txz") {
@@ -43,12 +43,13 @@ impl ArchiveFormat {
 
 /// Extract an archive to a directory.
 pub fn extract(archive_path: &Path, dest_dir: &Path) -> Result<(), FetchError> {
-    let format = ArchiveFormat::from_path(archive_path)
-        .ok_or_else(|| FetchError::Archive(format!(
+    let format = ArchiveFormat::from_path(archive_path).ok_or_else(|| {
+        FetchError::Archive(format!(
             "unknown archive format: {}",
             archive_path.display()
-        )))?;
-    
+        ))
+    })?;
+
     extract_with_format(archive_path, dest_dir, format)
 }
 
@@ -59,9 +60,9 @@ pub fn extract_with_format(
     format: ArchiveFormat,
 ) -> Result<(), FetchError> {
     fs::create_dir_all(dest_dir)?;
-    
+
     let file = File::open(archive_path)?;
-    
+
     match format {
         ArchiveFormat::TarGz => extract_tar_gz(file, dest_dir),
         ArchiveFormat::TarXz => extract_tar_xz(file, dest_dir),
@@ -90,16 +91,23 @@ fn extract_tar(file: File, dest_dir: &Path) -> Result<(), FetchError> {
 }
 
 /// Extract a tar archive to a directory.
-fn extract_tar_archive<R: Read>(archive: &mut Archive<R>, dest_dir: &Path) -> Result<(), FetchError> {
-    archive.unpack(dest_dir).map_err(|e| {
-        FetchError::Archive(format!("failed to extract tar archive: {}", e))
-    })
+fn extract_tar_archive<R: Read>(
+    archive: &mut Archive<R>,
+    dest_dir: &Path,
+) -> Result<(), FetchError> {
+    archive
+        .unpack(dest_dir)
+        .map_err(|e| FetchError::Archive(format!("failed to extract tar archive: {}", e)))
 }
 
 /// Extract archive contents from memory.
-pub fn extract_from_bytes(data: &[u8], dest_dir: &Path, format: ArchiveFormat) -> Result<(), FetchError> {
+pub fn extract_from_bytes(
+    data: &[u8],
+    dest_dir: &Path,
+    format: ArchiveFormat,
+) -> Result<(), FetchError> {
     fs::create_dir_all(dest_dir)?;
-    
+
     match format {
         ArchiveFormat::TarGz => {
             let decoder = GzDecoder::new(io::Cursor::new(data));
@@ -125,15 +133,16 @@ pub fn extract_stripped(
     dest_dir: &Path,
     strip_components: usize,
 ) -> Result<(), FetchError> {
-    let format = ArchiveFormat::from_path(archive_path)
-        .ok_or_else(|| FetchError::Archive(format!(
+    let format = ArchiveFormat::from_path(archive_path).ok_or_else(|| {
+        FetchError::Archive(format!(
             "unknown archive format: {}",
             archive_path.display()
-        )))?;
-    
+        ))
+    })?;
+
     fs::create_dir_all(dest_dir)?;
     let file = File::open(archive_path)?;
-    
+
     match format {
         ArchiveFormat::TarGz => {
             let decoder = GzDecoder::new(file);
@@ -143,42 +152,49 @@ pub fn extract_stripped(
             let decoder = xz2::read::XzDecoder::new(file);
             extract_tar_stripped(decoder, dest_dir, strip_components)
         }
-        ArchiveFormat::Tar => {
-            extract_tar_stripped(file, dest_dir, strip_components)
-        }
+        ArchiveFormat::Tar => extract_tar_stripped(file, dest_dir, strip_components),
     }
 }
 
 /// Extract a tar archive with path stripping.
-fn extract_tar_stripped<R: Read>(reader: R, dest_dir: &Path, strip: usize) -> Result<(), FetchError> {
+fn extract_tar_stripped<R: Read>(
+    reader: R,
+    dest_dir: &Path,
+    strip: usize,
+) -> Result<(), FetchError> {
     let mut archive = Archive::new(reader);
-    
-    for entry in archive.entries().map_err(|e| FetchError::Archive(e.to_string()))? {
+
+    for entry in archive
+        .entries()
+        .map_err(|e| FetchError::Archive(e.to_string()))?
+    {
         let mut entry = entry.map_err(|e| FetchError::Archive(e.to_string()))?;
-        let path = entry.path().map_err(|e| FetchError::Archive(e.to_string()))?;
-        
+        let path = entry
+            .path()
+            .map_err(|e| FetchError::Archive(e.to_string()))?;
+
         // Skip entries with fewer components than we want to strip
         let components: Vec<_> = path.components().collect();
         if components.len() <= strip {
             continue;
         }
-        
+
         // Build new path with stripped components
         let new_path: std::path::PathBuf = components[strip..].iter().collect();
         let dest_path = dest_dir.join(&new_path);
-        
+
         // Create parent directories
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         // Extract the entry
         if entry.header().entry_type().is_dir() {
             fs::create_dir_all(&dest_path)?;
         } else if entry.header().entry_type().is_file() {
             let mut file = File::create(&dest_path)?;
             io::copy(&mut entry, &mut file)?;
-            
+
             // Preserve permissions on Unix
             #[cfg(unix)]
             {
@@ -190,12 +206,12 @@ fn extract_tar_stripped<R: Read>(reader: R, dest_dir: &Path, strip: usize) -> Re
         } else if entry.header().entry_type().is_symlink() {
             #[cfg(unix)]
             if let Ok(link_name) = entry.link_name()
-                && let Some(target) = link_name {
-                    let _ = std::os::unix::fs::symlink(target, &dest_path);
-                }
+                && let Some(target) = link_name
+            {
+                let _ = std::os::unix::fs::symlink(target, &dest_path);
+            }
         }
     }
-    
+
     Ok(())
 }
-

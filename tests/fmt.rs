@@ -1,7 +1,7 @@
 //! Integration tests for neve-fmt crate.
 
-use neve_fmt::{format, check, FormatConfig, Formatter};
 use neve_fmt::printer::Printer;
+use neve_fmt::{FormatConfig, Formatter, check, format};
 use neve_lexer::Lexer;
 use neve_parser::Parser;
 

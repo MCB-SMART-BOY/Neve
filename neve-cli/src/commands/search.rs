@@ -3,18 +3,18 @@
 //! Searches for packages in the store and available package sources.
 
 use crate::output;
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 /// Search for packages matching a query.
 pub fn run(query: &str) -> Result<(), String> {
     let store_dir = get_store_dir();
-    
+
     output::info(&format!("Searching for '{query}'..."));
     println!();
-    
+
     let mut found = false;
-    
+
     // Search in store
     if store_dir.exists() {
         let matches = search_store(&store_dir, query)?;
@@ -26,7 +26,7 @@ pub fn run(query: &str) -> Result<(), String> {
             found = true;
         }
     }
-    
+
     // Search in package index (if available)
     let index_matches = search_index(query)?;
     if !index_matches.is_empty() {
@@ -39,11 +39,11 @@ pub fn run(query: &str) -> Result<(), String> {
         }
         found = true;
     }
-    
+
     if !found {
         println!("No packages found matching '{}'", query);
     }
-    
+
     Ok(())
 }
 
@@ -58,25 +58,20 @@ fn get_store_dir() -> PathBuf {
 fn search_store(store_dir: &PathBuf, query: &str) -> Result<Vec<(String, PathBuf)>, String> {
     let mut matches = Vec::new();
     let query_lower = query.to_lowercase();
-    
-    for entry in fs::read_dir(store_dir)
-        .map_err(|e| format!("Failed to read store: {}", e))?
-    {
+
+    for entry in fs::read_dir(store_dir).map_err(|e| format!("Failed to read store: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy().to_lowercase();
-        
+
         if name_str.contains(&query_lower) {
-            matches.push((
-                name.to_string_lossy().to_string(),
-                entry.path(),
-            ));
+            matches.push((name.to_string_lossy().to_string(), entry.path()));
         }
     }
-    
+
     // Sort by name
     matches.sort_by(|a, b| a.0.cmp(&b.0));
-    
+
     Ok(matches)
 }
 
@@ -110,18 +105,15 @@ fn search_index(query: &str) -> Result<Vec<(String, String)>, String> {
         ("tokei", "Code statistics tool"),
         ("hyperfine", "Command-line benchmarking tool"),
     ];
-    
+
     let query_lower = query.to_lowercase();
     let matches: Vec<(String, String)> = packages
         .into_iter()
         .filter(|(name, desc)| {
-            name.to_lowercase().contains(&query_lower) ||
-            desc.to_lowercase().contains(&query_lower)
+            name.to_lowercase().contains(&query_lower) || desc.to_lowercase().contains(&query_lower)
         })
         .map(|(name, desc)| (name.to_string(), desc.to_string()))
         .collect();
-    
+
     Ok(matches)
 }
-
-

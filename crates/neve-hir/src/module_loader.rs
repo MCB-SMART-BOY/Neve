@@ -7,12 +7,12 @@
 //! - Managing module dependencies
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use neve_diagnostic::Diagnostic;
 
-use crate::{ModuleId, Import, ImportKind, DefId};
+use crate::{DefId, Import, ImportKind, ModuleId};
 
 /// Represents a module path in the source code.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -105,7 +105,6 @@ impl ModulePath {
             _ => Self::absolute(segments.to_vec()),
         }
     }
-
 }
 
 impl std::fmt::Display for ModulePath {
@@ -210,13 +209,21 @@ impl ModuleLoader {
     }
 
     /// Resolve a module path to a file path.
-    pub fn resolve_path(&self, path: &ModulePath, from_module: Option<&[String]>) -> Option<PathBuf> {
+    pub fn resolve_path(
+        &self,
+        path: &ModulePath,
+        from_module: Option<&[String]>,
+    ) -> Option<PathBuf> {
         let absolute_path = self.make_absolute(path, from_module)?;
         self.find_module_file(&absolute_path)
     }
 
     /// Convert a relative path to an absolute path.
-    fn make_absolute(&self, path: &ModulePath, from_module: Option<&[String]>) -> Option<Vec<String>> {
+    fn make_absolute(
+        &self,
+        path: &ModulePath,
+        from_module: Option<&[String]>,
+    ) -> Option<Vec<String>> {
         match path.kind {
             ModulePathKind::Absolute => Some(path.segments.clone()),
             ModulePathKind::Crate => Some(path.segments.clone()),
@@ -277,7 +284,7 @@ impl ModuleLoader {
 
         // Build relative path
         let relative: PathBuf = module_path.iter().collect();
-        
+
         // Try module_name.neve
         let file_path = self.root_dir.join(&relative).with_extension("neve");
         if file_path.exists() {
@@ -291,7 +298,11 @@ impl ModuleLoader {
         }
 
         // Try src/module_name.neve
-        let src_path = self.root_dir.join("src").join(&relative).with_extension("neve");
+        let src_path = self
+            .root_dir
+            .join("src")
+            .join(&relative)
+            .with_extension("neve");
         if src_path.exists() {
             return Some(src_path);
         }
@@ -319,7 +330,8 @@ impl ModuleLoader {
 
         // Find the file
         let _module_path = ModulePath::absolute(path.to_vec());
-        let file_path = self.find_module_file(path)
+        let file_path = self
+            .find_module_file(path)
             .ok_or_else(|| ModuleLoadError::NotFound(path.to_vec()))?;
 
         // Mark as loading and add to stack
@@ -332,7 +344,7 @@ impl ModuleLoader {
 
         // Parse the source
         let (source_file, parse_errors) = neve_parser::parse(&source);
-        
+
         // Collect parse errors
         for error in parse_errors {
             self.diagnostics.push(error);
@@ -355,7 +367,8 @@ impl ModuleLoader {
 
                 #[allow(clippy::collapsible_if)]
                 if let Some(abs_path) = self.make_absolute(&import_path, Some(path))
-                    && abs_path != path  // Only load if not a self-reference
+                    && abs_path != path
+                // Only load if not a self-reference
                 {
                     // For re-exports, check if the target module is already being loaded
                     // in our dependency chain. If so, we can safely skip loading it now
@@ -371,7 +384,8 @@ impl ModuleLoader {
                     if let Err(e) = self.load_module(&abs_path) {
                         match &e {
                             // Circular dependencies and module not found should fail immediately
-                            ModuleLoadError::CircularDependency { .. } | ModuleLoadError::NotFound(_) => {
+                            ModuleLoadError::CircularDependency { .. }
+                            | ModuleLoadError::NotFound(_) => {
                                 // Remove from loading set and stack before returning error
                                 self.loading.remove(path);
                                 self.loading_stack.pop();
@@ -382,7 +396,11 @@ impl ModuleLoader {
                                 self.diagnostics.push(Diagnostic::error(
                                     neve_diagnostic::DiagnosticKind::Module,
                                     item.span,
-                                    format!("Failed to load module '{}': {}", abs_path.join("."), e),
+                                    format!(
+                                        "Failed to load module '{}': {}",
+                                        abs_path.join("."),
+                                        e
+                                    ),
                                 ));
                             }
                         }
@@ -446,13 +464,19 @@ impl ModuleLoader {
 
     /// Get all loaded modules.
     pub fn all_modules(&self) -> impl Iterator<Item = (&Vec<String>, &ModuleInfo)> {
-        self.path_to_id.iter().filter_map(|(path, &id)| {
-            self.modules.get(&id).map(|info| (path, info))
-        })
+        self.path_to_id
+            .iter()
+            .filter_map(|(path, &id)| self.modules.get(&id).map(|info| (path, info)))
     }
 
     /// Register an exported item for a module.
-    pub fn register_export(&mut self, module_id: ModuleId, name: String, def_id: DefId, visibility: Visibility) {
+    pub fn register_export(
+        &mut self,
+        module_id: ModuleId,
+        name: String,
+        def_id: DefId,
+        visibility: Visibility,
+    ) {
         if let Some(info) = self.modules.get_mut(&module_id) {
             info.items.insert(name.clone(), (def_id, visibility));
             if visibility == Visibility::Public {
@@ -468,14 +492,19 @@ impl ModuleLoader {
         from_module: &[String],
     ) -> Result<Vec<(String, DefId)>, ImportResolveError> {
         let import_path = ModulePath::from_hir_import(import);
-        
-        let target_path = self.make_absolute(&import_path, Some(from_module))
+
+        let target_path = self
+            .make_absolute(&import_path, Some(from_module))
             .ok_or_else(|| ImportResolveError::InvalidPath(import.path.clone()))?;
 
-        let target_id = self.path_to_id.get(&target_path)
+        let target_id = self
+            .path_to_id
+            .get(&target_path)
             .ok_or_else(|| ImportResolveError::ModuleNotFound(target_path.clone()))?;
 
-        let target_info = self.modules.get(target_id)
+        let target_info = self
+            .modules
+            .get(target_id)
             .ok_or_else(|| ImportResolveError::ModuleNotFound(target_path.clone()))?;
 
         // Check visibility based on module relationship
@@ -499,21 +528,27 @@ impl ModuleLoader {
         match &import.kind {
             ImportKind::Module => {
                 // Import the module as a namespace
-                let alias = import.alias.as_ref()
+                let alias = import
+                    .alias
+                    .as_ref()
                     .or_else(|| target_path.last())
                     .cloned()
                     .ok_or_else(|| ImportResolveError::InvalidPath(import.path.clone()))?;
-                
+
                 // Return all accessible exports with the namespace prefix
-                let exports: Vec<_> = target_info.exports.iter()
+                let exports: Vec<_> = target_info
+                    .exports
+                    .iter()
                     .filter(|&(name, _)| {
-                        target_info.items.get(name)
+                        target_info
+                            .items
+                            .get(name)
                             .map(|(_, vis)| can_access(*vis))
                             .unwrap_or(false)
                     })
                     .map(|(name, def_id)| (format!("{}.{}", alias, name), *def_id))
                     .collect();
-                
+
                 Ok(exports)
             }
             ImportKind::Items(names) => {
@@ -534,9 +569,13 @@ impl ModuleLoader {
                 Ok(result)
             }
             ImportKind::All => {
-                let exports: Vec<_> = target_info.exports.iter()
+                let exports: Vec<_> = target_info
+                    .exports
+                    .iter()
                     .filter(|(name, _)| {
-                        target_info.items.get(*name)
+                        target_info
+                            .items
+                            .get(*name)
                             .map(|(_, vis)| can_access(*vis))
                             .unwrap_or(false)
                     })
@@ -550,7 +589,7 @@ impl ModuleLoader {
     /// Discover all modules in the project.
     pub fn discover_modules(&mut self) -> Result<Vec<ModuleId>, ModuleLoadError> {
         let mut discovered = Vec::new();
-        
+
         // Start with lib.neve or main.neve
         let _root_file = if self.root_dir.join("lib.neve").exists() {
             self.root_dir.join("lib.neve")
@@ -585,11 +624,10 @@ impl ModuleLoader {
             .map_err(|e| ModuleLoadError::IoError(dir.to_path_buf(), e.to_string()))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| ModuleLoadError::IoError(dir.to_path_buf(), e.to_string()))?;
+            let entry =
+                entry.map_err(|e| ModuleLoadError::IoError(dir.to_path_buf(), e.to_string()))?;
             let path = entry.path();
-            let file_name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
             if path.is_file() && file_name.ends_with(".neve") && file_name != "mod.neve" {
                 let module_name = file_name.trim_end_matches(".neve");
@@ -647,7 +685,11 @@ impl std::fmt::Display for ModuleLoadError {
                 write!(f, "module not found: {}", path.join("."))
             }
             ModuleLoadError::CircularDependency { module, chain } => {
-                writeln!(f, "circular dependency detected when importing module: {}", module.join("."))?;
+                writeln!(
+                    f,
+                    "circular dependency detected when importing module: {}",
+                    module.join(".")
+                )?;
                 writeln!(f, "\nImport chain:")?;
                 for (i, m) in chain.iter().enumerate() {
                     if i == chain.len() - 1 {
@@ -751,11 +793,7 @@ mod tests {
         // Test that circular dependency error includes the full chain
         let error = ModuleLoadError::CircularDependency {
             module: vec!["a".into()],
-            chain: vec![
-                vec!["a".into()],
-                vec!["b".into()],
-                vec!["c".into()],
-            ],
+            chain: vec![vec!["a".into()], vec!["b".into()], vec!["c".into()]],
         };
 
         let message = format!("{}", error);

@@ -1,7 +1,7 @@
 //! Pattern AST nodes.
 
-use neve_common::Span;
 use crate::Ident;
+use neve_common::Span;
 
 /// A pattern for matching.
 #[derive(Debug, Clone)]
@@ -56,10 +56,7 @@ pub enum PatternKind {
     Or(Vec<Pattern>),
 
     /// Binding pattern `name @ pattern`
-    Binding {
-        name: Ident,
-        pattern: Box<Pattern>,
-    },
+    Binding { name: Ident, pattern: Box<Pattern> },
 }
 
 /// A literal in a pattern.

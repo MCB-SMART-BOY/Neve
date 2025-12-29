@@ -2,6 +2,7 @@
 
 mod commands;
 mod output;
+mod platform;
 
 use clap::{Parser, Subcommand};
 
@@ -54,6 +55,10 @@ enum Commands {
     Build {
         /// Package name or path
         package: Option<String>,
+
+        /// Build backend (native, docker, simple)
+        #[arg(long, default_value = "auto")]
+        backend: String,
     },
 
     /// Package management commands
@@ -68,10 +73,14 @@ enum Commands {
         query: String,
     },
 
-    /// Show package information
+    /// Show package or platform information
     Info {
         /// Package name
-        package: String,
+        package: Option<String>,
+
+        /// Show platform capabilities
+        #[arg(long, short = 'p')]
+        platform: bool,
     },
 
     /// Update dependencies
@@ -166,7 +175,7 @@ fn main() {
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
         Commands::Repl => commands::repl::run(),
-        Commands::Build { package } => commands::build::run(package.as_deref()),
+        Commands::Build { package, backend } => commands::build::run(package.as_deref(), &backend),
         Commands::Package { action } => match action {
             PackageAction::Install { package } => commands::install::run(&package),
             PackageAction::Remove { package } => commands::remove::run(&package),
@@ -174,7 +183,13 @@ fn main() {
             PackageAction::Rollback => commands::remove::rollback(),
         },
         Commands::Search { query } => commands::search::run(&query),
-        Commands::Info { package } => commands::info::run(&package),
+        Commands::Info { package, platform } => {
+            if platform || package.is_none() {
+                commands::info::platform_info()
+            } else {
+                commands::info::run(package.as_deref().unwrap())
+            }
+        }
         Commands::Update => commands::update::run(),
         Commands::Config { action } => match action {
             ConfigAction::Build => commands::config::build(),

@@ -22,7 +22,7 @@ impl GenerationManager {
     pub fn new(base_dir: PathBuf) -> Result<Self, ConfigError> {
         let gen_dir = base_dir.join(GENERATIONS_DIR);
         fs::create_dir_all(&gen_dir)?;
-        
+
         Ok(Self { base_dir })
     }
 
@@ -49,16 +49,20 @@ impl GenerationManager {
         }
 
         let target = fs::read_link(&current)?;
-        let name = target.file_name()
+        let name = target
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| ConfigError::Invalid("invalid generation link".to_string()))?;
 
         if let Some(gen_str) = name.strip_prefix("generation-") {
-            let num = gen_str.parse::<u64>()
+            let num = gen_str
+                .parse::<u64>()
                 .map_err(|_| ConfigError::Invalid("invalid generation number".to_string()))?;
             Ok(Some(num))
         } else {
-            Err(ConfigError::Invalid("invalid generation link format".to_string()))
+            Err(ConfigError::Invalid(
+                "invalid generation link format".to_string(),
+            ))
         }
     }
 
@@ -68,18 +72,22 @@ impl GenerationManager {
     }
 
     /// Create a new generation.
-    pub fn create_generation(&self, store_path: &StorePath, metadata: GenerationMetadata) -> Result<Generation, ConfigError> {
+    pub fn create_generation(
+        &self,
+        store_path: &StorePath,
+        metadata: GenerationMetadata,
+    ) -> Result<Generation, ConfigError> {
         let gen_num = self.next_generation()?;
         let gen_path = self.generation_path(gen_num);
-        
+
         fs::create_dir_all(&gen_path)?;
-        
+
         // Save metadata
         let meta_path = gen_path.join("metadata.json");
         let meta_json = serde_json::to_string_pretty(&metadata)
             .map_err(|e| ConfigError::Invalid(format!("JSON error: {}", e)))?;
         fs::write(&meta_path, meta_json)?;
-        
+
         // Create link to store path
         let store_link = gen_path.join("system");
         #[cfg(unix)]
@@ -91,18 +99,18 @@ impl GenerationManager {
         {
             fs::write(&store_link, store_path.display_name())?;
         }
-        
+
         // Update current link
         let current = self.current_link();
         if current.exists() || current.is_symlink() {
             fs::remove_file(&current)?;
         }
-        
+
         #[cfg(unix)]
         std::os::unix::fs::symlink(&gen_path, &current)?;
         #[cfg(not(unix))]
         fs::write(&current, gen_path.to_string_lossy().as_bytes())?;
-        
+
         Ok(Generation {
             number: gen_num,
             path: gen_path,
@@ -115,23 +123,24 @@ impl GenerationManager {
     pub fn list_generations(&self) -> Result<Vec<Generation>, ConfigError> {
         let mut generations = Vec::new();
         let dir = self.generations_dir();
-        
+
         if !dir.exists() {
             return Ok(generations);
         }
-        
+
         for entry in fs::read_dir(&dir)? {
             let entry = entry?;
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
-            
+
             if let Some(gen_str) = name_str.strip_prefix("generation-")
                 && let Ok(gen_num) = gen_str.parse::<u64>()
-                    && let Ok(generation) = self.load_generation(gen_num) {
-                        generations.push(generation);
-                    }
+                && let Ok(generation) = self.load_generation(gen_num)
+            {
+                generations.push(generation);
+            }
         }
-        
+
         generations.sort_by_key(|g| g.number);
         Ok(generations)
     }
@@ -139,11 +148,11 @@ impl GenerationManager {
     /// Load a specific generation.
     pub fn load_generation(&self, number: u64) -> Result<Generation, ConfigError> {
         let gen_path = self.generation_path(number);
-        
+
         if !gen_path.exists() {
             return Err(ConfigError::NotFound(format!("generation {}", number)));
         }
-        
+
         // Load metadata
         let meta_path = gen_path.join("metadata.json");
         let metadata = if meta_path.exists() {
@@ -153,22 +162,20 @@ impl GenerationManager {
         } else {
             GenerationMetadata::default()
         };
-        
+
         // Load store path
         let store_link = gen_path.join("system");
         let store_path_str = if store_link.is_symlink() {
-            fs::read_link(&store_link)?
-                .to_string_lossy()
-                .into_owned()
+            fs::read_link(&store_link)?.to_string_lossy().into_owned()
         } else if store_link.exists() {
             fs::read_to_string(&store_link)?
         } else {
             return Err(ConfigError::Invalid("missing system link".to_string()));
         };
-        
+
         let store_path = StorePath::parse_name(&store_path_str)
             .ok_or_else(|| ConfigError::Invalid("invalid store path".to_string()))?;
-        
+
         Ok(Generation {
             number,
             path: gen_path,
@@ -180,32 +187,32 @@ impl GenerationManager {
     /// Switch to a specific generation.
     pub fn switch_to(&self, number: u64) -> Result<Generation, ConfigError> {
         let generation = self.load_generation(number)?;
-        
+
         // Update current link
         let current = self.current_link();
         if current.exists() || current.is_symlink() {
             fs::remove_file(&current)?;
         }
-        
+
         #[cfg(unix)]
         std::os::unix::fs::symlink(&generation.path, &current)?;
         #[cfg(not(unix))]
         fs::write(&current, generation.path.to_string_lossy().as_bytes())?;
-        
+
         Ok(generation)
     }
 
     /// Delete old generations, keeping the last N.
     pub fn collect_garbage(&self, keep: usize) -> Result<usize, ConfigError> {
         let mut generations = self.list_generations()?;
-        
+
         if generations.len() <= keep {
             return Ok(0);
         }
-        
+
         // Sort by number descending
         generations.sort_by_key(|g| std::cmp::Reverse(g.number));
-        
+
         // Remove old generations
         let mut deleted = 0;
         for generation in generations.into_iter().skip(keep) {
@@ -214,7 +221,7 @@ impl GenerationManager {
                 deleted += 1;
             }
         }
-        
+
         Ok(deleted)
     }
 }
@@ -282,4 +289,3 @@ fn current_timestamp() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
-

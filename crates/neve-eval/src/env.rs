@@ -1,10 +1,10 @@
 //! Evaluation environment.
 
+use crate::Value;
+use neve_hir::LocalId;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
-use neve_hir::LocalId;
-use crate::Value;
 
 /// An environment for variable bindings.
 #[derive(Clone)]

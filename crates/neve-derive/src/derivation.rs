@@ -42,40 +42,40 @@ impl Derivation {
     /// Compute the hash of this derivation.
     pub fn hash(&self) -> Hash {
         let mut hasher = Hasher::new();
-        
+
         // Hash all fields in a deterministic order
         hasher.update_str(&self.name);
         hasher.update_str(&self.version);
         hasher.update_str(&self.system);
         hasher.update_str(&self.builder);
-        
+
         for arg in &self.args {
             hasher.update_str(arg);
         }
-        
+
         for (key, value) in &self.env {
             hasher.update_str(key);
             hasher.update_str(value);
         }
-        
+
         for (path, outputs) in &self.input_drvs {
             hasher.update(path.hash().as_bytes());
             for out in outputs {
                 hasher.update_str(out);
             }
         }
-        
+
         for src in &self.input_srcs {
             hasher.update(src.hash().as_bytes());
         }
-        
+
         for (name, output) in &self.outputs {
             hasher.update_str(name);
             if let Some(hash) = &output.expected_hash {
                 hasher.update(hash.as_bytes());
             }
         }
-        
+
         hasher.finalize()
     }
 
@@ -128,7 +128,7 @@ impl DerivationBuilder {
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
         let mut outputs = BTreeMap::new();
         outputs.insert("out".to_string(), Output::new("out"));
-        
+
         Self {
             name: name.into(),
             version: version.into(),
@@ -240,4 +240,3 @@ pub fn current_system() -> &'static str {
         _ => "unknown-unknown",
     }
 }
-

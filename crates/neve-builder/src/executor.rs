@@ -21,7 +21,10 @@ impl<'a> BuildExecutor<'a> {
     }
 
     /// Execute a derivation build.
-    pub fn execute(&self, drv: &Derivation) -> Result<(HashMap<String, StorePath>, String), BuildError> {
+    pub fn execute(
+        &self,
+        drv: &Derivation,
+    ) -> Result<(HashMap<String, StorePath>, String), BuildError> {
         // Create temporary build directory
         let build_id = format!("{}-{}", drv.name, uuid_simple());
         let build_root = self.config.temp_dir.join(&build_id);
@@ -54,14 +57,16 @@ impl<'a> BuildExecutor<'a> {
 
         if !output.status.success() {
             if self.config.keep_failed {
-                eprintln!("Build failed. Keeping build directory: {}", build_root.display());
+                eprintln!(
+                    "Build failed. Keeping build directory: {}",
+                    build_root.display()
+                );
             } else {
                 let _ = sandbox.cleanup();
             }
             return Err(BuildError::BuildFailed(format!(
                 "builder exited with status {}\n{}",
-                output.status,
-                log
+                output.status, log
             )));
         }
 
@@ -77,20 +82,63 @@ impl<'a> BuildExecutor<'a> {
     }
 
     /// Prepare environment variables for the build.
-    fn prepare_env(&self, drv: &Derivation, sandbox: &Sandbox) -> Result<HashMap<String, String>, BuildError> {
+    fn prepare_env(
+        &self,
+        drv: &Derivation,
+        sandbox: &Sandbox,
+    ) -> Result<HashMap<String, String>, BuildError> {
         // Convert BTreeMap to HashMap
-        let mut env: HashMap<String, String> = drv.env.iter()
+        let mut env: HashMap<String, String> = drv
+            .env
+            .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
 
         // Standard build environment variables
-        env.insert("NIX_BUILD_TOP".to_string(), sandbox.build_dir().to_string_lossy().into_owned());
-        env.insert("TMPDIR".to_string(), sandbox.build_dir().join("tmp").to_string_lossy().into_owned());
-        env.insert("TEMPDIR".to_string(), sandbox.build_dir().join("tmp").to_string_lossy().into_owned());
-        env.insert("TMP".to_string(), sandbox.build_dir().join("tmp").to_string_lossy().into_owned());
-        env.insert("TEMP".to_string(), sandbox.build_dir().join("tmp").to_string_lossy().into_owned());
-        env.insert("HOME".to_string(), sandbox.build_dir().to_string_lossy().into_owned());
-        env.insert("PWD".to_string(), sandbox.build_dir().to_string_lossy().into_owned());
+        env.insert(
+            "NIX_BUILD_TOP".to_string(),
+            sandbox.build_dir().to_string_lossy().into_owned(),
+        );
+        env.insert(
+            "TMPDIR".to_string(),
+            sandbox
+                .build_dir()
+                .join("tmp")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        env.insert(
+            "TEMPDIR".to_string(),
+            sandbox
+                .build_dir()
+                .join("tmp")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        env.insert(
+            "TMP".to_string(),
+            sandbox
+                .build_dir()
+                .join("tmp")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        env.insert(
+            "TEMP".to_string(),
+            sandbox
+                .build_dir()
+                .join("tmp")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        env.insert(
+            "HOME".to_string(),
+            sandbox.build_dir().to_string_lossy().into_owned(),
+        );
+        env.insert(
+            "PWD".to_string(),
+            sandbox.build_dir().to_string_lossy().into_owned(),
+        );
 
         // Build info
         env.insert("NIX_BUILD_CORES".to_string(), self.config.cores.to_string());
@@ -120,17 +168,17 @@ impl<'a> BuildExecutor<'a> {
         // Link input derivation outputs
         for (input_drv_path, output_names) in &drv.input_drvs {
             let input_store_path = self.store.to_path(input_drv_path);
-            
+
             for output_name in output_names {
                 let link_name = format!("{}-{}", input_drv_path.name(), output_name);
                 let link_path = inputs_dir.join(&link_name);
-                
+
                 // In a real implementation, we would link to the actual output path
                 // For now, just link to the derivation file
                 if input_store_path.exists() {
                     #[cfg(unix)]
                     std::os::unix::fs::symlink(&input_store_path, &link_path)?;
-                    
+
                     #[cfg(not(unix))]
                     fs::copy(&input_store_path, &link_path)?;
                 }
@@ -141,11 +189,11 @@ impl<'a> BuildExecutor<'a> {
         for input_src in &drv.input_srcs {
             let src_path = self.store.to_path(input_src);
             let link_path = inputs_dir.join(input_src.name());
-            
+
             if src_path.exists() {
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(&src_path, &link_path)?;
-                
+
                 #[cfg(not(unix))]
                 {
                     if src_path.is_dir() {
@@ -161,7 +209,11 @@ impl<'a> BuildExecutor<'a> {
     }
 
     /// Create output directories.
-    fn create_output_dirs(&self, drv: &Derivation, sandbox: &Sandbox) -> Result<HashMap<String, std::path::PathBuf>, BuildError> {
+    fn create_output_dirs(
+        &self,
+        drv: &Derivation,
+        sandbox: &Sandbox,
+    ) -> Result<HashMap<String, std::path::PathBuf>, BuildError> {
         let mut output_dirs = HashMap::new();
 
         for name in drv.outputs.keys() {
@@ -182,24 +234,26 @@ impl<'a> BuildExecutor<'a> {
         let mut outputs = HashMap::new();
 
         for (name, output) in &drv.outputs {
-            let out_dir = output_dirs.get(name)
-                .ok_or_else(|| BuildError::BuildFailed(format!("missing output directory: {}", name)))?;
+            let out_dir = output_dirs.get(name).ok_or_else(|| {
+                BuildError::BuildFailed(format!("missing output directory: {}", name))
+            })?;
 
             // Validate output before collecting
             crate::output::validate_output(out_dir)?;
 
             // Compute hash of output
             let hash = hash_path(out_dir)?;
-            
+
             // Verify hash if expected (for fixed-output derivations)
             if let Some(ref expected_hash) = output.expected_hash
-                && hash != *expected_hash {
-                    return Err(BuildError::OutputHashMismatch {
-                        output: name.clone(),
-                        expected: expected_hash.to_hex(),
-                        actual: hash.to_hex(),
-                    });
-                }
+                && hash != *expected_hash
+            {
+                return Err(BuildError::OutputHashMismatch {
+                    output: name.clone(),
+                    expected: expected_hash.to_hex(),
+                    actual: hash.to_hex(),
+                });
+            }
 
             // Create store path name
             let store_name = if name == "out" {
@@ -230,7 +284,7 @@ fn uuid_simple() -> String {
 /// Hash a path (file or directory).
 fn hash_path(path: &Path) -> Result<Hash, BuildError> {
     use neve_derive::Hasher;
-    
+
     let mut hasher = Hasher::new();
     hash_path_recursive(path, &mut hasher)?;
     Ok(hasher.finalize())
@@ -242,11 +296,9 @@ fn hash_path_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<
         let content = fs::read(path)?;
         hasher.update(&content);
     } else if path.is_dir() {
-        let mut entries: Vec<_> = fs::read_dir(path)?
-            .filter_map(|e| e.ok())
-            .collect();
+        let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
         entries.sort_by_key(|e| e.file_name());
-        
+
         for entry in entries {
             let name = entry.file_name();
             hasher.update(name.as_encoded_bytes());
@@ -256,7 +308,7 @@ fn hash_path_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<
         let target = fs::read_link(path)?;
         hasher.update(target.as_os_str().as_encoded_bytes());
     }
-    
+
     Ok(())
 }
 
@@ -264,19 +316,18 @@ fn hash_path_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<
 #[cfg(not(unix))]
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BuildError> {
     fs::create_dir_all(dst)?;
-    
+
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
-        
+
         if src_path.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
     }
-    
+
     Ok(())
 }
-

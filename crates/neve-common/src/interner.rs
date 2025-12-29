@@ -47,4 +47,3 @@ impl Interner {
         &self.strings[sym.0 as usize]
     }
 }
-

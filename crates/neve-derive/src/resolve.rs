@@ -3,8 +3,8 @@
 //! This module implements a SAT-based dependency resolver that finds
 //! a consistent set of package versions satisfying all constraints.
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use crate::StorePath;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A package identifier with name and version.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -52,13 +52,28 @@ impl Version {
         }
         // Note: nums.is_empty() is the idiomatic way to check for empty collections
 
-        let major = nums[0].parse().map_err(|_| VersionParseError::InvalidNumber)?;
-        let minor = nums.get(1).map(|s| s.parse()).transpose()
-            .map_err(|_| VersionParseError::InvalidNumber)?.unwrap_or(0);
-        let patch = nums.get(2).map(|s| s.parse()).transpose()
-            .map_err(|_| VersionParseError::InvalidNumber)?.unwrap_or(0);
+        let major = nums[0]
+            .parse()
+            .map_err(|_| VersionParseError::InvalidNumber)?;
+        let minor = nums
+            .get(1)
+            .map(|s| s.parse())
+            .transpose()
+            .map_err(|_| VersionParseError::InvalidNumber)?
+            .unwrap_or(0);
+        let patch = nums
+            .get(2)
+            .map(|s| s.parse())
+            .transpose()
+            .map_err(|_| VersionParseError::InvalidNumber)?
+            .unwrap_or(0);
 
-        Ok(Self { major, minor, patch, pre })
+        Ok(Self {
+            major,
+            minor,
+            patch,
+            pre,
+        })
     }
 
     /// Check if this version is compatible with another (same major version for 1.x+).
@@ -117,9 +132,7 @@ impl VersionConstraint {
             VersionConstraint::Exact(v) => version == v,
             VersionConstraint::GreaterOrEqual(v) => version >= v,
             VersionConstraint::Less(v) => version < v,
-            VersionConstraint::Compatible(v) => {
-                version >= v && version.is_compatible(v)
-            }
+            VersionConstraint::Compatible(v) => version >= v && version.is_compatible(v),
             VersionConstraint::Tilde(v) => {
                 version >= v && version.major == v.major && version.minor == v.minor
             }
@@ -132,7 +145,7 @@ impl VersionConstraint {
     /// Parse a version constraint string.
     pub fn parse(s: &str) -> Result<Self, VersionParseError> {
         let s = s.trim();
-        
+
         if s == "*" {
             return Ok(VersionConstraint::Any);
         }
@@ -145,7 +158,11 @@ impl VersionConstraint {
         if let Some(rest) = s.strip_prefix("<=") {
             let v = Version::parse(rest)?;
             return Ok(VersionConstraint::And(
-                Box::new(VersionConstraint::Less(Version::new(v.major, v.minor, v.patch + 1))),
+                Box::new(VersionConstraint::Less(Version::new(
+                    v.major,
+                    v.minor,
+                    v.patch + 1,
+                ))),
                 Box::new(VersionConstraint::GreaterOrEqual(Version::new(0, 0, 0))),
             ));
         }
@@ -158,7 +175,9 @@ impl VersionConstraint {
         if let Some(rest) = s.strip_prefix('>') {
             let v = Version::parse(rest)?;
             return Ok(VersionConstraint::GreaterOrEqual(Version::new(
-                v.major, v.minor, v.patch + 1
+                v.major,
+                v.minor,
+                v.patch + 1,
             )));
         }
 
@@ -218,7 +237,7 @@ pub struct PackageMetadata {
 pub trait PackageRegistry {
     /// Get all available versions of a package.
     fn get_versions(&self, name: &str) -> Vec<Version>;
-    
+
     /// Get the metadata for a specific package version.
     fn get_metadata(&self, name: &str, version: &Version) -> Option<PackageMetadata>;
 }
@@ -244,13 +263,15 @@ impl MemoryRegistry {
 
 impl PackageRegistry for MemoryRegistry {
     fn get_versions(&self, name: &str) -> Vec<Version> {
-        self.packages.get(name)
+        self.packages
+            .get(name)
             .map(|pkgs| pkgs.iter().map(|p| p.id.version.clone()).collect())
             .unwrap_or_default()
     }
 
     fn get_metadata(&self, name: &str, version: &Version) -> Option<PackageMetadata> {
-        self.packages.get(name)?
+        self.packages
+            .get(name)?
             .iter()
             .find(|p| &p.id.version == version)
             .cloned()
@@ -295,13 +316,27 @@ impl std::fmt::Display for ResolveError {
             ResolveError::PackageNotFound(name) => {
                 write!(f, "package '{}' not found in registry", name)
             }
-            ResolveError::NoMatchingVersion { package, constraint, available } => {
-                write!(f, "no version of '{}' matches constraint '{}', available: {:?}",
-                    package, constraint, available)
+            ResolveError::NoMatchingVersion {
+                package,
+                constraint,
+                available,
+            } => {
+                write!(
+                    f,
+                    "no version of '{}' matches constraint '{}', available: {:?}",
+                    package, constraint, available
+                )
             }
-            ResolveError::VersionConflict { package, requirement1, requirement2 } => {
-                write!(f, "conflicting requirements for '{}': {} vs {}",
-                    package, requirement1, requirement2)
+            ResolveError::VersionConflict {
+                package,
+                requirement1,
+                requirement2,
+            } => {
+                write!(
+                    f,
+                    "conflicting requirements for '{}': {} vs {}",
+                    package, requirement1, requirement2
+                )
             }
             ResolveError::CyclicDependency(cycle) => {
                 write!(f, "cyclic dependency detected: {}", cycle.join(" -> "))
@@ -337,7 +372,10 @@ impl<'a, R: PackageRegistry> Resolver<'a, R> {
         // Process dependencies
         while let Some((name, constraint)) = queue.pop_front() {
             // Record constraint
-            constraints.entry(name.clone()).or_default().push(constraint.clone());
+            constraints
+                .entry(name.clone())
+                .or_default()
+                .push(constraint.clone());
 
             // Skip if already resolved
             if resolved.contains_key(&name) {
@@ -363,22 +401,27 @@ impl<'a, R: PackageRegistry> Resolver<'a, R> {
             let all_constraints = &constraints[&name];
 
             // Find best matching version (prefer latest)
-            let mut matching: Vec<&Version> = versions.iter()
+            let mut matching: Vec<&Version> = versions
+                .iter()
                 .filter(|v| all_constraints.iter().all(|c| c.matches(v)))
                 .collect();
             matching.sort();
             matching.reverse();
 
-            let version = matching.first().cloned().ok_or_else(|| {
-                ResolveError::NoMatchingVersion {
-                    package: name.clone(),
-                    constraint: format!("{:?}", all_constraints),
-                    available: versions.clone(),
-                }
-            })?;
+            let version =
+                matching
+                    .first()
+                    .cloned()
+                    .ok_or_else(|| ResolveError::NoMatchingVersion {
+                        package: name.clone(),
+                        constraint: format!("{:?}", all_constraints),
+                        available: versions.clone(),
+                    })?;
 
             // Get metadata and add to resolved
-            let metadata = self.registry.get_metadata(&name, version)
+            let metadata = self
+                .registry
+                .get_metadata(&name, version)
                 .ok_or_else(|| ResolveError::PackageNotFound(name.clone()))?;
 
             resolved.insert(name.clone(), metadata.id.clone());
@@ -455,10 +498,17 @@ impl<'a, R: PackageRegistry> Resolver<'a, R> {
         }
 
         for name in resolved.keys() {
-            visit(name, graph, resolved, &mut visited, &mut in_progress, &mut path, &mut result)?;
+            visit(
+                name,
+                graph,
+                resolved,
+                &mut visited,
+                &mut in_progress,
+                &mut path,
+                &mut result,
+            )?;
         }
 
         Ok(result)
     }
 }
-
