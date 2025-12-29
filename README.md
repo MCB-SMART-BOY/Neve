@@ -15,6 +15,8 @@
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](LICENSE)
 [![AUR](https://img.shields.io/aur/version/neve-git?color=1793d1)](https://aur.archlinux.org/packages/neve-git)
 
+**Windows** · **Linux** · **macOS**
+
 ---
 
 **[English](#english)** | **[中文](#中文)**
@@ -49,17 +51,59 @@ neve> r.greet(r.name)
 
 ### Install
 
+<details>
+<summary><b>Windows (one-line install)</b></summary>
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
+```
+
+Or manually:
+1. Download `neve-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/MCB-SMART-BOY/neve/releases/latest)
+2. Extract `neve.exe` to a folder (e.g., `C:\neve`)
+3. Add that folder to your PATH
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
 ```bash
 # Arch Linux
 yay -S neve-git
 
-# Pre-built binary
+# Other distros - download binary
 curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz | tar xz
 sudo mv neve /usr/local/bin/
+```
 
-# From source
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+```bash
+# Intel Mac
+curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz | tar xz
+sudo mv neve /usr/local/bin/
+
+# Apple Silicon
+curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv neve /usr/local/bin/
+```
+
+</details>
+
+<details>
+<summary><b>From source</b></summary>
+
+```bash
 git clone https://github.com/MCB-SMART-BOY/neve && cd neve && cargo build --release
 ```
+
+</details>
 
 ### Syntax at a Glance
 
@@ -126,17 +170,59 @@ neve> r.greet(r.name)
 
 ### 安装
 
+<details>
+<summary><b>Windows（一键安装）</b></summary>
+
+打开 PowerShell 运行：
+
+```powershell
+irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
+```
+
+或者手动安装：
+1. 从 [Releases](https://github.com/MCB-SMART-BOY/neve/releases/latest) 下载 `neve-x86_64-pc-windows-msvc.zip`
+2. 解压 `neve.exe` 到某个文件夹（比如 `C:\neve`）
+3. 把那个文件夹加到 PATH 环境变量
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
 ```bash
 # Arch Linux
 yay -S neve-git
 
-# 下载预编译包
+# 其他发行版 - 下载二进制
 curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz | tar xz
 sudo mv neve /usr/local/bin/
+```
 
-# 从源码编译
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+```bash
+# Intel Mac
+curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz | tar xz
+sudo mv neve /usr/local/bin/
+
+# Apple Silicon
+curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv neve /usr/local/bin/
+```
+
+</details>
+
+<details>
+<summary><b>从源码编译</b></summary>
+
+```bash
 git clone https://github.com/MCB-SMART-BOY/neve && cd neve && cargo build --release
 ```
+
+</details>
 
 ### 语法一览
 
