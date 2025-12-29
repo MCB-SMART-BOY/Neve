@@ -1,23 +1,26 @@
 //! Map module for Neve standard library.
+//! Neve 标准库的 Map 模块。
 //!
 //! Provides immutable hash map operations.
+//! 提供不可变哈希映射操作。
 
 use neve_eval::Value;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Returns all map builtins.
+/// 返回所有映射内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // ============================================
-        // Construction
+        // Construction / 构造
         // ============================================
 
         // empty : Map k v
-        // Creates an empty map
+        // Creates an empty map / 创建空映射
         ("Map.empty", Value::Map(Rc::new(HashMap::new()))),
         // singleton : k -> v -> Map k v
-        // Creates a map with a single key-value pair
+        // Creates a map with a single key-value pair / 创建包含单个键值对的映射
         (
             "Map.singleton",
             Value::BuiltinFn(
@@ -34,7 +37,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // fromList : List (k, v) -> Map k v
-        // Creates a map from a list of key-value pairs
+        // Creates a map from a list of key-value pairs / 从键值对列表创建映射
         (
             "Map.fromList",
             Value::BuiltinFn(
@@ -75,11 +78,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Query
+        // Query / 查询
         // ============================================
 
         // get : k -> Map k v -> Option v
-        // Looks up a value by key
+        // Looks up a value by key / 按键查找值
         (
             "Map.get",
             Value::BuiltinFn(
@@ -100,7 +103,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // getWithDefault : k -> v -> Map k v -> v
-        // Gets a value with a default if key doesn't exist
+        // Gets a value with a default if key doesn't exist / 获取值，如果键不存在则返回默认值
         (
             "Map.getWithDefault",
             Value::BuiltinFn(
@@ -120,7 +123,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // contains : k -> Map k v -> Bool
-        // Checks if a key exists in the map
+        // Checks if a key exists in the map / 检查键是否存在于映射中
         (
             "Map.contains",
             Value::BuiltinFn(
@@ -138,7 +141,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // size : Map k v -> Int
-        // Returns the number of entries in the map
+        // Returns the number of entries in the map / 返回映射中的条目数
         (
             "Map.size",
             Value::BuiltinFn(
@@ -155,7 +158,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // isEmpty : Map k v -> Bool
-        // Checks if the map is empty
+        // Checks if the map is empty / 检查映射是否为空
         (
             "Map.isEmpty",
             Value::BuiltinFn(
@@ -172,11 +175,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Modification
+        // Modification / 修改
         // ============================================
 
         // insert : k -> v -> Map k v -> Map k v
-        // Inserts a key-value pair (overwrites if exists)
+        // Inserts a key-value pair (overwrites if exists) / 插入键值对（如存在则覆盖）
         (
             "Map.insert",
             Value::BuiltinFn(
@@ -198,7 +201,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // remove : k -> Map k v -> Map k v
-        // Removes a key from the map
+        // Removes a key from the map / 从映射中删除键
         (
             "Map.remove",
             Value::BuiltinFn(
@@ -220,8 +223,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // update : k -> (Option v -> Option v) -> Map k v -> Map k v
-        // Updates a value at a key using a function
-        // Note: Requires closure evaluation support
+        // Updates a value at a key using a function / 使用函数更新键处的值
+        // Note: Requires closure evaluation support / 注意：需要闭包求值支持
         (
             "Map.update",
             Value::BuiltinFn(
@@ -231,16 +234,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         return Err("Map.update requires 3 arguments (key, fn, map)".into());
                     }
                     // Full implementation requires closure evaluation
+                    // 完整实现需要闭包求值
                     Err("Map.update requires closure evaluation support".into())
                 }),
             ),
         ),
         // ============================================
-        // Combine
+        // Combine / 组合
         // ============================================
 
         // union : Map k v -> Map k v -> Map k v
-        // Combines two maps, preferring values from the first
+        // Combines two maps, preferring values from the first / 合并两个映射，优先使用第一个的值
         (
             "Map.union",
             Value::BuiltinFn(
@@ -263,7 +267,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // intersection : Map k v -> Map k v -> Map k v
-        // Returns a map with keys present in both
+        // Returns a map with keys present in both / 返回两者都有的键的映射
         (
             "Map.intersection",
             Value::BuiltinFn(
@@ -288,7 +292,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // difference : Map k v -> Map k v -> Map k v
-        // Returns keys in first map but not in second
+        // Returns keys in first map but not in second / 返回第一个映射有但第二个没有的键
         (
             "Map.difference",
             Value::BuiltinFn(
@@ -313,11 +317,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Conversion
+        // Conversion / 转换
         // ============================================
 
         // keys : Map k v -> List k
-        // Returns all keys as a list
+        // Returns all keys as a list / 返回所有键的列表
         (
             "Map.keys",
             Value::BuiltinFn(
@@ -329,6 +333,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     match &args[0] {
                         Value::Map(map) => {
                             // Keys are stored as debug strings, return as strings
+                            // 键存储为调试字符串，作为字符串返回
                             let keys: Vec<Value> = map
                                 .keys()
                                 .map(|k| Value::String(Rc::new(k.clone())))
@@ -341,7 +346,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // values : Map k v -> List v
-        // Returns all values as a list
+        // Returns all values as a list / 返回所有值的列表
         (
             "Map.values",
             Value::BuiltinFn(
@@ -361,7 +366,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // toList : Map k v -> List (k, v)
-        // Converts map to list of key-value pairs
+        // Converts map to list of key-value pairs / 将映射转换为键值对列表
         (
             "Map.toList",
             Value::BuiltinFn(
@@ -390,6 +395,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         ),
         // ============================================
         // Higher-order (require closure evaluation)
+        // 高阶函数（需要闭包求值）
         // ============================================
 
         // map : (v -> w) -> Map k v -> Map k w

@@ -1,10 +1,15 @@
 //! String operations for the standard library.
+//! 标准库的字符串操作。
 
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
+/// Returns all string builtins.
+/// 返回所有字符串内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // len : String -> Int
+        // Returns the length of a string / 返回字符串长度
         (
             "string.len",
             Value::Builtin(BuiltinFn {
@@ -16,6 +21,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // chars : String -> List Char
+        // Converts string to list of characters / 将字符串转换为字符列表
         (
             "string.chars",
             Value::Builtin(BuiltinFn {
@@ -30,6 +37,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // split : String -> String -> List String
+        // Splits string by separator / 按分隔符分割字符串
         (
             "string.split",
             Value::Builtin(BuiltinFn {
@@ -47,6 +56,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // join : List String -> String -> String
+        // Joins strings with separator / 用分隔符连接字符串
         (
             "string.join",
             Value::Builtin(BuiltinFn {
@@ -69,6 +80,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // trim : String -> String
+        // Removes leading and trailing whitespace / 移除首尾空白字符
         (
             "string.trim",
             Value::Builtin(BuiltinFn {
@@ -80,6 +93,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // upper : String -> String
+        // Converts to uppercase / 转换为大写
         (
             "string.upper",
             Value::Builtin(BuiltinFn {
@@ -91,6 +106,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // lower : String -> String
+        // Converts to lowercase / 转换为小写
         (
             "string.lower",
             Value::Builtin(BuiltinFn {
@@ -102,6 +119,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // contains : String -> String -> Bool
+        // Checks if string contains substring / 检查字符串是否包含子串
         (
             "string.contains",
             Value::Builtin(BuiltinFn {
@@ -115,6 +134,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // startsWith : String -> String -> Bool
+        // Checks if string starts with prefix / 检查字符串是否以前缀开头
         (
             "string.startsWith",
             Value::Builtin(BuiltinFn {
@@ -128,6 +149,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // endsWith : String -> String -> Bool
+        // Checks if string ends with suffix / 检查字符串是否以后缀结尾
         (
             "string.endsWith",
             Value::Builtin(BuiltinFn {
@@ -141,6 +164,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // replace : String -> String -> String -> String
+        // Replaces occurrences of from with to / 将 from 替换为 to
         (
             "string.replace",
             Value::Builtin(BuiltinFn {
@@ -154,6 +179,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // substring : String -> Int -> Int -> String
+        // Extracts substring from start to end / 提取从 start 到 end 的子串
         (
             "string.substring",
             Value::Builtin(BuiltinFn {
@@ -173,6 +200,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // isEmpty : String -> Bool
+        // Checks if string is empty / 检查字符串是否为空
         (
             "string.isEmpty",
             Value::Builtin(BuiltinFn {
@@ -184,6 +213,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // repeat : String -> Int -> String
+        // Repeats string n times / 将字符串重复 n 次
         (
             "string.repeat",
             Value::Builtin(BuiltinFn {
@@ -197,6 +228,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // lines : String -> List String
+        // Splits string into lines / 将字符串分割成行
         (
             "string.lines",
             Value::Builtin(BuiltinFn {

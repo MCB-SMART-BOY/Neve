@@ -1,13 +1,22 @@
 //! Type unification.
+//! 类型合一（统一）。
+//!
+//! This module implements the unification algorithm for type inference.
+//! It unifies two types by finding a substitution that makes them equal.
+//! 本模块实现类型推断的合一算法。
+//! 通过找到一个替换使两个类型相等来实现类型合一。
 
 use neve_hir::{Ty, TyKind};
 use std::collections::HashMap;
 
 /// Substitution mapping type variables to types.
+/// 将类型变量映射到具体类型的替换。
 pub struct Substitution {
-    /// Type variable bindings
+    /// Type variable bindings.
+    /// 类型变量绑定。
     map: HashMap<u32, Ty>,
-    /// Generic parameter bindings (index -> concrete type)
+    /// Generic parameter bindings (index -> concrete type).
+    /// 泛型参数绑定（索引 -> 具体类型）。
     params: HashMap<u32, Ty>,
 }
 
@@ -20,6 +29,7 @@ impl Substitution {
     }
 
     /// Apply substitution to a type.
+    /// 将替换应用到类型上。
     pub fn apply(&self, ty: &Ty) -> Ty {
         match &ty.kind {
             TyKind::Var(v) => {
@@ -69,21 +79,25 @@ impl Substitution {
     }
 
     /// Extend substitution with a new type variable binding.
+    /// 添加新的类型变量绑定到替换中。
     pub fn extend(&mut self, var: u32, ty: Ty) {
         self.map.insert(var, ty);
     }
 
     /// Bind a generic parameter to a concrete type.
+    /// 将泛型参数绑定到具体类型。
     pub fn bind_param(&mut self, idx: u32, ty: Ty) {
         self.params.insert(idx, ty);
     }
 
     /// Get a bound type variable.
+    /// 获取已绑定的类型变量。
     pub fn get(&self, var: u32) -> Option<&Ty> {
         self.map.get(&var)
     }
 
     /// Get a bound generic parameter.
+    /// 获取已绑定的泛型参数。
     pub fn get_param(&self, idx: u32) -> Option<&Ty> {
         self.params.get(&idx)
     }
@@ -96,6 +110,7 @@ impl Default for Substitution {
 }
 
 /// Unify two types, returning an error message if they don't match.
+/// 合一两个类型，如果不匹配则返回错误信息。
 pub fn unify(t1: &Ty, t2: &Ty, subst: &mut Substitution) -> Result<(), String> {
     let t1 = subst.apply(t1);
     let t2 = subst.apply(t2);
@@ -204,6 +219,7 @@ pub fn unify(t1: &Ty, t2: &Ty, subst: &mut Substitution) -> Result<(), String> {
 }
 
 /// Check if a type variable occurs in a type (for infinite type prevention).
+/// 检查类型变量是否出现在类型中（用于防止无限类型）。
 fn occurs_check(var: u32, ty: &Ty) -> bool {
     match &ty.kind {
         TyKind::Var(v) => *v == var,
@@ -220,6 +236,7 @@ fn occurs_check(var: u32, ty: &Ty) -> bool {
 }
 
 /// Instantiate a polymorphic type by replacing type parameters with fresh variables.
+/// 实例化多态类型，用新的类型变量替换类型参数。
 pub fn instantiate(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> Ty {
     match &ty.kind {
         TyKind::Forall(params, body) => {
@@ -234,6 +251,7 @@ pub fn instantiate(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> Ty {
 }
 
 /// Generalize a type by wrapping free type variables in Forall.
+/// 泛化类型，将自由类型变量包装在 Forall 中。
 pub fn generalize(ty: &Ty, env_vars: &[u32]) -> Ty {
     let free_vars = free_type_vars(ty);
     let params: Vec<String> = free_vars
@@ -253,6 +271,7 @@ pub fn generalize(ty: &Ty, env_vars: &[u32]) -> Ty {
 }
 
 /// Collect free type variables from a type.
+/// 收集类型中的自由类型变量。
 pub fn free_type_vars(ty: &Ty) -> Vec<u32> {
     let mut vars = Vec::new();
     collect_free_vars(ty, &mut vars);

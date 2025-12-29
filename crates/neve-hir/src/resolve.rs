@@ -1,4 +1,5 @@
 //! Name resolution and AST to HIR lowering.
+//! 名称解析和 AST 到 HIR 的降级转换。
 
 use crate::{
     AssocTypeDef, AssocTypeImpl, BinOp, DefId, EnumDef, Expr, ExprKind, FieldDef, FnDef,
@@ -11,26 +12,29 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Name resolver that builds HIR from AST.
+/// 从 AST 构建 HIR 的名称解析器。
 pub struct Resolver {
-    /// Counter for generating unique definition IDs
+    /// Counter for generating unique definition IDs. / 生成唯一定义 ID 的计数器。
     next_def_id: u32,
-    /// Counter for generating unique local IDs
+    /// Counter for generating unique local IDs. / 生成唯一局部 ID 的计数器。
     next_local_id: u32,
-    /// Counter for generating unique module IDs
+    /// Counter for generating unique module IDs. / 生成唯一模块 ID 的计数器。
     next_module_id: u32,
-    /// Global definitions: name -> DefId
+    /// Global definitions: name -> DefId. / 全局定义：名称 -> DefId。
     globals: HashMap<String, DefId>,
-    /// Stack of local scopes
+    /// Stack of local scopes. / 局部作用域栈。
     scopes: Vec<HashMap<String, LocalId>>,
-    /// Imported names from other modules
+    /// Imported names from other modules. / 从其他模块导入的名称。
     imported: HashMap<String, DefId>,
-    /// Current module path (for relative imports)
+    /// Current module path (for relative imports). / 当前模块路径（用于相对导入）。
     current_module_path: Vec<String>,
-    /// Module loader for resolving imports
+    /// Module loader for resolving imports. / 用于解析导入的模块加载器。
     module_loader: Option<ModuleLoader>,
 }
 
 impl Resolver {
+    /// Create a new resolver.
+    /// 创建新的解析器。
     pub fn new() -> Self {
         Self {
             next_def_id: 0,
@@ -45,6 +49,7 @@ impl Resolver {
     }
 
     /// Create a new resolver with a module loader for the given root directory.
+    /// 为给定的根目录创建带有模块加载器的新解析器。
     pub fn with_root_dir(root_dir: impl AsRef<Path>) -> Self {
         Self {
             next_def_id: 0,
@@ -59,32 +64,39 @@ impl Resolver {
     }
 
     /// Set the module loader.
+    /// 设置模块加载器。
     pub fn set_module_loader(&mut self, loader: ModuleLoader) {
         self.module_loader = Some(loader);
     }
 
     /// Get the module loader.
+    /// 获取模块加载器。
     pub fn module_loader(&self) -> Option<&ModuleLoader> {
         self.module_loader.as_ref()
     }
 
     /// Get mutable access to the module loader.
+    /// 获取模块加载器的可变引用。
     pub fn module_loader_mut(&mut self) -> Option<&mut ModuleLoader> {
         self.module_loader.as_mut()
     }
 
     /// Set the current module path for relative import resolution.
+    /// 设置当前模块路径以解析相对导入。
     pub fn set_current_module_path(&mut self, path: Vec<String>) {
         self.current_module_path = path;
     }
 
     /// Get the current module path.
+    /// 获取当前模块路径。
     pub fn current_module_path(&self) -> &[String] {
         &self.current_module_path
     }
 
     /// Create an unknown type with the given span.
     /// Used during lowering when the type will be inferred later.
+    /// 创建具有给定位置的未知类型。
+    /// 在降级过程中使用，类型将在稍后推断。
     #[inline]
     fn unknown_ty(span: neve_common::Span) -> Ty {
         Ty {
@@ -94,16 +106,19 @@ impl Resolver {
     }
 
     /// Resolve an AST source file to HIR.
+    /// 将 AST 源文件解析为 HIR。
     pub fn resolve(&mut self, file: &SourceFile) -> Module {
         self.resolve_with_name(file, "main".to_string())
     }
 
     /// Resolve an AST source file to HIR with a specific module name.
+    /// 使用特定模块名称将 AST 源文件解析为 HIR。
     pub fn resolve_with_name(&mut self, file: &SourceFile, name: String) -> Module {
         self.resolve_with_path(file, name, Vec::new())
     }
 
     /// Resolve an AST source file to HIR with module path for relative imports.
+    /// 使用模块路径（用于相对导入）将 AST 源文件解析为 HIR。
     pub fn resolve_with_path(
         &mut self,
         file: &SourceFile,
@@ -113,20 +128,25 @@ impl Resolver {
         let module_id = self.fresh_module_id();
 
         // Set current module path for relative import resolution
+        // 设置当前模块路径以解析相对导入
         self.current_module_path = module_path;
 
         // First pass: collect imports and resolve them
+        // 第一遍：收集导入并解析它们
         let imports = self.collect_imports(file);
 
         // Process imports to bring names into scope
+        // 处理导入以将名称引入作用域
         self.process_imports(&imports);
 
         // Second pass: collect all global definitions
+        // 第二遍：收集所有全局定义
         for item in &file.items {
             self.collect_item(item);
         }
 
         // Third pass: lower all items
+        // 第三遍：降级所有项
         let items = file
             .items
             .iter()
@@ -134,6 +154,7 @@ impl Resolver {
             .collect();
 
         // Collect exports based on visibility
+        // 根据可见性收集导出
         let exports = self.collect_exports(file);
 
         Module {
@@ -146,10 +167,12 @@ impl Resolver {
     }
 
     /// Process imports to bring names into scope.
+    /// 处理导入以将名称引入作用域。
     fn process_imports(&mut self, imports: &[Import]) {
         for import in imports {
             if let Some(ref loader) = self.module_loader {
                 // Use the module loader to resolve the import
+                // 使用模块加载器解析导入
                 match loader.resolve_import(import, &self.current_module_path) {
                     Ok(resolved) => {
                         for (name, def_id) in resolved {
@@ -158,6 +181,7 @@ impl Resolver {
                     }
                     Err(_e) => {
                         // Import resolution failed - will be reported during type checking
+                        // 导入解析失败 - 将在类型检查期间报告
                     }
                 }
             }
@@ -165,6 +189,7 @@ impl Resolver {
     }
 
     /// Collect exported items based on visibility.
+    /// 根据可见性收集导出的项。
     fn collect_exports(&self, file: &SourceFile) -> Option<Vec<String>> {
         let mut exports = Vec::new();
 
@@ -184,6 +209,7 @@ impl Resolver {
                 ast::ItemKind::Enum(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
                     // Also export variants
+                    // 同时导出变体
                     for variant in &def.variants {
                         exports.push(variant.name.name.clone());
                     }
@@ -205,6 +231,8 @@ impl Resolver {
         }
     }
 
+    /// Allocate a fresh module ID.
+    /// 分配新的模块 ID。
     fn fresh_module_id(&mut self) -> ModuleId {
         let id = ModuleId(self.next_module_id);
         self.next_module_id += 1;
@@ -212,6 +240,7 @@ impl Resolver {
     }
 
     /// Collect all imports from the source file.
+    /// 从源文件收集所有导入。
     fn collect_imports(&mut self, file: &SourceFile) -> Vec<Import> {
         file.items
             .iter()
@@ -251,26 +280,36 @@ impl Resolver {
             .collect()
     }
 
+    /// Allocate a fresh definition ID.
+    /// 分配新的定义 ID。
     fn fresh_def_id(&mut self) -> DefId {
         let id = DefId(self.next_def_id);
         self.next_def_id += 1;
         id
     }
 
+    /// Allocate a fresh local ID.
+    /// 分配新的局部 ID。
     fn fresh_local_id(&mut self) -> LocalId {
         let id = LocalId(self.next_local_id);
         self.next_local_id += 1;
         id
     }
 
+    /// Push a new local scope onto the stack.
+    /// 将新的局部作用域压入栈。
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
 
+    /// Pop the top local scope from the stack.
+    /// 从栈中弹出顶部的局部作用域。
     fn pop_scope(&mut self) {
         self.scopes.pop();
     }
 
+    /// Define a new local variable in the current scope.
+    /// 在当前作用域中定义新的局部变量。
     fn define_local(&mut self, name: String) -> LocalId {
         let id = self.fresh_local_id();
         if let Some(scope) = self.scopes.last_mut() {
@@ -279,6 +318,8 @@ impl Resolver {
         id
     }
 
+    /// Look up a local variable by name.
+    /// 按名称查找局部变量。
     fn lookup_local(&self, name: &str) -> Option<LocalId> {
         for scope in self.scopes.iter().rev() {
             if let Some(&id) = scope.get(name) {
@@ -288,8 +329,11 @@ impl Resolver {
         None
     }
 
+    /// Look up a global definition by name.
+    /// 按名称查找全局定义。
     fn lookup_global(&self, name: &str) -> Option<DefId> {
         // First check local globals, then imported names
+        // 首先检查本地全局变量，然后检查导入的名称
         self.globals
             .get(name)
             .or_else(|| self.imported.get(name))
@@ -297,11 +341,13 @@ impl Resolver {
     }
 
     /// Register an imported name for resolution.
+    /// 注册导入的名称以供解析。
     pub fn register_import(&mut self, name: String, def_id: DefId) {
         self.imported.insert(name, def_id);
     }
 
     /// Register multiple imported names from a module registry resolution.
+    /// 从模块注册表解析中注册多个导入的名称。
     pub fn register_imports(&mut self, imports: Vec<(String, DefId)>) {
         for (name, def_id) in imports {
             self.imported.insert(name, def_id);
@@ -309,7 +355,10 @@ impl Resolver {
     }
 
     // === First pass: collect definitions ===
+    // === 第一遍：收集定义 ===
 
+    /// Collect a top-level item definition.
+    /// 收集顶层项定义。
     fn collect_item(&mut self, item: &ast::Item) {
         match &item.kind {
             ast::ItemKind::Let(def) => {
@@ -330,6 +379,7 @@ impl Resolver {
                 let id = self.fresh_def_id();
                 self.globals.insert(def.name.name.clone(), id);
                 // Also register variants
+                // 同时注册变体
                 for variant in &def.variants {
                     let vid = self.fresh_def_id();
                     self.globals.insert(variant.name.name.clone(), vid);
@@ -345,13 +395,17 @@ impl Resolver {
             }
             ast::ItemKind::Impl(_) => {
                 // Impls don't introduce names
+                // Impl 不引入名称
             }
             ast::ItemKind::Import(_) => {
-                // TODO: Handle imports
+                // Imports are handled separately
+                // 导入单独处理
             }
         }
     }
 
+    /// Extract the name from a pattern (if it's a simple variable pattern).
+    /// 从模式中提取名称（如果是简单的变量模式）。
     fn pattern_name(&self, pattern: &ast::Pattern) -> Option<String> {
         match &pattern.kind {
             ast::PatternKind::Var(ident) => Some(ident.name.clone()),
@@ -360,11 +414,15 @@ impl Resolver {
     }
 
     // === Second pass: lower items ===
+    // === 第二遍：降级项 ===
 
+    /// Lower an AST item to HIR.
+    /// 将 AST 项降级为 HIR。
     fn lower_item(&mut self, item: &ast::Item) -> Option<Item> {
         match &item.kind {
             ast::ItemKind::Let(def) => {
                 // Top-level let becomes a function with no parameters
+                // 顶层 let 变成没有参数的函数
                 let name = self.pattern_name(&def.pattern)?;
                 let id = self.lookup_global(&name)?;
 
@@ -549,6 +607,8 @@ impl Resolver {
         }
     }
 
+    /// Lower generic parameters.
+    /// 降级泛型参数。
     fn lower_generics(&self, generics: &[ast::GenericParam]) -> Vec<GenericParam> {
         generics
             .iter()
@@ -560,6 +620,8 @@ impl Resolver {
             .collect()
     }
 
+    /// Lower a function parameter.
+    /// 降级函数参数。
     fn lower_param(&mut self, param: &ast::Param) -> Param {
         let name = self
             .pattern_name(&param.pattern)
@@ -575,6 +637,8 @@ impl Resolver {
         }
     }
 
+    /// Lower a trait item (method declaration).
+    /// 降级 trait 项（方法声明）。
     fn lower_trait_item(&mut self, item: &ast::TraitItem) -> Option<TraitItem> {
         self.push_scope();
 
@@ -602,6 +666,8 @@ impl Resolver {
         })
     }
 
+    /// Lower an impl item (method implementation).
+    /// 降级 impl 项（方法实现）。
     fn lower_impl_item(&mut self, item: &ast::ImplItem) -> Option<ImplItem> {
         self.push_scope();
 
@@ -629,6 +695,8 @@ impl Resolver {
         })
     }
 
+    /// Lower an associated type definition.
+    /// 降级关联类型定义。
     fn lower_assoc_type_def(&self, assoc_type: &ast::AssocTypeDef) -> AssocTypeDef {
         AssocTypeDef {
             name: assoc_type.name.name.clone(),
@@ -642,6 +710,8 @@ impl Resolver {
         }
     }
 
+    /// Lower an associated type implementation.
+    /// 降级关联类型实现。
     fn lower_assoc_type_impl(&self, assoc_type_impl: &ast::AssocTypeImpl) -> AssocTypeImpl {
         AssocTypeImpl {
             name: assoc_type_impl.name.name.clone(),
@@ -651,7 +721,10 @@ impl Resolver {
     }
 
     // === Lower expressions ===
+    // === 降级表达式 ===
 
+    /// Lower an AST expression to HIR.
+    /// 将 AST 表达式降级为 HIR。
     fn lower_expr(&mut self, expr: &ast::Expr) -> Expr {
         let span = expr.span;
         let kind = match &expr.kind {
@@ -669,16 +742,19 @@ impl Resolver {
                     ExprKind::Global(def_id)
                 } else {
                     // Unknown variable - will be caught during type checking
+                    // 未知变量 - 将在类型检查期间捕获
                     ExprKind::Global(DefId(u32::MAX))
                 }
             }
 
             ast::ExprKind::Path(parts) => {
                 // Handle path like `r.a.b` as nested field access
+                // 将类似 `r.a.b` 的路径处理为嵌套字段访问
                 if parts.is_empty() {
                     ExprKind::Literal(Literal::Unit)
                 } else {
                     // Start with the first part as base
+                    // 以第一部分作为基础
                     let first = &parts[0];
                     let mut result_kind = if let Some(local_id) = self.lookup_local(&first.name) {
                         ExprKind::Var(local_id)
@@ -689,6 +765,7 @@ impl Resolver {
                     };
 
                     // Chain field accesses for remaining parts
+                    // 为剩余部分链接字段访问
                     for part in &parts[1..] {
                         let base_expr = Expr {
                             kind: result_kind,
@@ -722,6 +799,7 @@ impl Resolver {
                                 .map(|e| self.lower_expr(e))
                                 .unwrap_or_else(|| {
                                     // Shorthand: #{ x } means #{ x = x }
+                                    // 简写：#{ x } 表示 #{ x = x }
                                     let name = &f.name.name;
                                     if let Some(local_id) = self.lookup_local(name) {
                                         Expr {
@@ -751,7 +829,9 @@ impl Resolver {
 
             ast::ExprKind::RecordUpdate { base, fields } => {
                 // Desugar #{ base | field = value } to a record literal
+                // 将 #{ base | field = value } 解糖为记录字面量
                 // This is a simplification; real implementation would merge
+                // 这是简化；实际实现会合并
                 let base_expr = self.lower_expr(base);
                 let update_fields: Vec<(String, Expr)> = fields
                     .iter()
@@ -801,6 +881,7 @@ impl Resolver {
                 args,
             } => {
                 // Desugar method call to function call: receiver.method(args) -> method(receiver, args)
+                // 将方法调用解糖为函数调用：receiver.method(args) -> method(receiver, args)
                 let recv = self.lower_expr(receiver);
                 let mut all_args = vec![recv];
                 all_args.extend(args.iter().map(|e| self.lower_expr(e)));
@@ -834,10 +915,11 @@ impl Resolver {
 
             ast::ExprKind::Index { base, index } => {
                 // Desugar index to a function call: base[index] -> index(base, index)
+                // 将索引解糖为函数调用：base[index] -> index(base, index)
                 let base = self.lower_expr(base);
                 let index = self.lower_expr(index);
                 let index_fn = Expr {
-                    kind: ExprKind::Global(DefId(u32::MAX)), // TODO: resolve index function
+                    kind: ExprKind::Global(DefId(u32::MAX)), // TODO: resolve index function / 待办：解析索引函数
                     ty: Self::unknown_ty(span),
                     span,
                 };
@@ -884,6 +966,7 @@ impl Resolver {
 
             ast::ExprKind::Coalesce { value, default } => {
                 // Desugar value ?? default to match
+                // 将 value ?? default 解糖为 match
                 let value = self.lower_expr(value);
                 let default = self.lower_expr(default);
 
@@ -925,6 +1008,7 @@ impl Resolver {
 
             ast::ExprKind::Try(inner) => {
                 // Desugar expr? to match expr { Ok(x) => x, Err(e) => return Err(e) }
+                // 将 expr? 解糖为 match expr { Ok(x) => x, Err(e) => return Err(e) }
                 let inner = self.lower_expr(inner);
                 let x_id = self.fresh_local_id();
 
@@ -972,6 +1056,8 @@ impl Resolver {
         }
     }
 
+    /// Lower a statement to HIR.
+    /// 将语句降级为 HIR。
     fn lower_stmt(&mut self, stmt: &ast::Stmt) -> Stmt {
         let span = stmt.span;
         let kind = match &stmt.kind {
@@ -996,6 +1082,8 @@ impl Resolver {
         Stmt { kind, span }
     }
 
+    /// Lower a match arm to HIR.
+    /// 将匹配分支降级为 HIR。
     fn lower_match_arm(&mut self, arm: &ast::MatchArm) -> MatchArm {
         self.push_scope();
         let pattern = self.lower_pattern(&arm.pattern);
@@ -1011,6 +1099,8 @@ impl Resolver {
         }
     }
 
+    /// Lower a pattern to HIR.
+    /// 将模式降级为 HIR。
     fn lower_pattern(&mut self, pattern: &ast::Pattern) -> Pattern {
         let span = pattern.span;
         let kind = match &pattern.kind {
@@ -1078,6 +1168,7 @@ impl Resolver {
 
             ast::PatternKind::Or(patterns) => {
                 // For now, just use the first alternative
+                // 目前，只使用第一个选项
                 if let Some(first) = patterns.first() {
                     return self.lower_pattern(first);
                 }
@@ -1088,6 +1179,7 @@ impl Resolver {
                 let id = self.define_local(name.name.clone());
                 let _inner = self.lower_pattern(pattern);
                 // For @ patterns, we bind the whole value
+                // 对于 @ 模式，我们绑定整个值
                 PatternKind::Var(id, name.name.clone())
             }
 
@@ -1098,7 +1190,10 @@ impl Resolver {
     }
 
     // === Lower types ===
+    // === 降级类型 ===
 
+    /// Lower an AST type to HIR.
+    /// 将 AST 类型降级为 HIR。
     fn lower_type(&self, ty: &ast::Type) -> Ty {
         let span = ty.span;
         let kind = match &ty.kind {
@@ -1160,7 +1255,10 @@ impl Resolver {
     }
 
     // === Lower operators ===
+    // === 降级运算符 ===
 
+    /// Lower a binary operator.
+    /// 降级二元运算符。
     fn lower_binop(&self, op: ast::BinOp) -> BinOp {
         match op {
             ast::BinOp::Add => BinOp::Add,
@@ -1183,6 +1281,8 @@ impl Resolver {
         }
     }
 
+    /// Lower a unary operator.
+    /// 降级一元运算符。
     fn lower_unaryop(&self, op: ast::UnaryOp) -> UnaryOp {
         match op {
             ast::UnaryOp::Neg => UnaryOp::Neg,

@@ -1,10 +1,13 @@
 //! Math operations for the standard library.
+//! 标准库的数学操作。
 
 use neve_eval::value::{BuiltinFn, Value};
 
+/// Returns all math builtins.
+/// 返回所有数学内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
-        // Basic math
+        // Basic math / 基本数学运算
         (
             "math.abs",
             Value::Builtin(BuiltinFn {
@@ -125,7 +128,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Trigonometry
+        // Trigonometry / 三角函数
         (
             "math.sin",
             Value::Builtin(BuiltinFn {
@@ -162,7 +165,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Comparison
+        // Comparison / 比较
         (
             "math.max",
             Value::Builtin(BuiltinFn {
@@ -207,12 +210,12 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Constants
+        // Constants / 常量
         ("math.pi", Value::Float(std::f64::consts::PI)),
         ("math.e", Value::Float(std::f64::consts::E)),
         ("math.inf", Value::Float(f64::INFINITY)),
         ("math.nan", Value::Float(f64::NAN)),
-        // Type conversion
+        // Type conversion / 类型转换
         (
             "math.toInt",
             Value::Builtin(BuiltinFn {
@@ -245,7 +248,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Predicates
+        // Predicates / 谓词
         (
             "math.isNan",
             Value::Builtin(BuiltinFn {

@@ -1,23 +1,26 @@
 //! Set module for Neve standard library.
+//! Neve 标准库的 Set 模块。
 //!
 //! Provides immutable hash set operations.
+//! 提供不可变哈希集合操作。
 
 use neve_eval::Value;
 use std::collections::HashSet;
 use std::rc::Rc;
 
 /// Returns all set builtins.
+/// 返回所有集合内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // ============================================
-        // Construction
+        // Construction / 构造
         // ============================================
 
         // empty : Set a
-        // Creates an empty set
+        // Creates an empty set / 创建空集合
         ("Set.empty", Value::Set(Rc::new(HashSet::new()))),
         // singleton : a -> Set a
-        // Creates a set with a single element
+        // Creates a set with a single element / 创建包含单个元素的集合
         (
             "Set.singleton",
             Value::BuiltinFn(
@@ -34,7 +37,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // fromList : List a -> Set a
-        // Creates a set from a list
+        // Creates a set from a list / 从列表创建集合
         (
             "Set.fromList",
             Value::BuiltinFn(
@@ -55,11 +58,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Query
+        // Query / 查询
         // ============================================
 
         // contains : a -> Set a -> Bool
-        // Checks if an element is in the set
+        // Checks if an element is in the set / 检查元素是否在集合中
         (
             "Set.contains",
             Value::BuiltinFn(
@@ -77,7 +80,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // size : Set a -> Int
-        // Returns the number of elements in the set
+        // Returns the number of elements in the set / 返回集合中的元素数量
         (
             "Set.size",
             Value::BuiltinFn(
@@ -94,7 +97,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // isEmpty : Set a -> Bool
-        // Checks if the set is empty
+        // Checks if the set is empty / 检查集合是否为空
         (
             "Set.isEmpty",
             Value::BuiltinFn(
@@ -111,11 +114,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Modification
+        // Modification / 修改
         // ============================================
 
         // insert : a -> Set a -> Set a
-        // Inserts an element into the set
+        // Inserts an element into the set / 向集合中插入元素
         (
             "Set.insert",
             Value::BuiltinFn(
@@ -137,7 +140,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // remove : a -> Set a -> Set a
-        // Removes an element from the set
+        // Removes an element from the set / 从集合中删除元素
         (
             "Set.remove",
             Value::BuiltinFn(
@@ -159,11 +162,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Set Operations
+        // Set Operations / 集合运算
         // ============================================
 
         // union : Set a -> Set a -> Set a
-        // Returns the union of two sets
+        // Returns the union of two sets / 返回两个集合的并集
         (
             "Set.union",
             Value::BuiltinFn(
@@ -183,7 +186,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // intersection : Set a -> Set a -> Set a
-        // Returns the intersection of two sets
+        // Returns the intersection of two sets / 返回两个集合的交集
         (
             "Set.intersection",
             Value::BuiltinFn(
@@ -203,7 +206,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // difference : Set a -> Set a -> Set a
-        // Returns elements in first set but not in second
+        // Returns elements in first set but not in second / 返回第一个集合有但第二个没有的元素
         (
             "Set.difference",
             Value::BuiltinFn(
@@ -223,7 +226,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // symmetricDifference : Set a -> Set a -> Set a
-        // Returns elements in either set but not in both
+        // Returns elements in either set but not in both / 返回在任一集合中但不同时在两者中的元素
         (
             "Set.symmetricDifference",
             Value::BuiltinFn(
@@ -244,7 +247,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // isSubset : Set a -> Set a -> Bool
-        // Checks if first set is a subset of second
+        // Checks if first set is a subset of second / 检查第一个集合是否是第二个的子集
         (
             "Set.isSubset",
             Value::BuiltinFn(
@@ -261,7 +264,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // isSuperset : Set a -> Set a -> Bool
-        // Checks if first set is a superset of second
+        // Checks if first set is a superset of second / 检查第一个集合是否是第二个的超集
         (
             "Set.isSuperset",
             Value::BuiltinFn(
@@ -278,7 +281,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // isDisjoint : Set a -> Set a -> Bool
-        // Checks if two sets have no common elements
+        // Checks if two sets have no common elements / 检查两个集合是否没有共同元素
         (
             "Set.isDisjoint",
             Value::BuiltinFn(
@@ -295,11 +298,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             ),
         ),
         // ============================================
-        // Conversion
+        // Conversion / 转换
         // ============================================
 
         // toList : Set a -> List a
-        // Converts set to a list
+        // Converts set to a list / 将集合转换为列表
         (
             "Set.toList",
             Value::BuiltinFn(
@@ -311,6 +314,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     match &args[0] {
                         Value::Set(set) => {
                             // Elements are stored as debug strings
+                            // 元素存储为调试字符串
                             let list: Vec<Value> = set
                                 .iter()
                                 .map(|s| Value::String(Rc::new(s.clone())))
@@ -324,6 +328,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         ),
         // ============================================
         // Higher-order (require closure evaluation)
+        // 高阶函数（需要闭包求值）
         // ============================================
 
         // map : (a -> b) -> Set a -> Set b

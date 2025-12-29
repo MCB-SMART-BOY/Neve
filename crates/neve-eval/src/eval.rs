@@ -1,4 +1,10 @@
 //! HIR expression evaluation.
+//! HIR 表达式求值。
+//!
+//! This module implements the evaluator for the High-level Intermediate Representation (HIR).
+//! It provides a tree-walking interpreter with tail call optimization.
+//! 本模块实现了高级中间表示（HIR）的求值器。
+//! 它提供了一个带有尾调用优化的树遍历解释器。
 
 use crate::{Environment, Value};
 use neve_hir::{
@@ -9,55 +15,76 @@ use std::rc::Rc;
 use thiserror::Error;
 
 /// Evaluation errors.
+/// 求值错误。
 #[derive(Debug, Error)]
 pub enum EvalError {
+    /// Unbound variable error / 未绑定变量错误
     #[error("unbound variable")]
     UnboundVariable,
 
+    /// Type error / 类型错误
     #[error("type error: {0}")]
     TypeError(String),
 
+    /// Division by zero error / 除零错误
     #[error("division by zero")]
     DivisionByZero,
 
+    /// Assertion failed error / 断言失败错误
     #[error("assertion failed: {0}")]
     AssertionFailed(String),
 
+    /// Pattern match failed error / 模式匹配失败错误
     #[error("pattern match failed")]
     PatternMatchFailed,
 
+    /// Not a function error / 非函数错误
     #[error("not a function")]
     NotAFunction,
 
+    /// Wrong number of arguments error / 参数数量错误
     #[error("wrong number of arguments")]
     WrongArity,
 }
 
 /// Result of evaluating an expression with tail call detection.
+/// 带有尾调用检测的表达式求值结果。
 enum TcoResult {
-    /// Normal value result
+    /// Normal value result / 正常值结果
     Value(Value),
-    /// Tail call detected: (function, arguments)
+    /// Tail call detected: (function, arguments) / 检测到尾调用：（函数，参数）
     TailCall(Value, Vec<Value>),
 }
 
 /// The HIR evaluator.
+/// HIR 求值器。
+///
+/// This evaluator interprets HIR expressions with support for:
+/// 此求值器解释 HIR 表达式，支持：
+/// - Lexically scoped variables / 词法作用域变量
+/// - Tail call optimization / 尾调用优化
+/// - Pattern matching / 模式匹配
+/// - Closures / 闭包
 pub struct Evaluator {
-    /// Local variable environment
+    /// Local variable environment / 局部变量环境
     env: Environment,
-    /// Global definitions (functions, etc.)
+    /// Global definitions (functions, etc.) / 全局定义（函数等）
     globals: HashMap<DefId, GlobalDef>,
 }
 
 /// A global definition.
+/// 全局定义。
 #[derive(Clone)]
 enum GlobalDef {
+    /// Function definition / 函数定义
     Function(FnDef),
+    /// Evaluated value / 已求值的值
     Value(Value),
 }
 
 impl Evaluator {
     /// Create a new evaluator.
+    /// 创建一个新的求值器。
     pub fn new() -> Self {
         Self {
             env: Environment::new(),
@@ -66,18 +93,24 @@ impl Evaluator {
     }
 
     /// Create an evaluator with built-in functions.
+    /// 创建一个带有内置函数的求值器。
     pub fn with_builtins() -> Self {
         let mut eval = Self::new();
         eval.define_builtins();
         eval
     }
 
+    /// Define built-in functions.
+    /// 定义内置函数。
     fn define_builtins(&mut self) {
         // We'll store builtins as special values that can be called
         // For now, they're handled specially in apply()
+        // 我们将内置函数存储为可调用的特殊值
+        // 目前，它们在 apply() 中进行特殊处理
     }
 
     /// Evaluate a module and return the last value.
+    /// 求值一个模块并返回最后一个值。
     pub fn eval_module(&mut self, module: &Module) -> Result<Value, EvalError> {
         // First pass: collect all global definitions
         for item in &module.items {
@@ -119,6 +152,7 @@ impl Evaluator {
     }
 
     /// Evaluate an expression.
+    /// 求值一个表达式。
     pub fn eval(&mut self, expr: &Expr) -> Result<Value, EvalError> {
         match &expr.kind {
             ExprKind::Literal(lit) => Ok(self.eval_literal(lit)),
@@ -484,6 +518,13 @@ impl Evaluator {
     }
 
     /// Evaluate expression and detect tail calls.
+    /// 求值表达式并检测尾调用。
+    ///
+    /// This is the core of tail call optimization. When a call is in tail position,
+    /// we return a TailCall result instead of recursing, allowing the outer loop
+    /// in apply() to handle it iteratively.
+    /// 这是尾调用优化的核心。当调用处于尾位置时，我们返回 TailCall 结果
+    /// 而不是递归，从而允许 apply() 中的外层循环迭代处理它。
     fn eval_with_tco(&mut self, expr: &Expr) -> Result<TcoResult, EvalError> {
         match &expr.kind {
             // Direct call in tail position
@@ -645,6 +686,7 @@ impl Evaluator {
     }
 
     /// Convert a value to its string representation for interpolation.
+    /// 将值转换为用于字符串插值的字符串表示。
     fn value_to_string(value: &Value) -> String {
         match value {
             Value::Int(n) => n.to_string(),

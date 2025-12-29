@@ -1,11 +1,14 @@
 //! List operations for the standard library.
+//! 标准库的列表操作。
 
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
+/// Returns all list builtins.
+/// 返回所有列表内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
-        // Basic operations
+        // Basic operations / 基本操作
         (
             "list.empty",
             Value::Builtin(BuiltinFn {
@@ -44,7 +47,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Access operations
+        // Access operations / 访问操作
         (
             "list.head",
             Value::Builtin(BuiltinFn {
@@ -127,7 +130,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Modification operations
+        // Modification operations / 修改操作
         (
             "list.cons",
             Value::Builtin(BuiltinFn {
@@ -202,6 +205,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         // Higher-order functions (simplified - use evaluator for full closure support)
+        // 高阶函数（简化版 - 完整闭包支持需要求值器）
         (
             "list.map",
             Value::Builtin(BuiltinFn {
@@ -209,6 +213,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |_args| {
                     // Full implementation requires evaluator integration
+                    // 完整实现需要求值器集成
                     Err("list.map requires runtime closure evaluation".to_string())
                 },
             }),
@@ -237,7 +242,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |_args| Err("list.foldRight requires runtime closure evaluation".to_string()),
             }),
         ),
-        // Aggregation
+        // Aggregation / 聚合
         (
             "list.sum",
             Value::Builtin(BuiltinFn {
@@ -330,7 +335,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Search
+        // Search / 搜索
         (
             "list.contains",
             Value::Builtin(BuiltinFn {
@@ -363,7 +368,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Sorting
+        // Sorting / 排序
         (
             "list.sort",
             Value::Builtin(BuiltinFn {
@@ -374,6 +379,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::List(items) => {
                             let mut sorted: Vec<_> = items.iter().cloned().collect();
                             // Only sort if all elements are comparable (integers for now)
+                            // 仅在所有元素可比较时排序（目前支持整数）
                             sorted.sort_by(|a, b| match (a, b) {
                                 (Value::Int(x), Value::Int(y)) => x.cmp(y),
                                 (Value::String(x), Value::String(y)) => x.cmp(y),
@@ -386,7 +392,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Conversion
+        // Conversion / 转换
         (
             "list.range",
             Value::Builtin(BuiltinFn {
@@ -415,7 +421,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Zipping
+        // Zipping / 压缩
         (
             "list.zip",
             Value::Builtin(BuiltinFn {
@@ -465,6 +471,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
 }
 
 /// Check if two values are equal (simplified comparison).
+/// 检查两个值是否相等（简化比较）。
 fn values_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Int(x), Value::Int(y)) => x == y,

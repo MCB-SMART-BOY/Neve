@@ -1,6 +1,8 @@
 //! The `neve remove` command.
+//! `neve remove` 命令。
 //!
 //! Removes packages from the user environment.
+//! 从用户环境中移除软件包。
 
 use crate::output;
 use std::fs;
@@ -8,26 +10,32 @@ use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 
 /// Remove a package from the user environment.
+/// 从用户环境中移除软件包。
 pub fn run(package: &str) -> Result<(), String> {
     let profile_dir = get_profile_dir();
     let current_link = profile_dir.join("current");
 
     if !current_link.exists() {
         return Err("No packages installed".to_string());
+        // 没有安装软件包
     }
 
     let current_gen =
         fs::read_link(&current_link).map_err(|e| format!("Failed to read current link: {}", e))?;
+    // 读取当前链接失败：{}
 
     let manifest_path = current_gen.join("manifest");
     if !manifest_path.exists() {
         return Err("No packages installed".to_string());
+        // 没有安装软件包
     }
 
     let manifest = fs::read_to_string(&manifest_path)
         .map_err(|e| format!("Failed to read manifest: {}", e))?;
+    // 读取清单失败：{}
 
     // Find the package to remove
+    // 查找要移除的软件包
     let mut found = false;
     let mut new_manifest = String::new();
     let mut removed_path = PathBuf::new();
@@ -54,22 +62,29 @@ pub fn run(package: &str) -> Result<(), String> {
 
     if !found {
         return Err(format!("Package '{}' is not installed", package));
+        // 软件包 '{}' 未安装
     }
 
     // Create new generation
+    // 创建新的代
     let generation = get_next_generation(&profile_dir)?;
     let gen_dir = profile_dir.join(format!("generation-{}", generation));
     fs::create_dir_all(&gen_dir)
         .map_err(|e| format!("Failed to create generation directory: {}", e))?;
+    // 创建代目录失败：{}
 
     // Write new manifest
+    // 写入新清单
     let new_manifest_path = gen_dir.join("manifest");
     fs::write(&new_manifest_path, &new_manifest)
         .map_err(|e| format!("Failed to write manifest: {}", e))?;
+    // 写入清单失败：{}
 
     // Rebuild bin directory
+    // 重建 bin 目录
     let bin_dir = gen_dir.join("bin");
     fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin directory: {}", e))?;
+    // 创建 bin 目录失败：{}
 
     for line in new_manifest.lines() {
         if line.is_empty() {
@@ -82,45 +97,57 @@ pub fn run(package: &str) -> Result<(), String> {
         if pkg_bin.exists() {
             for entry in
                 fs::read_dir(&pkg_bin).map_err(|e| format!("Failed to read package bin: {}", e))?
+            // 读取软件包 bin 失败：{}
             {
                 let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                // 读取条目失败：{}
                 let src = entry.path();
                 let dst = bin_dir.join(entry.file_name());
 
                 if !dst.exists() {
                     symlink(&src, &dst).map_err(|e| format!("Failed to create symlink: {}", e))?;
+                    // 创建符号链接失败：{}
                 }
             }
         }
     }
 
     // Update current symlink
+    // 更新当前符号链接
     fs::remove_file(&current_link).map_err(|e| format!("Failed to remove current link: {}", e))?;
+    // 删除当前链接失败：{}
 
     symlink(&gen_dir, &current_link)
         .map_err(|e| format!("Failed to create current link: {}", e))?;
+    // 创建当前链接失败：{}
 
     output::success(&format!("Removed '{package}' (generation {generation})"));
+    // 已移除 '{}'（代 {}）
     println!("  Removed: {}", removed_path.display());
+    // 已移除：{}
 
     Ok(())
 }
 
 /// Get the profile directory.
+/// 获取配置目录。
 fn get_profile_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     PathBuf::from(home).join(".neve").join("profile")
 }
 
 /// Get the next generation number.
+/// 获取下一个代编号。
 fn get_next_generation(profile_dir: &PathBuf) -> Result<u32, String> {
     let mut max_gen = 0;
 
     if profile_dir.exists() {
         for entry in
             fs::read_dir(profile_dir).map_err(|e| format!("Failed to read profile: {}", e))?
+        // 读取配置失败：{}
         {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            // 读取条目失败：{}
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
@@ -136,45 +163,58 @@ fn get_next_generation(profile_dir: &PathBuf) -> Result<u32, String> {
 }
 
 /// Rollback to a previous generation.
+/// 回滚到上一代。
 pub fn rollback() -> Result<(), String> {
     let profile_dir = get_profile_dir();
     let current_link = profile_dir.join("current");
 
     if !current_link.exists() {
         return Err("No generations to rollback to".to_string());
+        // 没有可回滚的代
     }
 
     let current_gen =
         fs::read_link(&current_link).map_err(|e| format!("Failed to read current link: {}", e))?;
+    // 读取当前链接失败：{}
 
     // Extract current generation number
+    // 提取当前代编号
     let current_name = current_gen
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or("Invalid current generation")?;
+    // 无效的当前代
 
     let current_num: u32 = current_name
         .strip_prefix("generation-")
         .and_then(|s| s.parse().ok())
         .ok_or("Invalid generation number")?;
+    // 无效的代编号
 
     if current_num <= 1 {
         return Err("No previous generation to rollback to".to_string());
+        // 没有可回滚的上一代
     }
 
     // Find previous generation
+    // 查找上一代
     let prev_gen = profile_dir.join(format!("generation-{}", current_num - 1));
     if !prev_gen.exists() {
         return Err(format!("Generation {} not found", current_num - 1));
+        // 代 {} 未找到
     }
 
     // Update current symlink
+    // 更新当前符号链接
     fs::remove_file(&current_link).map_err(|e| format!("Failed to remove current link: {}", e))?;
+    // 删除当前链接失败：{}
 
     symlink(&prev_gen, &current_link)
         .map_err(|e| format!("Failed to create current link: {}", e))?;
+    // 创建当前链接失败：{}
 
     output::success(&format!("Rolled back to generation {}", current_num - 1));
+    // 已回滚到代 {}
 
     Ok(())
 }

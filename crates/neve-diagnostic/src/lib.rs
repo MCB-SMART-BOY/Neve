@@ -1,6 +1,8 @@
 //! Diagnostic and error reporting for Neve.
+//! Neve 的诊断和错误报告。
 //!
 //! This crate provides beautiful error messages using ariadne.
+//! 本 crate 使用 ariadne 库提供美观的错误信息。
 
 mod codes;
 mod diagnostic;
@@ -11,6 +13,7 @@ pub use diagnostic::{Diagnostic, DiagnosticKind, Label, Severity};
 use ariadne::{ColorGenerator, Label as AriadneLabel, Report, ReportKind, Source};
 
 /// Render a diagnostic to stderr.
+/// 将诊断信息渲染到标准错误输出。
 pub fn emit(source: &str, filename: &str, diagnostic: &Diagnostic) {
     let kind = match diagnostic.severity {
         Severity::Error => ReportKind::Error,
