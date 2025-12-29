@@ -1,12 +1,155 @@
-# Neve 标准库 API
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                        NEVE STANDARD LIBRARY API                              ║
+║                             标准库接口文档                                     ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [English]  #english   ──→  Core / List / String / Option / Result / I/O    │
+│  [中文]     #chinese   ──→  核心 / 列表 / 字符串 / Option / Result / I/O    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+<a name="english"></a>
+
+# English
+
+> *Your toolkit. Everything you need, nothing you don't.*
+
+## Core Functions
+
+```neve
+id<A>(x: A) -> A                              -- identity
+const<A, B>(x: A, y: B) -> A                  -- always return first
+compose<A, B, C>(f: B -> C, g: A -> B) -> A -> C  -- f . g
+flip<A, B, C>(f: A -> B -> C) -> B -> A -> C  -- swap arguments
+```
+
+## List Operations
+
+```neve
+map<A, B>(f: A -> B, xs: List<A>) -> List<B>
+filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
+fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
+foldRight<A, B>(init: B, f: A -> B -> B, xs: List<A>) -> B
+
+length<A>(xs: List<A>) -> Int
+head<A>(xs: List<A>) -> Option<A>
+tail<A>(xs: List<A>) -> Option<List<A>>
+reverse<A>(xs: List<A>) -> List<A>
+take<A>(n: Int, xs: List<A>) -> List<A>
+drop<A>(n: Int, xs: List<A>) -> List<A>
+zip<A, B>(xs: List<A>, ys: List<B>) -> List<(A, B)>
+concat<A>(xss: List<List<A>>) -> List<A>
+```
+
+## String Operations
+
+```neve
+length(s: String) -> Int
+concat(xs: List<String>) -> String
+split(sep: String, s: String) -> List<String>
+trim(s: String) -> String
+toUpper(s: String) -> String
+toLower(s: String) -> String
+```
+
+## Option Type
+
+```neve
+enum Option<T> { Some(T), None }
+
+map<A, B>(f: A -> B, opt: Option<A>) -> Option<B>
+flatMap<A, B>(f: A -> Option<B>, opt: Option<A>) -> Option<B>
+withDefault<A>(default: A, opt: Option<A>) -> A
+isSome<A>(opt: Option<A>) -> Bool
+```
+
+## Result Type
+
+```neve
+enum Result<T, E> { Ok(T), Err(E) }
+
+map<T, E, U>(f: T -> U, res: Result<T, E>) -> Result<U, E>
+mapErr<T, E, F>(f: E -> F, res: Result<T, E>) -> Result<T, F>
+withDefault<T, E>(default: T, res: Result<T, E>) -> T
+```
+
+## Math Functions
+
+```neve
+abs(x: Int) -> Int
+min(x: Int, y: Int) -> Int
+max(x: Int, y: Int) -> Int
+pow(base: Int, exp: Int) -> Int
+sqrt(x: Float) -> Float
+```
+
+## I/O Operations
+
+```neve
+print(s: String) -> Unit
+println(s: String) -> Unit
+readLine() -> String
+readFile(path: String) -> Result<String, String>
+writeFile(path: String, content: String) -> Result<Unit, String>
+```
+
+## Source Fetching
+
+```neve
+fetchurl #{ url: String, hash: String } -> Path
+fetchGit #{ url: String, rev: String, hash: String } -> Path
+```
+
+## Derivation
+
+```neve
+mkDerivation #{
+    name: String,
+    version: String,
+    src: Path,
+    buildInputs: List<Derivation>,
+    buildPhase: String,
+    installPhase: String,
+} -> Derivation
+```
+
+## Example
+
+```neve
+let users = [
+    #{ name = "Alice", age = 30 },
+    #{ name = "Bob", age = 25 },
+];
+
+let names = users
+    |> filter(fn(u) u.age >= 18)
+    |> map(fn(u) u.name)
+    |> concat(", ");
+
+-- => "Alice, Bob"
+```
+
+---
+
+<a name="chinese"></a>
+
+# 中文
+
+> 你的工具箱。要啥有啥，绝不臃肿。
 
 ## 核心函数
 
 ```neve
-id<A>(x: A) -> A                              -- 恒等函数
-const<A, B>(x: A, y: B) -> A                  -- 常量函数
-compose<A, B, C>(f: B -> C, g: A -> B) -> A -> C  -- 函数组合
-flip<A, B, C>(f: A -> B -> C) -> B -> A -> C  -- 翻转参数
+id<A>(x: A) -> A                              -- 恒等函数，传啥返啥
+const<A, B>(x: A, y: B) -> A                  -- 永远返回第一个参数
+compose<A, B, C>(f: B -> C, g: A -> B) -> A -> C  -- 函数组合 f . g
+flip<A, B, C>(f: A -> B -> C) -> B -> A -> C  -- 交换参数顺序
 ```
 
 ## 列表操作
@@ -86,7 +229,7 @@ fetchurl #{ url: String, hash: String } -> Path
 fetchGit #{ url: String, rev: String, hash: String } -> Path
 ```
 
-## Derivation
+## Derivation 构建
 
 ```neve
 mkDerivation #{
@@ -103,14 +246,26 @@ mkDerivation #{
 
 ```neve
 let users = [
-    #{ name = "Alice", age = 30 },
-    #{ name = "Bob", age = 25 },
+    #{ name = "小明", age = 30 },
+    #{ name = "小红", age = 25 },
 ];
 
 let names = users
     |> filter(fn(u) u.age >= 18)
     |> map(fn(u) u.name)
-    |> concat(", ");
+    |> concat("、");
 
--- => "Alice, Bob"
+-- => "小明、小红"
 ```
+
+---
+
+<div align="center">
+
+```
+═══════════════════════════════════════════════════════════════════════════════
+                    Build something. Break something. Learn.
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+</div>
