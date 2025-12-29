@@ -91,7 +91,41 @@ I love Nix's ideas but wanted to take them further with modern language design:
 | No type safety | Runtime errors | Catch errors early |
 | Inherit syntax | `inherit x;` | `#{ x }` shorthand |
 
+### Platform Support
+
+Neve runs on all major platforms with varying feature availability:
+
+| Feature | Linux | macOS | Windows |
+|---------|-------|-------|---------|
+| Language Core (eval, check) | ✅ | ✅ | ✅ |
+| REPL | ✅ | ✅ | ✅ |
+| Formatter | ✅ | ✅ | ✅ |
+| LSP | ✅ | ✅ | ✅ |
+| Native Sandbox Build | ✅ | ❌ | ❌ |
+| Docker Build | ✅ | ✅ | ✅ |
+| System Configuration | ✅ | ❌ | ❌ |
+
+Use `neve info --platform` to check your platform's capabilities.
+
 ### Installation
+
+#### Pre-built Binaries
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/MCB-SMART-BOY/neve/releases):
+
+- **Linux (x86_64)**: `neve-x86_64-unknown-linux-gnu.tar.gz`
+- **Linux (ARM64)**: `neve-aarch64-unknown-linux-gnu.tar.gz`
+- **macOS (Intel)**: `neve-x86_64-apple-darwin.tar.gz`
+- **macOS (Apple Silicon)**: `neve-aarch64-apple-darwin.tar.gz`
+- **Windows (x86_64)**: `neve-x86_64-pc-windows-msvc.zip`
+
+```bash
+# Linux/macOS
+tar xzf neve-*.tar.gz
+sudo mv neve /usr/local/bin/
+
+# Windows: Extract and add to PATH
+```
 
 #### Building from Source
 
@@ -298,7 +332,41 @@ let mySystem = #{
 | 没有类型安全 | 运行时报错 | 提前发现错误 |
 | Inherit 语法 | `inherit x;` | `#{ x }` 简写 |
 
+### 平台支持
+
+Neve 在所有主要平台上运行，功能支持如下：
+
+| 功能 | Linux | macOS | Windows |
+|------|-------|-------|---------|
+| 语言核心 (eval, check) | ✅ | ✅ | ✅ |
+| REPL | ✅ | ✅ | ✅ |
+| 格式化器 | ✅ | ✅ | ✅ |
+| LSP | ✅ | ✅ | ✅ |
+| 原生沙箱构建 | ✅ | ❌ | ❌ |
+| Docker 构建 | ✅ | ✅ | ✅ |
+| 系统配置 | ✅ | ❌ | ❌ |
+
+使用 `neve info --platform` 查看你的平台能力。
+
 ### 安装
+
+#### 预编译二进制
+
+从 [GitHub Releases](https://github.com/MCB-SMART-BOY/neve/releases) 下载适合你平台的版本：
+
+- **Linux (x86_64)**: `neve-x86_64-unknown-linux-gnu.tar.gz`
+- **Linux (ARM64)**: `neve-aarch64-unknown-linux-gnu.tar.gz`
+- **macOS (Intel)**: `neve-x86_64-apple-darwin.tar.gz`
+- **macOS (Apple Silicon)**: `neve-aarch64-apple-darwin.tar.gz`
+- **Windows (x86_64)**: `neve-x86_64-pc-windows-msvc.zip`
+
+```bash
+# Linux/macOS
+tar xzf neve-*.tar.gz
+sudo mv neve /usr/local/bin/
+
+# Windows: 解压并添加到 PATH
+```
 
 #### 从源码构建
 

@@ -1,9 +1,8 @@
 //! Integration tests for neve-derive crate.
 
 use neve_derive::{
-    Hash, Hasher, Derivation, StorePath, Output, HashMode,
-    Version, VersionConstraint, Dependency, PackageId, PackageMetadata,
-    Resolver, MemoryRegistry, ResolveError,
+    Dependency, Derivation, Hash, HashMode, Hasher, MemoryRegistry, Output, PackageId,
+    PackageMetadata, ResolveError, Resolver, StorePath, Version, VersionConstraint,
 };
 
 // Hash tests
@@ -73,27 +72,25 @@ fn test_derivation_hash() {
     let drv1 = Derivation::builder("hello", "1.0")
         .system("x86_64-linux")
         .build();
-    
+
     let drv2 = Derivation::builder("hello", "1.0")
         .system("x86_64-linux")
         .build();
-    
+
     let drv3 = Derivation::builder("hello", "1.1")
         .system("x86_64-linux")
         .build();
 
     // Same derivation should have same hash
     assert_eq!(drv1.hash(), drv2.hash());
-    
+
     // Different version should have different hash
     assert_ne!(drv1.hash(), drv3.hash());
 }
 
 #[test]
 fn test_derivation_json() {
-    let drv = Derivation::builder("test", "1.0")
-        .env("FOO", "bar")
-        .build();
+    let drv = Derivation::builder("test", "1.0").env("FOO", "bar").build();
 
     let json = drv.to_json().unwrap();
     let parsed = Derivation::from_json(&json).unwrap();
@@ -109,7 +106,7 @@ fn test_derivation_json() {
 fn test_store_path() {
     let hash = Hash::of(b"test derivation");
     let path = StorePath::new(hash, "hello-2.12.1".to_string());
-    
+
     assert_eq!(path.name(), "hello-2.12.1");
     assert!(path.path().to_string_lossy().contains("hello-2.12.1"));
 }
@@ -118,7 +115,7 @@ fn test_store_path() {
 fn test_store_path_from_derivation() {
     let drv_hash = Hash::of(b"derivation content");
     let path = StorePath::from_derivation(drv_hash, "mypackage-1.0");
-    
+
     assert_eq!(path.name(), "mypackage-1.0");
 }
 
@@ -126,7 +123,7 @@ fn test_store_path_from_derivation() {
 fn test_output() {
     let out = Output::new("out");
     assert!(!out.is_fixed());
-    
+
     let fixed = Output::fixed("out", Hash::of(b"expected"), HashMode::Flat);
     assert!(fixed.is_fixed());
 }
@@ -136,7 +133,8 @@ fn test_output() {
 fn make_pkg(name: &str, version: &str, deps: Vec<(&str, &str)>) -> PackageMetadata {
     PackageMetadata {
         id: PackageId::new(name, Version::parse(version).unwrap()),
-        dependencies: deps.into_iter()
+        dependencies: deps
+            .into_iter()
             .map(|(n, c)| Dependency::new(n, VersionConstraint::parse(c).unwrap()))
             .collect(),
         derivation_path: None,
@@ -189,16 +187,23 @@ fn test_simple_resolution() {
     registry.add(make_pkg("bar", "2.0.0", vec![("foo", "^1.0")]));
 
     let resolver = Resolver::new(&registry);
-    let deps = vec![
-        Dependency::new("bar", VersionConstraint::parse("^2.0").unwrap()),
-    ];
+    let deps = vec![Dependency::new(
+        "bar",
+        VersionConstraint::parse("^2.0").unwrap(),
+    )];
 
     let resolution = resolver.resolve(&deps).unwrap();
-    
+
     assert!(resolution.packages.contains_key("foo"));
     assert!(resolution.packages.contains_key("bar"));
-    assert_eq!(resolution.packages["foo"].version, Version::parse("1.0.0").unwrap());
-    assert_eq!(resolution.packages["bar"].version, Version::parse("2.0.0").unwrap());
+    assert_eq!(
+        resolution.packages["foo"].version,
+        Version::parse("1.0.0").unwrap()
+    );
+    assert_eq!(
+        resolution.packages["bar"].version,
+        Version::parse("2.0.0").unwrap()
+    );
 }
 
 #[test]
@@ -210,14 +215,18 @@ fn test_version_selection() {
     registry.add(make_pkg("foo", "2.0.0", vec![]));
 
     let resolver = Resolver::new(&registry);
-    let deps = vec![
-        Dependency::new("foo", VersionConstraint::parse("^1.0").unwrap()),
-    ];
+    let deps = vec![Dependency::new(
+        "foo",
+        VersionConstraint::parse("^1.0").unwrap(),
+    )];
 
     let resolution = resolver.resolve(&deps).unwrap();
-    
+
     // Should select latest compatible version
-    assert_eq!(resolution.packages["foo"].version, Version::parse("1.2.0").unwrap());
+    assert_eq!(
+        resolution.packages["foo"].version,
+        Version::parse("1.2.0").unwrap()
+    );
 }
 
 #[test]
@@ -228,18 +237,23 @@ fn test_build_order() {
     registry.add(make_pkg("c", "1.0.0", vec![("b", "^1.0")]));
 
     let resolver = Resolver::new(&registry);
-    let deps = vec![
-        Dependency::new("c", VersionConstraint::parse("^1.0").unwrap()),
-    ];
+    let deps = vec![Dependency::new(
+        "c",
+        VersionConstraint::parse("^1.0").unwrap(),
+    )];
 
     let resolution = resolver.resolve(&deps).unwrap();
-    
+
     // Build order should be a, b, c
-    let names: Vec<_> = resolution.build_order.iter().map(|p| p.name.as_str()).collect();
+    let names: Vec<_> = resolution
+        .build_order
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
     let a_pos = names.iter().position(|n| *n == "a").unwrap();
     let b_pos = names.iter().position(|n| *n == "b").unwrap();
     let c_pos = names.iter().position(|n| *n == "c").unwrap();
-    
+
     assert!(a_pos < b_pos);
     assert!(b_pos < c_pos);
 }
@@ -251,9 +265,10 @@ fn test_cycle_detection() {
     registry.add(make_pkg("b", "1.0.0", vec![("a", "^1.0")]));
 
     let resolver = Resolver::new(&registry);
-    let deps = vec![
-        Dependency::new("a", VersionConstraint::parse("^1.0").unwrap()),
-    ];
+    let deps = vec![Dependency::new(
+        "a",
+        VersionConstraint::parse("^1.0").unwrap(),
+    )];
 
     let result = resolver.resolve(&deps);
     assert!(matches!(result, Err(ResolveError::CyclicDependency(_))));
@@ -263,9 +278,7 @@ fn test_cycle_detection() {
 fn test_package_not_found() {
     let registry = MemoryRegistry::new();
     let resolver = Resolver::new(&registry);
-    let deps = vec![
-        Dependency::new("nonexistent", VersionConstraint::Any),
-    ];
+    let deps = vec![Dependency::new("nonexistent", VersionConstraint::Any)];
 
     let result = resolver.resolve(&deps);
     assert!(matches!(result, Err(ResolveError::PackageNotFound(_))));
@@ -286,12 +299,13 @@ fn test_diamond_dependency() {
     registry.add(make_pkg("a", "1.0.0", vec![("b", "^1.0"), ("c", "^1.0")]));
 
     let resolver = Resolver::new(&registry);
-    let deps = vec![
-        Dependency::new("a", VersionConstraint::parse("^1.0").unwrap()),
-    ];
+    let deps = vec![Dependency::new(
+        "a",
+        VersionConstraint::parse("^1.0").unwrap(),
+    )];
 
     let resolution = resolver.resolve(&deps).unwrap();
-    
+
     // D should be >= 1.1.0
     assert!(resolution.packages["d"].version >= Version::parse("1.1.0").unwrap());
 }

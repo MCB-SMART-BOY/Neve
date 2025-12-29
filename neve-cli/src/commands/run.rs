@@ -1,16 +1,15 @@
 //! The `neve run` command.
 
-use std::fs;
-use std::path::Path;
-use neve_parser::parse;
+use crate::output;
 use neve_diagnostic::emit;
 use neve_eval::AstEvaluator;
-use crate::output;
+use neve_parser::parse;
+use std::fs;
+use std::path::Path;
 
 pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let path = Path::new(file);
-    let source = fs::read_to_string(path)
-        .map_err(|e| format!("cannot read file '{file}': {e}"))?;
+    let source = fs::read_to_string(path).map_err(|e| format!("cannot read file '{file}': {e}"))?;
 
     let (ast, diagnostics) = parse(&source);
 
@@ -32,7 +31,7 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     } else {
         AstEvaluator::new()
     };
-    
+
     match evaluator.eval_file(&ast) {
         Ok(value) => {
             // Only print non-unit values

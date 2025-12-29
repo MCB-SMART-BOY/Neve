@@ -1,10 +1,12 @@
 //! HIR expression evaluation.
 
+use crate::{Environment, Value};
+use neve_hir::{
+    BinOp, DefId, Expr, ExprKind, FnDef, Item, ItemKind, Literal, LocalId, Module, UnaryOp,
+};
 use std::collections::HashMap;
 use std::rc::Rc;
 use thiserror::Error;
-use neve_hir::{Module, Item, ItemKind, FnDef, Expr, ExprKind, Literal, BinOp, UnaryOp, DefId, LocalId};
-use crate::{Value, Environment};
 
 /// Evaluation errors.
 #[derive(Debug, Error)]
@@ -93,7 +95,8 @@ impl Evaluator {
 
     fn collect_item(&mut self, item: &Item) {
         if let ItemKind::Fn(fn_def) = &item.kind {
-            self.globals.insert(item.id, GlobalDef::Function(fn_def.clone()));
+            self.globals
+                .insert(item.id, GlobalDef::Function(fn_def.clone()));
         }
     }
 
@@ -103,7 +106,8 @@ impl Evaluator {
                 // For top-level let (converted to zero-param function), evaluate immediately
                 if fn_def.params.is_empty() {
                     let value = self.eval(&fn_def.body)?;
-                    self.globals.insert(item.id, GlobalDef::Value(value.clone()));
+                    self.globals
+                        .insert(item.id, GlobalDef::Value(value.clone()));
                     Ok(value)
                 } else {
                     // For real functions, they're already collected
@@ -119,10 +123,7 @@ impl Evaluator {
         match &expr.kind {
             ExprKind::Literal(lit) => Ok(self.eval_literal(lit)),
 
-            ExprKind::Var(id) => self
-                .env
-                .get(*id)
-                .ok_or(EvalError::UnboundVariable),
+            ExprKind::Var(id) => self.env.get(*id).ok_or(EvalError::UnboundVariable),
 
             ExprKind::Global(def_id) => {
                 match self.globals.get(def_id).cloned() {
@@ -137,8 +138,7 @@ impl Evaluator {
                     }
                     None => {
                         // Check if it's a builtin
-                        self.get_builtin(*def_id)
-                            .ok_or(EvalError::UnboundVariable)
+                        self.get_builtin(*def_id).ok_or(EvalError::UnboundVariable)
                     }
                 }
             }
@@ -187,10 +187,9 @@ impl Evaluator {
             ExprKind::TupleIndex(base, index) => {
                 let base_val = self.eval(base)?;
                 match base_val {
-                    Value::Tuple(items) => items
-                        .get(*index as usize)
-                        .cloned()
-                        .ok_or_else(|| EvalError::TypeError("tuple index out of bounds".to_string())),
+                    Value::Tuple(items) => items.get(*index as usize).cloned().ok_or_else(|| {
+                        EvalError::TypeError("tuple index out of bounds".to_string())
+                    }),
                     _ => Err(EvalError::TypeError("not a tuple".to_string())),
                 }
             }
@@ -368,7 +367,8 @@ impl Evaluator {
             },
             BinOp::Merge => match (&left, &right) {
                 (Value::Record(a), Value::Record(b)) => {
-                    let mut result: HashMap<String, Value> = (*a).iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    let mut result: HashMap<String, Value> =
+                        (*a).iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                     for (k, v) in b.iter() {
                         result.insert(k.clone(), v.clone());
                     }
@@ -404,10 +404,16 @@ impl Evaluator {
             (Value::Unit, Value::Unit) => true,
             (Value::None, Value::None) => true,
             (Value::List(x), Value::List(y)) => {
-                x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| Self::values_equal(a, b))
+                x.len() == y.len()
+                    && x.iter()
+                        .zip(y.iter())
+                        .all(|(a, b)| Self::values_equal(a, b))
             }
             (Value::Tuple(x), Value::Tuple(y)) => {
-                x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| Self::values_equal(a, b))
+                x.len() == y.len()
+                    && x.iter()
+                        .zip(y.iter())
+                        .all(|(a, b)| Self::values_equal(a, b))
             }
             _ => false,
         }
@@ -416,9 +422,9 @@ impl Evaluator {
     fn compare(&self, a: &Value, b: &Value) -> Result<std::cmp::Ordering, EvalError> {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => Ok(x.cmp(y)),
-            (Value::Float(x), Value::Float(y)) => {
-                x.partial_cmp(y).ok_or_else(|| EvalError::TypeError("cannot compare NaN".to_string()))
-            }
+            (Value::Float(x), Value::Float(y)) => x
+                .partial_cmp(y)
+                .ok_or_else(|| EvalError::TypeError("cannot compare NaN".to_string())),
             (Value::String(x), Value::String(y)) => Ok(x.cmp(y)),
             (Value::Char(x), Value::Char(y)) => Ok(x.cmp(y)),
             _ => Err(EvalError::TypeError("cannot compare".to_string())),
@@ -468,7 +474,9 @@ impl Evaluator {
                 }
                 Value::AstClosure(_) => {
                     // AstClosure not supported in HIR evaluator
-                    return Err(EvalError::TypeError("AstClosure not supported in HIR evaluator".to_string()));
+                    return Err(EvalError::TypeError(
+                        "AstClosure not supported in HIR evaluator".to_string(),
+                    ));
                 }
                 _ => return Err(EvalError::NotAFunction),
             }
@@ -491,7 +499,9 @@ impl Evaluator {
                 match cond_val {
                     Value::Bool(true) => self.eval_with_tco(then_branch),
                     Value::Bool(false) => self.eval_with_tco(else_branch),
-                    _ => Err(EvalError::TypeError("condition must be boolean".to_string())),
+                    _ => Err(EvalError::TypeError(
+                        "condition must be boolean".to_string(),
+                    )),
                 }
             }
 
@@ -662,13 +672,15 @@ impl Evaluator {
                 format!("({})", strs.join(", "))
             }
             Value::Record(fields) => {
-                let strs: Vec<String> = fields.iter()
+                let strs: Vec<String> = fields
+                    .iter()
                     .map(|(k, v)| format!("{} = {}", k, Self::value_to_string(v)))
                     .collect();
                 format!("#{{ {} }}", strs.join(", "))
             }
             Value::Map(map) => {
-                let strs: Vec<String> = map.iter()
+                let strs: Vec<String> = map
+                    .iter()
                     .map(|(k, v)| format!("{} => {}", k, Self::value_to_string(v)))
                     .collect();
                 format!("Map{{ {} }}", strs.join(", "))
@@ -709,8 +721,8 @@ impl Default for Evaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neve_hir::*;
     use neve_common::Span;
+    use neve_hir::*;
 
     #[test]
     fn test_tail_call_optimization() {
@@ -733,22 +745,34 @@ mod tests {
                 BinOp::Le,
                 Box::new(Expr {
                     kind: ExprKind::Var(n_id),
-                    ty: Ty { kind: TyKind::Int, span },
+                    ty: Ty {
+                        kind: TyKind::Int,
+                        span,
+                    },
                     span,
                 }),
                 Box::new(Expr {
                     kind: ExprKind::Literal(Literal::Int(0)),
-                    ty: Ty { kind: TyKind::Int, span },
+                    ty: Ty {
+                        kind: TyKind::Int,
+                        span,
+                    },
                     span,
                 }),
             ),
-            ty: Ty { kind: TyKind::Bool, span },
+            ty: Ty {
+                kind: TyKind::Bool,
+                span,
+            },
             span,
         };
 
         let then_branch = Expr {
             kind: ExprKind::Var(acc_id),
-            ty: Ty { kind: TyKind::Int, span },
+            ty: Ty {
+                kind: TyKind::Int,
+                span,
+            },
             span,
         };
 
@@ -757,7 +781,10 @@ mod tests {
             kind: ExprKind::Call(
                 Box::new(Expr {
                     kind: ExprKind::Global(sum_def_id),
-                    ty: Ty { kind: TyKind::Int, span },
+                    ty: Ty {
+                        kind: TyKind::Int,
+                        span,
+                    },
                     span,
                 }),
                 vec![
@@ -766,16 +793,25 @@ mod tests {
                             BinOp::Sub,
                             Box::new(Expr {
                                 kind: ExprKind::Var(n_id),
-                                ty: Ty { kind: TyKind::Int, span },
+                                ty: Ty {
+                                    kind: TyKind::Int,
+                                    span,
+                                },
                                 span,
                             }),
                             Box::new(Expr {
                                 kind: ExprKind::Literal(Literal::Int(1)),
-                                ty: Ty { kind: TyKind::Int, span },
+                                ty: Ty {
+                                    kind: TyKind::Int,
+                                    span,
+                                },
                                 span,
                             }),
                         ),
-                        ty: Ty { kind: TyKind::Int, span },
+                        ty: Ty {
+                            kind: TyKind::Int,
+                            span,
+                        },
                         span,
                     },
                     Expr {
@@ -783,21 +819,33 @@ mod tests {
                             BinOp::Add,
                             Box::new(Expr {
                                 kind: ExprKind::Var(acc_id),
-                                ty: Ty { kind: TyKind::Int, span },
+                                ty: Ty {
+                                    kind: TyKind::Int,
+                                    span,
+                                },
                                 span,
                             }),
                             Box::new(Expr {
                                 kind: ExprKind::Var(n_id),
-                                ty: Ty { kind: TyKind::Int, span },
+                                ty: Ty {
+                                    kind: TyKind::Int,
+                                    span,
+                                },
                                 span,
                             }),
                         ),
-                        ty: Ty { kind: TyKind::Int, span },
+                        ty: Ty {
+                            kind: TyKind::Int,
+                            span,
+                        },
                         span,
                     },
                 ],
             ),
-            ty: Ty { kind: TyKind::Int, span },
+            ty: Ty {
+                kind: TyKind::Int,
+                span,
+            },
             span,
         };
 
@@ -807,7 +855,10 @@ mod tests {
                 Box::new(then_branch),
                 Box::new(recursive_call),
             ),
-            ty: Ty { kind: TyKind::Int, span },
+            ty: Ty {
+                kind: TyKind::Int,
+                span,
+            },
             span,
         };
 
@@ -818,21 +869,32 @@ mod tests {
                 Param {
                     id: n_id,
                     name: "n".to_string(),
-                    ty: Ty { kind: TyKind::Int, span },
+                    ty: Ty {
+                        kind: TyKind::Int,
+                        span,
+                    },
                     span,
                 },
                 Param {
                     id: acc_id,
                     name: "acc".to_string(),
-                    ty: Ty { kind: TyKind::Int, span },
+                    ty: Ty {
+                        kind: TyKind::Int,
+                        span,
+                    },
                     span,
                 },
             ],
-            return_ty: Ty { kind: TyKind::Int, span },
+            return_ty: Ty {
+                kind: TyKind::Int,
+                span,
+            },
             body,
         };
 
-        evaluator.globals.insert(sum_def_id, GlobalDef::Function(fn_def.clone()));
+        evaluator
+            .globals
+            .insert(sum_def_id, GlobalDef::Function(fn_def.clone()));
 
         // Call sum(100, 0) - should compute 1+2+...+100 = 5050
         let closure = Value::Closure {

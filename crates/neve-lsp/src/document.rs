@@ -1,9 +1,9 @@
 //! Document management for the LSP server.
 
 use neve_common::Span;
+use neve_hir::{Module, lower};
 use neve_parser::parse;
 use neve_syntax::SourceFile;
-use neve_hir::{Module, lower};
 use neve_typeck::check;
 
 use crate::symbol_index::SymbolIndex;
@@ -54,7 +54,7 @@ impl DiagnosticSeverity {
             _ => DiagnosticSeverity::Error,
         }
     }
-    
+
     /// Get the numeric level for this severity.
     pub fn to_level(self) -> u8 {
         match self {
@@ -80,19 +80,19 @@ impl Document {
         doc.analyze();
         doc
     }
-    
+
     /// Update the document content.
     pub fn update(&mut self, content: String) {
         self.content = content;
         self.diagnostics.clear();
         self.analyze();
     }
-    
+
     /// Analyze the document.
     fn analyze(&mut self) {
         // Parse
         let (ast, parse_diagnostics) = parse(&self.content);
-        
+
         for diag in parse_diagnostics {
             self.diagnostics.push(Diagnostic {
                 span: diag.span,
@@ -100,16 +100,16 @@ impl Document {
                 severity: DiagnosticSeverity::Error,
             });
         }
-        
+
         // Build symbol index for navigation
         self.symbol_index = Some(SymbolIndex::from_ast(&ast));
-        
+
         self.ast = Some(ast.clone());
-        
+
         // HIR lowering
         let hir = lower(&ast);
         self.hir = Some(hir.clone());
-        
+
         // Type checking
         let type_diagnostics = check(&hir);
         for diag in type_diagnostics {
@@ -120,7 +120,7 @@ impl Document {
             });
         }
     }
-    
+
     /// Get the offset for a line and column.
     pub fn offset_at(&self, line: u32, column: u32) -> usize {
         let mut offset = 0;
@@ -132,12 +132,12 @@ impl Document {
         }
         offset
     }
-    
+
     /// Get the line and column for an offset.
     pub fn position_at(&self, offset: usize) -> (u32, u32) {
         let mut line = 0;
         let mut col = 0;
-        
+
         for (i, c) in self.content.chars().enumerate() {
             if i == offset {
                 break;
@@ -149,8 +149,7 @@ impl Document {
                 col += 1;
             }
         }
-        
+
         (line, col)
     }
 }
-

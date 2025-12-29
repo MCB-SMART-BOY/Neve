@@ -1,17 +1,14 @@
 //! Integration tests for neve-lsp crate.
 
-use neve_lsp::{Document, SymbolIndex, generate_semantic_tokens};
 use neve_lexer::Lexer;
+use neve_lsp::{Document, SymbolIndex, generate_semantic_tokens};
 use neve_parser::parse;
 
 // Document tests
 
 #[test]
 fn test_document_new() {
-    let doc = Document::new(
-        "file:///test.neve".to_string(),
-        "let x = 1;".to_string(),
-    );
+    let doc = Document::new("file:///test.neve".to_string(), "let x = 1;".to_string());
     assert!(doc.ast.is_some());
 }
 
@@ -37,10 +34,7 @@ fn test_position_at() {
 
 #[test]
 fn test_position_at_end() {
-    let doc = Document::new(
-        "file:///test.neve".to_string(),
-        "abc".to_string(),
-    );
+    let doc = Document::new("file:///test.neve".to_string(), "abc".to_string());
     assert_eq!(doc.position_at(0), (0, 0));
     assert_eq!(doc.position_at(1), (0, 1));
     assert_eq!(doc.position_at(2), (0, 2));
@@ -100,7 +94,9 @@ fn test_find_definition() {
     let index = SymbolIndex::from_ast(&ast);
 
     // Find the reference to foo in "foo()"
-    let foo_refs: Vec<_> = index.references.iter()
+    let foo_refs: Vec<_> = index
+        .references
+        .iter()
         .filter(|r| r.name == "foo" && !r.is_write)
         .collect();
 

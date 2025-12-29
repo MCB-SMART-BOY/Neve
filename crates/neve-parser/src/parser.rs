@@ -6,8 +6,8 @@ use neve_lexer::{Token, TokenKind};
 use neve_syntax::*;
 
 use crate::recovery::{
-    DelimiterStack, DelimiterKind, RecoveryMode,
-    is_sync_token, is_stmt_start, is_stmt_end, STMT_ENDS,
+    DelimiterKind, DelimiterStack, RecoveryMode, STMT_ENDS, is_stmt_end, is_stmt_start,
+    is_sync_token,
 };
 
 /// The Neve parser.
@@ -45,7 +45,7 @@ impl Parser {
             // Track delimiter state for each token
             let kind = self.current_kind().clone();
             self.delimiter_stack.update(&kind);
-            
+
             if let Some(item) = self.parse_item() {
                 items.push(item);
             } else {
@@ -127,7 +127,11 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         LetDef {
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
             pattern,
             ty,
             value,
@@ -152,7 +156,11 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         FnDef {
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
             name,
             generics,
             params,
@@ -169,7 +177,11 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         TypeAlias {
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
             name,
             generics,
             ty,
@@ -185,7 +197,11 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         StructDef {
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
             name,
             generics,
             fields,
@@ -201,7 +217,11 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         EnumDef {
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
             name,
             generics,
             variants,
@@ -228,7 +248,11 @@ impl Parser {
         self.expect(TokenKind::Semicolon);
 
         TraitDef {
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private },
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
             name,
             generics,
             items,
@@ -331,7 +355,11 @@ impl Parser {
             path,
             items,
             alias,
-            visibility: if is_pub { Visibility::Public } else { Visibility::Private }
+            visibility: if is_pub {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
         }
     }
 
@@ -981,9 +1009,7 @@ impl Parser {
                 let span = start.merge(expr.span);
                 Expr::new(ExprKind::Lazy(Box::new(expr)), span)
             }
-            TokenKind::InterpolatedStart => {
-                self.parse_interpolated_string()
-            }
+            TokenKind::InterpolatedStart => self.parse_interpolated_string(),
             TokenKind::PathLit(p) => {
                 self.advance();
                 Expr::new(ExprKind::PathLit(p), start)
@@ -1049,7 +1075,10 @@ impl Parser {
         self.advance(); // [
 
         if self.eat(TokenKind::RBracket) {
-            return Expr::new(ExprKind::List(Vec::new()), start.merge(self.previous_span()));
+            return Expr::new(
+                ExprKind::List(Vec::new()),
+                start.merge(self.previous_span()),
+            );
         }
 
         let first = self.parse_expr();
@@ -1127,7 +1156,10 @@ impl Parser {
         self.advance(); // #{
 
         if self.eat(TokenKind::RBrace) {
-            return Expr::new(ExprKind::Record(Vec::new()), start.merge(self.previous_span()));
+            return Expr::new(
+                ExprKind::Record(Vec::new()),
+                start.merge(self.previous_span()),
+            );
         }
 
         // Check for record update: #{ base | field = value }
@@ -1208,7 +1240,7 @@ impl Parser {
     fn parse_block(&mut self) -> Expr {
         let start = self.current_span();
         self.advance(); // {
-        
+
         // Save previous recovery mode and set block-appropriate mode
         let prev_recovery = self.recovery_mode;
         self.recovery_mode = RecoveryMode::Delimiter(DelimiterKind::Brace);
@@ -1421,9 +1453,7 @@ impl Parser {
     }
 
     fn parse_args(&mut self) -> Vec<Expr> {
-        self.parse_comma_list(TokenKind::RParen, |parser| {
-            Some(parser.parse_expr())
-        })
+        self.parse_comma_list(TokenKind::RParen, |parser| Some(parser.parse_expr()))
     }
 
     // ========== Pattern Parsing ==========
@@ -1442,7 +1472,11 @@ impl Parser {
         if patterns.len() == 1 {
             patterns.pop().unwrap()
         } else {
-            let span = patterns.first().unwrap().span.merge(patterns.last().unwrap().span);
+            let span = patterns
+                .first()
+                .unwrap()
+                .span
+                .merge(patterns.last().unwrap().span);
             Pattern::new(PatternKind::Or(patterns), span)
         }
     }
@@ -1454,7 +1488,7 @@ impl Parser {
             // Peek ahead to check if this is a binding pattern (name @ pattern)
             // or a constructor pattern (Name(args)) or just a variable
             let ident = self.parse_ident();
-            
+
             if self.eat(TokenKind::At) {
                 // Binding pattern: name @ pattern
                 let pattern = self.parse_primary_pattern();
@@ -1467,7 +1501,7 @@ impl Parser {
                     span,
                 );
             }
-            
+
             if self.check(TokenKind::LParen) {
                 // Constructor pattern: Name(args)
                 self.advance(); // consume '('
@@ -1490,7 +1524,7 @@ impl Parser {
                     span,
                 );
             }
-            
+
             // Just a variable pattern
             return Pattern::new(PatternKind::Var(ident.clone()), ident.span);
         }
@@ -1560,7 +1594,10 @@ impl Parser {
             TokenKind::LParen => {
                 self.advance();
                 if self.eat(TokenKind::RParen) {
-                    return Pattern::new(PatternKind::Tuple(Vec::new()), start.merge(self.previous_span()));
+                    return Pattern::new(
+                        PatternKind::Tuple(Vec::new()),
+                        start.merge(self.previous_span()),
+                    );
                 }
                 let first = self.parse_pattern();
                 if self.eat(TokenKind::Comma) {
@@ -1584,7 +1621,10 @@ impl Parser {
             TokenKind::LBracket => {
                 self.advance();
                 if self.eat(TokenKind::RBracket) {
-                    return Pattern::new(PatternKind::List(Vec::new()), start.merge(self.previous_span()));
+                    return Pattern::new(
+                        PatternKind::List(Vec::new()),
+                        start.merge(self.previous_span()),
+                    );
                 }
 
                 let mut init = Vec::new();
@@ -1770,7 +1810,9 @@ impl Parser {
     // ========== Token Helpers ==========
 
     fn current(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or(&self.tokens[self.tokens.len() - 1])
+        self.tokens
+            .get(self.pos)
+            .unwrap_or(&self.tokens[self.tokens.len() - 1])
     }
 
     fn current_kind(&self) -> &TokenKind {
@@ -1832,12 +1874,18 @@ impl Parser {
     /// Synchronize to the next statement boundary.
     /// This skips tokens until we find a synchronization point.
     fn synchronize(&mut self) {
+        // Must advance at least once to avoid infinite loop when we can't parse current token
+        let mut advanced = false;
+        
         while !self.at_end() {
             // If we just passed a statement-ending token, we're at a statement boundary
             if self.pos > 0 {
                 let prev = &self.tokens[self.pos - 1].kind;
                 if is_stmt_end(prev) {
-                    return;
+                    // Only return if we've advanced, otherwise we'd loop forever
+                    if advanced {
+                        return;
+                    }
                 }
             }
 
@@ -1850,15 +1898,16 @@ impl Parser {
             let kind = self.current_kind().clone();
             self.delimiter_stack.update(&kind);
             self.advance();
+            advanced = true;
         }
     }
-    
+
     /// Check if we're at the end of a statement.
     /// Uses STMT_ENDS constant for the token set.
     fn at_stmt_end(&self) -> bool {
-        STMT_ENDS.iter().any(|k| 
-            std::mem::discriminant(self.current_kind()) == std::mem::discriminant(k)
-        )
+        STMT_ENDS
+            .iter()
+            .any(|k| std::mem::discriminant(self.current_kind()) == std::mem::discriminant(k))
     }
 
     /// Synchronize to a specific token or statement boundary.
@@ -1867,12 +1916,12 @@ impl Parser {
             if self.check(target.clone()) {
                 return;
             }
-            
+
             // Stop at statement-ending tokens
             if self.at_stmt_end() {
                 return;
             }
-            
+
             // Also stop at statement boundaries (sync tokens like keywords)
             if is_sync_token(self.current_kind()) {
                 return;
@@ -1891,7 +1940,7 @@ impl Parser {
 
         while !self.at_end() && depth > 0 {
             let current = self.current_kind().clone();
-            
+
             if current == kind.opening_token() {
                 depth += 1;
             } else if current == target {
@@ -1900,7 +1949,7 @@ impl Parser {
                     return; // Don't consume the closing delimiter
                 }
             }
-            
+
             self.advance();
         }
     }
@@ -1946,25 +1995,25 @@ impl Parser {
         F: FnMut(&mut Self) -> Option<T>,
     {
         let mut items = Vec::new();
-        
+
         while !self.check(closing.clone()) && !self.at_end() {
             if let Some(item) = parse_item(self) {
                 items.push(item);
             } else {
                 // Recovery: skip to comma or closing delimiter
-                while !self.check(TokenKind::Comma) 
-                    && !self.check(closing.clone()) 
-                    && !self.at_end() 
+                while !self.check(TokenKind::Comma)
+                    && !self.check(closing.clone())
+                    && !self.at_end()
                 {
                     self.advance();
                 }
             }
-            
+
             if !self.eat(TokenKind::Comma) {
                 break;
             }
         }
-        
+
         items
     }
 }
@@ -1998,7 +2047,10 @@ impl<T> Iterator for List<T> {
         let source_file = parser.parse_file();
 
         // Check for no errors
-        assert!(parser.diagnostics().is_empty(), "Parser should not produce errors");
+        assert!(
+            parser.diagnostics().is_empty(),
+            "Parser should not produce errors"
+        );
 
         // Verify we parsed 3 items
         assert_eq!(source_file.items.len(), 3);
@@ -2043,4 +2095,3 @@ impl<T> Iterator for List<T> {
         }
     }
 }
-

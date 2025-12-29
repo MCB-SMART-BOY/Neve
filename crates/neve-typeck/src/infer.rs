@@ -1,7 +1,7 @@
 //! Type inference using Hindley-Milner algorithm.
 
-use neve_hir::{Ty, TyKind};
 use neve_common::Span;
+use neve_hir::{Ty, TyKind};
 
 /// Type variable counter for fresh variables.
 pub struct InferContext {

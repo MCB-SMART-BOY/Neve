@@ -1,11 +1,11 @@
 //! Runtime values.
 
+use crate::Environment;
+use neve_hir::{Expr, Param};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
-use std::cell::RefCell;
-use neve_hir::{Expr, Param};
-use crate::Environment;
 
 // Forward declaration for AstClosure
 pub use crate::ast_eval::AstClosure;
@@ -115,7 +115,10 @@ pub enum Value {
     /// Built-in function
     Builtin(BuiltinFn),
     /// Built-in function with Rc closure (for stdlib)
-    BuiltinFn(&'static str, Rc<dyn Fn(Vec<Value>) -> Result<Value, String>>),
+    BuiltinFn(
+        &'static str,
+        Rc<dyn Fn(Vec<Value>) -> Result<Value, String>>,
+    ),
     /// Variant/enum value (tag, payload)
     Variant(String, Box<Value>),
     /// Option::Some

@@ -13,7 +13,7 @@ mod parser;
 mod recovery;
 
 pub use parser::Parser;
-pub use recovery::{RecoveryMode, DelimiterKind, DelimiterStack};
+pub use recovery::{DelimiterKind, DelimiterStack, RecoveryMode};
 
 use neve_diagnostic::Diagnostic;
 use neve_lexer::Lexer;

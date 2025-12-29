@@ -2,20 +2,44 @@
 //!
 //! Builds a package from a Neve file or flake.
 
+use crate::output;
+use crate::platform::{BuildBackend, PlatformCapabilities, warn_limited_sandbox};
+use neve_builder::{Builder, BuilderConfig};
+use neve_derive::Derivation;
+use neve_diagnostic::emit;
+use neve_eval::{AstEvaluator, Value};
+use neve_parser::parse;
+use neve_store::Store;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
-use neve_parser::parse;
-use neve_diagnostic::emit;
-use neve_eval::{AstEvaluator, Value};
-use neve_derive::Derivation;
-use neve_store::Store;
-use neve_builder::{Builder, BuilderConfig};
-use crate::output;
 
-pub fn run(package: Option<&str>) -> Result<(), String> {
+pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
     let start = Instant::now();
-    
+
+    // Detect platform and determine build backend
+    let caps = PlatformCapabilities::detect();
+    let backend = match backend_arg {
+        "auto" => caps.recommended_backend(),
+        "native" => BuildBackend::Native,
+        "docker" => BuildBackend::Docker,
+        "simple" => BuildBackend::Simple,
+        _ => {
+            return Err(format!(
+                "unknown backend: {}. Use 'native', 'docker', 'simple', or 'auto'",
+                backend_arg
+            ));
+        }
+    };
+
+    // Warn about limited sandbox on non-Linux
+    if backend == BuildBackend::Simple && !caps.can_sandbox_build() {
+        warn_limited_sandbox();
+    }
+
+    // Show backend info
+    output::info(&format!("Build backend: {}", backend));
+
     // Determine what to build
     let (source_path, target_attr) = match package {
         Some(pkg) => {
@@ -38,66 +62,69 @@ pub fn run(package: Option<&str>) -> Result<(), String> {
             }
         }
     };
-    
+
     let path = Path::new(&source_path);
     if !path.exists() {
         return Err(format!("file not found: {}", source_path));
     }
-    
+
     output::info(&format!("Evaluating {}", source_path));
-    
+
     // Parse and evaluate the file
     let source = fs::read_to_string(path)
         .map_err(|e| format!("cannot read file '{}': {}", source_path, e))?;
-    
+
     let (ast, diagnostics) = parse(&source);
-    
+
     for diag in &diagnostics {
         emit(&source, &source_path, diag);
     }
-    
+
     if !diagnostics.is_empty() {
         return Err("parse error".to_string());
     }
-    
+
     // Evaluate the file
     let mut evaluator = if let Some(parent) = path.parent() {
         AstEvaluator::new().with_base_path(parent.to_path_buf())
     } else {
         AstEvaluator::new()
     };
-    
-    let value = evaluator.eval_file(&ast)
+
+    let value = evaluator
+        .eval_file(&ast)
         .map_err(|e| format!("evaluation error: {:?}", e))?;
-    
+
     // Extract derivation(s) from the result
     let derivations = extract_derivations(&value, target_attr.as_deref())?;
-    
+
     if derivations.is_empty() {
         return Err("no derivations found to build".to_string());
     }
-    
-    output::info(&format!("Found {} derivation(s) to build", derivations.len()));
-    
+
+    output::info(&format!(
+        "Found {} derivation(s) to build",
+        derivations.len()
+    ));
+
     // Open the store
-    let store = Store::open()
-        .map_err(|e| format!("cannot open store: {}", e))?;
-    
+    let store = Store::open().map_err(|e| format!("cannot open store: {}", e))?;
+
     // Create builder
     let config = BuilderConfig::default();
     let mut builder = Builder::with_config(store, config);
-    
+
     // Build each derivation
     let mut built_count = 0;
     let mut failed_count = 0;
-    
+
     for drv in &derivations {
         output::info(&format!("Building {}-{}", drv.name, drv.version));
-        
+
         match builder.build(drv) {
             Ok(result) => {
                 built_count += 1;
-                
+
                 for (output_name, store_path) in &result.outputs {
                     let path_display = store_path.display_name();
                     if output_name == "out" {
@@ -106,7 +133,7 @@ pub fn run(package: Option<&str>) -> Result<(), String> {
                         output::success(&format!("Built {}: {}", output_name, path_display));
                     }
                 }
-                
+
                 if result.duration_secs > 0.1 {
                     output::info(&format!("Build time: {:.2}s", result.duration_secs));
                 }
@@ -117,20 +144,22 @@ pub fn run(package: Option<&str>) -> Result<(), String> {
             }
         }
     }
-    
+
     let elapsed = start.elapsed();
-    
+
     // Summary
     if failed_count == 0 {
         output::success(&format!(
             "Successfully built {} derivation(s) in {:.2}s",
-            built_count, elapsed.as_secs_f64()
+            built_count,
+            elapsed.as_secs_f64()
         ));
         Ok(())
     } else {
         output::error(&format!(
             "{} of {} build(s) failed",
-            failed_count, derivations.len()
+            failed_count,
+            derivations.len()
         ));
         Err("build failed".to_string())
     }
@@ -139,7 +168,7 @@ pub fn run(package: Option<&str>) -> Result<(), String> {
 /// Extract derivations from an evaluated value.
 fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Derivation>, String> {
     let mut derivations = Vec::new();
-    
+
     // Handle different value structures
     match value {
         Value::Record(fields) => {
@@ -151,10 +180,10 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
                     return Err(format!("attribute '{}' not found", target_name));
                 }
             }
-            
+
             // Look for standard output attributes
             let current_system = current_system();
-            
+
             // Check for flake-style outputs
             if let Some(Value::Record(packages)) = fields.get("packages")
                 && let Some(Value::Record(system_pkgs)) = packages.get(&current_system)
@@ -176,14 +205,14 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
                     }
                 }
             }
-            
+
             // Check for derivation-like structure directly
             if derivations.is_empty()
                 && let Some(drv) = value_to_derivation(value)?
             {
                 derivations.push(drv);
             }
-            
+
             // Look for 'output' or 'package' attribute
             if derivations.is_empty() {
                 for attr in &["output", "package", "default"] {
@@ -211,7 +240,7 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
             }
         }
     }
-    
+
     Ok(derivations)
 }
 
@@ -220,30 +249,56 @@ fn value_to_derivation(value: &Value) -> Result<Option<Derivation>, String> {
     match value {
         Value::Record(fields) => {
             // Check if this looks like a derivation record
-            let name = fields.get("name")
-                .and_then(|v| if let Value::String(s) = v { Some(s.to_string()) } else { None });
-            
+            let name = fields.get("name").and_then(|v| {
+                if let Value::String(s) = v {
+                    Some(s.to_string())
+                } else {
+                    None
+                }
+            });
+
             if name.is_none() {
                 return Ok(None);
             }
             let name = name.unwrap();
-            
-            let version = fields.get("version")
-                .and_then(|v| if let Value::String(s) = v { Some(s.to_string()) } else { None })
+
+            let version = fields
+                .get("version")
+                .and_then(|v| {
+                    if let Value::String(s) = v {
+                        Some(s.to_string())
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| "0.0.0".to_string());
-            
-            let system = fields.get("system")
-                .and_then(|v| if let Value::String(s) = v { Some(s.to_string()) } else { None })
+
+            let system = fields
+                .get("system")
+                .and_then(|v| {
+                    if let Value::String(s) = v {
+                        Some(s.to_string())
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(current_system);
-            
-            let builder = fields.get("builder")
-                .and_then(|v| if let Value::String(s) = v { Some(s.to_string()) } else { None })
+
+            let builder = fields
+                .get("builder")
+                .and_then(|v| {
+                    if let Value::String(s) = v {
+                        Some(s.to_string())
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| "/bin/sh".to_string());
-            
+
             let mut drv = Derivation::builder(&name, &version)
                 .system(&system)
                 .builder_path(&builder);
-            
+
             // Add build args
             if let Some(Value::List(args)) = fields.get("args") {
                 for arg in args.iter() {
@@ -252,7 +307,7 @@ fn value_to_derivation(value: &Value) -> Result<Option<Derivation>, String> {
                     }
                 }
             }
-            
+
             // Add environment variables
             if let Some(Value::Record(env)) = fields.get("env") {
                 for (key, val) in env.iter() {
@@ -261,13 +316,13 @@ fn value_to_derivation(value: &Value) -> Result<Option<Derivation>, String> {
                     }
                 }
             }
-            
+
             // Handle build script
             if let Some(Value::String(build_script)) = fields.get("build") {
                 drv = drv.arg("-c".to_string());
                 drv = drv.arg(build_script.to_string());
             }
-            
+
             Ok(Some(drv.build()))
         }
         _ => Ok(None),

@@ -1,12 +1,12 @@
 //! Integration tests for neve-fetch crate.
 
+use neve_derive::Hash;
+use neve_fetch::Source;
+use neve_fetch::archive::ArchiveFormat;
+use neve_fetch::verify::{hash_dir, verify_content, verify_file};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use neve_fetch::Source;
-use neve_fetch::archive::ArchiveFormat;
-use neve_fetch::verify::{verify_content, verify_file, hash_dir};
-use neve_derive::Hash;
 
 // Archive format tests
 
@@ -28,18 +28,14 @@ fn test_format_detection() {
         ArchiveFormat::from_name("foo.tar"),
         Some(ArchiveFormat::Tar)
     );
-    assert_eq!(
-        ArchiveFormat::from_name("foo.zip"),
-        None
-    );
+    assert_eq!(ArchiveFormat::from_name("foo.zip"), None);
 }
 
 // Source tests
 
 #[test]
 fn test_source_builder() {
-    let source = Source::url("https://example.com/file.tar.gz")
-        .with_name("my-source");
+    let source = Source::url("https://example.com/file.tar.gz").with_name("my-source");
 
     match source {
         Source::Url { url, name, .. } => {
@@ -64,7 +60,7 @@ fn test_source_path() {
 #[test]
 fn test_source_git() {
     let source = Source::git("https://github.com/user/repo.git", "main");
-    
+
     match source {
         Source::Git { url, rev, .. } => {
             assert_eq!(url, "https://github.com/user/repo.git");
@@ -141,14 +137,11 @@ fn test_fetch_url() {
 fn test_clone_repo() {
     use neve_fetch::git::clone_repo;
     use tempfile::TempDir;
-    
+
     let temp_dir = TempDir::new().unwrap();
     let repo_path = temp_dir.path().join("repo");
 
-    let result = clone_repo(
-        "https://github.com/octocat/Hello-World.git",
-        &repo_path,
-    );
+    let result = clone_repo("https://github.com/octocat/Hello-World.git", &repo_path);
 
     assert!(result.is_ok());
     assert!(repo_path.join(".git").exists());

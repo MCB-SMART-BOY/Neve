@@ -1,7 +1,7 @@
 //! Diagnostic types and builders.
 
-use neve_common::Span;
 use crate::ErrorCode;
+use neve_common::Span;
 
 /// Severity level of a diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

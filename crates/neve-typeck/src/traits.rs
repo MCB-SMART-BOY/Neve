@@ -8,9 +8,9 @@
 //! - Trait resolution (finding the right impl for a type)
 //! - Associated types and their resolution
 
-use std::collections::HashMap;
 use neve_common::Span;
-use neve_hir::{DefId, Ty, TyKind, TraitDef, ImplDef, GenericParam};
+use neve_hir::{DefId, GenericParam, ImplDef, TraitDef, Ty, TyKind};
+use std::collections::HashMap;
 
 /// A trait ID for internal tracking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -139,7 +139,9 @@ impl TraitResolver {
         let trait_id = TraitId(self.next_trait_id);
         self.next_trait_id += 1;
 
-        let methods: Vec<TraitMethod> = def.items.iter()
+        let methods: Vec<TraitMethod> = def
+            .items
+            .iter()
             .map(|item| TraitMethod {
                 name: item.name.clone(),
                 params: item.params.clone(),
@@ -149,10 +151,14 @@ impl TraitResolver {
             .collect();
 
         // Extract associated types from the trait definition
-        let assoc_types: Vec<AssocType> = def.assoc_types.iter()
+        let assoc_types: Vec<AssocType> = def
+            .assoc_types
+            .iter()
             .map(|at| AssocType {
                 name: at.name.clone(),
-                bounds: at.bounds.iter()
+                bounds: at
+                    .bounds
+                    .iter()
                     .filter_map(|bound_ty| self.ty_to_trait_bound(bound_ty))
                     .collect(),
                 default: at.default.clone(),
@@ -179,11 +185,14 @@ impl TraitResolver {
         let impl_id = ImplId(self.next_impl_id);
         self.next_impl_id += 1;
 
-        let trait_ref = def.trait_ref.as_ref().and_then(|ty| {
-            self.resolve_trait_ref(ty)
-        });
+        let trait_ref = def
+            .trait_ref
+            .as_ref()
+            .and_then(|ty| self.resolve_trait_ref(ty));
 
-        let methods: Vec<ImplMethod> = def.items.iter()
+        let methods: Vec<ImplMethod> = def
+            .items
+            .iter()
             .map(|item| ImplMethod {
                 name: item.name.clone(),
                 params: item.params.iter().map(|p| p.ty.clone()).collect(),
@@ -193,7 +202,9 @@ impl TraitResolver {
             .collect();
 
         // Extract associated type implementations
-        let assoc_types: Vec<AssocTypeResolution> = def.assoc_type_impls.iter()
+        let assoc_types: Vec<AssocTypeResolution> = def
+            .assoc_type_impls
+            .iter()
             .map(|ati| AssocTypeResolution {
                 name: ati.name.clone(),
                 ty: ati.ty.clone(),
@@ -219,7 +230,10 @@ impl TraitResolver {
         } else {
             // Inherent impl
             let type_key = self.type_key(&def.self_ty);
-            self.inherent_impls.entry(type_key).or_default().push(impl_id);
+            self.inherent_impls
+                .entry(type_key)
+                .or_default()
+                .push(impl_id);
         }
 
         impl_id
@@ -290,14 +304,15 @@ impl TraitResolver {
     /// Find implementations of a trait for a specific type.
     pub fn find_trait_impl(&self, trait_id: TraitId, self_ty: &Ty) -> Option<ImplId> {
         let impls = self.trait_impls.get(&trait_id)?;
-        
+
         for impl_id in impls {
             if let Some(info) = self.impls.get(impl_id)
-                && self.types_match(&info.self_ty, self_ty) {
-                    return Some(*impl_id);
-                }
+                && self.types_match(&info.self_ty, self_ty)
+            {
+                return Some(*impl_id);
+            }
         }
-        
+
         None
     }
 
@@ -345,26 +360,26 @@ impl TraitResolver {
         for (trait_id, impl_ids) in &self.trait_impls {
             // Check if trait has this method
             if let Some(trait_info) = self.traits.get(trait_id) {
-                let has_method = trait_info.methods.iter()
-                    .any(|m| m.name == method_name);
-                
+                let has_method = trait_info.methods.iter().any(|m| m.name == method_name);
+
                 if has_method {
                     // Find an impl that matches our type
                     for impl_id in impl_ids {
                         if let Some(info) = self.impls.get(impl_id)
-                            && self.types_match(&info.self_ty, self_ty) {
-                                for method in &info.methods {
-                                    if method.name == method_name {
-                                        return Some(MethodResolution {
-                                            impl_id: *impl_id,
-                                            method_name: method_name.to_string(),
-                                            self_ty: info.self_ty.clone(),
-                                            params: method.params.clone(),
-                                            return_ty: method.return_ty.clone(),
-                                        });
-                                    }
+                            && self.types_match(&info.self_ty, self_ty)
+                        {
+                            for method in &info.methods {
+                                if method.name == method_name {
+                                    return Some(MethodResolution {
+                                        impl_id: *impl_id,
+                                        method_name: method_name.to_string(),
+                                        self_ty: info.self_ty.clone(),
+                                        params: method.params.clone(),
+                                        return_ty: method.return_ty.clone(),
+                                    });
                                 }
                             }
+                        }
                     }
                 }
             }
@@ -379,18 +394,18 @@ impl TraitResolver {
 
         if let Some(info) = self.impls.get(&impl_id)
             && let Some(trait_ref) = &info.trait_ref
-                && let Some(trait_info) = self.traits.get(&trait_ref.trait_id) {
-                    let impl_method_names: Vec<_> = info.methods.iter()
-                        .map(|m| m.name.as_str())
-                        .collect();
+            && let Some(trait_info) = self.traits.get(&trait_ref.trait_id)
+        {
+            let impl_method_names: Vec<_> = info.methods.iter().map(|m| m.name.as_str()).collect();
 
-                    for trait_method in &trait_info.methods {
-                        if !trait_method.has_default
-                            && !impl_method_names.contains(&trait_method.name.as_str()) {
-                                missing.push(trait_method.name.clone());
-                            }
-                    }
+            for trait_method in &trait_info.methods {
+                if !trait_method.has_default
+                    && !impl_method_names.contains(&trait_method.name.as_str())
+                {
+                    missing.push(trait_method.name.clone());
                 }
+            }
+        }
 
         missing
     }
@@ -402,9 +417,11 @@ impl TraitResolver {
 
     /// Get all impls for a trait.
     pub fn impls_for_trait(&self, trait_id: TraitId) -> Vec<&ImplInfo> {
-        self.trait_impls.get(&trait_id)
+        self.trait_impls
+            .get(&trait_id)
             .map(|impl_ids| {
-                impl_ids.iter()
+                impl_ids
+                    .iter()
                     .filter_map(|id| self.impls.get(id))
                     .collect()
             })
@@ -422,14 +439,14 @@ impl TraitResolver {
         // Find the impl for this type and trait
         let impl_id = self.find_trait_impl(trait_id, self_ty)?;
         let impl_info = self.impls.get(&impl_id)?;
-        
+
         // Look for the associated type in the impl
         for assoc in &impl_info.assoc_types {
             if assoc.name == assoc_type_name {
                 return Some(assoc.ty.clone());
             }
         }
-        
+
         // Check if the trait has a default for this associated type
         let trait_info = self.traits.get(&trait_id)?;
         for assoc in &trait_info.assoc_types {
@@ -437,13 +454,14 @@ impl TraitResolver {
                 return assoc.default.clone();
             }
         }
-        
+
         None
     }
 
     /// Get all associated types defined by a trait.
     pub fn trait_assoc_types(&self, trait_id: TraitId) -> Vec<&AssocType> {
-        self.traits.get(&trait_id)
+        self.traits
+            .get(&trait_id)
             .map(|info| info.assoc_types.iter().collect())
             .unwrap_or_default()
     }
@@ -454,19 +472,20 @@ impl TraitResolver {
 
         if let Some(info) = self.impls.get(&impl_id)
             && let Some(trait_ref) = &info.trait_ref
-                && let Some(trait_info) = self.traits.get(&trait_ref.trait_id) {
-                    let impl_assoc_names: Vec<_> = info.assoc_types.iter()
-                        .map(|a| a.name.as_str())
-                        .collect();
+            && let Some(trait_info) = self.traits.get(&trait_ref.trait_id)
+        {
+            let impl_assoc_names: Vec<_> =
+                info.assoc_types.iter().map(|a| a.name.as_str()).collect();
 
-                    for trait_assoc in &trait_info.assoc_types {
-                        // Required if no default
-                        if trait_assoc.default.is_none()
-                            && !impl_assoc_names.contains(&trait_assoc.name.as_str()) {
-                                missing.push(trait_assoc.name.clone());
-                            }
-                    }
+            for trait_assoc in &trait_info.assoc_types {
+                // Required if no default
+                if trait_assoc.default.is_none()
+                    && !impl_assoc_names.contains(&trait_assoc.name.as_str())
+                {
+                    missing.push(trait_assoc.name.clone());
                 }
+            }
+        }
 
         missing
     }
@@ -556,7 +575,9 @@ impl ConstraintSolver {
 
     /// Check if a type satisfies a trait bound.
     fn is_satisfied(&self, ty: &Ty, bound: &TraitBound) -> bool {
-        self.trait_resolver.find_trait_impl(bound.trait_id, ty).is_some()
+        self.trait_resolver
+            .find_trait_impl(bound.trait_id, ty)
+            .is_some()
     }
 
     /// Get the trait resolver.
@@ -577,4 +598,3 @@ pub struct UnsatisfiedConstraint {
     pub bound: TraitBound,
     pub span: Span,
 }
-

@@ -2,8 +2,8 @@
 //!
 //! This crate provides the lexer that converts source code into tokens.
 
-mod token;
 mod lexer;
+mod token;
 
-pub use token::{Token, TokenKind};
 pub use lexer::Lexer;
+pub use token::{Token, TokenKind};

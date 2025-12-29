@@ -1,7 +1,7 @@
 //! Expression AST nodes.
 
-use neve_common::Span;
 use crate::{Ident, Pattern, Type};
+use neve_common::Span;
 
 /// An expression.
 #[derive(Debug, Clone)]
@@ -64,10 +64,7 @@ pub enum ExprKind {
     },
 
     /// Function call `f(x, y)`
-    Call {
-        func: Box<Expr>,
-        args: Vec<Expr>,
-    },
+    Call { func: Box<Expr>, args: Vec<Expr> },
 
     /// Method call `x.foo(y)`
     MethodCall {
@@ -77,28 +74,16 @@ pub enum ExprKind {
     },
 
     /// Field access `x.field`
-    Field {
-        base: Box<Expr>,
-        field: Ident,
-    },
+    Field { base: Box<Expr>, field: Ident },
 
     /// Tuple index `t.0`
-    TupleIndex {
-        base: Box<Expr>,
-        index: u32,
-    },
+    TupleIndex { base: Box<Expr>, index: u32 },
 
     /// Safe field access `x?.field`
-    SafeField {
-        base: Box<Expr>,
-        field: Ident,
-    },
+    SafeField { base: Box<Expr>, field: Ident },
 
     /// Index `xs[0]`
-    Index {
-        base: Box<Expr>,
-        index: Box<Expr>,
-    },
+    Index { base: Box<Expr>, index: Box<Expr> },
 
     /// Binary operation `a + b`
     Binary {
@@ -108,10 +93,7 @@ pub enum ExprKind {
     },
 
     /// Unary operation `!a` or `-a`
-    Unary {
-        op: UnaryOp,
-        operand: Box<Expr>,
-    },
+    Unary { op: UnaryOp, operand: Box<Expr> },
 
     /// Error propagation `expr?`
     Try(Box<Expr>),
@@ -216,24 +198,24 @@ pub enum StmtKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
     // Arithmetic
-    Add,    // +
-    Sub,    // -
-    Mul,    // *
-    Div,    // /
-    Mod,    // %
-    Pow,    // ^
+    Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
+    Mod, // %
+    Pow, // ^
 
     // Comparison
-    Eq,     // ==
-    Ne,     // !=
-    Lt,     // <
-    Le,     // <=
-    Gt,     // >
-    Ge,     // >=
+    Eq, // ==
+    Ne, // !=
+    Lt, // <
+    Le, // <=
+    Gt, // >
+    Ge, // >=
 
     // Logical
-    And,    // &&
-    Or,     // ||
+    And, // &&
+    Or,  // ||
 
     // Other
     Concat, // ++
@@ -244,8 +226,8 @@ pub enum BinOp {
 /// Unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
-    Neg,    // -
-    Not,    // !
+    Neg, // -
+    Not, // !
 }
 
 /// A part of an interpolated string.

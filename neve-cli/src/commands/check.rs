@@ -1,15 +1,15 @@
 //! The `neve check` command.
 
-use std::fs;
-use neve_parser::parse;
-use neve_hir::lower;
-use neve_typeck::check;
-use neve_diagnostic::emit;
 use crate::output;
+use neve_diagnostic::emit;
+use neve_hir::lower;
+use neve_parser::parse;
+use neve_typeck::check;
+use std::fs;
 
 pub fn run(file: &str, verbose: bool) -> Result<(), String> {
-    let source = fs::read_to_string(file)
-        .map_err(|e| format!("cannot read file '{}': {}", file, e))?;
+    let source =
+        fs::read_to_string(file).map_err(|e| format!("cannot read file '{}': {}", file, e))?;
 
     // Parse
     let (ast, parse_diagnostics) = parse(&source);

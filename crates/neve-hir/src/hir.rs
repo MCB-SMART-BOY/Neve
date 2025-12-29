@@ -105,11 +105,11 @@ impl ModuleRegistry {
     pub fn register(&mut self, name: String, path: Vec<String>) -> ModuleId {
         let id = ModuleId(self.next_id);
         self.next_id += 1;
-        
+
         let module = Module::new(id, name);
         self.modules.insert(id, module);
         self.path_to_id.insert(path, id);
-        
+
         id
     }
 
@@ -138,7 +138,7 @@ impl ModuleRegistry {
         let Some(module_id) = self.lookup(&import.path) else {
             return Vec::new();
         };
-        
+
         let Some(module) = self.get(module_id) else {
             return Vec::new();
         };
@@ -151,7 +151,8 @@ impl ModuleRegistry {
             }
             ImportKind::Items(names) => {
                 // Import specific items
-                names.iter()
+                names
+                    .iter()
                     .filter_map(|name| {
                         self.find_exported_def(module, name)
                             .map(|def_id| (name.clone(), def_id))
@@ -160,10 +161,10 @@ impl ModuleRegistry {
             }
             ImportKind::All => {
                 // Import all public items
-                module.items.iter()
-                    .filter_map(|item| {
-                        self.item_name(item).map(|name| (name, item.id))
-                    })
+                module
+                    .items
+                    .iter()
+                    .filter_map(|item| self.item_name(item).map(|name| (name, item.id)))
                     .collect()
             }
         }
@@ -173,12 +174,15 @@ impl ModuleRegistry {
     fn find_exported_def(&self, module: &Module, name: &str) -> Option<DefId> {
         // Check if the module has an explicit export list
         if let Some(exports) = &module.exports
-            && !exports.contains(&name.to_string()) {
-                return None;
-            }
+            && !exports.contains(&name.to_string())
+        {
+            return None;
+        }
 
         // Find the item with this name
-        module.items.iter()
+        module
+            .items
+            .iter()
             .find(|item| self.item_name(item).as_deref() == Some(name))
             .map(|item| item.id)
     }
@@ -229,7 +233,8 @@ impl ModuleRegistry {
 
     /// Get the module path for a given module ID.
     pub fn module_path(&self, id: ModuleId) -> Option<&Vec<String>> {
-        self.path_to_id.iter()
+        self.path_to_id
+            .iter()
             .find(|&(_, &mid)| mid == id)
             .map(|(path, _)| path)
     }
@@ -271,24 +276,27 @@ impl ModuleRegistry {
         match &import.kind {
             ImportKind::Module => {
                 // Import module as a namespace - return module binding
-                let alias = import.alias.clone()
+                let alias = import
+                    .alias
+                    .clone()
                     .or_else(|| absolute_path.last().cloned())
                     .unwrap_or_else(|| "module".to_string());
-                
+
                 // For module imports, we need special handling
                 // Return empty for now - the caller should handle namespace creation
                 vec![(alias, DefId(u32::MAX))] // Sentinel for module namespace
             }
-            ImportKind::Items(names) => {
-                names.iter()
-                    .filter_map(|name| {
-                        self.find_exported_def(module, name)
-                            .map(|def_id| (name.clone(), def_id))
-                    })
-                    .collect()
-            }
+            ImportKind::Items(names) => names
+                .iter()
+                .filter_map(|name| {
+                    self.find_exported_def(module, name)
+                        .map(|def_id| (name.clone(), def_id))
+                })
+                .collect(),
             ImportKind::All => {
-                module.items.iter()
+                module
+                    .items
+                    .iter()
                     .filter_map(|item| {
                         // Only export if in the export list (or no explicit exports)
                         let name = self.item_name(item)?;
@@ -497,15 +505,29 @@ pub enum Literal {
 
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, Mod, Pow,
-    Eq, Ne, Lt, Le, Gt, Ge,
-    And, Or,
-    Concat, Merge, Pipe,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
+    Concat,
+    Merge,
+    Pipe,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
-    Neg, Not,
+    Neg,
+    Not,
 }
 
 #[derive(Debug, Clone)]

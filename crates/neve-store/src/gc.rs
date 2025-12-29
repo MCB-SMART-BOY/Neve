@@ -32,21 +32,21 @@ impl<'a> GarbageCollector<'a> {
     pub fn add_root(&self, name: &str, path: &StorePath) -> Result<(), StoreError> {
         let roots_dir = self.roots_dir();
         fs::create_dir_all(&roots_dir)?;
-        
+
         let link_path = roots_dir.join(name);
         let target = self.store.to_path(path);
-        
+
         // Remove existing link if present
         if link_path.exists() || link_path.is_symlink() {
             fs::remove_file(&link_path)?;
         }
-        
+
         #[cfg(unix)]
         std::os::unix::fs::symlink(&target, &link_path)?;
-        
+
         #[cfg(not(unix))]
         fs::write(&link_path, target.to_string_lossy().as_bytes())?;
-        
+
         Ok(())
     }
 
@@ -65,24 +65,24 @@ impl<'a> GarbageCollector<'a> {
         if !roots_dir.exists() {
             return Ok(Vec::new());
         }
-        
+
         let mut roots = Vec::new();
         for entry in fs::read_dir(&roots_dir)? {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().into_owned();
             let path = entry.path();
-            
+
             let target = if path.is_symlink() {
                 fs::read_link(&path)?
             } else {
                 PathBuf::from(String::from_utf8_lossy(&fs::read(&path)?).into_owned())
             };
-            
+
             if let Some(store_path) = StorePath::parse(&target) {
                 roots.push((name, store_path));
             }
         }
-        
+
         Ok(roots)
     }
 
@@ -90,41 +90,46 @@ impl<'a> GarbageCollector<'a> {
     pub fn find_live_paths(&mut self) -> Result<HashSet<StorePath>, StoreError> {
         let roots = self.list_roots()?;
         let mut live = HashSet::new();
-        
+
         for (_, root_path) in roots {
             self.add_reachable(&root_path, &mut live)?;
         }
-        
+
         Ok(live)
     }
 
     /// Add a path and all its references to the live set.
-    fn add_reachable(&mut self, path: &StorePath, live: &mut HashSet<StorePath>) -> Result<(), StoreError> {
+    fn add_reachable(
+        &mut self,
+        path: &StorePath,
+        live: &mut HashSet<StorePath>,
+    ) -> Result<(), StoreError> {
         if live.contains(path) {
             return Ok(());
         }
-        
+
         if !self.store.path_exists(path) {
             return Ok(());
         }
-        
+
         live.insert(path.clone());
-        
+
         // If it's a derivation, add its inputs
         if path.name().ends_with(".drv")
-            && let Ok(drv) = self.store.read_derivation(path) {
-                // Collect the paths first to avoid borrow issues
-                let input_drvs: Vec<_> = drv.input_drvs.keys().cloned().collect();
-                let input_srcs: Vec<_> = drv.input_srcs.clone();
-                
-                for input_drv in input_drvs {
-                    self.add_reachable(&input_drv, live)?;
-                }
-                for input_src in input_srcs {
-                    self.add_reachable(&input_src, live)?;
-                }
+            && let Ok(drv) = self.store.read_derivation(path)
+        {
+            // Collect the paths first to avoid borrow issues
+            let input_drvs: Vec<_> = drv.input_drvs.keys().cloned().collect();
+            let input_srcs: Vec<_> = drv.input_srcs.clone();
+
+            for input_drv in input_drvs {
+                self.add_reachable(&input_drv, live)?;
             }
-        
+            for input_src in input_srcs {
+                self.add_reachable(&input_src, live)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -132,10 +137,10 @@ impl<'a> GarbageCollector<'a> {
     pub fn collect(&mut self) -> Result<GcResult, StoreError> {
         let live = self.find_live_paths()?;
         let all_paths = self.store.list_paths()?;
-        
+
         let mut deleted = 0;
         let mut freed_bytes = 0u64;
-        
+
         for path in all_paths {
             if !live.contains(&path) {
                 let fs_path = self.store.to_path(&path);
@@ -146,7 +151,7 @@ impl<'a> GarbageCollector<'a> {
                 deleted += 1;
             }
         }
-        
+
         Ok(GcResult {
             deleted,
             freed_bytes,
@@ -157,8 +162,9 @@ impl<'a> GarbageCollector<'a> {
     pub fn dry_run(&mut self) -> Result<Vec<StorePath>, StoreError> {
         let live = self.find_live_paths()?;
         let all_paths = self.store.list_paths()?;
-        
-        Ok(all_paths.into_iter()
+
+        Ok(all_paths
+            .into_iter()
             .filter(|p| !live.contains(p))
             .collect())
     }
@@ -179,7 +185,7 @@ impl GcResult {
         const KB: u64 = 1024;
         const MB: u64 = KB * 1024;
         const GB: u64 = MB * 1024;
-        
+
         if self.freed_bytes >= GB {
             format!("{:.2} GiB", self.freed_bytes as f64 / GB as f64)
         } else if self.freed_bytes >= MB {
@@ -194,18 +200,17 @@ impl GcResult {
 
 fn dir_size(path: &Path) -> Result<u64, StoreError> {
     let mut size = 0;
-    
+
     if path.is_file() {
         return Ok(fs::metadata(path)?.len());
     }
-    
+
     if path.is_dir() {
         for entry in fs::read_dir(path)? {
             let entry = entry?;
             size += dir_size(&entry.path())?;
         }
     }
-    
+
     Ok(size)
 }
-

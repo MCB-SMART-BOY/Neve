@@ -1,19 +1,16 @@
 //! Type checker implementation.
 
-use std::collections::HashMap;
+use crate::errors::{TypeMismatchError, unbound_variable, unused_variable};
+use crate::infer::InferContext;
+use crate::traits::{TraitId, TraitResolver};
+use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode};
 use neve_hir::{
-    Module, Item, ItemKind, FnDef, TraitDef, ImplDef,
-    Expr, ExprKind, Literal, BinOp, UnaryOp,
-    Pattern, PatternKind, MatchArm,
-    Stmt, StmtKind,
-    Ty, TyKind, DefId, LocalId,
+    BinOp, DefId, Expr, ExprKind, FnDef, ImplDef, Item, ItemKind, Literal, LocalId, MatchArm,
+    Module, Pattern, PatternKind, Stmt, StmtKind, TraitDef, Ty, TyKind, UnaryOp,
 };
-use crate::infer::InferContext;
-use crate::unify::{Substitution, unify, instantiate, generalize, free_type_vars};
-use crate::traits::{TraitResolver, TraitId};
-use crate::errors::{TypeMismatchError, unbound_variable, unused_variable};
+use std::collections::HashMap;
 
 /// Information about a local variable.
 #[derive(Clone)]
@@ -89,24 +86,42 @@ impl TypeChecker {
     /// Check all registered impls for completeness.
     fn check_all_impls(&mut self) {
         // Collect trait info for checking
-        let trait_infos: Vec<_> = self.trait_resolver.all_traits()
+        let trait_infos: Vec<_> = self
+            .trait_resolver
+            .all_traits()
             .map(|(trait_id, info)| (*trait_id, info.clone()))
             .collect();
 
         // Check each trait's impls
         for (trait_id, trait_info) in trait_infos {
-            let impl_infos: Vec<_> = self.trait_resolver.impls_for_trait(trait_id)
+            let impl_infos: Vec<_> = self
+                .trait_resolver
+                .impls_for_trait(trait_id)
                 .iter()
-                .map(|info| (info.self_ty.clone(), info.methods.iter().map(|m| m.name.clone()).collect::<Vec<_>>()))
+                .map(|info| {
+                    (
+                        info.self_ty.clone(),
+                        info.methods
+                            .iter()
+                            .map(|m| m.name.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                })
                 .collect();
 
             for (self_ty, impl_methods) in impl_infos {
                 let missing = self.check_impl_methods(&impl_methods, &trait_info);
                 for method_name in missing {
                     self.diagnostics.push(
-                        Diagnostic::error(DiagnosticKind::Type, Span::DUMMY, 
-                            format!("missing required method '{}' in impl for {:?}", method_name, self_ty.kind))
-                            .with_code(ErrorCode::TypeMismatch)
+                        Diagnostic::error(
+                            DiagnosticKind::Type,
+                            Span::DUMMY,
+                            format!(
+                                "missing required method '{}' in impl for {:?}",
+                                method_name, self_ty.kind
+                            ),
+                        )
+                        .with_code(ErrorCode::TypeMismatch),
                     );
                 }
             }
@@ -114,7 +129,11 @@ impl TypeChecker {
     }
 
     /// Check if an impl provides all required methods.
-    fn check_impl_methods(&self, impl_methods: &[String], trait_info: &crate::traits::TraitInfo) -> Vec<String> {
+    fn check_impl_methods(
+        &self,
+        impl_methods: &[String],
+        trait_info: &crate::traits::TraitInfo,
+    ) -> Vec<String> {
         let mut missing = Vec::new();
         for method in &trait_info.methods {
             if !method.has_default && !impl_methods.contains(&method.name) {
@@ -137,7 +156,7 @@ impl TypeChecker {
     fn error(&mut self, span: Span, message: impl Into<String>) {
         self.diagnostics.push(
             Diagnostic::error(DiagnosticKind::Type, span, message)
-                .with_code(ErrorCode::TypeMismatch)
+                .with_code(ErrorCode::TypeMismatch),
         );
     }
 
@@ -152,7 +171,8 @@ impl TypeChecker {
         }
         for info in self.locals.values() {
             if !info.used && !info.name.starts_with('_') {
-                self.diagnostics.push(unused_variable(&info.name, info.span));
+                self.diagnostics
+                    .push(unused_variable(&info.name, info.span));
             }
         }
     }
@@ -166,12 +186,15 @@ impl TypeChecker {
 
     /// Define a local variable.
     fn define_local(&mut self, local_id: LocalId, name: String, ty: Ty, span: Span) {
-        self.locals.insert(local_id, LocalInfo {
-            ty,
-            name,
-            span,
-            used: false,
-        });
+        self.locals.insert(
+            local_id,
+            LocalInfo {
+                ty,
+                name,
+                span,
+                used: false,
+            },
+        );
     }
 
     /// Get type of a local variable.
@@ -186,22 +209,22 @@ impl TypeChecker {
     fn apply(&self, ty: &Ty) -> Ty {
         self.subst.apply(ty)
     }
-    
+
     /// Check if a type variable has been resolved.
     pub fn is_resolved(&self, var: u32) -> bool {
         self.subst.get(var).is_some()
     }
-    
+
     /// Get the resolved type for a type variable, if any.
     pub fn get_resolved(&self, var: u32) -> Option<Ty> {
         self.subst.get(var).map(|ty| self.apply(ty))
     }
-    
+
     /// Check if a generic parameter has been bound.
     pub fn is_param_bound(&self, idx: u32) -> bool {
         self.subst.get_param(idx).is_some()
     }
-    
+
     /// Get the bound type for a generic parameter, if any.
     pub fn get_param_binding(&self, idx: u32) -> Option<Ty> {
         self.subst.get_param(idx).map(|ty| self.apply(ty))
@@ -247,12 +270,14 @@ impl TypeChecker {
     }
 
     fn fn_signature(&mut self, fn_def: &FnDef) -> Ty {
-        let param_tys: Vec<Ty> = fn_def.params.iter()
+        let param_tys: Vec<Ty> = fn_def
+            .params
+            .iter()
             .map(|p| self.resolve_type(&p.ty))
             .collect();
-        
+
         let ret_ty = self.resolve_type(&fn_def.return_ty);
-        
+
         let fn_ty = Ty {
             kind: TyKind::Fn(param_tys, Box::new(ret_ty)),
             span: Span::DUMMY,
@@ -262,9 +287,7 @@ impl TypeChecker {
         if fn_def.generics.is_empty() {
             fn_ty
         } else {
-            let params: Vec<String> = fn_def.generics.iter()
-                .map(|g| g.name.clone())
-                .collect();
+            let params: Vec<String> = fn_def.generics.iter().map(|g| g.name.clone()).collect();
             Ty {
                 kind: TyKind::Forall(params, Box::new(fn_ty)),
                 span: Span::DUMMY,
@@ -283,27 +306,22 @@ impl TypeChecker {
                 }
             }
             TyKind::Named(id, args) => {
-                let resolved_args: Vec<Ty> = args.iter()
-                    .map(|a| self.resolve_type(a))
-                    .collect();
+                let resolved_args: Vec<Ty> = args.iter().map(|a| self.resolve_type(a)).collect();
                 Ty {
                     kind: TyKind::Named(*id, resolved_args),
                     span: ty.span,
                 }
             }
             TyKind::Fn(params, ret) => {
-                let resolved_params: Vec<Ty> = params.iter()
-                    .map(|p| self.resolve_type(p))
-                    .collect();
+                let resolved_params: Vec<Ty> =
+                    params.iter().map(|p| self.resolve_type(p)).collect();
                 Ty {
                     kind: TyKind::Fn(resolved_params, Box::new(self.resolve_type(ret))),
                     span: ty.span,
                 }
             }
             TyKind::Tuple(elems) => {
-                let resolved_elems: Vec<Ty> = elems.iter()
-                    .map(|e| self.resolve_type(e))
-                    .collect();
+                let resolved_elems: Vec<Ty> = elems.iter().map(|e| self.resolve_type(e)).collect();
                 Ty {
                     kind: TyKind::Tuple(resolved_elems),
                     span: ty.span,
@@ -334,12 +352,15 @@ impl TypeChecker {
         // Parameters are considered used by default (they're part of the function signature)
         for param in &fn_def.params {
             let ty = self.resolve_type_with_generics(&param.ty, &generic_vars);
-            self.locals.insert(param.id, LocalInfo {
-                ty,
-                name: param.name.clone(),
-                span: param.span,
-                used: true, // Parameters are always "used"
-            });
+            self.locals.insert(
+                param.id,
+                LocalInfo {
+                    ty,
+                    name: param.name.clone(),
+                    span: param.span,
+                    used: true, // Parameters are always "used"
+                },
+            );
         }
 
         // Infer body type
@@ -352,7 +373,7 @@ impl TypeChecker {
             self.emit(
                 TypeMismatchError::new(ret_ty, body_ty, fn_def.body.span)
                     .with_context("function return type")
-                    .build()
+                    .build(),
             );
         }
 
@@ -367,14 +388,13 @@ impl TypeChecker {
     fn resolve_type_with_generics(&mut self, ty: &Ty, generics: &HashMap<String, Ty>) -> Ty {
         match &ty.kind {
             TyKind::Unknown => self.fresh_var(),
-            TyKind::Param(_idx, name) => {
-                generics.get(name).cloned().unwrap_or_else(|| {
-                    self.error(ty.span, format!("unknown generic parameter: {}", name));
-                    self.fresh_var()
-                })
-            }
+            TyKind::Param(_idx, name) => generics.get(name).cloned().unwrap_or_else(|| {
+                self.error(ty.span, format!("unknown generic parameter: {}", name));
+                self.fresh_var()
+            }),
             TyKind::Named(id, args) => {
-                let resolved_args: Vec<Ty> = args.iter()
+                let resolved_args: Vec<Ty> = args
+                    .iter()
                     .map(|a| self.resolve_type_with_generics(a, generics))
                     .collect();
                 Ty {
@@ -383,16 +403,21 @@ impl TypeChecker {
                 }
             }
             TyKind::Fn(params, ret) => {
-                let resolved_params: Vec<Ty> = params.iter()
+                let resolved_params: Vec<Ty> = params
+                    .iter()
                     .map(|p| self.resolve_type_with_generics(p, generics))
                     .collect();
                 Ty {
-                    kind: TyKind::Fn(resolved_params, Box::new(self.resolve_type_with_generics(ret, generics))),
+                    kind: TyKind::Fn(
+                        resolved_params,
+                        Box::new(self.resolve_type_with_generics(ret, generics)),
+                    ),
                     span: ty.span,
                 }
             }
             TyKind::Tuple(elems) => {
-                let resolved_elems: Vec<Ty> = elems.iter()
+                let resolved_elems: Vec<Ty> = elems
+                    .iter()
                     .map(|e| self.resolve_type_with_generics(e, generics))
                     .collect();
                 Ty {
@@ -418,13 +443,17 @@ impl TypeChecker {
             }
 
             ExprKind::Global(def_id) => {
-                self.globals.get(def_id).cloned().map(|ty| {
-                    // Instantiate polymorphic types with fresh type variables
-                    instantiate(&ty, &mut || self.fresh_var())
-                }).unwrap_or_else(|| {
-                    self.error(span, "undefined global");
-                    self.fresh_var()
-                })
+                self.globals
+                    .get(def_id)
+                    .cloned()
+                    .map(|ty| {
+                        // Instantiate polymorphic types with fresh type variables
+                        instantiate(&ty, &mut || self.fresh_var())
+                    })
+                    .unwrap_or_else(|| {
+                        self.error(span, "undefined global");
+                        self.fresh_var()
+                    })
             }
 
             ExprKind::List(items) => {
@@ -441,9 +470,7 @@ impl TypeChecker {
             }
 
             ExprKind::Tuple(items) => {
-                let elem_tys: Vec<Ty> = items.iter()
-                    .map(|e| self.infer_expr(e))
-                    .collect();
+                let elem_tys: Vec<Ty> = items.iter().map(|e| self.infer_expr(e)).collect();
                 Ty {
                     kind: TyKind::Tuple(elem_tys),
                     span,
@@ -451,7 +478,8 @@ impl TypeChecker {
             }
 
             ExprKind::Record(fields) => {
-                let field_tys: Vec<(String, Ty)> = fields.iter()
+                let field_tys: Vec<(String, Ty)> = fields
+                    .iter()
                     .map(|(name, e)| (name.clone(), self.infer_expr(e)))
                     .collect();
                 Ty {
@@ -462,15 +490,19 @@ impl TypeChecker {
 
             ExprKind::Lambda(params, body) => {
                 // Bind parameter types
-                let param_tys: Vec<Ty> = params.iter()
+                let param_tys: Vec<Ty> = params
+                    .iter()
                     .map(|p| {
                         let ty = self.resolve_type(&p.ty);
-                        self.locals.insert(p.id, LocalInfo {
-                            ty: ty.clone(),
-                            name: p.name.clone(),
-                            span: p.span,
-                            used: true, // Lambda params considered used
-                        });
+                        self.locals.insert(
+                            p.id,
+                            LocalInfo {
+                                ty: ty.clone(),
+                                name: p.name.clone(),
+                                span: p.span,
+                                used: true, // Lambda params considered used
+                            },
+                        );
                         ty
                     })
                     .collect();
@@ -491,9 +523,7 @@ impl TypeChecker {
 
             ExprKind::Call(func, args) => {
                 let func_ty = self.infer_expr(func);
-                let arg_tys: Vec<Ty> = args.iter()
-                    .map(|a| self.infer_expr(a))
-                    .collect();
+                let arg_tys: Vec<Ty> = args.iter().map(|a| self.infer_expr(a)).collect();
 
                 let ret_ty = self.fresh_var();
                 let expected_fn_ty = Ty {
@@ -546,17 +576,20 @@ impl TypeChecker {
                 }
             }
 
-            ExprKind::Binary(op, left, right) => {
-                self.infer_binary(*op, left, right, span)
-            }
+            ExprKind::Binary(op, left, right) => self.infer_binary(*op, left, right, span),
 
-            ExprKind::Unary(op, operand) => {
-                self.infer_unary(*op, operand, span)
-            }
+            ExprKind::Unary(op, operand) => self.infer_unary(*op, operand, span),
 
             ExprKind::If(cond, then_br, else_br) => {
                 let cond_ty = self.infer_expr(cond);
-                self.unify(&cond_ty, &Ty { kind: TyKind::Bool, span: cond.span }, cond.span);
+                self.unify(
+                    &cond_ty,
+                    &Ty {
+                        kind: TyKind::Bool,
+                        span: cond.span,
+                    },
+                    cond.span,
+                );
 
                 let then_ty = self.infer_expr(then_br);
                 let else_ty = self.infer_expr(else_br);
@@ -584,7 +617,10 @@ impl TypeChecker {
                 if let Some(e) = expr {
                     self.infer_expr(e)
                 } else {
-                    Ty { kind: TyKind::Unit, span }
+                    Ty {
+                        kind: TyKind::Unit,
+                        span,
+                    }
                 }
             }
 
@@ -598,7 +634,10 @@ impl TypeChecker {
                     }
                 }
                 // Interpolated strings always have type String
-                Ty { kind: TyKind::String, span }
+                Ty {
+                    kind: TyKind::String,
+                    span,
+                }
             }
         }
     }
@@ -612,7 +651,10 @@ impl TypeChecker {
             Literal::Bool(_) => TyKind::Bool,
             Literal::Unit => TyKind::Unit,
         };
-        Ty { kind, span: Span::DUMMY }
+        Ty {
+            kind,
+            span: Span::DUMMY,
+        }
     }
 
     fn infer_binary(&mut self, op: BinOp, left: &Expr, right: &Expr, span: Span) -> Ty {
@@ -630,14 +672,34 @@ impl TypeChecker {
             // Comparison: a -> a -> Bool
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
                 self.unify(&left_ty, &right_ty, span);
-                Ty { kind: TyKind::Bool, span }
+                Ty {
+                    kind: TyKind::Bool,
+                    span,
+                }
             }
 
             // Logical: Bool -> Bool -> Bool
             BinOp::And | BinOp::Or => {
-                self.unify(&left_ty, &Ty { kind: TyKind::Bool, span: left.span }, left.span);
-                self.unify(&right_ty, &Ty { kind: TyKind::Bool, span: right.span }, right.span);
-                Ty { kind: TyKind::Bool, span }
+                self.unify(
+                    &left_ty,
+                    &Ty {
+                        kind: TyKind::Bool,
+                        span: left.span,
+                    },
+                    left.span,
+                );
+                self.unify(
+                    &right_ty,
+                    &Ty {
+                        kind: TyKind::Bool,
+                        span: right.span,
+                    },
+                    right.span,
+                );
+                Ty {
+                    kind: TyKind::Bool,
+                    span,
+                }
             }
 
             // Concat: [a] -> [a] -> [a] or String -> String -> String
@@ -674,8 +736,18 @@ impl TypeChecker {
                 self.apply(&operand_ty)
             }
             UnaryOp::Not => {
-                self.unify(&operand_ty, &Ty { kind: TyKind::Bool, span: operand.span }, operand.span);
-                Ty { kind: TyKind::Bool, span }
+                self.unify(
+                    &operand_ty,
+                    &Ty {
+                        kind: TyKind::Bool,
+                        span: operand.span,
+                    },
+                    operand.span,
+                );
+                Ty {
+                    kind: TyKind::Bool,
+                    span,
+                }
             }
         }
     }
@@ -687,7 +759,14 @@ impl TypeChecker {
         // Check guard if present
         if let Some(guard) = &arm.guard {
             let guard_ty = self.infer_expr(guard);
-            self.unify(&guard_ty, &Ty { kind: TyKind::Bool, span: guard.span }, guard.span);
+            self.unify(
+                &guard_ty,
+                &Ty {
+                    kind: TyKind::Bool,
+                    span: guard.span,
+                },
+                guard.span,
+            );
         }
 
         // Check body and unify with result type
@@ -708,18 +787,16 @@ impl TypeChecker {
                 self.unify(&lit_ty, expected, pattern.span);
             }
 
-            PatternKind::Tuple(patterns) => {
-                match &expected.kind {
-                    TyKind::Tuple(elem_tys) if elem_tys.len() == patterns.len() => {
-                        for (pat, ty) in patterns.iter().zip(elem_tys.iter()) {
-                            self.check_pattern(pat, ty);
-                        }
-                    }
-                    _ => {
-                        self.error(pattern.span, "pattern does not match expected tuple");
+            PatternKind::Tuple(patterns) => match &expected.kind {
+                TyKind::Tuple(elem_tys) if elem_tys.len() == patterns.len() => {
+                    for (pat, ty) in patterns.iter().zip(elem_tys.iter()) {
+                        self.check_pattern(pat, ty);
                     }
                 }
-            }
+                _ => {
+                    self.error(pattern.span, "pattern does not match expected tuple");
+                }
+            },
 
             PatternKind::List(patterns) => {
                 // Infer element type
@@ -732,14 +809,13 @@ impl TypeChecker {
             PatternKind::Record(fields) => {
                 for (name, pat) in fields {
                     let field_ty = match &expected.kind {
-                        TyKind::Record(field_tys) => {
-                            field_tys.iter()
-                                .find(|(n, _)| n == name)
-                                .map(|(_, t)| t.clone())
-                        }
+                        TyKind::Record(field_tys) => field_tys
+                            .iter()
+                            .find(|(n, _)| n == name)
+                            .map(|(_, t)| t.clone()),
                         _ => None,
                     };
-                    
+
                     if let Some(ty) = field_ty {
                         self.check_pattern(pat, &ty);
                     } else {
@@ -764,10 +840,12 @@ impl TypeChecker {
                 let value_ty = self.infer_expr(value);
                 let declared_ty = self.resolve_type(ty);
                 self.unify(&value_ty, &declared_ty, value.span);
-                
+
                 // Generalize the type for let-polymorphism
                 // Collect environment type variables that shouldn't be generalized
-                let env_vars: Vec<u32> = self.locals.values()
+                let env_vars: Vec<u32> = self
+                    .locals
+                    .values()
                     .flat_map(|info| free_type_vars(&info.ty))
                     .collect();
                 let generalized_ty = generalize(&self.apply(&declared_ty), &env_vars);
@@ -785,4 +863,3 @@ impl Default for TypeChecker {
         Self::new()
     }
 }
-

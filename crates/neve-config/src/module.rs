@@ -78,21 +78,26 @@ impl Module {
         let lexer = Lexer::new(source);
         let (tokens, lex_errors) = lexer.tokenize();
         if !lex_errors.is_empty() {
-            return Err(ConfigError::Module(format!("lexer errors: {:?}", lex_errors)));
+            return Err(ConfigError::Module(format!(
+                "lexer errors: {:?}",
+                lex_errors
+            )));
         }
         let mut parser = Parser::new(tokens);
         let ast = parser.parse_file();
-        
-        let base_path = path.as_ref()
+
+        let base_path = path
+            .as_ref()
             .and_then(|p| p.parent())
             .map(|p| p.to_path_buf());
-        
+
         let mut evaluator = AstEvaluator::new();
         if let Some(bp) = base_path {
             evaluator = evaluator.with_base_path(bp);
         }
-        
-        let value = evaluator.eval_file(&ast)
+
+        let value = evaluator
+            .eval_file(&ast)
             .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
 
         // Extract module structure from evaluated value
@@ -100,7 +105,7 @@ impl Module {
             path.as_ref()
                 .and_then(|p| p.file_stem())
                 .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "anonymous".to_string())
+                .unwrap_or_else(|| "anonymous".to_string()),
         );
         module.path = path;
 
@@ -140,20 +145,20 @@ impl Module {
     /// Convert to SystemConfig.
     pub fn to_system_config(&self) -> Result<SystemConfig, ConfigError> {
         let mut config = SystemConfig::new(&self.name);
-        
+
         // Extract standard options
         if let Some(Value::String(hostname)) = self.config.get("hostname") {
             config.options.hostname = Some(hostname.to_string());
         }
-        
+
         if let Some(Value::String(timezone)) = self.config.get("timezone") {
             config.options.timezone = Some(timezone.to_string());
         }
-        
+
         if let Some(Value::String(locale)) = self.config.get("locale") {
             config.options.locale = Some(locale.to_string());
         }
-        
+
         if let Some(Value::List(services)) = self.config.get("services") {
             for svc in services.iter() {
                 if let Value::String(s) = svc {
@@ -161,7 +166,7 @@ impl Module {
                 }
             }
         }
-        
+
         if let Some(Value::List(packages)) = self.config.get("packages") {
             for pkg in packages.iter() {
                 if let Value::String(p) = pkg {
@@ -169,17 +174,21 @@ impl Module {
                 }
             }
         }
-        
+
         if let Some(Value::List(env_list)) = self.config.get("environment") {
             for item in env_list.iter() {
                 if let Value::Record(fields) = item
-                    && let (Some(Value::String(k)), Some(Value::String(v))) = 
-                        (fields.get("name"), fields.get("value")) {
-                        config.options.environment.push((k.to_string(), v.to_string()));
-                    }
+                    && let (Some(Value::String(k)), Some(Value::String(v))) =
+                        (fields.get("name"), fields.get("value"))
+                {
+                    config
+                        .options
+                        .environment
+                        .push((k.to_string(), v.to_string()));
+                }
             }
         }
-        
+
         Ok(config)
     }
 }
@@ -218,10 +227,10 @@ impl OptionDecl {
 /// Merge multiple modules into a single configuration.
 pub fn merge_modules(modules: &[Module]) -> Result<SystemConfig, ConfigError> {
     let mut merged = SystemConfig::new("merged");
-    
+
     for module in modules {
         let config = module.to_system_config()?;
-        
+
         // Merge options
         if config.options.hostname.is_some() {
             merged.options.hostname = config.options.hostname;
@@ -232,19 +241,21 @@ pub fn merge_modules(modules: &[Module]) -> Result<SystemConfig, ConfigError> {
         if config.options.locale.is_some() {
             merged.options.locale = config.options.locale;
         }
-        
+
         merged.options.services.extend(config.options.services);
         merged.options.packages.extend(config.options.packages);
         merged.options.users.extend(config.options.users);
-        merged.options.environment.extend(config.options.environment);
+        merged
+            .options
+            .environment
+            .extend(config.options.environment);
     }
-    
+
     // Deduplicate
     merged.options.services.sort();
     merged.options.services.dedup();
     merged.options.packages.sort();
     merged.options.packages.dedup();
-    
+
     Ok(merged)
 }
-

@@ -649,7 +649,10 @@ fn test_only_comments() {
 
 #[test]
 fn test_many_items() {
-    let source: String = (0..100).map(|i| format!("let x{} = {};", i, i)).collect::<Vec<_>>().join("\n");
+    let source: String = (0..100)
+        .map(|i| format!("let x{} = {};", i, i))
+        .collect::<Vec<_>>()
+        .join("\n");
     let (file, diags) = parse(&source);
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 100);
@@ -664,21 +667,36 @@ fn test_deeply_nested_parens() {
 
 #[test]
 fn test_long_expression() {
-    let source = "let x = ".to_string() + &(0..100).map(|i| i.to_string()).collect::<Vec<_>>().join(" + ") + ";";
+    let source = "let x = ".to_string()
+        + &(0..100)
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(" + ")
+        + ";";
     let (_, diags) = parse(&source);
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_large_list() {
-    let source = "let xs = [".to_string() + &(0..500).map(|i| i.to_string()).collect::<Vec<_>>().join(", ") + "];";
+    let source = "let xs = [".to_string()
+        + &(0..500)
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+        + "];";
     let (_, diags) = parse(&source);
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_large_record() {
-    let source = "let r = #{".to_string() + &(0..100).map(|i| format!("field{} = {}", i, i)).collect::<Vec<_>>().join(", ") + "};";
+    let source = "let r = #{".to_string()
+        + &(0..100)
+            .map(|i| format!("field{} = {}", i, i))
+            .collect::<Vec<_>>()
+            .join(", ")
+        + "};";
     let (_, diags) = parse(&source);
     assert!(diags.is_empty());
 }
@@ -689,100 +707,116 @@ fn test_large_record() {
 
 #[test]
 fn test_match_literal_patterns() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match n {
             0 -> "zero",
             1 -> "one",
             2 -> "two",
             _ -> "many",
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_with_guards() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match n {
             x if x < 0 -> "negative",
             x if x > 0 -> "positive",
             _ -> "zero",
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_tuple_pattern() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match pair {
             (0, 0) -> "origin",
             (x, 0) -> "on x-axis",
             (0, y) -> "on y-axis",
             (x, y) -> "other",
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_list_patterns() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match xs {
             [] -> "empty",
             [x] -> "singleton",
             [x, y] -> "pair",
             [h, ..t] -> "has tail",
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_record_pattern() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match point {
             #{ x = 0, y = 0 } -> "origin",
             #{ x = 0, y } -> "on y-axis",
             #{ x, y = 0 } -> "on x-axis",
             #{ x, y } -> "other",
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_or_patterns() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match n {
             1 | 2 | 3 -> "small",
             4 | 5 | 6 -> "medium",
             _ -> "large",
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_at_pattern() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match opt {
             v @ Some(x) -> v,
             None -> None,
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_match_nested_patterns() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = match data {
             Some((x, Some(y))) -> x + y,
             Some((x, None)) -> x,
             None -> 0,
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -810,12 +844,14 @@ fn test_lambda_with_types() {
 
 #[test]
 fn test_lambda_block_body() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let f = fn(x) {
             let y = x + 1;
             y * 2
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -885,7 +921,8 @@ fn test_record_chained_access() {
 
 #[test]
 fn test_record_deeply_nested() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let config = #{
             server = #{
                 host = "localhost",
@@ -896,7 +933,8 @@ fn test_record_deeply_nested() {
                 },
             },
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1022,12 +1060,14 @@ fn test_struct_empty() {
 
 #[test]
 fn test_struct_with_defaults() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         struct Config {
             host: String = "localhost",
             port: Int = 8080,
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1051,12 +1091,14 @@ fn test_enum_with_data() {
 
 #[test]
 fn test_enum_with_record_variant() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         enum Event {
             Click #{ x: Int, y: Int },
             KeyPress #{ key: Char },
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1068,41 +1110,49 @@ fn test_enum_generic() {
 
 #[test]
 fn test_trait_simple() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         trait Show {
             fn show(self) -> String;
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_trait_with_default() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         trait Default {
             fn default() -> Self;
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_impl_simple() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         impl Show for Int {
             fn show(self) -> String = intToString(self);
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_impl_generic() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         impl<T: Show> Show for List<T> {
             fn show(self) -> String = "[" ++ join(map(show, self), ", ") ++ "]";
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1170,19 +1220,22 @@ fn test_block_single_expr() {
 
 #[test]
 fn test_block_with_let() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = {
             let a = 1;
             let b = 2;
             a + b
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_block_nested() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = {
             let a = {
                 let b = 1;
@@ -1190,19 +1243,22 @@ fn test_block_nested() {
             };
             a * 2
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_block_as_function_body() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         fn complex(x: Int) -> Int = {
             let y = x + 1;
             let z = y * 2;
             z - 1
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1242,13 +1298,15 @@ fn test_string_concat_multiple() {
 
 #[test]
 fn test_multiline_string_literal() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let s = """
             This is a
             multiline string
             with indentation
         """;
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1276,18 +1334,21 @@ fn test_if_nested() {
 
 #[test]
 fn test_if_else_if() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = if a then 1
             else if b then 2
             else if c then 3
             else 4;
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_with_blocks() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let x = if cond then {
             let a = 1;
             a + 1
@@ -1295,7 +1356,8 @@ fn test_if_with_blocks() {
             let b = 2;
             b * 2
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
@@ -1366,7 +1428,8 @@ fn test_recovery_continue_after_error() {
 
 #[test]
 fn test_derivation_like() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let hello = derivation #{
             name = "hello",
             version = "2.12",
@@ -1379,13 +1442,15 @@ fn test_derivation_like() {
                 make = "make install",
             },
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_system_config_like() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let config = #{
             hostname = "myserver",
             users = [
@@ -1397,13 +1462,15 @@ fn test_system_config_like() {
                 #{ name = "nginx", enable = true, config = ./nginx.conf },
             ],
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_function_with_many_params() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         fn createUser(
             name: String,
             email: String,
@@ -1419,25 +1486,29 @@ fn test_function_with_many_params() {
             roles,
             metadata,
         };
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_complex_type_signature() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         fn transform<A, B, C>(
             f: A -> B,
             g: B -> C,
             xs: List<A>,
         ) -> List<C> = map(g, map(f, xs));
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_pipeline_heavy() {
-    let (_, diags) = parse(r#"
+    let (_, diags) = parse(
+        r#"
         let result = data
             |> parse
             |> validate
@@ -1446,6 +1517,7 @@ fn test_pipeline_heavy() {
             |> sort
             |> take(10)
             |> serialize;
-    "#);
+    "#,
+    );
     assert!(diags.is_empty());
 }

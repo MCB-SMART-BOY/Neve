@@ -6,11 +6,11 @@
 //! - Activating and switching configurations
 //! - Managing configuration generations
 
-pub mod module;
-pub mod generate;
 pub mod activate;
-pub mod generation;
 pub mod flake;
+pub mod generate;
+pub mod generation;
+pub mod module;
 
 use neve_derive::StorePath;
 use std::path::PathBuf;
@@ -21,31 +21,31 @@ use thiserror::Error;
 pub enum ConfigError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("evaluation error: {0}")]
     Eval(String),
-    
+
     #[error("build error: {0}")]
     Build(#[from] neve_builder::BuildError),
-    
+
     #[error("store error: {0}")]
     Store(#[from] neve_store::StoreError),
-    
+
     #[error("module error: {0}")]
     Module(String),
-    
+
     #[error("activation error: {0}")]
     Activation(String),
-    
+
     #[error("configuration not found: {0}")]
     NotFound(String),
-    
+
     #[error("invalid configuration: {0}")]
     Invalid(String),
-    
+
     #[error("flake error: {0}")]
     Flake(String),
-    
+
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 }
@@ -170,4 +170,3 @@ impl UserConfig {
         self
     }
 }
-

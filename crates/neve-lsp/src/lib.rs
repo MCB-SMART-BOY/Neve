@@ -16,16 +16,12 @@ pub mod semantic_tokens;
 pub mod symbol_index;
 
 pub use backend::Backend;
-pub use document::{Document, Diagnostic, DiagnosticSeverity};
+pub use document::{Diagnostic, DiagnosticSeverity, Document};
 pub use semantic_tokens::{
-    generate_semantic_tokens, 
-    generate_semantic_tokens_with_context,
-    parameter_token_type,
-    comment_token_type,
-    token_types,
-    token_modifiers,
+    comment_token_type, generate_semantic_tokens, generate_semantic_tokens_with_context,
+    parameter_token_type, token_modifiers, token_types,
 };
-pub use symbol_index::{SymbolIndex, Symbol, SymbolKind, SymbolRef};
+pub use symbol_index::{Symbol, SymbolIndex, SymbolKind, SymbolRef};
 
 use tower_lsp::{LspService, Server};
 
@@ -33,7 +29,7 @@ use tower_lsp::{LspService, Server};
 pub async fn run_server() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    
+
     let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
 }

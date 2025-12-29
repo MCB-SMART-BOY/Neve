@@ -93,4 +93,3 @@ impl Printer {
         &self.config
     }
 }
-

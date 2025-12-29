@@ -1,8 +1,10 @@
 //! Symbol indexing for LSP features like go-to-definition and find references.
 
-use std::collections::HashMap;
 use neve_common::Span;
-use neve_syntax::{SourceFile, Item, ItemKind, Expr, ExprKind, Stmt, StmtKind, Pattern, PatternKind};
+use neve_syntax::{
+    Expr, ExprKind, Item, ItemKind, Pattern, PatternKind, SourceFile, Stmt, StmtKind,
+};
+use std::collections::HashMap;
 
 /// A symbol in the source code.
 #[derive(Debug, Clone)]
@@ -84,12 +86,11 @@ impl SymbolIndex {
     pub fn find_references_at(&self, offset: usize, include_declaration: bool) -> Vec<&SymbolRef> {
         // First, find what symbol is at this offset
         let name = self.find_name_at(offset);
-        
+
         if let Some(name) = name {
-            self.references.iter()
-                .filter(|r| {
-                    r.name == name && (include_declaration || !r.is_write)
-                })
+            self.references
+                .iter()
+                .filter(|r| r.name == name && (include_declaration || !r.is_write))
                 .collect()
         } else {
             Vec::new()
@@ -123,9 +124,7 @@ impl SymbolIndex {
 
     /// Get all references to a symbol by name.
     pub fn get_references(&self, name: &str) -> Vec<&SymbolRef> {
-        self.references.iter()
-            .filter(|r| r.name == name)
-            .collect()
+        self.references.iter().filter(|r| r.name == name).collect()
     }
 
     /// Get all definitions for a name.
@@ -321,7 +320,11 @@ impl SymbolIndex {
                     self.index_expr(arg);
                 }
             }
-            ExprKind::MethodCall { receiver, method, args } => {
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
                 self.index_expr(receiver);
                 self.add_reference(SymbolRef {
                     name: method.name.clone(),
@@ -386,7 +389,11 @@ impl SymbolIndex {
             ExprKind::Unary { operand, .. } => {
                 self.index_expr(operand);
             }
-            ExprKind::If { condition, then_branch, else_branch } => {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 self.index_expr(condition);
                 self.index_expr(then_branch);
                 self.index_expr(else_branch);
@@ -441,7 +448,12 @@ impl SymbolIndex {
                     is_write: false,
                 });
             }
-            ExprKind::Let { pattern, value, body, .. } => {
+            ExprKind::Let {
+                pattern,
+                value,
+                body,
+                ..
+            } => {
                 self.push_scope();
                 self.index_expr(value);
                 self.index_pattern(pattern, true);
@@ -459,9 +471,13 @@ impl SymbolIndex {
                 }
             }
             // Literals don't reference symbols
-            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::String(_) |
-            ExprKind::Char(_) | ExprKind::Bool(_) | ExprKind::Unit |
-            ExprKind::PathLit(_) => {}
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Unit
+            | ExprKind::PathLit(_) => {}
         }
     }
 
@@ -529,7 +545,7 @@ impl SymbolIndex {
             }
         }
     }
-    
+
     fn index_pattern(&mut self, pattern: &Pattern, is_definition: bool) {
         match &pattern.kind {
             PatternKind::Var(ident) => {
@@ -665,4 +681,3 @@ impl SymbolIndex {
         self.references.push(reference);
     }
 }
-

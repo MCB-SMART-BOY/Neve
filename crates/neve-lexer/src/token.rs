@@ -53,9 +53,9 @@ pub enum TokenKind {
     Pub,
     Import,
     As,
-    SelfLower,  // self
-    Super,      // super
-    Crate,      // crate
+    SelfLower, // self
+    Super,     // super
+    Crate,     // crate
     If,
     Then,
     Else,
@@ -74,39 +74,39 @@ pub enum TokenKind {
     HashLBrace, // #{
 
     // Operators
-    Plus,       // +
-    Minus,      // -
-    Star,       // *
-    Slash,      // /
-    Percent,    // %
-    Caret,      // ^
-    Eq,         // =
-    EqEq,       // ==
-    BangEq,     // !=
-    Lt,         // <
-    LtEq,       // <=
-    Gt,         // >
-    GtEq,       // >=
-    AndAnd,     // &&
-    OrOr,       // ||
-    Bang,       // !
-    PlusPlus,   // ++
-    SlashSlash, // //
+    Plus,             // +
+    Minus,            // -
+    Star,             // *
+    Slash,            // /
+    Percent,          // %
+    Caret,            // ^
+    Eq,               // =
+    EqEq,             // ==
+    BangEq,           // !=
+    Lt,               // <
+    LtEq,             // <=
+    Gt,               // >
+    GtEq,             // >=
+    AndAnd,           // &&
+    OrOr,             // ||
+    Bang,             // !
+    PlusPlus,         // ++
+    SlashSlash,       // //
     QuestionQuestion, // ??
     QuestionDot,      // ?.
-    Pipe,       // |
-    PipeGt,     // |>
-    Arrow,      // ->
-    FatArrow,   // =>
-    At,         // @
-    DotDot,     // ..
-    Question,   // ?
+    Pipe,             // |
+    PipeGt,           // |>
+    Arrow,            // ->
+    FatArrow,         // =>
+    At,               // @
+    DotDot,           // ..
+    Question,         // ?
 
     // Punctuation
-    Comma,      // ,
-    Colon,      // :
-    Semicolon,  // ;
-    Dot,        // .
+    Comma,     // ,
+    Colon,     // :
+    Semicolon, // ;
+    Dot,       // .
 
     // Special
     Eof,

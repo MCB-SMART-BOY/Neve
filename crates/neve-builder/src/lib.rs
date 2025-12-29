@@ -4,10 +4,12 @@
 //! - Sandboxed build environments
 //! - Build execution
 //! - Output collection and registration
+//! - Docker-based builds for cross-platform support
 
-pub mod sandbox;
+pub mod docker;
 pub mod executor;
 pub mod output;
+pub mod sandbox;
 
 use neve_derive::{Derivation, StorePath};
 use neve_store::Store;
@@ -20,22 +22,22 @@ use thiserror::Error;
 pub enum BuildError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("store error: {0}")]
     Store(#[from] neve_store::StoreError),
-    
+
     #[error("fetch error: {0}")]
     Fetch(#[from] neve_fetch::FetchError),
-    
+
     #[error("sandbox error: {0}")]
     Sandbox(String),
-    
+
     #[error("build failed: {0}")]
     BuildFailed(String),
-    
+
     #[error("missing input: {0}")]
     MissingInput(String),
-    
+
     #[error("output hash mismatch for {output}: expected {expected}, got {actual}")]
     OutputHashMismatch {
         output: String,
@@ -57,6 +59,18 @@ pub struct BuildResult {
     pub duration_secs: f64,
 }
 
+/// Build backend type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BuildBackend {
+    /// Native sandbox (Linux namespaces) - full isolation.
+    #[default]
+    Native,
+    /// Docker-based sandbox - cross-platform isolation.
+    Docker,
+    /// Simple execution without isolation.
+    Simple,
+}
+
 /// Builder configuration.
 #[derive(Debug, Clone)]
 pub struct BuilderConfig {
@@ -72,17 +86,29 @@ pub struct BuilderConfig {
     pub keep_failed: bool,
     /// Build timeout in seconds (0 = no timeout).
     pub timeout: u64,
+    /// Build backend to use.
+    pub backend: BuildBackend,
 }
 
 impl Default for BuilderConfig {
     fn default() -> Self {
+        // Determine the best backend for this platform
+        let backend = if cfg!(target_os = "linux") && sandbox::sandbox_available() {
+            BuildBackend::Native
+        } else if docker::DockerExecutor::is_available() {
+            BuildBackend::Docker
+        } else {
+            BuildBackend::Simple
+        };
+
         Self {
             max_jobs: 1,
             cores: num_cpus(),
             temp_dir: std::env::temp_dir().join("neve-build"),
-            sandbox: cfg!(target_os = "linux"),
+            sandbox: backend != BuildBackend::Simple,
             keep_failed: false,
             timeout: 0,
+            backend,
         }
     }
 }
@@ -134,7 +160,7 @@ impl Builder {
     /// Build a derivation.
     pub fn build(&mut self, drv: &Derivation) -> Result<BuildResult, BuildError> {
         let start = std::time::Instant::now();
-        
+
         // Check if already built
         let drv_path = drv.drv_path();
         if let Some(outputs) = self.check_outputs_exist(drv) {
@@ -153,7 +179,7 @@ impl Builder {
         let (outputs, log) = self.execute_build(drv)?;
 
         let duration = start.elapsed().as_secs_f64();
-        
+
         Ok(BuildResult {
             derivation: drv_path,
             outputs,
@@ -165,7 +191,7 @@ impl Builder {
     /// Check if all outputs already exist.
     fn check_outputs_exist(&self, drv: &Derivation) -> Option<HashMap<String, StorePath>> {
         let mut outputs = HashMap::new();
-        
+
         for (name, output) in &drv.outputs {
             if let Some(ref path) = output.path {
                 if self.store.path_exists(path) {
@@ -178,7 +204,7 @@ impl Builder {
                 return None;
             }
         }
-        
+
         Some(outputs)
     }
 
@@ -189,30 +215,32 @@ impl Builder {
             if !self.store.path_exists(input_drv_path) {
                 return Err(BuildError::MissingInput(input_drv_path.display_name()));
             }
-            
+
             // Read and build the input derivation if its outputs don't exist
             let input_drv = self.store.read_derivation(input_drv_path)?;
             if self.check_outputs_exist(&input_drv).is_none() {
                 self.build(&input_drv)?;
             }
         }
-        
+
         // Check input sources
         for input_src in &drv.input_srcs {
             if !self.store.path_exists(input_src) {
                 return Err(BuildError::MissingInput(input_src.display_name()));
             }
         }
-        
+
         Ok(())
     }
 
     /// Execute the build.
-    fn execute_build(&mut self, drv: &Derivation) -> Result<(HashMap<String, StorePath>, String), BuildError> {
+    fn execute_build(
+        &mut self,
+        drv: &Derivation,
+    ) -> Result<(HashMap<String, StorePath>, String), BuildError> {
         use executor::BuildExecutor;
-        
+
         let executor = BuildExecutor::new(&self.store, &self.config);
         executor.execute(drv)
     }
 }
-

@@ -1,21 +1,14 @@
 //! Name resolution and AST to HIR lowering.
 
+use crate::{
+    AssocTypeDef, AssocTypeImpl, BinOp, DefId, EnumDef, Expr, ExprKind, FieldDef, FnDef,
+    GenericParam, ImplDef, ImplItem, Import, ImportKind, ImportPathPrefix, Item, ItemKind, Literal,
+    LocalId, MatchArm, Module, ModuleId, ModuleLoader, Param, Pattern, PatternKind, Stmt, StmtKind,
+    StringPart, StructDef, TraitDef, TraitItem, Ty, TyKind, TypeAlias, UnaryOp, VariantDef,
+};
+use neve_syntax::{self as ast, SourceFile};
 use std::collections::HashMap;
 use std::path::Path;
-use neve_syntax::{self as ast, SourceFile};
-use crate::{
-    Module, ModuleId, Item, ItemKind, DefId, LocalId,
-    Import, ImportKind, ImportPathPrefix,
-    FnDef, StructDef, EnumDef, TypeAlias, TraitDef, ImplDef,
-    Param, GenericParam, FieldDef, VariantDef, TraitItem, ImplItem,
-    AssocTypeDef, AssocTypeImpl,
-    Expr, ExprKind, Literal, BinOp, UnaryOp,
-    Pattern, PatternKind, MatchArm,
-    Stmt, StmtKind,
-    Ty, TyKind,
-    StringPart,
-    ModuleLoader,
-};
 
 /// Name resolver that builds HIR from AST.
 pub struct Resolver {
@@ -94,7 +87,10 @@ impl Resolver {
     /// Used during lowering when the type will be inferred later.
     #[inline]
     fn unknown_ty(span: neve_common::Span) -> Ty {
-        Ty { kind: TyKind::Unknown, span }
+        Ty {
+            kind: TyKind::Unknown,
+            span,
+        }
     }
 
     /// Resolve an AST source file to HIR.
@@ -108,15 +104,20 @@ impl Resolver {
     }
 
     /// Resolve an AST source file to HIR with module path for relative imports.
-    pub fn resolve_with_path(&mut self, file: &SourceFile, name: String, module_path: Vec<String>) -> Module {
+    pub fn resolve_with_path(
+        &mut self,
+        file: &SourceFile,
+        name: String,
+        module_path: Vec<String>,
+    ) -> Module {
         let module_id = self.fresh_module_id();
-        
+
         // Set current module path for relative import resolution
         self.current_module_path = module_path;
 
         // First pass: collect imports and resolve them
         let imports = self.collect_imports(file);
-        
+
         // Process imports to bring names into scope
         self.process_imports(&imports);
 
@@ -126,7 +127,9 @@ impl Resolver {
         }
 
         // Third pass: lower all items
-        let items = file.items.iter()
+        let items = file
+            .items
+            .iter()
             .filter_map(|item| self.lower_item(item))
             .collect();
 
@@ -194,7 +197,7 @@ impl Resolver {
                 _ => {}
             }
         }
-        
+
         if exports.is_empty() {
             None
         } else {
@@ -210,42 +213,40 @@ impl Resolver {
 
     /// Collect all imports from the source file.
     fn collect_imports(&mut self, file: &SourceFile) -> Vec<Import> {
-        file.items.iter()
-            .filter_map(|item| {
-                match &item.kind {
-                    ast::ItemKind::Import(import_def) => {
-                        let prefix = match import_def.prefix {
-                            ast::PathPrefix::Absolute => ImportPathPrefix::Absolute,
-                            ast::PathPrefix::Self_ => ImportPathPrefix::Self_,
-                            ast::PathPrefix::Super => ImportPathPrefix::Super,
-                            ast::PathPrefix::Crate => ImportPathPrefix::Crate,
-                        };
-                        
-                        let path: Vec<String> = import_def.path.iter()
-                            .map(|p| p.name.clone())
-                            .collect();
-                        
-                        let kind = match &import_def.items {
-                            ast::ImportItems::Module => ImportKind::Module,
-                            ast::ImportItems::Items(items) => {
-                                ImportKind::Items(items.iter().map(|i| i.name.clone()).collect())
-                            }
-                            ast::ImportItems::All => ImportKind::All,
-                        };
-                        
-                        let alias = import_def.alias.as_ref().map(|a| a.name.clone());
-                        
-                        Some(Import {
-                            prefix,
-                            path,
-                            kind,
-                            alias,
-                            is_pub: import_def.visibility == ast::Visibility::Public,
-                            span: item.span,
-                        })
-                    }
-                    _ => None,
+        file.items
+            .iter()
+            .filter_map(|item| match &item.kind {
+                ast::ItemKind::Import(import_def) => {
+                    let prefix = match import_def.prefix {
+                        ast::PathPrefix::Absolute => ImportPathPrefix::Absolute,
+                        ast::PathPrefix::Self_ => ImportPathPrefix::Self_,
+                        ast::PathPrefix::Super => ImportPathPrefix::Super,
+                        ast::PathPrefix::Crate => ImportPathPrefix::Crate,
+                    };
+
+                    let path: Vec<String> =
+                        import_def.path.iter().map(|p| p.name.clone()).collect();
+
+                    let kind = match &import_def.items {
+                        ast::ImportItems::Module => ImportKind::Module,
+                        ast::ImportItems::Items(items) => {
+                            ImportKind::Items(items.iter().map(|i| i.name.clone()).collect())
+                        }
+                        ast::ImportItems::All => ImportKind::All,
+                    };
+
+                    let alias = import_def.alias.as_ref().map(|a| a.name.clone());
+
+                    Some(Import {
+                        prefix,
+                        path,
+                        kind,
+                        alias,
+                        is_pub: import_def.visibility == ast::Visibility::Public,
+                        span: item.span,
+                    })
                 }
+                _ => None,
             })
             .collect()
     }
@@ -289,16 +290,17 @@ impl Resolver {
 
     fn lookup_global(&self, name: &str) -> Option<DefId> {
         // First check local globals, then imported names
-        self.globals.get(name)
+        self.globals
+            .get(name)
             .or_else(|| self.imported.get(name))
             .copied()
     }
-    
+
     /// Register an imported name for resolution.
     pub fn register_import(&mut self, name: String, def_id: DefId) {
         self.imported.insert(name, def_id);
     }
-    
+
     /// Register multiple imported names from a module registry resolution.
     pub fn register_imports(&mut self, imports: Vec<(String, DefId)>) {
         for (name, def_id) in imports {
@@ -360,14 +362,12 @@ impl Resolver {
     // === Second pass: lower items ===
 
     fn lower_item(&mut self, item: &ast::Item) -> Option<Item> {
-        
-
         match &item.kind {
             ast::ItemKind::Let(def) => {
                 // Top-level let becomes a function with no parameters
                 let name = self.pattern_name(&def.pattern)?;
                 let id = self.lookup_global(&name)?;
-                
+
                 self.push_scope();
                 let body = self.lower_expr(&def.value);
                 self.pop_scope();
@@ -386,20 +386,20 @@ impl Resolver {
             }
             ast::ItemKind::Fn(def) => {
                 let id = self.lookup_global(&def.name.name)?;
-                
+
                 self.push_scope();
-                
+
                 let generics = self.lower_generics(&def.generics);
-                let params: Vec<Param> = def.params.iter()
-                    .map(|p| self.lower_param(p))
-                    .collect();
-                
-                let return_ty = def.return_type.as_ref()
+                let params: Vec<Param> = def.params.iter().map(|p| self.lower_param(p)).collect();
+
+                let return_ty = def
+                    .return_type
+                    .as_ref()
                     .map(|t| self.lower_type(t))
                     .unwrap_or_else(|| Self::unknown_ty(def.name.span));
-                
+
                 let body = self.lower_expr(&def.body);
-                
+
                 self.pop_scope();
 
                 Some(Item {
@@ -417,7 +417,9 @@ impl Resolver {
             ast::ItemKind::Struct(def) => {
                 let id = self.lookup_global(&def.name.name)?;
                 let generics = self.lower_generics(&def.generics);
-                let fields = def.fields.iter()
+                let fields = def
+                    .fields
+                    .iter()
                     .map(|f| FieldDef {
                         name: f.name.name.clone(),
                         ty: self.lower_type(&f.ty),
@@ -438,16 +440,18 @@ impl Resolver {
             ast::ItemKind::Enum(def) => {
                 let id = self.lookup_global(&def.name.name)?;
                 let generics = self.lower_generics(&def.generics);
-                let variants = def.variants.iter()
+                let variants = def
+                    .variants
+                    .iter()
                     .map(|v| {
                         let fields = match &v.kind {
                             ast::VariantKind::Unit => Vec::new(),
-                            ast::VariantKind::Tuple(types) => types.iter()
-                                .map(|t| self.lower_type(t))
-                                .collect(),
-                            ast::VariantKind::Record(field_defs) => field_defs.iter()
-                                .map(|f| self.lower_type(&f.ty))
-                                .collect(),
+                            ast::VariantKind::Tuple(types) => {
+                                types.iter().map(|t| self.lower_type(t)).collect()
+                            }
+                            ast::VariantKind::Record(field_defs) => {
+                                field_defs.iter().map(|f| self.lower_type(&f.ty)).collect()
+                            }
                         };
                         VariantDef {
                             name: v.name.name.clone(),
@@ -485,12 +489,16 @@ impl Resolver {
             ast::ItemKind::Trait(def) => {
                 let id = self.lookup_global(&def.name.name)?;
                 let generics = self.lower_generics(&def.generics);
-                
-                let items = def.items.iter()
+
+                let items = def
+                    .items
+                    .iter()
                     .filter_map(|ti| self.lower_trait_item(ti))
                     .collect();
 
-                let assoc_types = def.assoc_types.iter()
+                let assoc_types = def
+                    .assoc_types
+                    .iter()
                     .map(|at| self.lower_assoc_type_def(at))
                     .collect();
 
@@ -508,17 +516,20 @@ impl Resolver {
             ast::ItemKind::Impl(def) => {
                 let id = self.fresh_def_id();
                 let generics = self.lower_generics(&def.generics);
-                
-                let trait_ref = def.trait_.as_ref()
-                    .map(|t| self.lower_type(t));
-                
+
+                let trait_ref = def.trait_.as_ref().map(|t| self.lower_type(t));
+
                 let self_ty = self.lower_type(&def.target);
-                
-                let items = def.items.iter()
+
+                let items = def
+                    .items
+                    .iter()
                     .filter_map(|ii| self.lower_impl_item(ii))
                     .collect();
 
-                let assoc_type_impls = def.assoc_type_impls.iter()
+                let assoc_type_impls = def
+                    .assoc_type_impls
+                    .iter()
                     .map(|ati| self.lower_assoc_type_impl(ati))
                     .collect();
 
@@ -539,7 +550,8 @@ impl Resolver {
     }
 
     fn lower_generics(&self, generics: &[ast::GenericParam]) -> Vec<GenericParam> {
-        generics.iter()
+        generics
+            .iter()
             .map(|p| GenericParam {
                 name: p.name.name.clone(),
                 bounds: p.bounds.iter().map(|b| self.lower_type(b)).collect(),
@@ -549,7 +561,9 @@ impl Resolver {
     }
 
     fn lower_param(&mut self, param: &ast::Param) -> Param {
-        let name = self.pattern_name(&param.pattern).unwrap_or_else(|| "_".to_string());
+        let name = self
+            .pattern_name(&param.pattern)
+            .unwrap_or_else(|| "_".to_string());
         let id = self.define_local(name.clone());
         let ty = self.lower_type(&param.ty);
 
@@ -563,16 +577,18 @@ impl Resolver {
 
     fn lower_trait_item(&mut self, item: &ast::TraitItem) -> Option<TraitItem> {
         self.push_scope();
-        
+
         let generics = self.lower_generics(&item.generics);
-        let params = item.params.iter()
-            .map(|p| self.lower_type(&p.ty))
-            .collect();
-        let return_ty = item.return_type.as_ref()
+        let params = item.params.iter().map(|p| self.lower_type(&p.ty)).collect();
+        let return_ty = item
+            .return_type
+            .as_ref()
             .map(|t| self.lower_type(t))
-            .unwrap_or(Ty { kind: TyKind::Unit, span: item.span });
-        let default = item.default.as_ref()
-            .map(|e| self.lower_expr(e));
+            .unwrap_or(Ty {
+                kind: TyKind::Unit,
+                span: item.span,
+            });
+        let default = item.default.as_ref().map(|e| self.lower_expr(e));
 
         self.pop_scope();
 
@@ -590,12 +606,15 @@ impl Resolver {
         self.push_scope();
 
         let generics = self.lower_generics(&item.generics);
-        let params: Vec<Param> = item.params.iter()
-            .map(|p| self.lower_param(p))
-            .collect();
-        let return_ty = item.return_type.as_ref()
+        let params: Vec<Param> = item.params.iter().map(|p| self.lower_param(p)).collect();
+        let return_ty = item
+            .return_type
+            .as_ref()
             .map(|t| self.lower_type(t))
-            .unwrap_or(Ty { kind: TyKind::Unit, span: item.span });
+            .unwrap_or(Ty {
+                kind: TyKind::Unit,
+                span: item.span,
+            });
         let body = self.lower_expr(&item.body);
 
         self.pop_scope();
@@ -613,7 +632,11 @@ impl Resolver {
     fn lower_assoc_type_def(&self, assoc_type: &ast::AssocTypeDef) -> AssocTypeDef {
         AssocTypeDef {
             name: assoc_type.name.name.clone(),
-            bounds: assoc_type.bounds.iter().map(|b| self.lower_type(b)).collect(),
+            bounds: assoc_type
+                .bounds
+                .iter()
+                .map(|b| self.lower_type(b))
+                .collect(),
             default: assoc_type.default.as_ref().map(|t| self.lower_type(t)),
             span: assoc_type.span,
         }
@@ -664,7 +687,7 @@ impl Resolver {
                     } else {
                         ExprKind::Global(DefId(u32::MAX))
                     };
-                    
+
                     // Chain field accesses for remaining parts
                     for part in &parts[1..] {
                         let base_expr = Expr {
@@ -674,7 +697,7 @@ impl Resolver {
                         };
                         result_kind = ExprKind::Field(Box::new(base_expr), part.name.clone());
                     }
-                    
+
                     result_kind
                 }
             }
@@ -690,33 +713,36 @@ impl Resolver {
             }
 
             ast::ExprKind::Record(fields) => {
-                let fields = fields.iter()
+                let fields = fields
+                    .iter()
                     .map(|f| {
-                        let value = f.value.as_ref()
-                            .map(|e| self.lower_expr(e))
-                            .unwrap_or_else(|| {
-                                // Shorthand: #{ x } means #{ x = x }
-                                let name = &f.name.name;
-                                if let Some(local_id) = self.lookup_local(name) {
-                                    Expr {
-                                        kind: ExprKind::Var(local_id),
-                                        ty: Self::unknown_ty(span),
-                                        span,
+                        let value =
+                            f.value
+                                .as_ref()
+                                .map(|e| self.lower_expr(e))
+                                .unwrap_or_else(|| {
+                                    // Shorthand: #{ x } means #{ x = x }
+                                    let name = &f.name.name;
+                                    if let Some(local_id) = self.lookup_local(name) {
+                                        Expr {
+                                            kind: ExprKind::Var(local_id),
+                                            ty: Self::unknown_ty(span),
+                                            span,
+                                        }
+                                    } else if let Some(def_id) = self.lookup_global(name) {
+                                        Expr {
+                                            kind: ExprKind::Global(def_id),
+                                            ty: Self::unknown_ty(span),
+                                            span,
+                                        }
+                                    } else {
+                                        Expr {
+                                            kind: ExprKind::Global(DefId(u32::MAX)),
+                                            ty: Self::unknown_ty(span),
+                                            span,
+                                        }
                                     }
-                                } else if let Some(def_id) = self.lookup_global(name) {
-                                    Expr {
-                                        kind: ExprKind::Global(def_id),
-                                        ty: Self::unknown_ty(span),
-                                        span,
-                                    }
-                                } else {
-                                    Expr {
-                                        kind: ExprKind::Global(DefId(u32::MAX)),
-                                        ty: Self::unknown_ty(span),
-                                        span,
-                                    }
-                                }
-                            });
+                                });
                         (f.name.name.clone(), value)
                     })
                     .collect();
@@ -727,9 +753,12 @@ impl Resolver {
                 // Desugar #{ base | field = value } to a record literal
                 // This is a simplification; real implementation would merge
                 let base_expr = self.lower_expr(base);
-                let update_fields: Vec<(String, Expr)> = fields.iter()
+                let update_fields: Vec<(String, Expr)> = fields
+                    .iter()
                     .map(|f| {
-                        let value = f.value.as_ref()
+                        let value = f
+                            .value
+                            .as_ref()
                             .map(|e| self.lower_expr(e))
                             .unwrap_or_else(|| base_expr.clone());
                         (f.name.name.clone(), value)
@@ -740,9 +769,12 @@ impl Resolver {
 
             ast::ExprKind::Lambda { params, body } => {
                 self.push_scope();
-                let params: Vec<Param> = params.iter()
+                let params: Vec<Param> = params
+                    .iter()
                     .map(|p| {
-                        let name = self.pattern_name(&p.pattern).unwrap_or_else(|| "_".to_string());
+                        let name = self
+                            .pattern_name(&p.pattern)
+                            .unwrap_or_else(|| "_".to_string());
                         let id = self.define_local(name.clone());
                         Param {
                             id,
@@ -763,12 +795,16 @@ impl Resolver {
                 ExprKind::Call(Box::new(func), args)
             }
 
-            ast::ExprKind::MethodCall { receiver, method, args } => {
+            ast::ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
                 // Desugar method call to function call: receiver.method(args) -> method(receiver, args)
                 let recv = self.lower_expr(receiver);
                 let mut all_args = vec![recv];
                 all_args.extend(args.iter().map(|e| self.lower_expr(e)));
-                
+
                 let func = if let Some(def_id) = self.lookup_global(&method.name) {
                     Expr {
                         kind: ExprKind::Global(def_id),
@@ -782,7 +818,7 @@ impl Resolver {
                         span,
                     }
                 };
-                
+
                 ExprKind::Call(Box::new(func), all_args)
             }
 
@@ -821,7 +857,11 @@ impl Resolver {
                 ExprKind::Unary(op, Box::new(operand))
             }
 
-            ast::ExprKind::If { condition, then_branch, else_branch } => {
+            ast::ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 let cond = self.lower_expr(condition);
                 let then_br = self.lower_expr(then_branch);
                 let else_br = self.lower_expr(else_branch);
@@ -830,17 +870,13 @@ impl Resolver {
 
             ast::ExprKind::Match { scrutinee, arms } => {
                 let scrutinee = self.lower_expr(scrutinee);
-                let arms = arms.iter()
-                    .map(|arm| self.lower_match_arm(arm))
-                    .collect();
+                let arms = arms.iter().map(|arm| self.lower_match_arm(arm)).collect();
                 ExprKind::Match(Box::new(scrutinee), arms)
             }
 
             ast::ExprKind::Block { stmts, expr } => {
                 self.push_scope();
-                let stmts = stmts.iter()
-                    .map(|s| self.lower_stmt(s))
-                    .collect();
+                let stmts = stmts.iter().map(|s| self.lower_stmt(s)).collect();
                 let expr = expr.as_ref().map(|e| Box::new(self.lower_expr(e)));
                 self.pop_scope();
                 ExprKind::Block(stmts, expr)
@@ -850,18 +886,19 @@ impl Resolver {
                 // Desugar value ?? default to match
                 let value = self.lower_expr(value);
                 let default = self.lower_expr(default);
-                
+
                 // match value { Some(x) => x, None => default }
                 let x_id = self.fresh_local_id();
                 let arms = vec![
                     MatchArm {
                         pattern: Pattern {
-                            kind: PatternKind::Constructor(DefId(u32::MAX), vec![
-                                Pattern {
+                            kind: PatternKind::Constructor(
+                                DefId(u32::MAX),
+                                vec![Pattern {
                                     kind: PatternKind::Var(x_id, "x".to_string()),
                                     span,
-                                }
-                            ]),
+                                }],
+                            ),
                             span,
                         },
                         guard: None,
@@ -882,7 +919,7 @@ impl Resolver {
                         span,
                     },
                 ];
-                
+
                 ExprKind::Match(Box::new(value), arms)
             }
 
@@ -890,33 +927,33 @@ impl Resolver {
                 // Desugar expr? to match expr { Ok(x) => x, Err(e) => return Err(e) }
                 let inner = self.lower_expr(inner);
                 let x_id = self.fresh_local_id();
-                
-                let arms = vec![
-                    MatchArm {
-                        pattern: Pattern {
-                            kind: PatternKind::Constructor(DefId(u32::MAX), vec![
-                                Pattern {
-                                    kind: PatternKind::Var(x_id, "x".to_string()),
-                                    span,
-                                }
-                            ]),
-                            span,
-                        },
-                        guard: None,
-                        body: Expr {
-                            kind: ExprKind::Var(x_id),
-                            ty: Self::unknown_ty(span),
-                            span,
-                        },
+
+                let arms = vec![MatchArm {
+                    pattern: Pattern {
+                        kind: PatternKind::Constructor(
+                            DefId(u32::MAX),
+                            vec![Pattern {
+                                kind: PatternKind::Var(x_id, "x".to_string()),
+                                span,
+                            }],
+                        ),
                         span,
                     },
-                ];
-                
+                    guard: None,
+                    body: Expr {
+                        kind: ExprKind::Var(x_id),
+                        ty: Self::unknown_ty(span),
+                        span,
+                    },
+                    span,
+                }];
+
                 ExprKind::Match(Box::new(inner), arms)
             }
 
             ast::ExprKind::Interpolated(parts) => {
-                let parts = parts.iter()
+                let parts = parts
+                    .iter()
                     .map(|part| match part {
                         ast::StringPart::Literal(s) => StringPart::Literal(s.clone()),
                         ast::StringPart::Expr(e) => StringPart::Expr(self.lower_expr(e)),
@@ -939,9 +976,12 @@ impl Resolver {
         let span = stmt.span;
         let kind = match &stmt.kind {
             ast::StmtKind::Let { pattern, ty, value } => {
-                let name = self.pattern_name(pattern).unwrap_or_else(|| "_".to_string());
+                let name = self
+                    .pattern_name(pattern)
+                    .unwrap_or_else(|| "_".to_string());
                 let id = self.define_local(name.clone());
-                let ty = ty.as_ref()
+                let ty = ty
+                    .as_ref()
                     .map(|t| self.lower_type(t))
                     .unwrap_or_else(|| Self::unknown_ty(span));
                 let value = self.lower_expr(value);
@@ -975,7 +1015,7 @@ impl Resolver {
         let span = pattern.span;
         let kind = match &pattern.kind {
             ast::PatternKind::Wildcard => PatternKind::Wildcard,
-            
+
             ast::PatternKind::Var(ident) => {
                 if ident.name == "_" {
                     PatternKind::Wildcard
@@ -997,23 +1037,22 @@ impl Resolver {
             }
 
             ast::PatternKind::Tuple(patterns) => {
-                let patterns = patterns.iter()
-                    .map(|p| self.lower_pattern(p))
-                    .collect();
+                let patterns = patterns.iter().map(|p| self.lower_pattern(p)).collect();
                 PatternKind::Tuple(patterns)
             }
 
             ast::PatternKind::List(patterns) => {
-                let patterns = patterns.iter()
-                    .map(|p| self.lower_pattern(p))
-                    .collect();
+                let patterns = patterns.iter().map(|p| self.lower_pattern(p)).collect();
                 PatternKind::List(patterns)
             }
 
             ast::PatternKind::Record { fields, .. } => {
-                let fields = fields.iter()
+                let fields = fields
+                    .iter()
                     .map(|f| {
-                        let pattern = f.pattern.as_ref()
+                        let pattern = f
+                            .pattern
+                            .as_ref()
                             .map(|p| self.lower_pattern(p))
                             .unwrap_or_else(|| {
                                 let id = self.define_local(f.name.name.clone());
@@ -1029,12 +1068,11 @@ impl Resolver {
             }
 
             ast::PatternKind::Constructor { path, args } => {
-                let def_id = path.first()
+                let def_id = path
+                    .first()
                     .and_then(|p| self.lookup_global(&p.name))
                     .unwrap_or(DefId(u32::MAX));
-                let args = args.iter()
-                    .map(|p| self.lower_pattern(p))
-                    .collect();
+                let args = args.iter().map(|p| self.lower_pattern(p)).collect();
                 PatternKind::Constructor(def_id, args)
             }
 
@@ -1106,7 +1144,8 @@ impl Resolver {
             }
 
             ast::TypeKind::Record(fields) => {
-                let fields = fields.iter()
+                let fields = fields
+                    .iter()
                     .map(|f| (f.name.name.clone(), self.lower_type(&f.ty)))
                     .collect();
                 TyKind::Record(fields)

@@ -29,4 +29,3 @@ pub fn relative_store_path(path: &Path) -> Option<&Path> {
 pub fn to_absolute(store_path: &StorePath) -> PathBuf {
     store_path.path_with_prefix(&store_dir().to_string_lossy())
 }
-

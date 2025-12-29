@@ -3,14 +3,14 @@
 //! This is a simplified evaluator that works directly on the AST.
 //! It's useful for quick prototyping and REPL.
 
+use crate::EvalError;
+use crate::builtin::builtins;
+use crate::value::{Thunk, ThunkState, Value};
+use neve_hir::{ModuleLoader, ModulePath};
+use neve_syntax::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use neve_syntax::*;
-use neve_hir::{ModuleLoader, ModulePath};
-use crate::value::{Value, Thunk, ThunkState};
-use crate::builtin::builtins;
-use crate::EvalError;
 
 // Re-import StringPart from syntax since we use it here
 use neve_syntax::StringPart;
@@ -41,7 +41,13 @@ impl AstEnv {
         let mut env = Self::new();
         // Load all builtins from the central registry - all are public
         for (name, value) in builtins() {
-            env.bindings.insert(name.to_string(), Binding { value, is_public: true });
+            env.bindings.insert(
+                name.to_string(),
+                Binding {
+                    value,
+                    is_public: true,
+                },
+            );
         }
         env
     }
@@ -55,14 +61,26 @@ impl AstEnv {
 
     /// Define a binding (private by default).
     pub fn define(&mut self, name: String, value: Value) {
-        self.bindings.insert(name, Binding { value, is_public: false });
+        self.bindings.insert(
+            name,
+            Binding {
+                value,
+                is_public: false,
+            },
+        );
     }
-    
+
     /// Define a public binding.
     pub fn define_pub(&mut self, name: String, value: Value) {
-        self.bindings.insert(name, Binding { value, is_public: true });
+        self.bindings.insert(
+            name,
+            Binding {
+                value,
+                is_public: true,
+            },
+        );
     }
-    
+
     /// Define a binding with explicit visibility.
     pub fn define_with_visibility(&mut self, name: String, value: Value, is_public: bool) {
         self.bindings.insert(name, Binding { value, is_public });
@@ -81,23 +99,28 @@ impl AstEnv {
     /// Get all bindings in this environment (not including parent).
     /// Used for module exports.
     pub fn all_bindings(&self) -> HashMap<String, Value> {
-        self.bindings.iter()
+        self.bindings
+            .iter()
             .map(|(k, v)| (k.clone(), v.value.clone()))
             .collect()
     }
-    
+
     /// Get only public bindings in this environment.
     /// Used for module exports when respecting visibility.
     pub fn public_bindings(&self) -> HashMap<String, Value> {
-        self.bindings.iter()
+        self.bindings
+            .iter()
             .filter(|(_, v)| v.is_public)
             .map(|(k, v)| (k.clone(), v.value.clone()))
             .collect()
     }
-    
+
     /// Check if a binding is public.
     pub fn is_public(&self, name: &str) -> bool {
-        self.bindings.get(name).map(|b| b.is_public).unwrap_or(false)
+        self.bindings
+            .get(name)
+            .map(|b| b.is_public)
+            .unwrap_or(false)
     }
 }
 
@@ -126,7 +149,7 @@ impl AstEvaluator {
     }
 
     pub fn with_env(env: Rc<AstEnv>) -> Self {
-        Self { 
+        Self {
             env,
             base_path: None,
             loaded_modules: HashMap::new(),
@@ -158,19 +181,23 @@ impl AstEvaluator {
     pub fn module_loader(&self) -> Option<&ModuleLoader> {
         self.module_loader.as_ref()
     }
-    
+
     /// Call an AstClosure with the given arguments.
-    pub fn call_closure(&mut self, closure: &AstClosure, args: Vec<Value>) -> Result<Value, EvalError> {
+    pub fn call_closure(
+        &mut self,
+        closure: &AstClosure,
+        args: Vec<Value>,
+    ) -> Result<Value, EvalError> {
         if args.len() != closure.params.len() {
             return Err(EvalError::WrongArity);
         }
-        
+
         let mut new_env = AstEnv::child(closure.env.clone());
         for (param, arg) in closure.params.iter().zip(args) {
             let name = pattern_name(&param.pattern);
             new_env.define(name, arg);
         }
-        
+
         let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
         if let Some(ref base) = self.base_path {
             body_eval.base_path = Some(base.clone());
@@ -202,7 +229,10 @@ impl AstEvaluator {
         let (file, diagnostics) = neve_parser::parse(&source);
 
         if !diagnostics.is_empty() {
-            return Err(EvalError::TypeError(format!("parse error in {}", path.display())));
+            return Err(EvalError::TypeError(format!(
+                "parse error in {}",
+                path.display()
+            )));
         }
 
         self.eval_file(&file)
@@ -234,25 +264,33 @@ impl AstEvaluator {
                 // then update the closure to capture the environment that includes itself.
                 let name = fn_def.name.name.clone();
                 let is_pub = fn_def.visibility == Visibility::Public;
-                
+
                 // Create a placeholder closure first
                 let func = AstClosure {
                     params: fn_def.params.clone(),
                     body: fn_def.body.clone(),
                     env: self.env.clone(), // Will be updated below
                 };
-                
+
                 // Define the function in the environment
-                Rc::make_mut(&mut self.env).define_with_visibility(name.clone(), Value::AstClosure(Rc::new(func)), is_pub);
-                
+                Rc::make_mut(&mut self.env).define_with_visibility(
+                    name.clone(),
+                    Value::AstClosure(Rc::new(func)),
+                    is_pub,
+                );
+
                 // Now update the closure to have the environment that includes itself
                 let recursive_func = AstClosure {
                     params: fn_def.params.clone(),
                     body: fn_def.body.clone(),
                     env: self.env.clone(), // Now includes the function itself
                 };
-                Rc::make_mut(&mut self.env).define_with_visibility(name, Value::AstClosure(Rc::new(recursive_func)), is_pub);
-                
+                Rc::make_mut(&mut self.env).define_with_visibility(
+                    name,
+                    Value::AstClosure(Rc::new(recursive_func)),
+                    is_pub,
+                );
+
                 Ok(Value::Unit)
             }
             ItemKind::Import(import_def) => {
@@ -266,52 +304,65 @@ impl AstEvaluator {
     fn eval_import(&mut self, import_def: &ImportDef) -> Result<(), EvalError> {
         // Resolve the module path to a file path
         let module_path = self.resolve_module_path(import_def)?;
-        
+
         // Check if module is already loaded
         if let Some(module_env) = self.loaded_modules.get(&module_path).cloned() {
             // Import from cached module
             self.import_from_env(&module_env, import_def)?;
             return Ok(());
         }
-        
+
         // Load the module
-        let source = std::fs::read_to_string(&module_path)
-            .map_err(|e| EvalError::TypeError(format!("cannot load module '{}': {}", 
-                import_def.path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."),
-                e)))?;
-        
+        let source = std::fs::read_to_string(&module_path).map_err(|e| {
+            EvalError::TypeError(format!(
+                "cannot load module '{}': {}",
+                import_def
+                    .path
+                    .iter()
+                    .map(|i| i.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("."),
+                e
+            ))
+        })?;
+
         let (file, diagnostics) = neve_parser::parse(&source);
-        
+
         if !diagnostics.is_empty() {
-            return Err(EvalError::TypeError(format!("parse error in module '{}'",
-                import_def.path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."))));
+            return Err(EvalError::TypeError(format!(
+                "parse error in module '{}'",
+                import_def
+                    .path
+                    .iter()
+                    .map(|i| i.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".")
+            )));
         }
-        
+
         // Create a new evaluator for the module with its own environment
         let mut module_eval = AstEvaluator::new();
         if let Some(parent) = module_path.parent() {
             module_eval.base_path = Some(parent.to_path_buf());
         }
-        
+
         // Evaluate the module
         module_eval.eval_file(&file)?;
-        
+
         // Cache the module environment
         let module_env = module_eval.env.clone();
         self.loaded_modules.insert(module_path, module_env.clone());
-        
+
         // Import from the module
         self.import_from_env(&module_env, import_def)?;
-        
+
         Ok(())
     }
 
     fn resolve_module_path(&self, import_def: &ImportDef) -> Result<PathBuf, EvalError> {
         let path = &import_def.path;
-        let path_segments: Vec<String> = path.iter()
-            .map(|i| i.name.clone())
-            .collect();
-        
+        let path_segments: Vec<String> = path.iter().map(|i| i.name.clone()).collect();
+
         // Try using ModuleLoader first if available
         if let Some(ref loader) = self.module_loader {
             let module_path = match import_def.prefix {
@@ -320,15 +371,17 @@ impl AstEvaluator {
                 PathPrefix::Super => ModulePath::super_(path_segments.clone()),
                 PathPrefix::Crate => ModulePath::crate_(path_segments.clone()),
             };
-            
-            if let Some(file_path) = loader.resolve_path(&module_path, Some(&self.current_module_path)) {
+
+            if let Some(file_path) =
+                loader.resolve_path(&module_path, Some(&self.current_module_path))
+            {
                 return Ok(file_path);
             }
         }
-        
+
         // Fallback to manual resolution
         let module_name: String = path_segments.join("/");
-        
+
         // Determine base directory based on path prefix
         let base_dir = match import_def.prefix {
             PathPrefix::Absolute => {
@@ -341,7 +394,8 @@ impl AstEvaluator {
             }
             PathPrefix::Super => {
                 // Super-relative - search from parent directory
-                self.base_path.as_ref()
+                self.base_path
+                    .as_ref()
                     .and_then(|p| p.parent())
                     .map(|p| p.to_path_buf())
                     .unwrap_or_else(|| PathBuf::from(".."))
@@ -352,27 +406,38 @@ impl AstEvaluator {
                 self.base_path.clone().unwrap_or_else(|| PathBuf::from("."))
             }
         };
-        
+
         // Try various locations
         let candidates = vec![
             base_dir.join(format!("{}.neve", module_name)),
             base_dir.join(&module_name).join("mod.neve"),
         ];
-        
+
         for candidate in &candidates {
             if candidate.exists() {
                 return Ok(candidate.clone());
             }
         }
-        
+
         Err(EvalError::TypeError(format!(
             "cannot find module '{}' (tried: {})",
-            path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."),
-            candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+            path.iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join("."),
+            candidates
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )))
     }
 
-    fn import_from_env(&mut self, module_env: &Rc<AstEnv>, import_def: &ImportDef) -> Result<(), EvalError> {
+    fn import_from_env(
+        &mut self,
+        module_env: &Rc<AstEnv>,
+        import_def: &ImportDef,
+    ) -> Result<(), EvalError> {
         match &import_def.items {
             ImportItems::Module => {
                 // Import the module as a namespace
@@ -380,11 +445,13 @@ impl AstEvaluator {
                 let module_name = if let Some(alias) = &import_def.alias {
                     alias.name.clone()
                 } else {
-                    import_def.path.last()
+                    import_def
+                        .path
+                        .last()
                         .map(|i| i.name.clone())
                         .unwrap_or_else(|| "module".to_string())
                 };
-                
+
                 // Create a record with only public module bindings
                 let bindings = module_env.public_bindings();
                 let record = Value::Record(Rc::new(bindings));
@@ -398,11 +465,13 @@ impl AstEvaluator {
                     if !module_env.is_public(name) {
                         if module_env.get(name).is_some() {
                             return Err(EvalError::TypeError(format!(
-                                "'{}' is private and cannot be imported", name
+                                "'{}' is private and cannot be imported",
+                                name
                             )));
                         } else {
                             return Err(EvalError::TypeError(format!(
-                                "module does not export '{}'", name
+                                "module does not export '{}'",
+                                name
                             )));
                         }
                     }
@@ -431,22 +500,18 @@ impl AstEvaluator {
             ExprKind::Bool(b) => Ok(Value::Bool(*b)),
             ExprKind::Unit => Ok(Value::Unit),
 
-            ExprKind::Var(ident) => {
-                self.env.get(&ident.name)
-                    .ok_or_else(|| EvalError::TypeError(format!("undefined variable: {}", ident.name)))
-            }
+            ExprKind::Var(ident) => self
+                .env
+                .get(&ident.name)
+                .ok_or_else(|| EvalError::TypeError(format!("undefined variable: {}", ident.name))),
 
             ExprKind::List(items) => {
-                let values: Result<Vec<_>, _> = items.iter()
-                    .map(|e| self.eval_expr(e))
-                    .collect();
+                let values: Result<Vec<_>, _> = items.iter().map(|e| self.eval_expr(e)).collect();
                 Ok(Value::List(Rc::new(values?)))
             }
 
             ExprKind::Tuple(items) => {
-                let values: Result<Vec<_>, _> = items.iter()
-                    .map(|e| self.eval_expr(e))
-                    .collect();
+                let values: Result<Vec<_>, _> = items.iter().map(|e| self.eval_expr(e)).collect();
                 Ok(Value::Tuple(Rc::new(values?)))
             }
 
@@ -457,8 +522,9 @@ impl AstEvaluator {
                         self.eval_expr(v)?
                     } else {
                         // Shorthand: #{ x } means #{ x = x }
-                        self.env.get(&field.name.name)
-                            .ok_or_else(|| EvalError::TypeError(format!("undefined variable: {}", field.name.name)))?
+                        self.env.get(&field.name.name).ok_or_else(|| {
+                            EvalError::TypeError(format!("undefined variable: {}", field.name.name))
+                        })?
                     };
                     map.insert(field.name.name.clone(), value);
                 }
@@ -474,28 +540,37 @@ impl AstEvaluator {
                             let value = if let Some(ref v) = field.value {
                                 self.eval_expr(v)?
                             } else {
-                                self.env.get(&field.name.name)
-                                    .ok_or_else(|| EvalError::TypeError(format!("undefined variable: {}", field.name.name)))?
+                                self.env.get(&field.name.name).ok_or_else(|| {
+                                    EvalError::TypeError(format!(
+                                        "undefined variable: {}",
+                                        field.name.name
+                                    ))
+                                })?
                             };
                             map.insert(field.name.name.clone(), value);
                         }
                         Ok(Value::Record(Rc::new(map)))
                     }
-                    _ => Err(EvalError::TypeError("record update requires a record".to_string())),
+                    _ => Err(EvalError::TypeError(
+                        "record update requires a record".to_string(),
+                    )),
                 }
             }
 
             ExprKind::Lambda { params, body } => {
                 let closure = AstClosure {
-                    params: params.iter().map(|p| Param {
-                        pattern: p.pattern.clone(),
-                        ty: p.ty.clone().unwrap_or(Type {
-                            kind: TypeKind::Infer,
+                    params: params
+                        .iter()
+                        .map(|p| Param {
+                            pattern: p.pattern.clone(),
+                            ty: p.ty.clone().unwrap_or(Type {
+                                kind: TypeKind::Infer,
+                                span: p.span,
+                            }),
+                            is_lazy: false,
                             span: p.span,
-                        }),
-                        is_lazy: false,
-                        span: p.span,
-                    }).collect(),
+                        })
+                        .collect(),
                     body: (**body).clone(),
                     env: self.env.clone(),
                 };
@@ -504,48 +579,53 @@ impl AstEvaluator {
 
             ExprKind::Call { func, args } => {
                 let func_val = self.eval_expr(func)?;
-                let arg_vals: Result<Vec<_>, _> = args.iter()
-                    .map(|e| self.eval_expr(e))
-                    .collect();
+                let arg_vals: Result<Vec<_>, _> = args.iter().map(|e| self.eval_expr(e)).collect();
                 self.apply(func_val, arg_vals?)
             }
 
-            ExprKind::MethodCall { receiver, method, args } => {
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
                 let recv_val = self.eval_expr(receiver)?;
                 let mut all_args = vec![recv_val];
                 for arg in args {
                     all_args.push(self.eval_expr(arg)?);
                 }
-                
+
                 // Look up method as a function
                 if let Some(func) = self.env.get(&method.name) {
                     self.apply(func, all_args)
                 } else {
-                    Err(EvalError::TypeError(format!("undefined method: {}", method.name)))
+                    Err(EvalError::TypeError(format!(
+                        "undefined method: {}",
+                        method.name
+                    )))
                 }
             }
 
             ExprKind::Field { base, field } => {
                 let base_val = self.eval_expr(base)?;
                 match base_val {
-                    Value::Record(fields) => {
-                        fields.get(&field.name)
-                            .cloned()
-                            .ok_or_else(|| EvalError::TypeError(format!("no field '{}' in record", field.name)))
-                    }
-                    _ => Err(EvalError::TypeError("field access requires a record".to_string())),
+                    Value::Record(fields) => fields.get(&field.name).cloned().ok_or_else(|| {
+                        EvalError::TypeError(format!("no field '{}' in record", field.name))
+                    }),
+                    _ => Err(EvalError::TypeError(
+                        "field access requires a record".to_string(),
+                    )),
                 }
             }
 
             ExprKind::TupleIndex { base, index } => {
                 let base_val = self.eval_expr(base)?;
                 match base_val {
-                    Value::Tuple(items) => {
-                        items.get(*index as usize)
-                            .cloned()
-                            .ok_or_else(|| EvalError::TypeError("tuple index out of bounds".to_string()))
-                    }
-                    _ => Err(EvalError::TypeError("tuple index requires a tuple".to_string())),
+                    Value::Tuple(items) => items.get(*index as usize).cloned().ok_or_else(|| {
+                        EvalError::TypeError("tuple index out of bounds".to_string())
+                    }),
+                    _ => Err(EvalError::TypeError(
+                        "tuple index requires a tuple".to_string(),
+                    )),
                 }
             }
 
@@ -554,14 +634,14 @@ impl AstEvaluator {
                 let index_val = self.eval_expr(index)?;
                 match (&base_val, &index_val) {
                     (Value::List(items), Value::Int(i)) => {
-                        items.get(*i as usize)
-                            .cloned()
-                            .ok_or_else(|| EvalError::TypeError("list index out of bounds".to_string()))
+                        items.get(*i as usize).cloned().ok_or_else(|| {
+                            EvalError::TypeError("list index out of bounds".to_string())
+                        })
                     }
                     (Value::String(s), Value::Int(i)) => {
-                        s.chars().nth(*i as usize)
-                            .map(Value::Char)
-                            .ok_or_else(|| EvalError::TypeError("string index out of bounds".to_string()))
+                        s.chars().nth(*i as usize).map(Value::Char).ok_or_else(|| {
+                            EvalError::TypeError("string index out of bounds".to_string())
+                        })
                     }
                     _ => Err(EvalError::TypeError("invalid index operation".to_string())),
                 }
@@ -578,7 +658,11 @@ impl AstEvaluator {
                 self.eval_unary(*op, val)
             }
 
-            ExprKind::If { condition, then_branch, else_branch } => {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 let cond = self.eval_expr(condition)?;
                 if cond.is_truthy() {
                     self.eval_expr(then_branch)
@@ -596,7 +680,7 @@ impl AstEvaluator {
                         for (name, value) in bindings {
                             new_env.define(name, value);
                         }
-                        
+
                         // Check guard
                         if let Some(guard) = &arm.guard {
                             let mut guard_eval = AstEvaluator::with_env(Rc::new(new_env.clone()));
@@ -605,7 +689,7 @@ impl AstEvaluator {
                                 continue;
                             }
                         }
-                        
+
                         let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
                         return body_eval.eval_expr(&arm.body);
                     }
@@ -615,7 +699,7 @@ impl AstEvaluator {
 
             ExprKind::Block { stmts, expr } => {
                 let mut new_env = AstEnv::child(self.env.clone());
-                
+
                 for stmt in stmts {
                     match &stmt.kind {
                         StmtKind::Let { pattern, value, .. } => {
@@ -629,7 +713,7 @@ impl AstEvaluator {
                         }
                     }
                 }
-                
+
                 if let Some(e) = expr {
                     let mut final_eval = AstEvaluator::with_env(Rc::new(new_env));
                     final_eval.eval_expr(e)
@@ -663,23 +747,30 @@ impl AstEvaluator {
                 if parts.is_empty() {
                     return Err(EvalError::TypeError("empty path".to_string()));
                 }
-                
+
                 let first = &parts[0];
-                let mut value = self.env.get(&first.name)
+                let mut value = self
+                    .env
+                    .get(&first.name)
                     .ok_or_else(|| EvalError::TypeError(format!("undefined: {}", first.name)))?;
-                
+
                 // Traverse remaining parts as field accesses
                 for part in &parts[1..] {
                     match value {
                         Value::Record(ref fields) => {
-                            value = fields.get(&part.name)
-                                .cloned()
-                                .ok_or_else(|| EvalError::TypeError(format!("no field '{}' in record", part.name)))?;
+                            value = fields.get(&part.name).cloned().ok_or_else(|| {
+                                EvalError::TypeError(format!("no field '{}' in record", part.name))
+                            })?;
                         }
-                        _ => return Err(EvalError::TypeError(format!("cannot access field '{}' on non-record", part.name))),
+                        _ => {
+                            return Err(EvalError::TypeError(format!(
+                                "cannot access field '{}' on non-record",
+                                part.name
+                            )));
+                        }
                     }
                 }
-                
+
                 Ok(value)
             }
 
@@ -711,32 +802,33 @@ impl AstEvaluator {
                 let base_val = self.eval_expr(base)?;
                 match base_val {
                     Value::None => Ok(Value::None),
-                    Value::Some(inner) => {
-                        match *inner {
-                            Value::Record(ref fields) => {
-                                match fields.get(&field.name) {
-                                    Some(v) => Ok(Value::Some(Box::new(v.clone()))),
-                                    None => Ok(Value::None),
-                                }
-                            }
-                            _ => Err(EvalError::TypeError("safe field access requires a record".to_string())),
-                        }
-                    }
-                    Value::Record(fields) => {
-                        match fields.get(&field.name) {
+                    Value::Some(inner) => match *inner {
+                        Value::Record(ref fields) => match fields.get(&field.name) {
                             Some(v) => Ok(Value::Some(Box::new(v.clone()))),
                             None => Ok(Value::None),
-                        }
-                    }
-                    _ => Err(EvalError::TypeError("safe field access requires an option or record".to_string())),
+                        },
+                        _ => Err(EvalError::TypeError(
+                            "safe field access requires a record".to_string(),
+                        )),
+                    },
+                    Value::Record(fields) => match fields.get(&field.name) {
+                        Some(v) => Ok(Value::Some(Box::new(v.clone()))),
+                        None => Ok(Value::None),
+                    },
+                    _ => Err(EvalError::TypeError(
+                        "safe field access requires an option or record".to_string(),
+                    )),
                 }
             }
 
-            ExprKind::PathLit(path) => {
-                Ok(Value::String(Rc::new(path.clone())))
-            }
+            ExprKind::PathLit(path) => Ok(Value::String(Rc::new(path.clone()))),
 
-            ExprKind::Let { pattern, value, body, .. } => {
+            ExprKind::Let {
+                pattern,
+                value,
+                body,
+                ..
+            } => {
                 let val = self.eval_expr(value)?;
                 let mut new_env = AstEnv::child(self.env.clone());
                 self.bind_pattern_to_env(pattern, val, &mut new_env)?;
@@ -750,7 +842,11 @@ impl AstEvaluator {
     }
 
     /// Evaluate a list comprehension.
-    fn eval_list_comprehension(&mut self, body: &Expr, generators: &[Generator]) -> Result<Value, EvalError> {
+    fn eval_list_comprehension(
+        &mut self,
+        body: &Expr,
+        generators: &[Generator],
+    ) -> Result<Value, EvalError> {
         let mut results = Vec::new();
         self.eval_generators(body, generators, 0, &mut results)?;
         Ok(Value::List(Rc::new(results)))
@@ -777,7 +873,11 @@ impl AstEvaluator {
         // Get the items to iterate over
         let items = match iter_val {
             Value::List(items) => items,
-            _ => return Err(EvalError::TypeError("generator requires a list".to_string())),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "generator requires a list".to_string(),
+                ));
+            }
         };
 
         // Iterate over each item
@@ -817,7 +917,9 @@ impl AstEvaluator {
             match &*state {
                 ThunkState::Evaluated(v) => return Ok(v.clone()),
                 ThunkState::Evaluating => {
-                    return Err(EvalError::TypeError("infinite recursion in lazy evaluation".to_string()));
+                    return Err(EvalError::TypeError(
+                        "infinite recursion in lazy evaluation".to_string(),
+                    ));
                 }
                 ThunkState::Unevaluated { .. } => {
                     // Will evaluate below
@@ -839,7 +941,7 @@ impl AstEvaluator {
         if let Some(ref base) = self.base_path {
             eval.base_path = Some(base.clone());
         }
-        
+
         let result = eval.eval_expr(&expr);
 
         // Store the result (or restore on error)
@@ -853,9 +955,9 @@ impl AstEvaluator {
                 // On error, we could restore the unevaluated state or leave it as error
                 // For now, store an error indicator
                 let mut state = thunk.state_mut();
-                *state = ThunkState::Evaluated(Value::Err(Box::new(Value::String(
-                    Rc::new(e.to_string())
-                ))));
+                *state = ThunkState::Evaluated(Value::Err(Box::new(Value::String(Rc::new(
+                    e.to_string(),
+                )))));
                 Err(e)
             }
         }
@@ -1044,7 +1146,7 @@ impl AstEvaluator {
                     }
                     _ => {}
                 }
-                
+
                 if args.len() != builtin.arity {
                     return Err(EvalError::WrongArity);
                 }
@@ -1064,7 +1166,7 @@ impl AstEvaluator {
                 if args.len() != closure.params.len() {
                     return Err(EvalError::WrongArity);
                 }
-                
+
                 // Use the current evaluator's environment as the parent,
                 // which allows recursive calls to find the function
                 let mut new_env = AstEnv::child(self.env.clone());
@@ -1072,14 +1174,14 @@ impl AstEvaluator {
                     let name = pattern_name(&param.pattern);
                     new_env.define(name, arg);
                 }
-                
+
                 let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
                 body_eval.eval_expr(&closure.body)
             }
             _ => Err(EvalError::NotAFunction),
         }
     }
-    
+
     /// Force evaluation of a value (handles both thunks and regular values).
     fn force_value(&mut self, value: &Value) -> Result<Value, EvalError> {
         match value {
@@ -1098,7 +1200,7 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("map expects a list".to_string())),
         };
-        
+
         let mut results = Vec::with_capacity(items.len());
         for item in items.iter() {
             let result = self.apply(func.clone(), vec![item.clone()])?;
@@ -1113,7 +1215,7 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("filter expects a list".to_string())),
         };
-        
+
         let mut results = Vec::new();
         for item in items.iter() {
             let result = self.apply(pred.clone(), vec![item.clone()])?;
@@ -1130,7 +1232,7 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("all expects a list".to_string())),
         };
-        
+
         for item in items.iter() {
             let result = self.apply(pred.clone(), vec![item.clone()])?;
             if let Value::Bool(false) = result {
@@ -1146,7 +1248,7 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("any expects a list".to_string())),
         };
-        
+
         for item in items.iter() {
             let result = self.apply(pred.clone(), vec![item.clone()])?;
             if let Value::Bool(true) = result {
@@ -1157,12 +1259,17 @@ impl AstEvaluator {
     }
 
     /// foldl(op, init, list) - Left fold: op(op(op(init, x1), x2), x3)...
-    fn builtin_foldl(&mut self, op: &Value, init: &Value, list: &Value) -> Result<Value, EvalError> {
+    fn builtin_foldl(
+        &mut self,
+        op: &Value,
+        init: &Value,
+        list: &Value,
+    ) -> Result<Value, EvalError> {
         let items = match list {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("foldl expects a list".to_string())),
         };
-        
+
         let mut acc = init.clone();
         for item in items.iter() {
             acc = self.apply(op.clone(), vec![acc, item.clone()])?;
@@ -1171,12 +1278,17 @@ impl AstEvaluator {
     }
 
     /// foldr(op, init, list) - Right fold: op(x1, op(x2, op(x3, init)))
-    fn builtin_foldr(&mut self, op: &Value, init: &Value, list: &Value) -> Result<Value, EvalError> {
+    fn builtin_foldr(
+        &mut self,
+        op: &Value,
+        init: &Value,
+        list: &Value,
+    ) -> Result<Value, EvalError> {
         let items = match list {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("foldr expects a list".to_string())),
         };
-        
+
         let mut acc = init.clone();
         for item in items.iter().rev() {
             acc = self.apply(op.clone(), vec![item.clone(), acc])?;
@@ -1188,13 +1300,19 @@ impl AstEvaluator {
     fn builtin_gen_list(&mut self, func: &Value, count: &Value) -> Result<Value, EvalError> {
         let n = match count {
             Value::Int(n) => *n,
-            _ => return Err(EvalError::TypeError("genList expects an integer count".to_string())),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "genList expects an integer count".to_string(),
+                ));
+            }
         };
-        
+
         if n < 0 {
-            return Err(EvalError::TypeError("genList count must be non-negative".to_string()));
+            return Err(EvalError::TypeError(
+                "genList count must be non-negative".to_string(),
+            ));
         }
-        
+
         let mut results = Vec::with_capacity(n as usize);
         for i in 0..n {
             let result = self.apply(func.clone(), vec![Value::Int(i)])?;
@@ -1207,12 +1325,19 @@ impl AstEvaluator {
     fn builtin_map_attrs(&mut self, func: &Value, attrs: &Value) -> Result<Value, EvalError> {
         let fields = match attrs {
             Value::Record(fields) => fields,
-            _ => return Err(EvalError::TypeError("mapAttrs expects a record".to_string())),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "mapAttrs expects a record".to_string(),
+                ));
+            }
         };
-        
+
         let mut results = HashMap::new();
         for (name, value) in fields.iter() {
-            let result = self.apply(func.clone(), vec![Value::String(Rc::new(name.clone())), value.clone()])?;
+            let result = self.apply(
+                func.clone(),
+                vec![Value::String(Rc::new(name.clone())), value.clone()],
+            )?;
             results.insert(name.clone(), result);
         }
         Ok(Value::Record(Rc::new(results)))
@@ -1222,12 +1347,19 @@ impl AstEvaluator {
     fn builtin_filter_attrs(&mut self, pred: &Value, attrs: &Value) -> Result<Value, EvalError> {
         let fields = match attrs {
             Value::Record(fields) => fields,
-            _ => return Err(EvalError::TypeError("filterAttrs expects a record".to_string())),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "filterAttrs expects a record".to_string(),
+                ));
+            }
         };
-        
+
         let mut results = HashMap::new();
         for (name, value) in fields.iter() {
-            let result = self.apply(pred.clone(), vec![Value::String(Rc::new(name.clone())), value.clone()])?;
+            let result = self.apply(
+                pred.clone(),
+                vec![Value::String(Rc::new(name.clone())), value.clone()],
+            )?;
             if let Value::Bool(true) = result {
                 results.insert(name.clone(), value.clone());
             }
@@ -1241,13 +1373,17 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("concatMap expects a list".to_string())),
         };
-        
+
         let mut results = Vec::new();
         for item in items.iter() {
             let result = self.apply(func.clone(), vec![item.clone()])?;
             match result {
                 Value::List(inner) => results.extend(inner.iter().cloned()),
-                _ => return Err(EvalError::TypeError("concatMap function must return a list".to_string())),
+                _ => {
+                    return Err(EvalError::TypeError(
+                        "concatMap function must return a list".to_string(),
+                    ));
+                }
             }
         }
         Ok(Value::List(Rc::new(results)))
@@ -1259,7 +1395,7 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("partition expects a list".to_string())),
         };
-        
+
         let mut right = Vec::new();
         let mut wrong = Vec::new();
         for item in items.iter() {
@@ -1270,7 +1406,7 @@ impl AstEvaluator {
                 wrong.push(item.clone());
             }
         }
-        
+
         let mut record = HashMap::new();
         record.insert("right".to_string(), Value::List(Rc::new(right)));
         record.insert("wrong".to_string(), Value::List(Rc::new(wrong)));
@@ -1283,18 +1419,23 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("groupBy expects a list".to_string())),
         };
-        
+
         let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
         for item in items.iter() {
             let key = self.apply(func.clone(), vec![item.clone()])?;
             let key_str = match key {
                 Value::String(s) => (*s).clone(),
-                _ => return Err(EvalError::TypeError("groupBy function must return a string".to_string())),
+                _ => {
+                    return Err(EvalError::TypeError(
+                        "groupBy function must return a string".to_string(),
+                    ));
+                }
             };
             groups.entry(key_str).or_default().push(item.clone());
         }
-        
-        let record: HashMap<String, Value> = groups.into_iter()
+
+        let record: HashMap<String, Value> = groups
+            .into_iter()
             .map(|(k, v)| (k, Value::List(Rc::new(v))))
             .collect();
         Ok(Value::Record(Rc::new(record)))
@@ -1306,25 +1447,30 @@ impl AstEvaluator {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("sort expects a list".to_string())),
         };
-        
+
         let mut vec: Vec<Value> = items.iter().cloned().collect();
-        
+
         // Use a simple insertion sort to avoid the complexity of sort_by with mutable self
         for i in 1..vec.len() {
             let mut j = i;
             while j > 0 {
-                let cmp_result = self.apply(cmp.clone(), vec![vec[j - 1].clone(), vec[j].clone()])?;
+                let cmp_result =
+                    self.apply(cmp.clone(), vec![vec[j - 1].clone(), vec[j].clone()])?;
                 match cmp_result {
                     Value::Bool(true) => break, // a < b, so order is correct
                     Value::Bool(false) => {
                         vec.swap(j - 1, j);
                         j -= 1;
                     }
-                    _ => return Err(EvalError::TypeError("sort comparator must return a boolean".to_string())),
+                    _ => {
+                        return Err(EvalError::TypeError(
+                            "sort comparator must return a boolean".to_string(),
+                        ));
+                    }
                 }
             }
         }
-        
+
         Ok(Value::List(Rc::new(vec)))
     }
 
@@ -1340,14 +1486,14 @@ impl AstEvaluator {
                 if args.len() != closure.params.len() {
                     return Err(EvalError::WrongArity);
                 }
-                
+
                 // For immutable apply, use the closure's captured environment
                 let mut new_env = AstEnv::child(closure.env.clone());
                 for (param, arg) in closure.params.iter().zip(args) {
                     let name = pattern_name(&param.pattern);
                     new_env.define(name, arg);
                 }
-                
+
                 let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
                 body_eval.eval_expr(&closure.body)
             }
@@ -1355,7 +1501,7 @@ impl AstEvaluator {
         }
     }
 
-    fn match_pattern( pattern: &Pattern, value: &Value) -> Option<Vec<(String, Value)>> {
+    fn match_pattern(pattern: &Pattern, value: &Value) -> Option<Vec<(String, Value)>> {
         match &pattern.kind {
             PatternKind::Wildcard => Some(Vec::new()),
             PatternKind::Var(ident) => {
@@ -1451,19 +1597,27 @@ impl AstEvaluator {
     fn bind_pattern(&mut self, pattern: &Pattern, value: Value) -> Result<(), EvalError> {
         self.bind_pattern_with_visibility(pattern, value, false)
     }
-    
-    fn bind_pattern_with_visibility(&mut self, pattern: &Pattern, value: Value, is_public: bool) -> Result<(), EvalError> {
-        let bindings = Self::match_pattern(pattern, &value)
-            .ok_or(EvalError::PatternMatchFailed)?;
+
+    fn bind_pattern_with_visibility(
+        &mut self,
+        pattern: &Pattern,
+        value: Value,
+        is_public: bool,
+    ) -> Result<(), EvalError> {
+        let bindings = Self::match_pattern(pattern, &value).ok_or(EvalError::PatternMatchFailed)?;
         for (name, val) in bindings {
             Rc::make_mut(&mut self.env).define_with_visibility(name, val, is_public);
         }
         Ok(())
     }
 
-    fn bind_pattern_to_env(&self, pattern: &Pattern, value: Value, env: &mut AstEnv) -> Result<(), EvalError> {
-        let bindings = Self::match_pattern(pattern, &value)
-            .ok_or(EvalError::PatternMatchFailed)?;
+    fn bind_pattern_to_env(
+        &self,
+        pattern: &Pattern,
+        value: Value,
+        env: &mut AstEnv,
+    ) -> Result<(), EvalError> {
+        let bindings = Self::match_pattern(pattern, &value).ok_or(EvalError::PatternMatchFailed)?;
         for (name, val) in bindings {
             env.define(name, val);
         }
@@ -1498,13 +1652,15 @@ impl AstEvaluator {
                 format!("({})", strs.join(", "))
             }
             Value::Record(fields) => {
-                let strs: Vec<String> = fields.iter()
+                let strs: Vec<String> = fields
+                    .iter()
                     .map(|(k, v)| format!("{} = {}", k, Self::value_to_string(v)))
                     .collect();
                 format!("#{{ {} }}", strs.join(", "))
             }
             Value::Map(map) => {
-                let strs: Vec<String> = map.iter()
+                let strs: Vec<String> = map
+                    .iter()
                     .map(|(k, v)| format!("{} => {}", k, Self::value_to_string(v)))
                     .collect();
                 format!("Map{{ {} }}", strs.join(", "))
@@ -1524,13 +1680,11 @@ impl AstEvaluator {
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
             Value::AstClosure(_) => "<function>".to_string(),
             Value::Closure { .. } => "<function>".to_string(),
-            Value::Thunk(thunk) => {
-                match &*thunk.state() {
-                    ThunkState::Evaluated(v) => Self::value_to_string(v),
-                    ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
-                    ThunkState::Unevaluated { .. } => "<thunk>".to_string(),
-                }
-            }
+            Value::Thunk(thunk) => match &*thunk.state() {
+                ThunkState::Evaluated(v) => Self::value_to_string(v),
+                ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
+                ThunkState::Unevaluated { .. } => "<thunk>".to_string(),
+            },
         }
     }
 }
@@ -1578,9 +1732,9 @@ fn values_equal(a: &Value, b: &Value) -> bool {
 fn compare(a: &Value, b: &Value) -> Result<std::cmp::Ordering, EvalError> {
     match (a, b) {
         (Value::Int(x), Value::Int(y)) => Ok(x.cmp(y)),
-        (Value::Float(x), Value::Float(y)) => {
-            x.partial_cmp(y).ok_or_else(|| EvalError::TypeError("cannot compare NaN".to_string()))
-        }
+        (Value::Float(x), Value::Float(y)) => x
+            .partial_cmp(y)
+            .ok_or_else(|| EvalError::TypeError("cannot compare NaN".to_string())),
         (Value::String(x), Value::String(y)) => Ok(x.cmp(y)),
         (Value::Char(x), Value::Char(y)) => Ok(x.cmp(y)),
         _ => Err(EvalError::TypeError("cannot compare".to_string())),

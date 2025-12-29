@@ -5,14 +5,13 @@
 
 mod hir;
 mod lower;
-mod resolve;
 mod module_loader;
+mod resolve;
 
 pub use hir::*;
 pub use lower::lower;
-pub use resolve::Resolver;
 pub use module_loader::{
-    ModuleLoader, ModulePath, ModulePathKind, ModuleInfo,
-    Visibility, ModuleLoadError, ImportResolveError,
+    ImportResolveError, ModuleInfo, ModuleLoadError, ModuleLoader, ModulePath, ModulePathKind,
+    Visibility,
 };
-
+pub use resolve::Resolver;

@@ -2,11 +2,11 @@
 //!
 //! This crate provides beautiful error messages using ariadne.
 
-mod diagnostic;
 mod codes;
+mod diagnostic;
 
-pub use diagnostic::{Diagnostic, DiagnosticKind, Label, Severity};
 pub use codes::ErrorCode;
+pub use diagnostic::{Diagnostic, DiagnosticKind, Label, Severity};
 
 use ariadne::{ColorGenerator, Label as AriadneLabel, Report, ReportKind, Source};
 

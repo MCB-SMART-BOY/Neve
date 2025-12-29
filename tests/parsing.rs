@@ -5,7 +5,7 @@
 
 use neve_lexer::Lexer;
 use neve_parser::Parser;
-use neve_syntax::{ItemKind, ExprKind, PatternKind};
+use neve_syntax::{ExprKind, ItemKind, PatternKind};
 
 #[test]
 fn test_parse_basic_function() {
@@ -201,11 +201,19 @@ fn test_parse_module_imports() {
     let ast = parser.parse_file();
 
     // Count import statements
-    let import_count = ast.items.iter().filter(|item| matches!(item.kind, ItemKind::Import(_))).count();
+    let import_count = ast
+        .items
+        .iter()
+        .filter(|item| matches!(item.kind, ItemKind::Import(_)))
+        .count();
     assert_eq!(import_count, 3);
 
     // Count function definitions
-    let fn_count = ast.items.iter().filter(|item| matches!(item.kind, ItemKind::Fn(_))).count();
+    let fn_count = ast
+        .items
+        .iter()
+        .filter(|item| matches!(item.kind, ItemKind::Fn(_)))
+        .count();
     assert_eq!(fn_count, 1);
 }
 

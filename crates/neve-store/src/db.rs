@@ -71,7 +71,7 @@ impl Database {
     pub fn open(root: PathBuf) -> Result<Self, StoreError> {
         let db_dir = root.join("db");
         fs::create_dir_all(&db_dir)?;
-        
+
         Ok(Self {
             root: db_dir,
             cache: HashMap::new(),
@@ -97,16 +97,16 @@ impl Database {
         if let Some(info) = self.cache.get(store_path) {
             return Ok(Some(info.clone()));
         }
-        
+
         let path = self.info_path(store_path);
         if !path.exists() {
             return Ok(None);
         }
-        
+
         let json = fs::read_to_string(&path)?;
         let info: PathInfo = serde_json::from_str(&json)?;
         self.cache.insert(store_path.clone(), info.clone());
-        
+
         Ok(Some(info))
     }
 
@@ -116,32 +116,40 @@ impl Database {
     }
 
     /// Get all references of a path.
-    pub fn get_references(&mut self, store_path: &StorePath) -> Result<HashSet<StorePath>, StoreError> {
-        Ok(self.query(store_path)?
+    pub fn get_references(
+        &mut self,
+        store_path: &StorePath,
+    ) -> Result<HashSet<StorePath>, StoreError> {
+        Ok(self
+            .query(store_path)?
             .map(|i| i.references)
             .unwrap_or_default())
     }
 
     /// Get paths that reference the given path (referrers).
-    pub fn get_referrers(&mut self, store_path: &StorePath) -> Result<HashSet<StorePath>, StoreError> {
+    pub fn get_referrers(
+        &mut self,
+        store_path: &StorePath,
+    ) -> Result<HashSet<StorePath>, StoreError> {
         let mut referrers = HashSet::new();
-        
+
         // Scan all info files (inefficient, but simple)
         if !self.root.exists() {
             return Ok(referrers);
         }
-        
+
         for entry in fs::read_dir(&self.root)? {
             let entry = entry?;
             if entry.path().extension().is_some_and(|e| e == "json") {
                 let json = fs::read_to_string(entry.path())?;
                 if let Ok(info) = serde_json::from_str::<PathInfo>(&json)
-                    && info.references.contains(store_path) {
-                        referrers.insert(info.path);
-                    }
+                    && info.references.contains(store_path)
+                {
+                    referrers.insert(info.path);
+                }
             }
         }
-        
+
         Ok(referrers)
     }
 
@@ -167,11 +175,11 @@ impl Database {
     /// List all registered paths.
     pub fn list_all(&self) -> Result<Vec<StorePath>, StoreError> {
         let mut paths = Vec::new();
-        
+
         if !self.root.exists() {
             return Ok(paths);
         }
-        
+
         for entry in fs::read_dir(&self.root)? {
             let entry = entry?;
             if entry.path().extension().is_some_and(|e| e == "json") {
@@ -181,7 +189,7 @@ impl Database {
                 }
             }
         }
-        
+
         Ok(paths)
     }
 }
@@ -193,4 +201,3 @@ fn current_time() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
-

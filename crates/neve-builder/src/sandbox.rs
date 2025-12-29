@@ -11,8 +11,8 @@
 //! On other platforms, builds run without full isolation.
 
 use crate::BuildError;
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Resource limits for builds.
 #[derive(Debug, Clone)]
@@ -32,11 +32,11 @@ pub struct ResourceLimits {
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            max_memory: 0,          // Unlimited
-            max_cpu_time: 0,        // Unlimited
-            max_processes: 1024,    // Reasonable default
-            max_fds: 1024,          // Reasonable default
-            max_file_size: 0,       // Unlimited
+            max_memory: 0,       // Unlimited
+            max_cpu_time: 0,     // Unlimited
+            max_processes: 1024, // Reasonable default
+            max_fds: 1024,       // Reasonable default
+            max_file_size: 0,    // Unlimited
         }
     }
 }
@@ -90,7 +90,7 @@ impl SandboxConfig {
     pub fn add_ro_path(&mut self, path: PathBuf) {
         self.ro_paths.push(path);
     }
-    
+
     /// Add a read-write path.
     pub fn add_rw_path(&mut self, path: PathBuf) {
         self.rw_paths.push(path);
@@ -101,31 +101,31 @@ impl SandboxConfig {
         self.network = true;
         self
     }
-    
+
     /// Add an environment variable.
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.insert(key.into(), value.into());
         self
     }
-    
+
     /// Set resource limits.
     pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
         self.limits = limits;
         self
     }
-    
+
     /// Set memory limit in bytes.
     pub fn with_memory_limit(mut self, bytes: u64) -> Self {
         self.limits.max_memory = bytes;
         self
     }
-    
+
     /// Set CPU time limit in seconds.
     pub fn with_cpu_limit(mut self, seconds: u64) -> Self {
         self.limits.max_cpu_time = seconds;
         self
     }
-    
+
     /// Set build log file.
     pub fn with_log_file(mut self, path: PathBuf) -> Self {
         self.log_file = Some(path);
@@ -147,10 +147,10 @@ impl Sandbox {
         std::fs::create_dir_all(&config.root)?;
         std::fs::create_dir_all(&config.build_dir)?;
         std::fs::create_dir_all(&config.output_dir)?;
-        
+
         // Create tmp directory inside build dir
         std::fs::create_dir_all(config.build_dir.join("tmp"))?;
-        
+
         Ok(Self {
             config,
             active: false,
@@ -171,12 +171,12 @@ impl Sandbox {
     pub fn output_dir(&self) -> &Path {
         &self.config.output_dir
     }
-    
+
     /// Check if the sandbox is currently active.
     pub fn is_active(&self) -> bool {
         self.active
     }
-    
+
     /// Enter the sandbox (mark as active before build).
     pub fn enter(&mut self) -> Result<(), BuildError> {
         if self.active {
@@ -185,7 +185,7 @@ impl Sandbox {
         self.active = true;
         Ok(())
     }
-    
+
     /// Leave the sandbox (mark as inactive after build).
     pub fn leave(&mut self) {
         self.active = false;
@@ -215,53 +215,65 @@ impl Sandbox {
         args: &[String],
         env: &HashMap<String, String>,
     ) -> Result<std::process::Output, BuildError> {
+        use nix::mount::{MntFlags, MsFlags, mount, umount2};
         use nix::sched::{CloneFlags, unshare};
-        use nix::unistd::{fork, ForkResult, chroot, chdir, sethostname};
-        use nix::mount::{mount, MsFlags, umount2, MntFlags};
         use nix::sys::wait::waitpid;
+        use nix::unistd::{ForkResult, chdir, chroot, fork, sethostname};
         use std::os::unix::process::ExitStatusExt;
-        
+
         // Create a new root for the sandbox
         let newroot = self.config.root.join("rootfs");
         std::fs::create_dir_all(&newroot)?;
-        
+
         // Set up directory structure
-        let dirs = ["bin", "usr/bin", "lib", "lib64", "etc", "tmp", "proc", "dev", "build", "output", "neve/store"];
+        let dirs = [
+            "bin",
+            "usr/bin",
+            "lib",
+            "lib64",
+            "etc",
+            "tmp",
+            "proc",
+            "dev",
+            "build",
+            "output",
+            "neve/store",
+        ];
         for dir in dirs {
             std::fs::create_dir_all(newroot.join(dir))?;
         }
-        
+
         // Clone flags for namespace isolation
         let mut clone_flags = CloneFlags::CLONE_NEWUSER
             | CloneFlags::CLONE_NEWNS
             | CloneFlags::CLONE_NEWPID
             | CloneFlags::CLONE_NEWIPC
             | CloneFlags::CLONE_NEWUTS;
-        
+
         if !self.config.network {
             clone_flags |= CloneFlags::CLONE_NEWNET;
         }
-        
+
         // Fork a child process
         match unsafe { fork() } {
             Ok(ForkResult::Parent { child }) => {
                 // Wait for the child
                 let status = waitpid(child, None)
                     .map_err(|e| BuildError::Sandbox(format!("waitpid failed: {}", e)))?;
-                
+
                 // Clean up
                 let _ = std::fs::remove_dir_all(&newroot);
-                
+
                 use nix::sys::wait::WaitStatus;
                 match status {
-                    WaitStatus::Exited(_, code) => {
-                        Ok(std::process::Output {
-                            status: std::process::ExitStatus::from_raw(code),
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                        })
-                    }
-                    _ => Err(BuildError::Sandbox("child process did not exit normally".into())),
+                    WaitStatus::Exited(_, code) => Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(code),
+                        stdout: Vec::new(),
+                        stderr: Vec::new(),
+                    }),
+                    _ => Err(BuildError::Sandbox(
+                        "child process did not exit normally".into(),
+                    )),
                 }
             }
             Ok(ForkResult::Child) => {
@@ -270,92 +282,110 @@ impl Sandbox {
                     eprintln!("Failed to unshare: {}", e);
                     std::process::exit(1);
                 }
-                
+
                 // Write UID/GID mappings
                 let uid = nix::unistd::getuid();
                 let gid = nix::unistd::getgid();
-                
+
                 // Map current user to root in the namespace
                 let _ = std::fs::write("/proc/self/uid_map", format!("0 {} 1\n", uid));
                 let _ = std::fs::write("/proc/self/setgroups", "deny\n");
                 let _ = std::fs::write("/proc/self/gid_map", format!("0 {} 1\n", gid));
-                
+
                 // Apply resource limits using rlimit
                 apply_resource_limits(&self.config.limits);
-                
+
                 // Set up mounts - bind mount essential directories
                 let mount_opts: Option<&str> = None;
-                
+
                 // Make all mounts private
                 if let Err(e) = mount::<str, str, str, str>(
-                    None, "/", None, MsFlags::MS_PRIVATE | MsFlags::MS_REC, None
+                    None,
+                    "/",
+                    None,
+                    MsFlags::MS_PRIVATE | MsFlags::MS_REC,
+                    None,
                 ) {
                     eprintln!("Failed to make mounts private: {}", e);
                     std::process::exit(1);
                 }
-                
+
                 // Bind mount the new root
                 if let Err(e) = mount(
-                    Some(&newroot), &newroot, mount_opts,
-                    MsFlags::MS_BIND | MsFlags::MS_REC, mount_opts
+                    Some(&newroot),
+                    &newroot,
+                    mount_opts,
+                    MsFlags::MS_BIND | MsFlags::MS_REC,
+                    mount_opts,
                 ) {
                     eprintln!("Failed to bind mount newroot: {}", e);
                     std::process::exit(1);
                 }
-                
+
                 // Bind mount necessary paths
-                let bind_mounts = [
-                    ("/bin", "bin"),
-                    ("/usr", "usr"),
-                    ("/lib", "lib"),
-                ];
-                
+                let bind_mounts = [("/bin", "bin"), ("/usr", "usr"), ("/lib", "lib")];
+
                 for (src, dst) in bind_mounts {
                     let src_path = Path::new(src);
                     let dst_path = newroot.join(dst);
                     if src_path.exists() {
                         let _ = mount(
-                            Some(src_path), &dst_path, mount_opts,
-                            MsFlags::MS_BIND | MsFlags::MS_RDONLY | MsFlags::MS_REC, mount_opts
+                            Some(src_path),
+                            &dst_path,
+                            mount_opts,
+                            MsFlags::MS_BIND | MsFlags::MS_RDONLY | MsFlags::MS_REC,
+                            mount_opts,
                         );
                     }
                 }
-                
+
                 // Mount /lib64 if it exists
                 if Path::new("/lib64").exists() {
                     let _ = mount(
-                        Some(Path::new("/lib64")), &newroot.join("lib64"), mount_opts,
-                        MsFlags::MS_BIND | MsFlags::MS_RDONLY, mount_opts
+                        Some(Path::new("/lib64")),
+                        &newroot.join("lib64"),
+                        mount_opts,
+                        MsFlags::MS_BIND | MsFlags::MS_RDONLY,
+                        mount_opts,
                     );
                 }
-                
+
                 // Bind mount the store as read-only
                 if self.config.store_dir.exists() {
                     let _ = mount(
-                        Some(&self.config.store_dir), &newroot.join("neve/store"), mount_opts,
-                        MsFlags::MS_BIND | MsFlags::MS_RDONLY, mount_opts
+                        Some(&self.config.store_dir),
+                        &newroot.join("neve/store"),
+                        mount_opts,
+                        MsFlags::MS_BIND | MsFlags::MS_RDONLY,
+                        mount_opts,
                     );
                 }
-                
+
                 // Bind mount build and output directories
                 if let Err(e) = mount(
-                    Some(&self.config.build_dir), &newroot.join("build"), mount_opts,
-                    MsFlags::MS_BIND, mount_opts
+                    Some(&self.config.build_dir),
+                    &newroot.join("build"),
+                    mount_opts,
+                    MsFlags::MS_BIND,
+                    mount_opts,
                 ) {
                     eprintln!("Failed to mount build dir: {}", e);
                 }
-                
+
                 if let Err(e) = mount(
-                    Some(&self.config.output_dir), &newroot.join("output"), mount_opts,
-                    MsFlags::MS_BIND, mount_opts
+                    Some(&self.config.output_dir),
+                    &newroot.join("output"),
+                    mount_opts,
+                    MsFlags::MS_BIND,
+                    mount_opts,
                 ) {
                     eprintln!("Failed to mount output dir: {}", e);
                 }
-                
+
                 // Pivot root
                 let old_root = newroot.join("old_root");
                 std::fs::create_dir_all(&old_root).ok();
-                
+
                 if nix::unistd::pivot_root(&newroot, &old_root).is_err() {
                     // Fall back to chroot if pivot_root fails
                     if let Err(e) = chroot(&newroot) {
@@ -369,34 +399,37 @@ impl Sandbox {
                     }
                     std::fs::remove_dir("/old_root").ok();
                 }
-                
+
                 // Change to build directory
                 if let Err(e) = chdir("/build") {
                     eprintln!("Failed to chdir: {}", e);
                     std::process::exit(1);
                 }
-                
+
                 // Mount proc
                 let _ = mount::<str, str, str, str>(
-                    Some("proc"), "/proc", Some("proc"),
-                    MsFlags::empty(), None
+                    Some("proc"),
+                    "/proc",
+                    Some("proc"),
+                    MsFlags::empty(),
+                    None,
                 );
-                
+
                 // Set hostname
                 let _ = sethostname("neve-build");
-                
+
                 // Set up environment and exec
                 let mut cmd = std::process::Command::new(program);
                 cmd.args(args);
                 cmd.env_clear();
-                
+
                 // Default environment
                 cmd.env("PATH", "/bin:/usr/bin");
                 cmd.env("HOME", "/build");
                 cmd.env("TMPDIR", "/tmp");
                 cmd.env("NIX_BUILD_TOP", "/build");
                 cmd.env("out", "/output");
-                
+
                 // User-specified environment
                 for (key, value) in env {
                     cmd.env(key, value);
@@ -404,7 +437,7 @@ impl Sandbox {
                 for (key, value) in &self.config.env {
                     cmd.env(key, value);
                 }
-                
+
                 // Execute
                 let status = cmd.status();
                 match status {
@@ -415,9 +448,7 @@ impl Sandbox {
                     }
                 }
             }
-            Err(e) => {
-                Err(BuildError::Sandbox(format!("fork failed: {}", e)))
-            }
+            Err(e) => Err(BuildError::Sandbox(format!("fork failed: {}", e))),
         }
     }
 
@@ -430,19 +461,19 @@ impl Sandbox {
         env: &HashMap<String, String>,
     ) -> Result<std::process::Output, BuildError> {
         use std::process::Command;
-        
+
         let mut cmd = Command::new(program);
         cmd.args(args)
             .current_dir(&self.config.build_dir)
             .env_clear();
-        
+
         // Default environment
         cmd.env("HOME", &self.config.build_dir);
         cmd.env("TMPDIR", self.config.build_dir.join("tmp"));
         cmd.env("PATH", "/bin:/usr/bin");
         cmd.env("NIX_BUILD_TOP", &self.config.build_dir);
         cmd.env("out", &self.config.output_dir);
-        
+
         // User environment
         for (key, value) in env {
             cmd.env(key, value);
@@ -450,7 +481,7 @@ impl Sandbox {
         for (key, value) in &self.config.env {
             cmd.env(key, value);
         }
-        
+
         let output = cmd.output()?;
         Ok(output)
     }
@@ -464,17 +495,17 @@ impl Sandbox {
         env: &HashMap<String, String>,
     ) -> Result<std::process::Output, BuildError> {
         use std::process::Command;
-        
+
         let mut cmd = Command::new(program);
         cmd.args(args)
             .current_dir(&self.config.build_dir)
             .env_clear();
-        
+
         // Default environment
         cmd.env("HOME", &self.config.build_dir);
         cmd.env("TMPDIR", self.config.build_dir.join("tmp"));
         cmd.env("out", &self.config.output_dir);
-        
+
         // User environment
         for (key, value) in env {
             cmd.env(key, value);
@@ -482,7 +513,7 @@ impl Sandbox {
         for (key, value) in &self.config.env {
             cmd.env(key, value);
         }
-        
+
         let output = cmd.output()?;
         Ok(output)
     }
@@ -547,39 +578,47 @@ impl IsolationLevel {
 /// Apply resource limits using setrlimit.
 #[cfg(target_os = "linux")]
 fn apply_resource_limits(limits: &ResourceLimits) {
-    use nix::sys::resource::{setrlimit, Resource};
-    
+    use nix::sys::resource::{Resource, setrlimit};
+
     // Set memory limit (address space)
     if limits.max_memory > 0 {
         let _ = setrlimit(Resource::RLIMIT_AS, limits.max_memory, limits.max_memory);
     }
-    
+
     // Set CPU time limit
     if limits.max_cpu_time > 0 {
-        let _ = setrlimit(Resource::RLIMIT_CPU, limits.max_cpu_time, limits.max_cpu_time);
+        let _ = setrlimit(
+            Resource::RLIMIT_CPU,
+            limits.max_cpu_time,
+            limits.max_cpu_time,
+        );
     }
-    
+
     // Set max processes
     if limits.max_processes > 0 {
         let _ = setrlimit(
-            Resource::RLIMIT_NPROC, 
-            limits.max_processes as u64, 
-            limits.max_processes as u64
+            Resource::RLIMIT_NPROC,
+            limits.max_processes as u64,
+            limits.max_processes as u64,
         );
     }
-    
+
     // Set max file descriptors
     if limits.max_fds > 0 {
         let _ = setrlimit(
-            Resource::RLIMIT_NOFILE, 
-            limits.max_fds as u64, 
-            limits.max_fds as u64
+            Resource::RLIMIT_NOFILE,
+            limits.max_fds as u64,
+            limits.max_fds as u64,
         );
     }
-    
+
     // Set max file size
     if limits.max_file_size > 0 {
-        let _ = setrlimit(Resource::RLIMIT_FSIZE, limits.max_file_size, limits.max_file_size);
+        let _ = setrlimit(
+            Resource::RLIMIT_FSIZE,
+            limits.max_file_size,
+            limits.max_file_size,
+        );
     }
 }
 
@@ -623,7 +662,7 @@ impl BuildPhase {
             BuildPhase::Dist => "dist",
         }
     }
-    
+
     /// Get all phases in order.
     pub fn all() -> &'static [BuildPhase] {
         &[
@@ -658,7 +697,7 @@ impl BuildHook {
             script: script.into(),
         }
     }
-    
+
     /// Create a post-phase hook.
     pub fn post(phase: BuildPhase, script: impl Into<String>) -> Self {
         Self {
@@ -668,4 +707,3 @@ impl BuildHook {
         }
     }
 }
-
