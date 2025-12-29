@@ -45,8 +45,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 blake3 = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["blocking"] }
-git2 = "0.20"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2", "vendored-openssl"] }
 rustyline = "15"
 logos = "0.15"
 tar = "0.4"
