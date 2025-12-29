@@ -7,8 +7,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  v0.4.0 / v0.3.1 / v0.3.0 / v0.2.0 / v0.1.0      │
-│  [中文]     #chinese   ──→  v0.4.0 / v0.3.1 / v0.3.0 / v0.2.0 / v0.1.0      │
+│  [English]  #english   ──→  v0.4.1 / v0.4.0 / v0.3.1 / v0.3.0 / v0.2.0      │
+│  [中文]     #chinese   ──→  v0.4.1 / v0.4.0 / v0.3.1 / v0.3.0 / v0.2.0      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,6 +21,16 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 # English
 
 > *What changed, when, and why.*
+
+## [0.4.1] - 2025-12-29
+
+### Added
+- **Terminal Markdown rendering**: `neve doc` now renders with colors and styling
+- **Windows one-line installer**: `irm .../install.ps1 | iex`
+
+### Improved
+- Cross-platform install documentation with collapsible sections
+- Better code block and table rendering in docs
 
 ## [0.4.0] - 2025-12-29
 
@@ -117,6 +127,16 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > 改了啥、啥时候改的、为啥改。
 
+## [0.4.1] - 2025-12-29
+
+### 新功能
+- **终端 Markdown 渲染**: `neve doc` 现在有颜色和样式了
+- **Windows 一键安装**: `irm .../install.ps1 | iex`
+
+### 改进
+- 跨平台安装文档，用折叠面板分类
+- 代码块和表格渲染效果更好
+
 ## [0.4.0] - 2025-12-29
 
 ### 新功能
@@ -206,6 +226,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.4.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.2.0...v0.3.0
