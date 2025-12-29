@@ -1,152 +1,138 @@
-# Neve 完整教程 / Complete Tutorial
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                            COMPLETE TUTORIAL                                  ║
+║                               完整教程                                         ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
 
-本教程将带你深入了解 Neve 语言的各个方面。
-
-## 目录 / Table of Contents
-
-1. [基础语法](#基础语法)
-2. [类型系统](#类型系统)
-3. [模式匹配](#模式匹配)
-4. [Traits 和多态](#traits-和多态)
-5. [模块系统](#模块系统)
-6. [包管理](#包管理)
-7. [最佳实践](#最佳实践)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [English]  #english   ──→  Basics / Types / Patterns / Traits / Modules   │
+│  [中文]     #chinese   ──→  基础 / 类型 / 匹配 / Trait / 模块              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 基础语法
+<a name="english"></a>
 
-### 值和变量
+# English
 
-Neve 中的所有绑定都是不可变的:
+## 1. Basics
+
+### Values and Bindings
+
+All bindings are immutable:
 
 ```neve
 let x = 42;
 let name = "Alice";
-let isValid = true;
+let valid = true;
 ```
 
-### 函数定义
-
-函数是一等公民:
+### Functions
 
 ```neve
--- 简单函数
+-- Named function
 fn add(x: Int, y: Int) -> Int = x + y;
 
--- Lambda 表达式
+-- Lambda
 let multiply = fn(x, y) x * y;
 
--- 多参数和类型推导
+-- With string interpolation
 fn greet(name) = `Hello, {name}!`;
 ```
 
-### 记录 (Records)
-
-记录是结构化数据的基础:
+### Records
 
 ```neve
 let user = #{
     name = "Bob",
     age = 30,
-    email = "bob@example.com",
 };
 
--- 访问字段
-let name = user.name;
+-- Access
+let n = user.name;
 
--- 记录更新 (创建新记录)
-let updated = user // #{ age = 31 };
+-- Update (creates new record)
+let older = user // #{ age = 31 };
+
+-- Shorthand
+let name = "Alice";
+let u = #{ name, age = 25 };  -- same as #{ name = name, age = 25 }
 ```
 
-### 列表
-
-列表是同质集合:
+### Lists
 
 ```neve
-let numbers = [1, 2, 3, 4, 5];
-let names = ["Alice", "Bob", "Charlie"];
+let nums = [1, 2, 3, 4, 5];
 
--- 列表拼接
+-- Concatenate
 let combined = [1, 2] ++ [3, 4];
 
--- 列表推导
-let doubled = [x * 2 | x <- numbers];
-let filtered = [x | x <- numbers, x > 2];
+-- Comprehension
+let doubled = [x * 2 | x <- nums];
+let filtered = [x | x <- nums, x > 2];
+```
+
+### Blocks
+
+```neve
+let result = {
+    let a = 10;
+    let b = 20;
+    a + b   -- last expression is returned
+};
 ```
 
 ---
 
-## 类型系统
+## 2. Type System
 
-### 基本类型
+### Basic Types
 
 ```neve
-Int      -- 整数
-Float    -- 浮点数
-Bool     -- 布尔值
-Char     -- 字符
-String   -- 字符串
-Unit     -- 单元类型 ()
+Int, Float, Bool, Char, String, Unit
 ```
 
-### 复合类型
+### Compound Types
 
 ```neve
--- 元组
+-- Tuple
 type Point = (Int, Int);
-let p: Point = (10, 20);
 
--- 列表
+-- List
 type Numbers = List<Int>;
-let nums: Numbers = [1, 2, 3];
 
--- 记录类型
-type User = #{
-    name: String,
-    age: Int,
-};
+-- Record type
+type User = #{ name: String, age: Int };
 ```
 
-### 泛型
+### Generics
 
 ```neve
--- 泛型函数
 fn first<T>(xs: List<T>) -> Option<T> = match xs {
     [] -> None,
     [h, ..] -> Some(h),
 };
 
--- 泛型类型别名
-type Pair<A, B> = (A, B);
-
--- 泛型结构体
-struct Container<T> {
-    value: T,
-};
+fn identity<T>(x: T) -> T = x;
 ```
 
-### 类型推导
+### Type Inference
 
-Neve 使用 Hindley-Milner 类型推导:
+Neve uses Hindley-Milner:
 
 ```neve
--- 类型会自动推导
-let double = fn(x) x * 2;  -- Int -> Int
-
--- 多态函数
-let identity = fn(x) x;  -- forall a. a -> a
-
--- 组合函数
-let compose = fn(f, g) fn(x) f(g(x));
--- forall a b c. (b -> c) -> (a -> b) -> a -> c
+let double = fn(x) x * 2;     -- inferred: Int -> Int
+let id = fn(x) x;             -- inferred: forall a. a -> a
 ```
 
 ---
 
-## 模式匹配
+## 3. Pattern Matching
 
-### 基础匹配
+### Basics
 
 ```neve
 fn describe(x) = match x {
@@ -156,21 +142,269 @@ fn describe(x) = match x {
 };
 ```
 
-### 列表模式
+### Lists
 
 ```neve
 fn sum(xs) = match xs {
     [] -> 0,
     [h, ..t] -> h + sum(t),
 };
+```
 
-fn length(xs) = match xs {
-    [] -> 0,
-    [_, ..t] -> 1 + length(t),
+### Records
+
+```neve
+fn getName(user) = match user {
+    #{ name, .. } -> name,
+};
+
+fn isAdult(user) = match user {
+    #{ age } if age >= 18 -> true,
+    _ -> false,
 };
 ```
 
-### 记录模式
+### Option and Result
+
+```neve
+fn divide(a, b) = {
+    if b == 0 then Err("div by zero")
+    else Ok(a / b)
+};
+
+match divide(10, 2) {
+    Ok(n) -> `Got: {n}`,
+    Err(e) -> `Error: {e}`,
+}
+```
+
+---
+
+## 4. Traits
+
+### Define
+
+```neve
+trait Show {
+    fn show(self) -> String;
+};
+
+trait Eq {
+    fn eq(self, other: Self) -> Bool;
+};
+```
+
+### Implement
+
+```neve
+struct Point { x: Int, y: Int };
+
+impl Show for Point {
+    fn show(self) = `Point({self.x}, {self.y})`;
+};
+
+impl Eq for Point {
+    fn eq(self, other) = self.x == other.x && self.y == other.y;
+};
+```
+
+### Bounds
+
+```neve
+fn print_all<T: Show>(items: List<T>) = {
+    -- T must implement Show
+};
+```
+
+---
+
+## 5. Modules
+
+### Define
+
+```neve
+-- utils.neve
+pub fn add(x, y) = x + y;
+fn helper() = 42;  -- private
+```
+
+### Import
+
+```neve
+import utils;
+let r = utils.add(1, 2);
+
+-- Or selective
+import utils (add);
+let r = add(1, 2);
+```
+
+---
+
+## 6. Best Practices
+
+1. **Use type annotations** for public APIs
+2. **Prefer immutable data** (it's the only option anyway)
+3. **Use tail recursion** for large iterations
+4. **Use pipes** for data transformation chains
+5. **Match exhaustively** — handle all cases
+
+```neve
+-- Good: clear data flow
+let result = data
+    |> filter(valid)
+    |> map(transform)
+    |> fold(0, add);
+```
+
+---
+
+## Next
+
+- [Spec](spec.md) — full language reference
+- [API](api.md) — standard library
+- [Philosophy](philosophy.md) — why these design choices
+
+---
+
+<a name="chinese"></a>
+
+# 中文
+
+## 1. 基础
+
+### 值和绑定
+
+所有绑定都是不可变的：
+
+```neve
+let x = 42;
+let name = "Alice";
+let valid = true;
+```
+
+### 函数
+
+```neve
+-- 命名函数
+fn add(x: Int, y: Int) -> Int = x + y;
+
+-- Lambda
+let multiply = fn(x, y) x * y;
+
+-- 带字符串插值
+fn greet(name) = `你好，{name}！`;
+```
+
+### 记录
+
+```neve
+let user = #{
+    name = "小明",
+    age = 30,
+};
+
+-- 访问字段
+let n = user.name;
+
+-- 更新（创建新记录）
+let older = user // #{ age = 31 };
+
+-- 简写
+let name = "小红";
+let u = #{ name, age = 25 };  -- 等价于 #{ name = name, age = 25 }
+```
+
+### 列表
+
+```neve
+let nums = [1, 2, 3, 4, 5];
+
+-- 拼接
+let combined = [1, 2] ++ [3, 4];
+
+-- 推导
+let doubled = [x * 2 | x <- nums];
+let filtered = [x | x <- nums, x > 2];
+```
+
+### 代码块
+
+```neve
+let result = {
+    let a = 10;
+    let b = 20;
+    a + b   -- 最后一个表达式作为返回值
+};
+```
+
+---
+
+## 2. 类型系统
+
+### 基本类型
+
+```neve
+Int, Float, Bool, Char, String, Unit
+```
+
+### 复合类型
+
+```neve
+-- 元组
+type Point = (Int, Int);
+
+-- 列表
+type Numbers = List<Int>;
+
+-- 记录类型
+type User = #{ name: String, age: Int };
+```
+
+### 泛型
+
+```neve
+fn first<T>(xs: List<T>) -> Option<T> = match xs {
+    [] -> None,
+    [h, ..] -> Some(h),
+};
+
+fn identity<T>(x: T) -> T = x;
+```
+
+### 类型推导
+
+Neve 用的是 Hindley-Milner 算法：
+
+```neve
+let double = fn(x) x * 2;     -- 推导出：Int -> Int
+let id = fn(x) x;             -- 推导出：forall a. a -> a
+```
+
+---
+
+## 3. 模式匹配
+
+### 基础
+
+```neve
+fn describe(x) = match x {
+    0 -> "零",
+    1 -> "一",
+    n -> `其他：{n}`,
+};
+```
+
+### 列表匹配
+
+```neve
+fn sum(xs) = match xs {
+    [] -> 0,
+    [h, ..t] -> h + sum(t),
+};
+```
+
+### 记录匹配
 
 ```neve
 fn getName(user) = match user {
@@ -186,27 +420,22 @@ fn isAdult(user) = match user {
 ### Option 和 Result
 
 ```neve
-fn parseInt(s: String) -> Option<Int> = -- ...
-
-fn divide(a: Int, b: Int) -> Result<Int, String> = {
-    if b == 0 then
-        Err("division by zero")
-    else
-        Ok(a / b)
+fn divide(a, b) = {
+    if b == 0 then Err("除以零了")
+    else Ok(a / b)
 };
 
--- 使用
-let result = match divide(10, 2) {
-    Ok(n) -> `Success: {n}`,
-    Err(msg) -> `Error: {msg}`,
-};
+match divide(10, 2) {
+    Ok(n) -> `结果：{n}`,
+    Err(e) -> `出错：{e}`,
+}
 ```
 
 ---
 
-## Traits 和多态
+## 4. Trait
 
-### 定义 Trait
+### 定义
 
 ```neve
 trait Show {
@@ -218,235 +447,85 @@ trait Eq {
 };
 ```
 
-### 实现 Trait
+### 实现
 
 ```neve
-struct Point {
-    x: Int,
-    y: Int,
-};
+struct Point { x: Int, y: Int };
 
 impl Show for Point {
-    fn show(self) -> String = `Point({self.x}, {self.y})`;
+    fn show(self) = `Point({self.x}, {self.y})`;
 };
 
 impl Eq for Point {
-    fn eq(self, other: Point) -> Bool =
-        self.x == other.x && self.y == other.y;
+    fn eq(self, other) = self.x == other.x && self.y == other.y;
 };
 ```
 
-### 关联类型
+### 约束
 
 ```neve
-trait Iterator {
-    type Item;
-    fn next(self) -> Option<Self.Item>;
-};
-
-impl<T> Iterator for List<T> {
-    type Item = T;
-
-    fn next(self) -> Option<T> = match self {
-        [] -> None,
-        [h, ..] -> Some(h),
-    };
-};
-```
-
-### Trait 边界
-
-```neve
-fn print_all<T: Show>(items: List<T>) -> Unit = {
-    for item in items {
-        println(item.show());
-    }
+fn print_all<T: Show>(items: List<T>) = {
+    -- T 必须实现 Show
 };
 ```
 
 ---
 
-## 模块系统
+## 5. 模块
 
-### 定义模块
+### 定义
 
 ```neve
 -- utils.neve
-pub fn add(x: Int, y: Int) -> Int = x + y;
-
-pub fn multiply(x: Int, y: Int) -> Int = x * y;
-
--- 私有函数
-fn helper() = 42;
+pub fn add(x, y) = x + y;
+fn helper() = 42;  -- 私有的
 ```
 
-### 导入模块
+### 导入
 
 ```neve
--- main.neve
 import utils;
+let r = utils.add(1, 2);
 
-let result = utils.add(1, 2);
-```
-
-### 选择性导入
-
-```neve
--- 导入特定项
-import utils (add, multiply);
-
-let sum = add(1, 2);
-let product = multiply(3, 4);
-```
-
-### 路径前缀
-
-```neve
--- 相对导入
-import self.utils;      -- 当前模块
-import super.common;    -- 父模块
-import crate.helpers;   -- crate 根模块
-```
-
-### 可见性控制
-
-```neve
-pub fn publicFunc() = 1;           -- 公开
-pub(crate) fn crateFunc() = 2;     -- crate 内可见
-pub(super) fn superFunc() = 3;     -- 父模块可见
-fn privateFunc() = 4;               -- 私有
+-- 或者只导入需要的
+import utils (add);
+let r = add(1, 2);
 ```
 
 ---
 
-## 包管理
+## 6. 写代码的建议
 
-### 包结构
-
-```
-myproject/
-├── neve.toml         # 包配置
-├── lib.neve          # 库入口
-├── main.neve         # 二进制入口
-└── src/
-    ├── utils.neve
-    └── helpers.neve
-```
-
-### neve.toml 配置
-
-```toml
-[package]
-name = "myproject"
-version = "0.1.0"
-authors = ["Your Name <you@example.com>"]
-
-[dependencies]
-# 依赖将在这里定义
-```
-
-### Derivations (包定义)
+1. **公开 API 加上类型注解**，方便别人用
+2. **数据都是不可变的**，习惯就好
+3. **大循环用尾递归**，不然栈会炸
+4. **数据变换用管道**，看着清楚
+5. **匹配要穷尽**，别漏情况
 
 ```neve
--- package.neve
-{
-    name = "hello",
-    version = "1.0.0",
-
-    src = fetchurl {
-        url = "https://example.com/hello-1.0.tar.gz",
-        hash = "sha256-...",
-    },
-
-    buildInputs = [ gcc, make ],
-
-    buildPhase = ''
-        make
-    '',
-
-    installPhase = ''
-        mkdir -p $out/bin
-        cp hello $out/bin/
-    '',
-}
-```
-
----
-
-## 最佳实践
-
-### 1. 使用类型注解增强可读性
-
-```neve
--- 好
-fn process(items: List<String>) -> Result<Int, String> = -- ...
-
--- 也可以,但不太清晰
-fn process(items) = -- ...
-```
-
-### 2. 优先使用不可变数据
-
-```neve
--- 好: 创建新记录
-let updated = user // #{ age = user.age + 1 };
-
--- 避免: 在 Neve 中不存在可变状态
-```
-
-### 3. 使用尾递归避免栈溢出
-
-```neve
--- 好: 尾递归
-fn factorial_tail(n: Int, acc: Int) -> Int = {
-    if n <= 1 then acc
-    else factorial_tail(n - 1, n * acc)
-};
-
--- 可能栈溢出
-fn factorial(n: Int) -> Int = {
-    if n <= 1 then 1
-    else n * factorial(n - 1)
-};
-```
-
-### 4. 使用管道提高可读性
-
-```neve
--- 好: 清晰的数据流
+-- 这样写清楚
 let result = data
-    |> filter(isValid)
+    |> filter(valid)
     |> map(transform)
     |> fold(0, add);
-
--- 不太清晰
-let result = fold(0, add, map(transform, filter(isValid, data)));
-```
-
-### 5. 合理使用模式匹配
-
-```neve
--- 好: 穷尽所有情况
-fn handle(opt) = match opt {
-    Some(x) -> process(x),
-    None -> defaultValue,
-};
-
--- 避免: 遗漏情况
-fn handle(opt) = match opt {
-    Some(x) -> process(x),
-    -- 编译器会警告
-};
 ```
 
 ---
 
-## 下一步
+## 接下来
 
-- 查看 [语言规范](../neve-spec-v2.md) 了解完整语法
-- 阅读 [设计哲学](../PHILOSOPHY.md) 理解设计决策
-- 参考 [API 文档](API.md) 了解标准库
+- [语言规范](spec.md) — 完整语法参考
+- [标准库](api.md) — API 文档
+- [设计哲学](philosophy.md) — 为什么这样设计
 
 ---
 
-*祝你在 Neve 中编程愉快!*
+<div align="center">
+
+```
+═══════════════════════════════════════════════════════════════════════════════
+                           Happy hacking! 写代码愉快！
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+</div>
