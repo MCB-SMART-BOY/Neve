@@ -1912,7 +1912,7 @@ impl Parser {
     fn synchronize(&mut self) {
         // Must advance at least once to avoid infinite loop when we can't parse current token
         let mut advanced = false;
-        
+
         while !self.at_end() {
             // If we just passed a statement-ending token, we're at a statement boundary
             if self.pos > 0 {
@@ -2073,7 +2073,7 @@ trait Container {
 
 impl<T> Iterator for List<T> {
     type Item = T;
-    fn next(self) -> Option<T> { None };
+    fn next(self) -> Option<T> = None;
 };
 "#;
 
@@ -2083,10 +2083,13 @@ impl<T> Iterator for List<T> {
         let source_file = parser.parse_file();
 
         // Check for no errors
-        assert!(
-            parser.diagnostics().is_empty(),
-            "Parser should not produce errors"
-        );
+        let diagnostics = parser.diagnostics();
+        if !diagnostics.is_empty() {
+            for diag in &diagnostics {
+                eprintln!("Error: {:?}", diag);
+            }
+            panic!("Parser should not produce errors");
+        }
 
         // Verify we parsed 3 items
         assert_eq!(source_file.items.len(), 3);

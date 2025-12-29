@@ -2,9 +2,9 @@
 //!
 //! Shows detailed information about a package or platform.
 
-use crate::platform::{PlatformCapabilities, print_cross_platform_note};
 #[cfg(unix)]
 use crate::output;
+use crate::platform::{PlatformCapabilities, print_cross_platform_note};
 #[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
