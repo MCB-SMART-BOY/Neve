@@ -203,7 +203,12 @@ fn main() {
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
         Commands::Repl => commands::repl::run(),
-        Commands::Doc { topic, en, zh, list } => {
+        Commands::Doc {
+            topic,
+            en,
+            zh,
+            list,
+        } => {
             if list || topic.is_none() {
                 commands::doc::list()
             } else {
