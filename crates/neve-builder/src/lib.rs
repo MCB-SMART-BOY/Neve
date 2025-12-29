@@ -1,10 +1,13 @@
 //! Build execution for Neve.
+//! Neve 的构建执行。
 //!
 //! This crate provides functionality for building derivations:
-//! - Sandboxed build environments
-//! - Build execution
-//! - Output collection and registration
-//! - Docker-based builds for cross-platform support
+//! 本 crate 提供构建派生的功能：
+//!
+//! - Sandboxed build environments / 沙箱构建环境
+//! - Build execution / 构建执行
+//! - Output collection and registration / 输出收集和注册
+//! - Docker-based builds for cross-platform support / 基于 Docker 的跨平台构建支持
 
 pub mod docker;
 pub mod executor;
@@ -18,6 +21,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors that can occur during building.
+/// 构建过程中可能发生的错误。
 #[derive(Debug, Error)]
 pub enum BuildError {
     #[error("I/O error: {0}")]
@@ -47,46 +51,52 @@ pub enum BuildError {
 }
 
 /// Build result.
+/// 构建结果。
 #[derive(Debug, Clone)]
 pub struct BuildResult {
-    /// The derivation that was built.
+    /// The derivation that was built. / 被构建的派生。
     pub derivation: StorePath,
-    /// Map from output name to store path.
+    /// Map from output name to store path. / 输出名称到存储路径的映射。
     pub outputs: HashMap<String, StorePath>,
-    /// Build log.
+    /// Build log. / 构建日志。
     pub log: String,
-    /// Build duration in seconds.
+    /// Build duration in seconds. / 构建耗时（秒）。
     pub duration_secs: f64,
 }
 
 /// Build backend type.
+/// 构建后端类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildBackend {
     /// Native sandbox (Linux namespaces) - full isolation.
+    /// 原生沙箱（Linux 命名空间）- 完全隔离。
     #[default]
     Native,
     /// Docker-based sandbox - cross-platform isolation.
+    /// 基于 Docker 的沙箱 - 跨平台隔离。
     Docker,
     /// Simple execution without isolation.
+    /// 简单执行，无隔离。
     Simple,
 }
 
 /// Builder configuration.
+/// 构建器配置。
 #[derive(Debug, Clone)]
 pub struct BuilderConfig {
-    /// Number of parallel builds.
+    /// Number of parallel builds. / 并行构建数量。
     pub max_jobs: usize,
-    /// Number of cores per build.
+    /// Number of cores per build. / 每个构建使用的核心数。
     pub cores: usize,
-    /// Temporary directory for builds.
+    /// Temporary directory for builds. / 构建临时目录。
     pub temp_dir: PathBuf,
-    /// Whether to use sandboxing.
+    /// Whether to use sandboxing. / 是否使用沙箱。
     pub sandbox: bool,
-    /// Keep failed build directories for debugging.
+    /// Keep failed build directories for debugging. / 保留失败的构建目录以供调试。
     pub keep_failed: bool,
-    /// Build timeout in seconds (0 = no timeout).
+    /// Build timeout in seconds (0 = no timeout). / 构建超时（秒，0 表示无超时）。
     pub timeout: u64,
-    /// Build backend to use.
+    /// Build backend to use. / 使用的构建后端。
     pub backend: BuildBackend,
 }
 
@@ -114,6 +124,7 @@ impl Default for BuilderConfig {
 }
 
 /// Get number of CPUs.
+/// 获取 CPU 数量。
 fn num_cpus() -> usize {
     std::thread::available_parallelism()
         .map(|p| p.get())
@@ -121,15 +132,17 @@ fn num_cpus() -> usize {
 }
 
 /// The builder.
+/// 构建器。
 pub struct Builder {
-    /// The store.
+    /// The store. / 存储。
     store: Store,
-    /// Builder configuration.
+    /// Builder configuration. / 构建器配置。
     config: BuilderConfig,
 }
 
 impl Builder {
     /// Create a new builder.
+    /// 创建新的构建器。
     pub fn new(store: Store) -> Self {
         Self {
             store,
@@ -158,6 +171,7 @@ impl Builder {
     }
 
     /// Build a derivation.
+    /// 构建一个派生。
     pub fn build(&mut self, drv: &Derivation) -> Result<BuildResult, BuildError> {
         let start = std::time::Instant::now();
 

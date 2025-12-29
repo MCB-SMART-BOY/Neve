@@ -1,13 +1,16 @@
 //! Type error construction with detailed messages.
+//! 类型错误构造，提供详细的错误信息。
 //!
 //! This module provides builders for constructing informative type error
 //! diagnostics with helpful context and suggestions.
+//! 本模块提供构建器，用于构造带有上下文信息和建议的类型错误诊断。
 
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{BinOp, Ty, TyKind, UnaryOp};
 
 /// Format a type for display in error messages.
+/// 格式化类型以在错误信息中显示。
 pub fn format_type(ty: &Ty) -> String {
     match &ty.kind {
         TyKind::Int => "Int".to_string(),
@@ -49,6 +52,7 @@ pub fn format_type(ty: &Ty) -> String {
 }
 
 /// Format a binary operator for display.
+/// 格式化二元运算符以供显示。
 fn format_binop(op: &BinOp) -> &'static str {
     match op {
         BinOp::Add => "+",
@@ -72,6 +76,7 @@ fn format_binop(op: &BinOp) -> &'static str {
 }
 
 /// Format a unary operator for display.
+/// 格式化一元运算符以供显示。
 fn format_unaryop(op: &UnaryOp) -> &'static str {
     match op {
         UnaryOp::Neg => "-",
@@ -80,6 +85,7 @@ fn format_unaryop(op: &UnaryOp) -> &'static str {
 }
 
 /// Builder for type mismatch errors.
+/// 类型不匹配错误的构建器。
 pub struct TypeMismatchError {
     expected: Ty,
     found: Ty,
@@ -157,6 +163,7 @@ impl TypeMismatchError {
 }
 
 /// Add helpful notes for common type mismatches.
+/// 为常见的类型不匹配添加有用的提示信息。
 fn add_type_mismatch_help(mut diag: Diagnostic, expected: &Ty, found: &Ty) -> Diagnostic {
     match (&expected.kind, &found.kind) {
         // Int vs Float
@@ -209,6 +216,7 @@ fn add_type_mismatch_help(mut diag: Diagnostic, expected: &Ty, found: &Ty) -> Di
 }
 
 /// Create an error for if/else branch type mismatch.
+/// 创建 if/else 分支类型不匹配的错误。
 pub fn if_branch_mismatch(
     then_ty: &Ty,
     else_ty: &Ty,
@@ -241,6 +249,7 @@ pub fn if_branch_mismatch(
 }
 
 /// Create an error for match arm type mismatch.
+/// 创建 match 分支类型不匹配的错误。
 pub fn match_arm_mismatch(
     first_ty: &Ty,
     arm_ty: &Ty,
@@ -270,6 +279,7 @@ pub fn match_arm_mismatch(
 }
 
 /// Create an error for binary operator type mismatch.
+/// 创建二元运算符类型不匹配的错误。
 pub fn binary_op_mismatch(
     op: &BinOp,
     left_ty: &Ty,
@@ -337,6 +347,7 @@ pub fn binary_op_mismatch(
 }
 
 /// Create an error for unary operator type mismatch.
+/// 创建一元运算符类型不匹配的错误。
 pub fn unary_op_mismatch(
     op: &UnaryOp,
     operand_ty: &Ty,
@@ -370,6 +381,7 @@ pub fn unary_op_mismatch(
 }
 
 /// Create an error for wrong number of arguments.
+/// 创建参数数量错误的错误。
 pub fn wrong_arity(
     fn_name: Option<&str>,
     expected: usize,
@@ -409,6 +421,7 @@ pub fn wrong_arity(
 }
 
 /// Create an error for calling a non-function.
+/// 创建调用非函数类型的错误。
 pub fn not_a_function(ty: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(ty);
 
@@ -423,6 +436,7 @@ pub fn not_a_function(ty: &Ty, span: Span) -> Diagnostic {
 }
 
 /// Create an error for unbound variable.
+/// 创建未绑定变量的错误。
 pub fn unbound_variable(name: &str, span: Span, similar: Option<&str>) -> Diagnostic {
     let mut diag = Diagnostic::error(
         DiagnosticKind::Type,
@@ -440,6 +454,7 @@ pub fn unbound_variable(name: &str, span: Span, similar: Option<&str>) -> Diagno
 }
 
 /// Create an error for missing record field.
+/// 创建记录缺失字段的错误。
 pub fn missing_field(field: &str, record_ty: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(record_ty);
 
@@ -454,6 +469,7 @@ pub fn missing_field(field: &str, record_ty: &Ty, span: Span) -> Diagnostic {
 }
 
 /// Create an error for unknown record field.
+/// 创建记录中未知字段的错误。
 pub fn unknown_field(field: &str, record_ty: &Ty, span: Span, available: &[String]) -> Diagnostic {
     let ty_str = format_type(record_ty);
 
@@ -478,6 +494,7 @@ pub fn unknown_field(field: &str, record_ty: &Ty, span: Span, available: &[Strin
 }
 
 /// Create an error for missing trait method.
+/// 创建缺失特征方法的错误。
 pub fn missing_method(method: &str, trait_name: &str, impl_ty: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(impl_ty);
 
@@ -495,6 +512,7 @@ pub fn missing_method(method: &str, trait_name: &str, impl_ty: &Ty, span: Span) 
 }
 
 /// Create an error for infinite type.
+/// 创建无限类型的错误（类型变量出现在自身类型中）。
 pub fn infinite_type(var: u32, ty: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(ty);
 
@@ -509,6 +527,7 @@ pub fn infinite_type(var: u32, ty: &Ty, span: Span) -> Diagnostic {
 }
 
 /// Create an error for pattern type mismatch.
+/// 创建模式类型不匹配的错误。
 pub fn pattern_mismatch(expected: &Ty, pattern_ty: &Ty, span: Span) -> Diagnostic {
     let expected_str = format_type(expected);
     let pattern_str = format_type(pattern_ty);
@@ -526,6 +545,7 @@ pub fn pattern_mismatch(expected: &Ty, pattern_ty: &Ty, span: Span) -> Diagnosti
 }
 
 /// Create an error for non-exhaustive pattern match.
+/// 创建模式匹配不完整的错误。
 pub fn non_exhaustive_match(missing_patterns: &[String], span: Span) -> Diagnostic {
     let patterns_str = missing_patterns.join(", ");
 
@@ -537,6 +557,7 @@ pub fn non_exhaustive_match(missing_patterns: &[String], span: Span) -> Diagnost
 }
 
 /// Create an error for unreachable pattern.
+/// 创建不可达模式的警告。
 pub fn unreachable_pattern(span: Span, previous_span: Span) -> Diagnostic {
     Diagnostic::warning(DiagnosticKind::Type, span, "unreachable pattern")
         .with_label(Label::new(span, "this pattern will never be matched"))
@@ -548,6 +569,7 @@ pub fn unreachable_pattern(span: Span, previous_span: Span) -> Diagnostic {
 }
 
 /// Create an error for ambiguous type.
+/// 创建类型模糊（无法推断）的错误。
 pub fn ambiguous_type(span: Span, context: &str) -> Diagnostic {
     Diagnostic::error(DiagnosticKind::Type, span, "type annotations needed")
         .with_code(ErrorCode::AmbiguousType)
@@ -557,6 +579,7 @@ pub fn ambiguous_type(span: Span, context: &str) -> Diagnostic {
 }
 
 /// Create an error for private access.
+/// 创建访问私有成员的错误。
 pub fn private_access(name: &str, span: Span) -> Diagnostic {
     Diagnostic::error(DiagnosticKind::Type, span, format!("`{}` is private", name))
         .with_code(ErrorCode::PrivateAccess)
@@ -565,6 +588,7 @@ pub fn private_access(name: &str, span: Span) -> Diagnostic {
 }
 
 /// Create an error for cyclic dependency.
+/// 创建循环依赖的错误。
 pub fn cyclic_dependency(items: &[String], span: Span) -> Diagnostic {
     let cycle_str = items.join(" -> ");
 
@@ -576,6 +600,7 @@ pub fn cyclic_dependency(items: &[String], span: Span) -> Diagnostic {
 }
 
 /// Create an error for unused variable.
+/// 创建未使用变量的警告。
 pub fn unused_variable(name: &str, span: Span) -> Diagnostic {
     Diagnostic::warning(
         DiagnosticKind::Type,
@@ -590,6 +615,7 @@ pub fn unused_variable(name: &str, span: Span) -> Diagnostic {
 }
 
 /// Create an error for redundant type annotation.
+/// 创建冗余类型标注的警告。
 pub fn redundant_annotation(inferred: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(inferred);
 

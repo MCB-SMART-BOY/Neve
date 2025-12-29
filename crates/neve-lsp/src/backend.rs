@@ -1,4 +1,8 @@
 //! LSP backend implementation.
+//! LSP 后端实现。
+//!
+//! Implements the Language Server Protocol for Neve.
+//! 实现 Neve 的语言服务器协议。
 
 use dashmap::DashMap;
 use tower_lsp::jsonrpc::Result;
@@ -13,13 +17,17 @@ use crate::semantic_tokens::generate_semantic_tokens_with_context;
 use crate::symbol_index::SymbolKind as IndexSymbolKind;
 
 /// The LSP backend.
+/// LSP 后端。
 pub struct Backend {
+    /// The LSP client. / LSP 客户端。
     client: Client,
+    /// Open documents. / 打开的文档。
     documents: DashMap<String, Document>,
 }
 
 impl Backend {
     /// Create a new backend.
+    /// 创建新的后端。
     pub fn new(client: Client) -> Self {
         Self {
             client,
@@ -28,6 +36,7 @@ impl Backend {
     }
 
     /// Publish diagnostics for a document.
+    /// 发布文档的诊断信息。
     async fn publish_diagnostics(&self, uri: &Url, doc: &Document) {
         let diagnostics: Vec<Diagnostic> = doc
             .diagnostics
@@ -127,6 +136,7 @@ impl LanguageServer for Backend {
         self.documents.remove(&uri);
 
         // Clear diagnostics
+        // 清除诊断信息
         self.client
             .publish_diagnostics(params.text_document.uri, vec![], None)
             .await;
@@ -144,10 +154,12 @@ impl LanguageServer for Backend {
             let offset = doc.offset_at(pos.line, pos.character);
 
             // Try to get symbol information first
+            // 首先尝试获取符号信息
             if let Some(ref index) = doc.symbol_index
                 && let Some(symbol) = index.find_definition_at(offset)
             {
                 // Format symbol kind nicely
+                // 格式化符号类型
                 let kind_str = match symbol.kind {
                     IndexSymbolKind::Function => "function",
                     IndexSymbolKind::Variable => "variable",
@@ -162,10 +174,12 @@ impl LanguageServer for Backend {
                 };
 
                 // Get the full definition text using full_span
+                // 使用 full_span 获取完整的定义文本
                 let full_start: usize = symbol.full_span.start.into();
                 let full_end: usize = symbol.full_span.end.into();
                 let definition_text = if full_end <= doc.content.len() {
                     // Limit to first line for display
+                    // 限制显示第一行
                     let full_text = &doc.content[full_start..full_end];
                     let first_line = full_text.lines().next().unwrap_or(full_text);
                     if first_line.len() > 80 {
@@ -200,6 +214,7 @@ impl LanguageServer for Backend {
             }
 
             // Fallback to token-based hover
+            // 回退到基于 token 的悬停
             let lexer = Lexer::new(&doc.content);
             let (tokens, _) = lexer.tokenize();
 
@@ -237,28 +252,32 @@ impl LanguageServer for Backend {
         let mut items = Vec::new();
 
         // Get context for smarter completion
+        // 获取上下文以实现更智能的补全
         let trigger_char = params
             .context
             .as_ref()
             .and_then(|c| c.trigger_character.as_deref());
 
         // Check if we're after a dot (member access)
+        // 检查是否在点后面（成员访问）
         let is_dot_completion = trigger_char == Some(".");
 
         if is_dot_completion {
             // Method completion based on type
+            // 基于类型的方法补全
             items.extend(self.get_method_completions());
         } else {
-            // Keywords
+            // Keywords / 关键字
             items.extend(self.get_keyword_completions());
 
-            // Standard library functions
+            // Standard library functions / 标准库函数
             items.extend(self.get_stdlib_completions());
 
-            // Types
+            // Types / 类型
             items.extend(self.get_type_completions());
 
             // Document symbols (variables, functions from current file)
+            // 文档符号（当前文件中的变量、函数）
             if let Some(doc) = self.documents.get(&uri) {
                 items.extend(self.get_document_completions(&doc, pos));
             }
@@ -270,6 +289,7 @@ impl LanguageServer for Backend {
 
 impl Backend {
     /// Get keyword completions.
+    /// 获取关键字补全。
     fn get_keyword_completions(&self) -> Vec<CompletionItem> {
         let keywords = vec![
             ("let", "Let binding", "let ${1:name} = ${2:value};"),
@@ -330,9 +350,10 @@ impl Backend {
     }
 
     /// Get standard library completions.
+    /// 获取标准库补全。
     fn get_stdlib_completions(&self) -> Vec<CompletionItem> {
         let stdlib_functions = vec![
-            // IO functions
+            // IO functions / IO 函数
             (
                 "io.readFile",
                 "Read file contents",
@@ -399,7 +420,7 @@ impl Backend {
                 "io.currentSystem()",
                 "String",
             ),
-            // Math functions
+            // Math functions / 数学函数
             ("math.abs", "Absolute value", "math.abs(${1:x})", "Number"),
             ("math.floor", "Floor of number", "math.floor(${1:x})", "Int"),
             ("math.ceil", "Ceiling of number", "math.ceil(${1:x})", "Int"),
@@ -447,7 +468,7 @@ impl Backend {
                 "math.toFloat(${1:x})",
                 "Float",
             ),
-            // String functions
+            // String functions / 字符串函数
             ("string.len", "String length", "string.len(${1:s})", "Int"),
             (
                 "string.concat",
@@ -509,7 +530,7 @@ impl Backend {
                 "string.replace(${1:s}, ${2:from}, ${3:to})",
                 "String",
             ),
-            // List functions
+            // List functions / 列表函数
             ("list.len", "List length", "list.len(${1:xs})", "Int"),
             (
                 "list.head",
@@ -572,7 +593,7 @@ impl Backend {
                 "list.elem(${1:x}, ${2:xs})",
                 "Bool",
             ),
-            // Option functions
+            // Option functions / Option 函数
             (
                 "option.some",
                 "Wrap in Some",
@@ -610,7 +631,7 @@ impl Backend {
                 "option.map(${1:f}, ${2:opt})",
                 "Option<U>",
             ),
-            // Result functions
+            // Result functions / Result 函数
             (
                 "result.ok",
                 "Wrap in Ok",
@@ -647,7 +668,7 @@ impl Backend {
                 "result.map(${1:f}, ${2:res})",
                 "Result<U, E>",
             ),
-            // Path functions
+            // Path functions / 路径函数
             (
                 "path.join",
                 "Join paths",
@@ -678,7 +699,7 @@ impl Backend {
                 "path.isAbsolute(${1:p})",
                 "Bool",
             ),
-            // Builtins
+            // Builtins / 内置函数
             (
                 "assert",
                 "Assert condition",
@@ -702,6 +723,7 @@ impl Backend {
     }
 
     /// Get type completions.
+    /// 获取类型补全。
     fn get_type_completions(&self) -> Vec<CompletionItem> {
         let types = vec![
             ("Int", "Arbitrary precision integer"),
@@ -729,9 +751,10 @@ impl Backend {
     }
 
     /// Get method completions for dot-triggered completion.
+    /// 获取点触发补全的方法补全。
     fn get_method_completions(&self) -> Vec<CompletionItem> {
         let methods = vec![
-            // List methods
+            // List methods / 列表方法
             (
                 "map",
                 "Map function over elements",
@@ -777,7 +800,7 @@ impl Backend {
             ("take", "Take first n elements", "take(${1:n})", "List<T>"),
             ("drop", "Drop first n elements", "drop(${1:n})", "List<T>"),
             ("join", "Join with separator", "join(${1:sep})", "String"),
-            // String methods
+            // String methods / 字符串方法
             (
                 "split",
                 "Split by separator",
@@ -807,7 +830,7 @@ impl Backend {
                 "String",
             ),
             ("chars", "Get characters", "chars()", "List<Char>"),
-            // Option/Result methods
+            // Option/Result methods / Option/Result 方法
             ("unwrap", "Unwrap value", "unwrap()", "T"),
             (
                 "unwrapOr",
@@ -819,7 +842,7 @@ impl Backend {
             ("isNone", "Check if None", "isNone()", "Bool"),
             ("isOk", "Check if Ok", "isOk()", "Bool"),
             ("isErr", "Check if Err", "isErr()", "Bool"),
-            // Record methods
+            // Record methods / 记录方法
             ("keys", "Get record keys", "keys()", "List<String>"),
             ("values", "Get record values", "values()", "List<T>"),
             (
@@ -844,6 +867,7 @@ impl Backend {
     }
 
     /// Get completions from document symbols.
+    /// 从文档符号获取补全。
     fn get_document_completions(&self, doc: &Document, _pos: Position) -> Vec<CompletionItem> {
         let mut items = Vec::new();
 
@@ -876,6 +900,8 @@ impl Backend {
         items
     }
 
+    /// Format a document.
+    /// 格式化文档。
     #[allow(dead_code)]
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri.to_string();
@@ -900,6 +926,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Get semantic tokens for a document.
+    /// 获取文档的语义 token。
     #[allow(dead_code)]
     async fn semantic_tokens_full(
         &self,
@@ -921,6 +949,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Get document symbols.
+    /// 获取文档符号。
     #[allow(dead_code)]
     async fn document_symbol(
         &self,
@@ -939,6 +969,7 @@ impl Backend {
                 let (name, kind) = match &item.kind {
                     ItemKind::Let(def) => {
                         // Extract name from pattern
+                        // 从模式中提取名称
                         let name = format!("{:?}", def.pattern.kind);
                         (name, SymbolKind::VARIABLE)
                     }
@@ -981,6 +1012,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Go to definition.
+    /// 跳转到定义。
     #[allow(dead_code)]
     async fn goto_definition(
         &self,
@@ -1021,6 +1054,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Find all references.
+    /// 查找所有引用。
     #[allow(dead_code)]
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
         let uri = params.text_document_position.text_document.uri.to_string();
@@ -1059,6 +1094,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Rename a symbol.
+    /// 重命名符号。
     #[allow(dead_code)]
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
         let uri = params.text_document_position.text_document.uri.to_string();
@@ -1067,6 +1104,7 @@ impl Backend {
 
         if let Some(doc) = self.documents.get(&uri) {
             // Use the document's stored URI for consistency
+            // 使用文档存储的 URI 以保持一致性
             let doc_uri = &doc.uri;
             let _ = doc_uri; // Acknowledge the field is used for identification
 
@@ -1074,15 +1112,19 @@ impl Backend {
                 let offset = doc.offset_at(pos.line, pos.character);
 
                 // Find the symbol name at this position
+                // 在此位置查找符号名称
                 if let Some(name) = index.find_name_at(offset) {
                     // Check if this is a valid symbol that can be renamed
                     // by verifying it has a definition
+                    // 通过验证是否有定义来检查这是否是可以重命名的有效符号
                     if index.get_definitions(&name).is_none() {
                         // Symbol has no definition in this file, cannot rename
+                        // 符号在此文件中没有定义，无法重命名
                         return Ok(None);
                     }
 
                     // Get all references to this symbol
+                    // 获取此符号的所有引用
                     let refs = index.get_references(&name);
 
                     if !refs.is_empty() {
@@ -1123,6 +1165,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Prepare rename operation.
+    /// 准备重命名操作。
     #[allow(dead_code)]
     async fn prepare_rename(
         &self,
@@ -1137,8 +1181,10 @@ impl Backend {
             let offset = doc.offset_at(pos.line, pos.character);
 
             // Find the symbol at this position
+            // 在此位置查找符号
             if let Some(name) = index.find_name_at(offset) {
                 // Find the reference at this position to get its span
+                // 查找此位置的引用以获取其范围
                 for r in &index.references {
                     let start: usize = r.span.start.into();
                     let end: usize = r.span.end.into();
@@ -1161,6 +1207,8 @@ impl Backend {
         Ok(None)
     }
 
+    /// Workspace symbol search.
+    /// 工作区符号搜索。
     #[allow(dead_code)]
     async fn symbol(
         &self,
@@ -1170,6 +1218,7 @@ impl Backend {
         let mut symbols = Vec::new();
 
         // Search across all open documents
+        // 在所有打开的文档中搜索
         for entry in self.documents.iter() {
             let doc = entry.value();
             let uri =
@@ -1178,6 +1227,7 @@ impl Backend {
             if let Some(ref index) = doc.symbol_index {
                 for (name, defs) in &index.definitions {
                     // Filter by query
+                    // 按查询过滤
                     if query.is_empty() || name.to_lowercase().contains(&query) {
                         for def in defs {
                             let start: usize = def.def_span.start.into();
@@ -1214,7 +1264,8 @@ impl Backend {
     }
 }
 
-// Helper function to convert symbol kind
+/// Helper function to convert symbol kind.
+/// 转换符号类型的辅助函数。
 #[allow(dead_code)]
 fn convert_symbol_kind(kind: IndexSymbolKind) -> SymbolKind {
     match kind {

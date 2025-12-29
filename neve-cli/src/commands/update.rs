@@ -1,74 +1,95 @@
 //! The `neve update` command.
+//! `neve update` 命令。
 //!
 //! Updates flake inputs and dependencies.
+//! 更新 flake 输入和依赖。
 
 use crate::output;
 use neve_config::flake::{Flake, FlakeLock};
 use std::path::Path;
 
+/// Run the update command.
+/// 运行更新命令。
 pub fn run() -> Result<(), String> {
     // Find flake in current directory
+    // 在当前目录中查找 flake
     let flake_path = Path::new("flake.neve");
 
     if !flake_path.exists() {
         return Err("no flake.neve found in current directory".to_string());
+        // 在当前目录中未找到 flake.neve
     }
 
     output::info("Loading flake...");
+    // 正在加载 flake...
 
     let mut flake =
         Flake::load(Path::new(".")).map_err(|e| format!("failed to load flake: {}", e))?;
+    // 加载 flake 失败：{}
 
     if flake.inputs.is_empty() {
         output::info("No inputs to update");
+        // 没有要更新的输入
         return Ok(());
     }
 
     output::info(&format!("Found {} input(s) to update", flake.inputs.len()));
+    // 找到 {} 个要更新的输入
 
     // Check for existing lock file
+    // 检查现有锁文件
     let lock_path = Path::new("flake.lock");
     let had_lock = lock_path.exists();
 
     if had_lock {
         output::info("Updating existing lock file...");
+        // 正在更新现有锁文件...
     } else {
         output::info("Creating new lock file...");
+        // 正在创建新锁文件...
     }
 
     // Clear existing lock to force re-resolution
+    // 清除现有锁以强制重新解析
     flake.lock = FlakeLock::new();
 
     // Resolve and lock all inputs
+    // 解析并锁定所有输入
     let mut updated_count = 0;
     let mut failed_inputs = Vec::new();
 
     for (name, input) in &flake.inputs {
         output::info(&format!("Updating input '{}'...", name));
+        // 正在更新输入 '{}'...
 
         match update_input(&input.url, input.rev.as_deref(), input.branch.as_deref()) {
             Ok(entry) => {
                 flake.lock.inputs.insert(name.clone(), entry);
                 updated_count += 1;
                 output::success(&format!("  Updated: {}", name));
+                // 已更新：{}
             }
             Err(e) => {
                 failed_inputs.push((name.clone(), e.clone()));
                 output::warning(&format!("  Failed to update '{}': {}", name, e));
+                // 更新 '{}' 失败：{}
             }
         }
     }
 
     // Save the lock file
+    // 保存锁文件
     if updated_count > 0 {
         flake
             .save_lock()
             .map_err(|e| format!("failed to save lock file: {}", e))?;
+        // 保存锁文件失败：{}
 
         output::success(&format!(
             "Updated {} input(s), lock file written to flake.lock",
             updated_count
         ));
+        // 已更新 {} 个输入，锁文件已写入 flake.lock
     }
 
     if !failed_inputs.is_empty() {
@@ -76,6 +97,7 @@ pub fn run() -> Result<(), String> {
             "{} input(s) could not be updated",
             failed_inputs.len()
         ));
+        // {} 个输入无法更新
         for (name, err) in &failed_inputs {
             output::warning(&format!("  {}: {}", name, err));
         }
@@ -85,13 +107,16 @@ pub fn run() -> Result<(), String> {
         Ok(())
     } else if updated_count > 0 {
         // Partial success
+        // 部分成功
         Ok(())
     } else {
         Err("failed to update any inputs".to_string())
+        // 无法更新任何输入
     }
 }
 
 /// Update a single input and return its lock entry.
+/// 更新单个输入并返回其锁条目。
 fn update_input(
     url: &str,
     rev: Option<&str>,
@@ -100,6 +125,7 @@ fn update_input(
     use std::time::SystemTime;
 
     // Parse the URL to determine the type
+    // 解析 URL 以确定类型
     let (resolved_url, resolved_rev, hash) = if url.starts_with("github:") {
         update_github_input(url, rev, branch)?
     } else if url.starts_with("git+") || url.ends_with(".git") {
@@ -110,6 +136,7 @@ fn update_input(
         update_url_input(url)?
     } else {
         // Assume it's a GitHub shorthand
+        // 假设它是 GitHub 简写
         let github_url = format!("github:{}", url);
         update_github_input(&github_url, rev, branch)?
     };
@@ -120,6 +147,7 @@ fn update_input(
         .unwrap_or(0);
 
     // Extract name from URL
+    // 从 URL 中提取名称
     let name = url
         .split('/')
         .next_back()
@@ -137,17 +165,21 @@ fn update_input(
 }
 
 /// Update a GitHub input.
+/// 更新 GitHub 输入。
 fn update_github_input(
     url: &str,
     rev: Option<&str>,
     branch: Option<&str>,
 ) -> Result<(String, Option<String>, String), String> {
     // Parse github:owner/repo format
+    // 解析 github:owner/repo 格式
     let repo_path = url
         .strip_prefix("github:")
         .ok_or_else(|| "invalid github URL".to_string())?;
+    // 无效的 GitHub URL
 
     // Extract owner/repo and optional ref
+    // 提取 owner/repo 和可选的 ref
     let (owner_repo, url_ref) = if let Some(pos) = repo_path.find('/') {
         let rest = &repo_path[pos + 1..];
         if let Some(ref_pos) = rest.find('/') {
@@ -162,9 +194,11 @@ fn update_github_input(
         }
     } else {
         return Err(format!("invalid github URL: {}", url));
+        // 无效的 GitHub URL：{}
     };
 
     // Determine the ref to use
+    // 确定要使用的 ref
     let git_ref = rev
         .map(|s| s.to_string())
         .or_else(|| branch.map(|s| s.to_string()))
@@ -172,9 +206,13 @@ fn update_github_input(
         .unwrap_or_else(|| "main".to_string());
 
     // In a real implementation, we would:
+    // 在真实实现中，我们将：
     // 1. Query GitHub API for the latest commit
+    // 1. 查询 GitHub API 获取最新提交
     // 2. Download and hash the tarball
+    // 2. 下载并哈希 tarball
     // For now, we generate a placeholder
+    // 目前，我们生成一个占位符
 
     let _api_url = format!(
         "https://api.github.com/repos/{}/commits/{}",
@@ -186,10 +224,12 @@ fn update_github_input(
     );
 
     // Try to fetch the commit hash (simplified - in production would use proper HTTP client)
+    // 尝试获取提交哈希（简化版 - 在生产中应使用适当的 HTTP 客户端）
     let commit_hash =
         fetch_github_commit(&owner_repo, &git_ref).unwrap_or_else(|_| format!("ref-{}", git_ref));
 
     // Generate content hash (placeholder - would hash actual content)
+    // 生成内容哈希（占位符 - 应该哈希实际内容）
     let content_hash = format!(
         "sha256-{}",
         hash_string(&format!("{}:{}", owner_repo, commit_hash))
@@ -199,6 +239,7 @@ fn update_github_input(
 }
 
 /// Update a Git input.
+/// 更新 Git 输入。
 fn update_git_input(
     url: &str,
     rev: Option<&str>,
@@ -212,9 +253,13 @@ fn update_git_input(
         .unwrap_or_else(|| "HEAD".to_string());
 
     // In a real implementation, we would:
+    // 在真实实现中，我们将：
     // 1. Clone/fetch the repository
+    // 1. 克隆/获取仓库
     // 2. Get the commit hash
+    // 2. 获取提交哈希
     // 3. Hash the contents
+    // 3. 哈希内容
 
     let content_hash = format!(
         "sha256-{}",
@@ -225,15 +270,18 @@ fn update_git_input(
 }
 
 /// Update a path input.
+/// 更新路径输入。
 fn update_path_input(url: &str) -> Result<(String, Option<String>, String), String> {
     let path = url.strip_prefix("path:").unwrap_or(url);
     let path = Path::new(path);
 
     if !path.exists() {
         return Err(format!("path does not exist: {}", path.display()));
+        // 路径不存在：{}
     }
 
     // Hash the directory contents
+    // 哈希目录内容
     let content_hash = hash_path(path)?;
 
     Ok((
@@ -249,20 +297,27 @@ fn update_path_input(url: &str) -> Result<(String, Option<String>, String), Stri
 }
 
 /// Update a URL input.
+/// 更新 URL 输入。
 fn update_url_input(url: &str) -> Result<(String, Option<String>, String), String> {
     // In a real implementation, we would fetch the URL and hash its contents
+    // 在真实实现中，我们将获取 URL 并哈希其内容
     let content_hash = format!("sha256-{}", hash_string(url));
 
     Ok((url.to_string(), None, content_hash))
 }
 
 /// Fetch the latest commit hash from GitHub.
+/// 从 GitHub 获取最新的提交哈希。
 fn fetch_github_commit(owner_repo: &str, git_ref: &str) -> Result<String, String> {
     // This is a simplified implementation
+    // 这是一个简化的实现
     // In production, we would use reqwest or similar to actually fetch the commit
+    // 在生产中，我们将使用 reqwest 或类似工具来实际获取提交
 
     // For now, generate a deterministic hash based on the ref
+    // 目前，根据 ref 生成确定性哈希
     // This allows the system to work offline while still being deterministic
+    // 这允许系统离线工作，同时保持确定性
     Ok(format!(
         "{:0>40}",
         hash_string(&format!("{}:{}", owner_repo, git_ref))
@@ -270,6 +325,7 @@ fn fetch_github_commit(owner_repo: &str, git_ref: &str) -> Result<String, String
 }
 
 /// Hash a string using a simple algorithm.
+/// 使用简单算法哈希字符串。
 fn hash_string(s: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -281,6 +337,7 @@ fn hash_string(s: &str) -> String {
 }
 
 /// Hash a path's contents.
+/// 哈希路径的内容。
 fn hash_path(path: &Path) -> Result<String, String> {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hasher;
@@ -292,6 +349,7 @@ fn hash_path(path: &Path) -> Result<String, String> {
 }
 
 /// Recursively hash a path.
+/// 递归哈希路径。
 fn hash_path_recursive(
     path: &Path,
     hasher: &mut std::collections::hash_map::DefaultHasher,
@@ -302,10 +360,12 @@ fn hash_path_recursive(
     if path.is_file() {
         let content =
             fs::read(path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
+        // 无法读取 {}：{}
         content.hash(hasher);
     } else if path.is_dir() {
         let mut entries: Vec<_> = fs::read_dir(path)
             .map_err(|e| format!("cannot read dir {}: {}", path.display(), e))?
+            // 无法读取目录 {}：{}
             .filter_map(|e| e.ok())
             .collect();
         entries.sort_by_key(|e| e.file_name());
@@ -313,6 +373,7 @@ fn hash_path_recursive(
         for entry in entries {
             let name = entry.file_name();
             // Skip hidden files and common non-content files
+            // 跳过隐藏文件和常见的非内容文件
             let name_str = name.to_string_lossy();
             if name_str.starts_with('.') || name_str == "flake.lock" {
                 continue;

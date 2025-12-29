@@ -1,31 +1,39 @@
 //! Platform detection and capability reporting.
+//! 平台检测和功能报告。
 //!
 //! This module provides utilities for detecting platform-specific features
 //! and displaying appropriate warnings to users on limited platforms.
+//! 本模块提供检测平台特定功能的工具，并在受限平台上向用户显示适当的警告。
 
 use std::fmt;
 
 /// Platform capabilities for Neve.
+/// Neve 的平台功能。
 #[derive(Debug, Clone)]
 pub struct PlatformCapabilities {
-    /// The current operating system.
+    /// The current operating system. / 当前操作系统。
     pub os: Os,
-    /// The CPU architecture.
+    /// The CPU architecture. / CPU 架构。
     pub arch: Arch,
-    /// Whether native sandboxed builds are available.
+    /// Whether native sandboxed builds are available. / 是否支持原生沙箱构建。
     pub native_sandbox: bool,
-    /// Whether Docker is available for builds.
+    /// Whether Docker is available for builds. / Docker 是否可用于构建。
     pub docker_available: bool,
-    /// Whether system configuration is supported.
+    /// Whether system configuration is supported. / 是否支持系统配置。
     pub system_config: bool,
 }
 
 /// Operating system.
+/// 操作系统。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Os {
+    /// Linux operating system. / Linux 操作系统。
     Linux,
+    /// macOS operating system. / macOS 操作系统。
     MacOS,
+    /// Windows operating system. / Windows 操作系统。
     Windows,
+    /// Other/unknown operating system. / 其他/未知操作系统。
     Other,
 }
 
@@ -41,10 +49,14 @@ impl fmt::Display for Os {
 }
 
 /// CPU architecture.
+/// CPU 架构。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arch {
+    /// 64-bit x86 architecture. / 64 位 x86 架构。
     X86_64,
+    /// 64-bit ARM architecture. / 64 位 ARM 架构。
     Aarch64,
+    /// Other/unknown architecture. / 其他/未知架构。
     Other,
 }
 
@@ -60,6 +72,7 @@ impl fmt::Display for Arch {
 
 impl PlatformCapabilities {
     /// Detect capabilities for the current platform.
+    /// 检测当前平台的功能。
     pub fn detect() -> Self {
         let os = detect_os();
         let arch = detect_arch();
@@ -77,6 +90,7 @@ impl PlatformCapabilities {
     }
 
     /// Get the system identifier string (e.g., "x86_64-linux").
+    /// 获取系统标识符字符串（例如 "x86_64-linux"）。
     pub fn system_id(&self) -> String {
         let os_str = match self.os {
             Os::Linux => "linux",
@@ -88,11 +102,13 @@ impl PlatformCapabilities {
     }
 
     /// Check if sandboxed builds are available (native or Docker).
+    /// 检查沙箱构建是否可用（原生或 Docker）。
     pub fn can_sandbox_build(&self) -> bool {
         self.native_sandbox || self.docker_available
     }
 
     /// Get the recommended build backend.
+    /// 获取推荐的构建后端。
     pub fn recommended_backend(&self) -> BuildBackend {
         if self.native_sandbox {
             BuildBackend::Native
@@ -104,6 +120,7 @@ impl PlatformCapabilities {
     }
 
     /// Print platform information.
+    /// 打印平台信息。
     pub fn print_info(&self) {
         println!("Platform: {} {}", self.os, self.arch);
         println!("System ID: {}", self.system_id());
@@ -127,13 +144,17 @@ impl PlatformCapabilities {
 }
 
 /// Build backend options.
+/// 构建后端选项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildBackend {
     /// Native Linux namespace isolation (full isolation).
+    /// 原生 Linux 命名空间隔离（完全隔离）。
     Native,
     /// Docker-based isolation (cross-platform).
+    /// 基于 Docker 的隔离（跨平台）。
     Docker,
     /// Simple execution without isolation.
+    /// 无隔离的简单执行。
     Simple,
 }
 
@@ -148,6 +169,7 @@ impl fmt::Display for BuildBackend {
 }
 
 /// Detect the current operating system.
+/// 检测当前操作系统。
 fn detect_os() -> Os {
     match std::env::consts::OS {
         "linux" => Os::Linux,
@@ -158,6 +180,7 @@ fn detect_os() -> Os {
 }
 
 /// Detect the CPU architecture.
+/// 检测 CPU 架构。
 fn detect_arch() -> Arch {
     match std::env::consts::ARCH {
         "x86_64" => Arch::X86_64,
@@ -167,13 +190,16 @@ fn detect_arch() -> Arch {
 }
 
 /// Check if Linux namespace support is available.
+/// 检查 Linux 命名空间支持是否可用。
 #[cfg(target_os = "linux")]
 fn check_namespace_support() -> bool {
     // Check if unprivileged user namespaces are enabled
+    // 检查是否启用了非特权用户命名空间
     std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
         .map(|s| s.trim() == "1")
         .unwrap_or_else(|_| {
             // On some systems, the file doesn't exist but user namespaces work
+            // 在某些系统上，该文件不存在但用户命名空间仍可工作
             std::fs::read_to_string("/proc/sys/user/max_user_namespaces")
                 .map(|s| s.trim().parse::<u32>().unwrap_or(0) > 0)
                 .unwrap_or(false)
@@ -186,6 +212,7 @@ fn check_namespace_support() -> bool {
 }
 
 /// Check if Docker is available.
+/// 检查 Docker 是否可用。
 fn check_docker() -> bool {
     std::process::Command::new("docker")
         .arg("--version")
@@ -195,54 +222,72 @@ fn check_docker() -> bool {
 }
 
 /// Warn about limited sandbox support on non-Linux platforms.
+/// 警告非 Linux 平台上有限的沙箱支持。
 pub fn warn_limited_sandbox() {
     let caps = PlatformCapabilities::detect();
 
     if !caps.native_sandbox {
         eprintln!("\x1b[33mwarning:\x1b[0m Native sandboxed builds are only available on Linux.");
+        // 原生沙箱构建仅在 Linux 上可用。
 
         if caps.docker_available {
             eprintln!("         Using Docker backend for isolated builds.");
+            // 使用 Docker 后端进行隔离构建。
             eprintln!("         Use --backend native to force native mode (less isolation).");
+            // 使用 --backend native 强制使用原生模式（隔离性较低）。
         } else {
             eprintln!("         Builds will run with limited isolation.");
+            // 构建将以有限的隔离运行。
             eprintln!(
                 "         Install Docker for better isolation on {}.",
                 caps.os
             );
+            // 在 {} 上安装 Docker 以获得更好的隔离。
         }
         eprintln!();
     }
 }
 
 /// Warn about system configuration not being available.
+/// 警告系统配置不可用。
 pub fn warn_system_config_unavailable() {
     let caps = PlatformCapabilities::detect();
 
     if !caps.system_config {
         eprintln!("\x1b[33mwarning:\x1b[0m System configuration is only available on Linux.");
+        // 系统配置仅在 Linux 上可用。
         eprintln!("         This feature manages /etc, services, and system state.");
+        // 此功能管理 /etc、服务和系统状态。
         eprintln!("         On {}, you can still use Neve for:", caps.os);
+        // 在 {} 上，您仍然可以使用 Neve 来：
         eprintln!("           - Package definitions and builds (with Docker)");
+        // - 软件包定义和构建（使用 Docker）
         eprintln!("           - User-level environment management");
+        // - 用户级环境管理
         eprintln!("           - Development environment configuration");
+        // - 开发环境配置
         eprintln!();
     }
 }
 
 /// Print a note about cross-platform usage.
+/// 打印关于跨平台使用的说明。
 pub fn print_cross_platform_note() {
     let caps = PlatformCapabilities::detect();
 
     if caps.os != Os::Linux {
         println!();
         println!("\x1b[34mNote:\x1b[0m Running on {} {}.", caps.os, caps.arch);
+        // 正在 {} {} 上运行。
         println!("      Language features (eval, check, fmt, repl, lsp) work fully.");
+        // 语言功能（eval, check, fmt, repl, lsp）完全可用。
 
         if caps.docker_available {
             println!("      Package builds will use Docker for isolation.");
+            // 软件包构建将使用 Docker 进行隔离。
         } else {
             println!("      Install Docker for sandboxed package builds.");
+            // 安装 Docker 以进行沙箱软件包构建。
         }
     }
 }
@@ -255,6 +300,7 @@ mod tests {
     fn test_detect_capabilities() {
         let caps = PlatformCapabilities::detect();
         // Just ensure detection doesn't panic
+        // 只是确保检测不会 panic
         assert!(!caps.system_id().is_empty());
     }
 

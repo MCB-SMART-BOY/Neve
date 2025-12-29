@@ -1,6 +1,8 @@
 //! The `neve info` command.
+//! `neve info` 命令。
 //!
 //! Shows detailed information about a package or platform.
+//! 显示软件包或平台的详细信息。
 
 #[cfg(unix)]
 use crate::output;
@@ -11,8 +13,10 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Show platform capabilities and information.
+/// 显示平台功能和信息。
 pub fn platform_info() -> Result<(), String> {
     println!("Neve Platform Information");
+    // Neve 平台信息
     println!("==========================");
     println!();
 
@@ -21,45 +25,61 @@ pub fn platform_info() -> Result<(), String> {
 
     println!();
     println!("Feature Availability:");
+    // 功能可用性：
     println!("  Language (eval, check, repl):  \x1b[32myes\x1b[0m");
+    // 语言（eval, check, repl）：是
     println!("  Formatting:                    \x1b[32myes\x1b[0m");
+    // 格式化：是
     println!("  LSP:                           \x1b[32myes\x1b[0m");
+    // LSP：是
 
     if caps.native_sandbox {
         println!("  Native sandboxed builds:       \x1b[32myes\x1b[0m");
+        // 原生沙箱构建：是
     } else if caps.docker_available {
         println!("  Native sandboxed builds:       \x1b[33mno (using Docker)\x1b[0m");
+        // 原生沙箱构建：否（使用 Docker）
     } else {
         println!("  Native sandboxed builds:       \x1b[31mno\x1b[0m");
+        // 原生沙箱构建：否
     }
 
     if caps.docker_available {
         println!("  Docker builds:                 \x1b[32myes\x1b[0m");
+        // Docker 构建：是
     } else {
         println!("  Docker builds:                 \x1b[31mno (Docker not found)\x1b[0m");
+        // Docker 构建：否（未找到 Docker）
     }
 
     if caps.system_config {
         println!("  System configuration:          \x1b[32myes\x1b[0m");
+        // 系统配置：是
     } else {
         println!("  System configuration:          \x1b[33mLinux only\x1b[0m");
+        // 系统配置：仅限 Linux
     }
 
     // Show cross-platform note if not on Linux
+    // 如果不在 Linux 上，显示跨平台说明
     print_cross_platform_note();
 
     Ok(())
 }
 
 /// Show detailed information about a package (Unix only).
+/// 显示软件包的详细信息（仅限 Unix）。
 #[cfg(unix)]
 pub fn run(package: &str) -> Result<(), String> {
     let store_dir = get_store_dir();
 
     // Try to find the package in the store
+    // 尝试在存储中查找软件包
     if store_dir.exists() {
         for entry in fs::read_dir(&store_dir).map_err(|e| format!("Failed to read store: {}", e))? {
+            // 读取存储失败：{}
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            // 读取条目失败：{}
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
@@ -67,33 +87,44 @@ pub fn run(package: &str) -> Result<(), String> {
                 let path = entry.path();
 
                 output::info(&format!("Package: {name_str}"));
+                // 软件包：{}
                 println!("Path: {}", path.display());
+                // 路径：{}
 
                 // Read derivation info if available
+                // 如果可用，读取派生信息
                 let drv_path = path.with_extension("drv");
                 if drv_path.exists()
                     && let Ok(drv_content) = fs::read_to_string(&drv_path)
                 {
                     println!("Derivation: {}", drv_path.display());
+                    // 派生：{}
 
                     // Parse JSON derivation
+                    // 解析 JSON 派生
                     if let Ok(drv) = serde_json::from_str::<serde_json::Value>(&drv_content) {
                         if let Some(name) = drv.get("name").and_then(|v| v.as_str()) {
                             println!("Name: {name}");
+                            // 名称：{}
                         }
                         if let Some(system) = drv.get("system").and_then(|v| v.as_str()) {
                             println!("System: {system}");
+                            // 系统：{}
                         }
                     }
                 }
 
                 // Show size
+                // 显示大小
                 if let Ok(size) = get_dir_size(&path) {
                     println!("Size: {}", format_size(size));
+                    // 大小：{}
                 }
 
                 // Show contents
+                // 显示内容
                 println!("\nContents:");
+                // 内容：
                 show_dir_tree(&path, "", 2)?;
 
                 return Ok(());
@@ -102,9 +133,11 @@ pub fn run(package: &str) -> Result<(), String> {
     }
 
     Err(format!("Package '{}' not found", package))
+    // 软件包 '{}' 未找到
 }
 
 /// Get the store directory.
+/// 获取存储目录。
 #[cfg(unix)]
 fn get_store_dir() -> PathBuf {
     std::env::var("NEVE_STORE")
@@ -113,6 +146,7 @@ fn get_store_dir() -> PathBuf {
 }
 
 /// Get the total size of a directory.
+/// 获取目录的总大小。
 #[cfg(unix)]
 fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
     let mut size = 0;
@@ -122,10 +156,13 @@ fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
             .metadata()
             .map(|m| m.len())
             .map_err(|e| format!("Failed to get file size: {}", e));
+        // 获取文件大小失败：{}
     }
 
     for entry in fs::read_dir(path).map_err(|e| format!("Failed to read directory: {}", e))? {
+        // 读取目录失败：{}
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        // 读取条目失败：{}
         let entry_path = entry.path();
 
         if entry_path.is_file() {
@@ -139,6 +176,7 @@ fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
 }
 
 /// Format a size in bytes as a human-readable string.
+/// 将字节大小格式化为人类可读的字符串。
 #[cfg(unix)]
 fn format_size(size: u64) -> String {
     const KB: u64 = 1024;
@@ -157,6 +195,7 @@ fn format_size(size: u64) -> String {
 }
 
 /// Show a directory tree up to a certain depth.
+/// 显示目录树到一定深度。
 #[cfg(unix)]
 fn show_dir_tree(path: &PathBuf, prefix: &str, max_depth: usize) -> Result<(), String> {
     if max_depth == 0 {
@@ -165,6 +204,7 @@ fn show_dir_tree(path: &PathBuf, prefix: &str, max_depth: usize) -> Result<(), S
 
     let mut entries: Vec<_> = fs::read_dir(path)
         .map_err(|e| format!("Failed to read directory: {}", e))?
+        // 读取目录失败：{}
         .filter_map(|e| e.ok())
         .collect();
 

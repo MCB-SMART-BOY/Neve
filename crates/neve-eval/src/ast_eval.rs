@@ -1,7 +1,18 @@
 //! Direct AST evaluation (without HIR).
+//! 直接 AST 求值（无需 HIR）。
 //!
 //! This is a simplified evaluator that works directly on the AST.
 //! It's useful for quick prototyping and REPL.
+//! 这是一个直接对 AST 进行求值的简化求值器。
+//! 适用于快速原型开发和 REPL。
+//!
+//! ## Features 功能
+//!
+//! - Module imports with visibility / 带可见性的模块导入
+//! - Lazy evaluation with thunks / 使用 thunk 的惰性求值
+//! - Higher-order function support / 高阶函数支持
+//! - Pattern matching / 模式匹配
+//! - List comprehensions / 列表推导
 
 use crate::EvalError;
 use crate::builtin::builtins;
@@ -16,30 +27,43 @@ use std::rc::Rc;
 use neve_syntax::StringPart;
 
 /// A binding with visibility information.
+/// 带有可见性信息的绑定。
 #[derive(Clone)]
 struct Binding {
+    /// The bound value / 绑定的值
     value: Value,
+    /// Whether this binding is public / 此绑定是否公开
     is_public: bool,
 }
 
 /// Environment for AST evaluation.
+/// AST 求值环境。
 ///
 /// Note: For REPL usage, AstEnv can be wrapped in Rc<RefCell<AstEnv>>
 /// to allow persistent state across evaluations.
+/// 注意：对于 REPL 使用，可以将 AstEnv 包装在 Rc<RefCell<AstEnv>> 中
+/// 以便在多次求值之间保持持久状态。
 #[derive(Clone, Default)]
 pub struct AstEnv {
+    /// Variable bindings in this scope / 此作用域中的变量绑定
     bindings: HashMap<String, Binding>,
+    /// Parent scope / 父作用域
     parent: Option<Rc<AstEnv>>,
 }
 
 impl AstEnv {
+    /// Create a new empty environment.
+    /// 创建一个新的空环境。
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Create an environment with all built-in functions.
+    /// 创建一个包含所有内置函数的环境。
     pub fn with_builtins() -> Self {
         let mut env = Self::new();
         // Load all builtins from the central registry - all are public
+        // 从中央注册表加载所有内置函数 - 全部为公开
         for (name, value) in builtins() {
             env.bindings.insert(
                 name.to_string(),
@@ -52,6 +76,8 @@ impl AstEnv {
         env
     }
 
+    /// Create a child environment with the given parent.
+    /// 创建一个具有给定父环境的子环境。
     pub fn child(parent: Rc<AstEnv>) -> Self {
         Self {
             bindings: HashMap::new(),
@@ -60,6 +86,7 @@ impl AstEnv {
     }
 
     /// Define a binding (private by default).
+    /// 定义一个绑定（默认为私有）。
     pub fn define(&mut self, name: String, value: Value) {
         self.bindings.insert(
             name,
@@ -71,6 +98,7 @@ impl AstEnv {
     }
 
     /// Define a public binding.
+    /// 定义一个公开的绑定。
     pub fn define_pub(&mut self, name: String, value: Value) {
         self.bindings.insert(
             name,
@@ -82,10 +110,13 @@ impl AstEnv {
     }
 
     /// Define a binding with explicit visibility.
+    /// 定义一个具有显式可见性的绑定。
     pub fn define_with_visibility(&mut self, name: String, value: Value, is_public: bool) {
         self.bindings.insert(name, Binding { value, is_public });
     }
 
+    /// Look up a variable by name.
+    /// 按名称查找变量。
     pub fn get(&self, name: &str) -> Option<Value> {
         if let Some(binding) = self.bindings.get(name) {
             return Some(binding.value.clone());
@@ -98,6 +129,8 @@ impl AstEnv {
 
     /// Get all bindings in this environment (not including parent).
     /// Used for module exports.
+    /// 获取此环境中的所有绑定（不包括父环境）。
+    /// 用于模块导出。
     pub fn all_bindings(&self) -> HashMap<String, Value> {
         self.bindings
             .iter()
@@ -107,6 +140,8 @@ impl AstEnv {
 
     /// Get only public bindings in this environment.
     /// Used for module exports when respecting visibility.
+    /// 仅获取此环境中的公开绑定。
+    /// 在尊重可见性时用于模块导出。
     pub fn public_bindings(&self) -> HashMap<String, Value> {
         self.bindings
             .iter()
@@ -116,6 +151,7 @@ impl AstEnv {
     }
 
     /// Check if a binding is public.
+    /// 检查绑定是否公开。
     pub fn is_public(&self, name: &str) -> bool {
         self.bindings
             .get(name)
@@ -125,15 +161,22 @@ impl AstEnv {
 }
 
 /// AST evaluator.
+/// AST 求值器。
+///
+/// This evaluator works directly on the AST without lowering to HIR.
+/// It supports module imports, lazy evaluation, and higher-order functions.
+/// 此求值器直接对 AST 进行操作，无需降级到 HIR。
+/// 支持模块导入、惰性求值和高阶函数。
 pub struct AstEvaluator {
+    /// Current evaluation environment / 当前求值环境
     env: Rc<AstEnv>,
-    /// Base path for resolving relative imports
+    /// Base path for resolving relative imports / 解析相对导入的基路径
     base_path: Option<PathBuf>,
-    /// Cache of already-loaded modules
+    /// Cache of already-loaded modules / 已加载模块的缓存
     loaded_modules: HashMap<PathBuf, Rc<AstEnv>>,
-    /// Current module path (for relative imports)
+    /// Current module path (for relative imports) / 当前模块路径（用于相对导入）
     current_module_path: Vec<String>,
-    /// Module loader for advanced module resolution
+    /// Module loader for advanced module resolution / 高级模块解析的模块加载器
     module_loader: Option<ModuleLoader>,
 }
 
@@ -1696,10 +1739,17 @@ impl Default for AstEvaluator {
 }
 
 /// Closure for AST evaluation.
+/// 用于 AST 求值的闭包。
+///
+/// A closure captures its defining environment along with the function parameters and body.
+/// 闭包捕获其定义环境以及函数参数和函数体。
 #[derive(Clone)]
 pub struct AstClosure {
+    /// Function parameters / 函数参数
     pub params: Vec<Param>,
+    /// Function body expression / 函数体表达式
     pub body: Expr,
+    /// Captured environment / 捕获的环境
     pub env: Rc<AstEnv>,
 }
 

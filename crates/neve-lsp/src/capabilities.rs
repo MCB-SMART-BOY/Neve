@@ -1,11 +1,16 @@
 //! LSP server capabilities.
+//! LSP 服务器能力。
+//!
+//! Defines what features the language server supports.
+//! 定义语言服务器支持的功能。
 
 use tower_lsp::lsp_types::*;
 
 /// Get the server capabilities.
+/// 获取服务器能力。
 pub fn server_capabilities() -> ServerCapabilities {
     ServerCapabilities {
-        // Text document sync
+        // Text document sync / 文本文档同步
         text_document_sync: Some(TextDocumentSyncCapability::Options(
             TextDocumentSyncOptions {
                 open_close: Some(true),
@@ -18,10 +23,10 @@ pub fn server_capabilities() -> ServerCapabilities {
             },
         )),
 
-        // Hover
+        // Hover / 悬停
         hover_provider: Some(HoverProviderCapability::Simple(true)),
 
-        // Completion
+        // Completion / 补全
         completion_provider: Some(CompletionOptions {
             trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
             resolve_provider: Some(false),
@@ -30,35 +35,35 @@ pub fn server_capabilities() -> ServerCapabilities {
             completion_item: None,
         }),
 
-        // Signature help
+        // Signature help / 签名帮助
         signature_help_provider: Some(SignatureHelpOptions {
             trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
             retrigger_characters: None,
             work_done_progress_options: WorkDoneProgressOptions::default(),
         }),
 
-        // Go to definition
+        // Go to definition / 跳转到定义
         definition_provider: Some(OneOf::Left(true)),
 
-        // Find references
+        // Find references / 查找引用
         references_provider: Some(OneOf::Left(true)),
 
-        // Rename
+        // Rename / 重命名
         rename_provider: Some(OneOf::Right(RenameOptions {
             prepare_provider: Some(true),
             work_done_progress_options: WorkDoneProgressOptions::default(),
         })),
 
-        // Document symbols
+        // Document symbols / 文档符号
         document_symbol_provider: Some(OneOf::Left(true)),
 
-        // Document formatting
+        // Document formatting / 文档格式化
         document_formatting_provider: Some(OneOf::Left(true)),
 
-        // Workspace symbol
+        // Workspace symbol / 工作区符号
         workspace_symbol_provider: Some(OneOf::Left(true)),
 
-        // Semantic tokens
+        // Semantic tokens / 语义 token
         semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
             SemanticTokensOptions {
                 work_done_progress_options: WorkDoneProgressOptions::default(),

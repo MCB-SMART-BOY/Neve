@@ -1,4 +1,8 @@
 //! Output collection and registration.
+//! 输出收集和注册。
+//!
+//! Handles collecting build outputs and registering them in the store.
+//! 处理收集构建输出并将其注册到存储中。
 
 use crate::BuildError;
 use neve_derive::{Hash, StorePath};
@@ -7,6 +11,7 @@ use std::fs;
 use std::path::Path;
 
 /// Collect a build output and register it in the store.
+/// 收集构建输出并将其注册到存储中。
 pub fn collect_output(
     store: &Store,
     output_dir: &Path,
@@ -20,15 +25,19 @@ pub fn collect_output(
     }
 
     // Hash the output
+    // 哈希输出
     let hash = hash_output(output_dir)?;
 
     // Add to store
+    // 添加到存储
     let store_path = store.add_dir(output_dir, name)?;
 
     // Verify the hash matches
+    // 验证哈希是否匹配
     let stored_hash = StorePath::new(hash, name.to_string());
     if store_path.hash() != stored_hash.hash() {
         // This shouldn't happen, but check anyway
+        // 这不应该发生，但还是检查一下
         return Err(BuildError::OutputHashMismatch {
             output: name.to_string(),
             expected: stored_hash.hash().to_hex(),
@@ -40,6 +49,7 @@ pub fn collect_output(
 }
 
 /// Hash an output directory.
+/// 哈希输出目录。
 fn hash_output(path: &Path) -> Result<Hash, BuildError> {
     use neve_derive::Hasher;
 
@@ -49,6 +59,7 @@ fn hash_output(path: &Path) -> Result<Hash, BuildError> {
 }
 
 /// Recursively hash a path.
+/// 递归哈希路径。
 fn hash_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), BuildError> {
     if path.is_file() {
         let content = fs::read(path)?;
@@ -63,10 +74,16 @@ fn hash_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), B
 
             let entry_path = entry.path();
             if entry_path.is_dir() {
+                // Directory marker
+                // 目录标记
                 hasher.update(b"d");
             } else if entry_path.is_symlink() {
+                // Symlink marker
+                // 符号链接标记
                 hasher.update(b"l");
             } else {
+                // File marker
+                // 文件标记
                 hasher.update(b"f");
             }
 
@@ -81,6 +98,7 @@ fn hash_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), B
 }
 
 /// Validate an output path.
+/// 验证输出路径。
 pub fn validate_output(path: &Path) -> Result<(), BuildError> {
     if !path.exists() {
         return Err(BuildError::BuildFailed(format!(
@@ -90,6 +108,7 @@ pub fn validate_output(path: &Path) -> Result<(), BuildError> {
     }
 
     // Check for common issues
+    // 检查常见问题
     if path.is_dir() {
         validate_dir_recursive(path)?;
     }
@@ -98,12 +117,14 @@ pub fn validate_output(path: &Path) -> Result<(), BuildError> {
 }
 
 /// Recursively validate a directory.
+/// 递归验证目录。
 fn validate_dir_recursive(dir: &Path) -> Result<(), BuildError> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
 
         // Check for broken symlinks
+        // 检查损坏的符号链接
         if path.is_symlink() {
             let target = fs::read_link(&path)?;
             if target.is_absolute() && !target.starts_with("/neve/store") {
@@ -124,6 +145,7 @@ fn validate_dir_recursive(dir: &Path) -> Result<(), BuildError> {
 }
 
 /// Calculate the size of an output.
+/// 计算输出的大小。
 pub fn output_size(path: &Path) -> Result<u64, BuildError> {
     let mut size = 0u64;
 
@@ -140,6 +162,7 @@ pub fn output_size(path: &Path) -> Result<u64, BuildError> {
 }
 
 /// Format a size as a human-readable string.
+/// 将大小格式化为人类可读的字符串。
 pub fn format_size(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;

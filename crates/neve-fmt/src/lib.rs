@@ -1,7 +1,9 @@
 //! Code formatter for Neve.
+//! Neve 代码格式化器。
 //!
 //! This crate provides functionality for formatting Neve source code
 //! according to a consistent style.
+//! 本 crate 提供按照一致风格格式化 Neve 源代码的功能。
 
 mod config;
 mod format;
@@ -14,11 +16,13 @@ use neve_lexer::Lexer;
 use neve_parser::Parser;
 
 /// Format Neve source code.
+/// 格式化 Neve 源代码。
 pub fn format(source: &str) -> Result<String, FormatError> {
     format_with_config(source, &FormatConfig::default())
 }
 
 /// Format Neve source code with custom configuration.
+/// 使用自定义配置格式化 Neve 源代码。
 pub fn format_with_config(source: &str, config: &FormatConfig) -> Result<String, FormatError> {
     let lexer = Lexer::new(source);
     let (tokens, errors) = lexer.tokenize();
@@ -35,17 +39,19 @@ pub fn format_with_config(source: &str, config: &FormatConfig) -> Result<String,
 }
 
 /// Check if source code is already formatted.
+/// 检查源代码是否已格式化。
 pub fn check(source: &str) -> Result<bool, FormatError> {
     let formatted = format(source)?;
     Ok(formatted == source)
 }
 
 /// Format errors.
+/// 格式化错误。
 #[derive(Debug, Clone)]
 pub enum FormatError {
-    /// Parse error.
+    /// Parse error. / 解析错误。
     Parse(String),
-    /// I/O error.
+    /// I/O error. / I/O 错误。
     Io(String),
 }
 

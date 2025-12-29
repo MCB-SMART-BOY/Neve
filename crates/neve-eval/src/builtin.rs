@@ -1,10 +1,32 @@
 //! Built-in functions.
+//! 内置函数。
+//!
+//! This module provides all built-in functions available in Neve.
+//! 本模块提供 Neve 中所有可用的内置函数。
+//!
+//! ## Categories 分类
+//!
+//! - **I/O**: print / 输入输出：print
+//! - **Type conversion**: toString, toInt, toFloat / 类型转换
+//! - **List operations**: len, head, tail, reverse, etc. / 列表操作
+//! - **String operations**: chars, words, lines, trim, split, join, etc. / 字符串操作
+//! - **Math**: abs, min, max, floor, ceil, round, sqrt, pow / 数学函数
+//! - **Option/Result helpers**: isSome, isNone, unwrap, unwrapOr, isOk, isErr / 可选值/结果辅助函数
+//! - **Record operations**: keys, values, hasField, getField, setField / 记录操作
+//! - **Type checking**: typeOf, isInt, isFloat, isBool, isString, etc. / 类型检查
+//! - **Assertion/debugging**: assert, assertEq, trace / 断言/调试
+//! - **Higher-order functions**: map, filter, foldl, foldr, etc. / 高阶函数
+//! - **Lazy evaluation**: force, isEvaluated / 惰性求值
+//! - **Derivation**: derivation / 推导
+//! - **JSON**: toJSON, fromJSON / JSON 操作
+//! - **Bitwise operations**: bitAnd, bitOr, bitXor, etc. / 位运算
 
 use crate::value::{BuiltinFn, Value};
 use neve_derive::Derivation;
 use std::rc::Rc;
 
 /// Get all built-in functions.
+/// 获取所有内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // === I/O ===

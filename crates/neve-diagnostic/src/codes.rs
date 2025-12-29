@@ -1,16 +1,18 @@
 //! Error codes for Neve diagnostics.
+//! Neve 诊断的错误代码。
 
 /// Error codes for categorizing diagnostics.
+/// 用于分类诊断的错误代码。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
-    // Lexer errors (E0001 - E0099)
+    // ===== Lexer errors (E0001 - E0099) 词法错误 =====
     UnexpectedCharacter,
     UnterminatedString,
     UnterminatedComment,
     InvalidEscape,
     InvalidNumber,
 
-    // Parser errors (E0100 - E0199)
+    // ===== Parser errors (E0100 - E0199) 语法错误 =====
     UnexpectedToken,
     ExpectedExpression,
     ExpectedPattern,
@@ -18,7 +20,7 @@ pub enum ErrorCode {
     UnclosedDelimiter,
     MissingSemicolon,
 
-    // Type errors (E0200 - E0299)
+    // ===== Type errors (E0200 - E0299) 类型错误 =====
     TypeMismatch,
     UnboundVariable,
     UnboundType,
@@ -44,7 +46,7 @@ pub enum ErrorCode {
     PrivateAccess,
     CyclicDependency,
 
-    // Eval errors (E0300 - E0399)
+    // ===== Eval errors (E0300 - E0399) 求值错误 =====
     DivisionByZero,
     AssertionFailed,
     PatternMatchFailed,
@@ -102,6 +104,7 @@ impl ErrorCode {
     }
 
     /// Get a human-readable description of the error.
+    /// 获取错误的可读描述。
     pub fn description(&self) -> &'static str {
         match self {
             // Lexer
@@ -155,6 +158,7 @@ impl ErrorCode {
     }
 
     /// Get a suggested fix for the error, if available.
+    /// 获取错误的修复建议（如果有）。
     pub fn suggestion(&self) -> Option<&'static str> {
         match self {
             ErrorCode::UnterminatedString => {

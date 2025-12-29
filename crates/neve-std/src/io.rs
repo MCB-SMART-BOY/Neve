@@ -1,14 +1,19 @@
 //! IO operations for the standard library.
+//! 标准库的 IO 操作。
 //!
 //! These are impure operations that interact with the file system.
 //! They are primarily used during package builds and configuration generation.
+//! 这些是与文件系统交互的非纯操作。
+//! 主要用于包构建和配置生成期间。
 
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
+/// Returns all IO builtins.
+/// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
-        // File reading
+        // File reading / 文件读取
         (
             "io.readFile",
             Value::Builtin(BuiltinFn {
@@ -47,7 +52,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // File checks
+        // File checks / 文件检查
         (
             "io.pathExists",
             Value::Builtin(BuiltinFn {
@@ -87,7 +92,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Environment
+        // Environment / 环境变量
         (
             "io.getEnv",
             Value::Builtin(BuiltinFn {
@@ -127,6 +132,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         // Hashing (useful for content-addressed store)
+        // 哈希（用于内容寻址存储）
         (
             "io.hashFile",
             Value::Builtin(BuiltinFn {
@@ -157,7 +163,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // System info
+        // System info / 系统信息
         (
             "io.currentSystem",
             Value::Builtin(BuiltinFn {
@@ -174,11 +180,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
 }
 
 /// Compute SHA-256 hash and return as hex string.
+/// 计算 SHA-256 哈希并返回十六进制字符串。
 fn sha256_hex(data: &[u8]) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
     // Simple hash for now - in production, use a proper SHA-256 implementation
+    // 目前使用简单哈希 - 生产环境中应使用正确的 SHA-256 实现
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
     let hash = hasher.finish();

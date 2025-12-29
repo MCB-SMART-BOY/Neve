@@ -1,12 +1,15 @@
 //! Language Server Protocol implementation for Neve.
+//! Neve 的语言服务器协议实现。
 //!
 //! This crate provides an LSP server for Neve, enabling IDE features like:
-//! - Syntax highlighting (via semantic tokens)
-//! - Diagnostics (parse and type errors)
-//! - Hover information
-//! - Go to definition
-//! - Code completion
-//! - Formatting
+//! 本 crate 提供 Neve 的 LSP 服务器，支持以下 IDE 功能：
+//!
+//! - Syntax highlighting (via semantic tokens) / 语法高亮（通过语义 token）
+//! - Diagnostics (parse and type errors) / 诊断（解析和类型错误）
+//! - Hover information / 悬停信息
+//! - Go to definition / 跳转到定义
+//! - Code completion / 代码补全
+//! - Formatting / 格式化
 
 mod backend;
 mod capabilities;
@@ -26,6 +29,7 @@ pub use symbol_index::{Symbol, SymbolIndex, SymbolKind, SymbolRef};
 use tower_lsp::{LspService, Server};
 
 /// Run the LSP server.
+/// 运行 LSP 服务器。
 pub async fn run_server() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
@@ -35,6 +39,7 @@ pub async fn run_server() {
 }
 
 /// Run the LSP server with custom I/O.
+/// 使用自定义 I/O 运行 LSP 服务器。
 pub async fn run_server_with_io<I, O>(input: I, output: O)
 where
     I: tokio::io::AsyncRead + Unpin,

@@ -1,10 +1,13 @@
 //! System configuration for Neve.
+//! Neve 的系统配置。
 //!
 //! This crate provides functionality for:
-//! - Evaluating system configuration files
-//! - Generating system configurations
-//! - Activating and switching configurations
-//! - Managing configuration generations
+//! 本 crate 提供以下功能：
+//!
+//! - Evaluating system configuration files / 评估系统配置文件
+//! - Generating system configurations / 生成系统配置
+//! - Activating and switching configurations / 激活和切换配置
+//! - Managing configuration generations / 管理配置代
 
 pub mod activate;
 pub mod flake;
@@ -17,6 +20,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors that can occur during configuration.
+/// 配置过程中可能发生的错误。
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("I/O error: {0}")]
@@ -51,49 +55,52 @@ pub enum ConfigError {
 }
 
 /// A system configuration.
+/// 系统配置。
 #[derive(Debug, Clone)]
 pub struct SystemConfig {
-    /// The configuration name.
+    /// The configuration name. / 配置名称。
     pub name: String,
-    /// The store path of the built configuration.
+    /// The store path of the built configuration. / 构建后配置的存储路径。
     pub store_path: Option<StorePath>,
-    /// The configuration generation number.
+    /// The configuration generation number. / 配置代号。
     pub generation: u64,
-    /// Configuration options.
+    /// Configuration options. / 配置选项。
     pub options: ConfigOptions,
 }
 
 /// Configuration options.
+/// 配置选项。
 #[derive(Debug, Clone, Default)]
 pub struct ConfigOptions {
-    /// Hostname.
+    /// Hostname. / 主机名。
     pub hostname: Option<String>,
-    /// Timezone.
+    /// Timezone. / 时区。
     pub timezone: Option<String>,
-    /// Locale.
+    /// Locale. / 语言区域。
     pub locale: Option<String>,
-    /// Enabled services.
+    /// Enabled services. / 启用的服务。
     pub services: Vec<String>,
-    /// System packages.
+    /// System packages. / 系统包。
     pub packages: Vec<String>,
-    /// User configurations.
+    /// User configurations. / 用户配置。
     pub users: Vec<UserConfig>,
-    /// Environment variables.
+    /// Environment variables. / 环境变量。
     pub environment: Vec<(String, String)>,
 }
 
 /// User configuration.
+/// 用户配置。
 #[derive(Debug, Clone)]
 pub struct UserConfig {
-    /// Username.
+    /// Username. / 用户名。
     pub name: String,
-    /// User's home directory.
+    /// User's home directory. / 用户主目录。
     pub home: PathBuf,
-    /// User's shell.
+    /// User's shell. / 用户 shell。
     pub shell: Option<String>,
-    /// User's groups.
+    /// User's groups. / 用户组。
     pub groups: Vec<String>,
-    /// User's packages.
+    /// User's packages. / 用户包。
     pub packages: Vec<String>,
 }
 

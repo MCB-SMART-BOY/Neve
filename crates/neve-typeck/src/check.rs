@@ -1,4 +1,10 @@
 //! Type checker implementation.
+//! 类型检查器实现。
+//!
+//! This module implements the main type checker for Neve.
+//! It performs bidirectional type checking with Hindley-Milner inference.
+//! 本模块实现 Neve 的主类型检查器。
+//! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::errors::{TypeMismatchError, unbound_variable, unused_variable};
 use crate::infer::InferContext;
@@ -13,34 +19,49 @@ use neve_hir::{
 use std::collections::HashMap;
 
 /// Information about a local variable.
+/// 局部变量的信息。
 #[derive(Clone)]
 struct LocalInfo {
+    /// The type of the variable. / 变量的类型。
     ty: Ty,
+    /// The variable name. / 变量名。
     name: String,
+    /// Source location. / 源码位置。
     span: Span,
+    /// Whether the variable has been used. / 变量是否被使用过。
     used: bool,
 }
 
 /// The type checker.
+/// 类型检查器。
 pub struct TypeChecker {
-    /// Type inference context for fresh type variables
+    /// Type inference context for fresh type variables.
+    /// 用于生成新类型变量的推断上下文。
     infer: InferContext,
-    /// Substitution built during unification
+    /// Substitution built during unification.
+    /// 合一过程中构建的替换。
     subst: Substitution,
-    /// Types of global definitions
+    /// Types of global definitions.
+    /// 全局定义的类型。
     globals: HashMap<DefId, Ty>,
-    /// Span of global definitions for error reporting
+    /// Span of global definitions for error reporting.
+    /// 全局定义的位置信息，用于错误报告。
     #[allow(dead_code)]
     global_spans: HashMap<DefId, Span>,
-    /// Types of local variables with usage tracking
+    /// Types of local variables with usage tracking.
+    /// 局部变量的类型及使用情况跟踪。
     locals: HashMap<LocalId, LocalInfo>,
-    /// Trait resolver for trait/impl handling
+    /// Trait resolver for trait/impl handling.
+    /// 用于处理 trait/impl 的特征解析器。
     trait_resolver: TraitResolver,
-    /// Map from def_id to trait_id
+    /// Map from def_id to trait_id.
+    /// 定义 ID 到特征 ID 的映射。
     trait_ids: HashMap<DefId, TraitId>,
-    /// Collected diagnostics
+    /// Collected diagnostics.
+    /// 收集的诊断信息。
     diagnostics: Vec<Diagnostic>,
-    /// Whether to check for unused variables
+    /// Whether to check for unused variables.
+    /// 是否检查未使用的变量。
     check_unused: bool,
 }
 
@@ -60,6 +81,7 @@ impl TypeChecker {
     }
 
     /// Create a type checker with unused variable checking disabled.
+    /// 创建一个禁用未使用变量检查的类型检查器。
     pub fn without_unused_check() -> Self {
         Self {
             check_unused: false,
@@ -68,22 +90,27 @@ impl TypeChecker {
     }
 
     /// Type check a module.
+    /// 对模块进行类型检查。
     pub fn check(&mut self, module: &Module) {
         // First pass: collect all definitions (functions, traits, impls)
+        // 第一遍：收集所有定义（函数、特征、实现）
         for item in &module.items {
             self.collect_item(item);
         }
 
         // Second pass: check trait impls are complete
+        // 第二遍：检查特征实现是否完整
         self.check_all_impls();
 
         // Third pass: type check function bodies
+        // 第三遍：对函数体进行类型检查
         for item in &module.items {
             self.check_item(item);
         }
     }
 
     /// Check all registered impls for completeness.
+    /// 检查所有已注册的实现是否完整。
     fn check_all_impls(&mut self) {
         // Collect trait info for checking
         let trait_infos: Vec<_> = self
@@ -129,6 +156,7 @@ impl TypeChecker {
     }
 
     /// Check if an impl provides all required methods.
+    /// 检查实现是否提供了所有必需的方法。
     fn check_impl_methods(
         &self,
         impl_methods: &[String],
@@ -144,11 +172,13 @@ impl TypeChecker {
     }
 
     /// Get the trait resolver (for external use).
+    /// 获取特征解析器（供外部使用）。
     pub fn trait_resolver(&self) -> &TraitResolver {
         &self.trait_resolver
     }
 
     /// Get the collected diagnostics.
+    /// 获取收集的诊断信息。
     pub fn diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
     }
@@ -165,6 +195,7 @@ impl TypeChecker {
     }
 
     /// Check for unused variables and emit warnings.
+    /// 检查未使用的变量并发出警告。
     fn check_unused_locals(&mut self) {
         if !self.check_unused {
             return;
@@ -178,6 +209,7 @@ impl TypeChecker {
     }
 
     /// Mark a local variable as used.
+    /// 标记局部变量为已使用。
     fn mark_used(&mut self, local_id: LocalId) {
         if let Some(info) = self.locals.get_mut(&local_id) {
             info.used = true;
@@ -185,6 +217,7 @@ impl TypeChecker {
     }
 
     /// Define a local variable.
+    /// 定义局部变量。
     fn define_local(&mut self, local_id: LocalId, name: String, ty: Ty, span: Span) {
         self.locals.insert(
             local_id,
@@ -198,6 +231,7 @@ impl TypeChecker {
     }
 
     /// Get type of a local variable.
+    /// 获取局部变量的类型。
     fn get_local(&self, local_id: &LocalId) -> Option<Ty> {
         self.locals.get(local_id).map(|info| info.ty.clone())
     }
@@ -211,21 +245,25 @@ impl TypeChecker {
     }
 
     /// Check if a type variable has been resolved.
+    /// 检查类型变量是否已被解析。
     pub fn is_resolved(&self, var: u32) -> bool {
         self.subst.get(var).is_some()
     }
 
     /// Get the resolved type for a type variable, if any.
+    /// 获取类型变量的解析结果（如果有）。
     pub fn get_resolved(&self, var: u32) -> Option<Ty> {
         self.subst.get(var).map(|ty| self.apply(ty))
     }
 
     /// Check if a generic parameter has been bound.
+    /// 检查泛型参数是否已被绑定。
     pub fn is_param_bound(&self, idx: u32) -> bool {
         self.subst.get_param(idx).is_some()
     }
 
     /// Get the bound type for a generic parameter, if any.
+    /// 获取泛型参数的绑定类型（如果有）。
     pub fn get_param_binding(&self, idx: u32) -> Option<Ty> {
         self.subst.get_param(idx).map(|ty| self.apply(ty))
     }
@@ -240,7 +278,7 @@ impl TypeChecker {
         }
     }
 
-    // === First pass: collect signatures ===
+    // ===== First pass: collect signatures 第一遍：收集签名 =====
 
     fn collect_item(&mut self, item: &Item) {
         match &item.kind {
@@ -331,7 +369,7 @@ impl TypeChecker {
         }
     }
 
-    // === Second pass: check bodies ===
+    // ===== Second pass: check bodies 第二遍：检查函数体 =====
 
     fn check_item(&mut self, item: &Item) {
         if let ItemKind::Fn(fn_def) = &item.kind {
@@ -385,6 +423,7 @@ impl TypeChecker {
     }
 
     /// Resolve a type, substituting generic parameters with their bound types.
+    /// 解析类型，将泛型参数替换为其绑定的类型。
     fn resolve_type_with_generics(&mut self, ty: &Ty, generics: &HashMap<String, Ty>) -> Ty {
         match &ty.kind {
             TyKind::Unknown => self.fresh_var(),

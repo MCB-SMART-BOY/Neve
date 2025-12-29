@@ -1,4 +1,9 @@
 //! AST formatter.
+//! AST 格式化器。
+//!
+//! Provides the main formatting logic for converting AST nodes back to
+//! properly formatted source code.
+//! 提供将 AST 节点转换回正确格式化源代码的主要格式化逻辑。
 
 use crate::config::FormatConfig;
 use crate::printer::Printer;
@@ -11,23 +16,28 @@ use neve_syntax::{
 };
 
 /// Code formatter.
+/// 代码格式化器。
 pub struct Formatter {
+    /// Formatting configuration. / 格式化配置。
     config: FormatConfig,
 }
 
 impl Formatter {
     /// Create a new formatter.
+    /// 创建新的格式化器。
     pub fn new(config: FormatConfig) -> Self {
         Self { config }
     }
 
     /// Format a source file.
+    /// 格式化源文件。
     pub fn format(&self, file: &SourceFile) -> String {
         let mut printer = Printer::new(self.config.clone());
 
         for (i, item) in file.items.iter().enumerate() {
             if i > 0 {
                 // Add extra blank line between top-level items if configured
+                // 如果配置了，在顶级项之间添加额外的空行
                 if printer.config().blank_lines_between_items {
                     printer.newline();
                 }
@@ -37,12 +47,14 @@ impl Formatter {
         }
 
         // Ensure we're at indent level 0 at end of file
+        // 确保在文件末尾缩进级别为 0
         debug_assert_eq!(printer.current_indent(), 0, "unbalanced indentation");
 
         printer.finish()
     }
 
     /// Format an item.
+    /// 格式化项。
     fn format_item(&self, p: &mut Printer, item: &Item) {
         match &item.kind {
             ItemKind::Let(def) => self.format_let(p, def),
@@ -57,6 +69,7 @@ impl Formatter {
     }
 
     /// Format a let binding.
+    /// 格式化 let 绑定。
     fn format_let(&self, p: &mut Printer, def: &LetDef) {
         if def.visibility == Visibility::Public {
             p.write("pub ");
@@ -76,6 +89,7 @@ impl Formatter {
     }
 
     /// Format a function definition.
+    /// 格式化函数定义。
     fn format_fn(&self, p: &mut Printer, def: &FnDef) {
         if def.visibility == Visibility::Public {
             p.write("pub ");
@@ -83,10 +97,10 @@ impl Formatter {
         p.write("fn ");
         p.write(&def.name.name);
 
-        // Generics
+        // Generics / 泛型
         self.format_generics(p, &def.generics);
 
-        // Parameters
+        // Parameters / 参数
         p.write("(");
         for (i, param) in def.params.iter().enumerate() {
             if i > 0 {
@@ -96,13 +110,13 @@ impl Formatter {
         }
         p.write(")");
 
-        // Return type
+        // Return type / 返回类型
         if let Some(ref ret_ty) = def.return_type {
             p.write(" -> ");
             self.format_type(p, ret_ty);
         }
 
-        // Body
+        // Body / 函数体
         p.write(" = ");
         self.format_expr(p, &def.body);
         p.write(";");
@@ -110,6 +124,7 @@ impl Formatter {
     }
 
     /// Format a type alias.
+    /// 格式化类型别名。
     fn format_type_alias(&self, p: &mut Printer, def: &TypeAlias) {
         if def.visibility == Visibility::Public {
             p.write("pub ");
@@ -124,6 +139,7 @@ impl Formatter {
     }
 
     /// Format a struct definition.
+    /// 格式化结构体定义。
     fn format_struct(&self, p: &mut Printer, def: &StructDef) {
         if def.visibility == Visibility::Public {
             p.write("pub ");
@@ -150,6 +166,7 @@ impl Formatter {
     }
 
     /// Format an enum definition.
+    /// 格式化枚举定义。
     fn format_enum(&self, p: &mut Printer, def: &EnumDef) {
         if def.visibility == Visibility::Public {
             p.write("pub ");
@@ -196,6 +213,7 @@ impl Formatter {
     }
 
     /// Format a trait definition.
+    /// 格式化 trait 定义。
     fn format_trait(&self, p: &mut Printer, def: &TraitDef) {
         if def.visibility == Visibility::Public {
             p.write("pub ");
@@ -217,6 +235,7 @@ impl Formatter {
     }
 
     /// Format an impl block.
+    /// 格式化 impl 块。
     fn format_impl(&self, p: &mut Printer, def: &ImplDef) {
         p.write("impl");
         self.format_generics(p, &def.generics);
@@ -242,6 +261,7 @@ impl Formatter {
     }
 
     /// Format an import.
+    /// 格式化导入。
     fn format_import(&self, p: &mut Printer, def: &ImportDef) {
         p.write("import ");
         for (i, part) in def.path.iter().enumerate() {
@@ -278,6 +298,7 @@ impl Formatter {
     }
 
     /// Format generics.
+    /// 格式化泛型。
     fn format_generics(&self, p: &mut Printer, generics: &[GenericParam]) {
         if !generics.is_empty() {
             p.write("<");
@@ -301,6 +322,7 @@ impl Formatter {
     }
 
     /// Format a function parameter.
+    /// 格式化函数参数。
     fn format_param(&self, p: &mut Printer, param: &Param) {
         if param.is_lazy {
             p.write("lazy ");
@@ -311,6 +333,7 @@ impl Formatter {
     }
 
     /// Format a field definition.
+    /// 格式化字段定义。
     fn format_field_def(&self, p: &mut Printer, field: &FieldDef) {
         p.write(&field.name.name);
         p.write(": ");
@@ -322,6 +345,7 @@ impl Formatter {
     }
 
     /// Format a trait item.
+    /// 格式化 trait 项。
     fn format_trait_item(&self, p: &mut Printer, item: &TraitItem) {
         p.write("fn ");
         p.write(&item.name.name);
@@ -350,6 +374,7 @@ impl Formatter {
     }
 
     /// Format an impl item.
+    /// 格式化 impl 项。
     fn format_impl_item(&self, p: &mut Printer, item: &ImplItem) {
         p.write("fn ");
         p.write(&item.name.name);
@@ -375,9 +400,10 @@ impl Formatter {
     }
 
     /// Format an expression.
+    /// 格式化表达式。
     fn format_expr(&self, p: &mut Printer, expr: &Expr) {
         match &expr.kind {
-            // Literals
+            // Literals / 字面量
             ExprKind::Int(n) => p.write(&n.to_string()),
             ExprKind::Float(f) => p.write(&f.to_string()),
             ExprKind::String(s) => {
@@ -393,10 +419,10 @@ impl Formatter {
             ExprKind::Bool(b) => p.write(if *b { "true" } else { "false" }),
             ExprKind::Unit => p.write("()"),
 
-            // Variable
+            // Variable / 变量
             ExprKind::Var(ident) => p.write(&ident.name),
 
-            // Path
+            // Path / 路径
             ExprKind::Path(parts) => {
                 for (i, part) in parts.iter().enumerate() {
                     if i > 0 {
@@ -406,19 +432,20 @@ impl Formatter {
                 }
             }
 
-            // Record
+            // Record / 记录
             ExprKind::Record(fields) => {
                 if fields.is_empty() {
                     p.write("#{}");
                 } else {
                     // Check if we should break to multiple lines
+                    // 检查是否应该拆分为多行
                     let estimated_len: usize = fields
                         .iter()
                         .map(|f| f.name.name.len() + 4) // " = " + ", "
                         .sum();
 
                     if p.would_exceed_width(estimated_len + 4) && fields.len() > 1 {
-                        // Multi-line format
+                        // Multi-line format / 多行格式
                         p.writeln("#{");
                         p.indent();
                         for (i, field) in fields.iter().enumerate() {
@@ -431,7 +458,7 @@ impl Formatter {
                         p.dedent();
                         p.write("}");
                     } else {
-                        // Single line format
+                        // Single line format / 单行格式
                         p.write("#{");
                         p.space();
                         for (i, field) in fields.iter().enumerate() {
@@ -447,7 +474,7 @@ impl Formatter {
                 }
             }
 
-            // Record update
+            // Record update / 记录更新
             ExprKind::RecordUpdate { base, fields } => {
                 p.write("#{ ");
                 self.format_expr(p, base);
@@ -461,12 +488,13 @@ impl Formatter {
                 p.write(" }");
             }
 
-            // List
+            // List / 列表
             ExprKind::List(elements) => {
                 if elements.is_empty() {
                     p.write("[]");
                 } else if elements.len() > 3 && p.would_exceed_width(elements.len() * 5) {
                     // Multi-line list for many elements
+                    // 多元素的多行列表
                     p.writeln("[");
                     p.indent();
                     for (i, elem) in elements.iter().enumerate() {
@@ -491,7 +519,7 @@ impl Formatter {
                 }
             }
 
-            // List comprehension
+            // List comprehension / 列表推导
             ExprKind::ListComp { body, generators } => {
                 p.write("[");
                 self.format_expr(p, body);
@@ -502,7 +530,7 @@ impl Formatter {
                 p.write("]");
             }
 
-            // Tuple
+            // Tuple / 元组
             ExprKind::Tuple(elements) => {
                 p.write("(");
                 for (i, elem) in elements.iter().enumerate() {
@@ -517,7 +545,7 @@ impl Formatter {
                 p.write(")");
             }
 
-            // Lambda
+            // Lambda / Lambda 表达式
             ExprKind::Lambda { params, body } => {
                 p.write("fn(");
                 for (i, param) in params.iter().enumerate() {
@@ -530,7 +558,7 @@ impl Formatter {
                 self.format_expr(p, body);
             }
 
-            // Call
+            // Call / 调用
             ExprKind::Call { func, args } => {
                 self.format_expr(p, func);
                 p.write("(");
@@ -543,7 +571,7 @@ impl Formatter {
                 p.write(")");
             }
 
-            // Method call
+            // Method call / 方法调用
             ExprKind::MethodCall {
                 receiver,
                 method,
@@ -562,28 +590,28 @@ impl Formatter {
                 p.write(")");
             }
 
-            // Field access
+            // Field access / 字段访问
             ExprKind::Field { base, field } => {
                 self.format_expr(p, base);
                 p.write(".");
                 p.write(&field.name);
             }
 
-            // Tuple index
+            // Tuple index / 元组索引
             ExprKind::TupleIndex { base, index } => {
                 self.format_expr(p, base);
                 p.write(".");
                 p.write(&index.to_string());
             }
 
-            // Safe field access
+            // Safe field access / 安全字段访问
             ExprKind::SafeField { base, field } => {
                 self.format_expr(p, base);
                 p.write("?.");
                 p.write(&field.name);
             }
 
-            // Index
+            // Index / 索引
             ExprKind::Index { base, index } => {
                 self.format_expr(p, base);
                 p.write("[");
@@ -591,7 +619,7 @@ impl Formatter {
                 p.write("]");
             }
 
-            // Binary
+            // Binary / 二元运算
             ExprKind::Binary { op, left, right } => {
                 self.format_expr(p, left);
                 p.write(" ");
@@ -600,26 +628,26 @@ impl Formatter {
                 self.format_expr(p, right);
             }
 
-            // Unary
+            // Unary / 一元运算
             ExprKind::Unary { op, operand } => {
                 p.write(self.unaryop_str(*op));
                 self.format_expr(p, operand);
             }
 
-            // Try (error propagation)
+            // Try (error propagation) / Try（错误传播）
             ExprKind::Try(inner) => {
                 self.format_expr(p, inner);
                 p.write("?");
             }
 
-            // Coalesce
+            // Coalesce / 空值合并
             ExprKind::Coalesce { value, default } => {
                 self.format_expr(p, value);
                 p.write(" ?? ");
                 self.format_expr(p, default);
             }
 
-            // If
+            // If / 条件表达式
             ExprKind::If {
                 condition,
                 then_branch,
@@ -633,7 +661,7 @@ impl Formatter {
                 self.format_expr(p, else_branch);
             }
 
-            // Match
+            // Match / 模式匹配
             ExprKind::Match { scrutinee, arms } => {
                 p.write("match ");
                 self.format_expr(p, scrutinee);
@@ -647,7 +675,7 @@ impl Formatter {
                 p.write("}");
             }
 
-            // Block
+            // Block / 块
             ExprKind::Block { stmts, expr } => {
                 p.write("{");
                 if stmts.is_empty() && expr.is_none() {
@@ -667,7 +695,7 @@ impl Formatter {
                 }
             }
 
-            // Let expression
+            // Let expression / Let 表达式
             ExprKind::Let {
                 pattern,
                 ty,
@@ -686,19 +714,20 @@ impl Formatter {
                 self.format_expr(p, body);
             }
 
-            // Lazy
+            // Lazy / 惰性求值
             ExprKind::Lazy(inner) => {
                 p.write("lazy ");
                 self.format_expr(p, inner);
             }
 
-            // Interpolated string
+            // Interpolated string / 插值字符串
             ExprKind::Interpolated(parts) => {
                 p.write("`");
                 for part in parts {
                     match part {
                         StringPart::Literal(s) => {
                             // Escape backticks and braces in literal parts
+                            // 在字面量部分转义反引号和大括号
                             for c in s.chars() {
                                 match c {
                                     '`' => p.write("\\`"),
@@ -722,6 +751,7 @@ impl Formatter {
             }
 
             // Path literal (./foo, ../bar, /absolute/path)
+            // 路径字面量（./foo、../bar、/absolute/path）
             ExprKind::PathLit(path) => {
                 p.write(path);
             }
@@ -729,6 +759,7 @@ impl Formatter {
     }
 
     /// Format a record field in an expression.
+    /// 格式化表达式中的记录字段。
     fn format_record_field(&self, p: &mut Printer, field: &RecordField) {
         p.write(&field.name.name);
         if let Some(ref value) = field.value {
@@ -738,6 +769,7 @@ impl Formatter {
     }
 
     /// Format a generator in list comprehension.
+    /// 格式化列表推导中的生成器。
     fn format_generator(&self, p: &mut Printer, generator: &Generator) {
         self.format_pattern(p, &generator.pattern);
         p.write(" <- ");
@@ -749,6 +781,7 @@ impl Formatter {
     }
 
     /// Format a lambda parameter.
+    /// 格式化 lambda 参数。
     fn format_lambda_param(&self, p: &mut Printer, param: &LambdaParam) {
         self.format_pattern(p, &param.pattern);
         if let Some(ref ty) = param.ty {
@@ -758,6 +791,7 @@ impl Formatter {
     }
 
     /// Format a match arm.
+    /// 格式化匹配分支。
     fn format_match_arm(&self, p: &mut Printer, arm: &MatchArm) {
         self.format_pattern(p, &arm.pattern);
         if let Some(ref guard) = arm.guard {
@@ -771,6 +805,7 @@ impl Formatter {
     }
 
     /// Format a statement.
+    /// 格式化语句。
     fn format_stmt(&self, p: &mut Printer, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Let { pattern, ty, value } => {
@@ -794,6 +829,7 @@ impl Formatter {
     }
 
     /// Format a pattern.
+    /// 格式化模式。
     fn format_pattern(&self, p: &mut Printer, pattern: &Pattern) {
         match &pattern.kind {
             PatternKind::Wildcard => p.write("_"),
@@ -893,6 +929,7 @@ impl Formatter {
     }
 
     /// Format a literal pattern.
+    /// 格式化字面量模式。
     fn format_literal_pattern(&self, p: &mut Printer, lit: &LiteralPattern) {
         match lit {
             LiteralPattern::Int(n) => p.write(&n.to_string()),
@@ -912,6 +949,7 @@ impl Formatter {
     }
 
     /// Format a record pattern field.
+    /// 格式化记录模式字段。
     fn format_record_pattern_field(&self, p: &mut Printer, field: &RecordPatternField) {
         p.write(&field.name.name);
         if let Some(ref pat) = field.pattern {
@@ -921,6 +959,7 @@ impl Formatter {
     }
 
     /// Format a type.
+    /// 格式化类型。
     fn format_type(&self, p: &mut Printer, ty: &Type) {
         match &ty.kind {
             TypeKind::Named { path, args } => {
@@ -983,6 +1022,7 @@ impl Formatter {
     }
 
     /// Format a record type field.
+    /// 格式化记录类型字段。
     fn format_record_type_field(&self, p: &mut Printer, field: &RecordTypeField) {
         p.write(&field.name.name);
         p.write(": ");
@@ -990,6 +1030,7 @@ impl Formatter {
     }
 
     /// Get the string representation of a binary operator.
+    /// 获取二元运算符的字符串表示。
     fn binop_str(&self, op: BinOp) -> &'static str {
         match op {
             BinOp::Add => "+",
@@ -1013,6 +1054,7 @@ impl Formatter {
     }
 
     /// Get the string representation of a unary operator.
+    /// 获取一元运算符的字符串表示。
     fn unaryop_str(&self, op: UnaryOp) -> &'static str {
         match op {
             UnaryOp::Neg => "-",
@@ -1022,6 +1064,7 @@ impl Formatter {
 }
 
 /// Escape special characters in a string.
+/// 转义字符串中的特殊字符。
 fn escape_string(s: &str) -> String {
     let mut result = String::new();
     for c in s.chars() {
@@ -1038,6 +1081,7 @@ fn escape_string(s: &str) -> String {
 }
 
 /// Escape a character.
+/// 转义字符。
 fn escape_char(c: char) -> String {
     match c {
         '\\' => "\\\\".to_string(),
