@@ -25,23 +25,17 @@ pub fn platform_info() -> Result<(), String> {
 
     println!();
     println!("Feature Availability:");
-    // 功能可用性：
     println!("  Language (eval, check, repl):  \x1b[32myes\x1b[0m");
-    // 语言（eval, check, repl）：是
     println!("  Formatting:                    \x1b[32myes\x1b[0m");
-    // 格式化：是
     println!("  LSP:                           \x1b[32myes\x1b[0m");
     // LSP：是
 
     if caps.native_sandbox {
         println!("  Native sandboxed builds:       \x1b[32myes\x1b[0m");
-        // 原生沙箱构建：是
     } else if caps.docker_available {
         println!("  Native sandboxed builds:       \x1b[33mno (using Docker)\x1b[0m");
-        // 原生沙箱构建：否（使用 Docker）
     } else {
         println!("  Native sandboxed builds:       \x1b[31mno\x1b[0m");
-        // 原生沙箱构建：否
     }
 
     if caps.docker_available {
@@ -54,10 +48,8 @@ pub fn platform_info() -> Result<(), String> {
 
     if caps.system_config {
         println!("  System configuration:          \x1b[32myes\x1b[0m");
-        // 系统配置：是
     } else {
         println!("  System configuration:          \x1b[33mLinux only\x1b[0m");
-        // 系统配置：仅限 Linux
     }
 
     // Show cross-platform note if not on Linux
@@ -77,9 +69,7 @@ pub fn run(package: &str) -> Result<(), String> {
     // 尝试在存储中查找软件包
     if store_dir.exists() {
         for entry in fs::read_dir(&store_dir).map_err(|e| format!("Failed to read store: {}", e))? {
-            // 读取存储失败：{}
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-            // 读取条目失败：{}
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
@@ -87,9 +77,7 @@ pub fn run(package: &str) -> Result<(), String> {
                 let path = entry.path();
 
                 output::info(&format!("Package: {name_str}"));
-                // 软件包：{}
                 println!("Path: {}", path.display());
-                // 路径：{}
 
                 // Read derivation info if available
                 // 如果可用，读取派生信息
@@ -98,18 +86,15 @@ pub fn run(package: &str) -> Result<(), String> {
                     && let Ok(drv_content) = fs::read_to_string(&drv_path)
                 {
                     println!("Derivation: {}", drv_path.display());
-                    // 派生：{}
 
                     // Parse JSON derivation
                     // 解析 JSON 派生
                     if let Ok(drv) = serde_json::from_str::<serde_json::Value>(&drv_content) {
                         if let Some(name) = drv.get("name").and_then(|v| v.as_str()) {
                             println!("Name: {name}");
-                            // 名称：{}
                         }
                         if let Some(system) = drv.get("system").and_then(|v| v.as_str()) {
                             println!("System: {system}");
-                            // 系统：{}
                         }
                     }
                 }
@@ -118,13 +103,11 @@ pub fn run(package: &str) -> Result<(), String> {
                 // 显示大小
                 if let Ok(size) = get_dir_size(&path) {
                     println!("Size: {}", format_size(size));
-                    // 大小：{}
                 }
 
                 // Show contents
                 // 显示内容
                 println!("\nContents:");
-                // 内容：
                 show_dir_tree(&path, "", 2)?;
 
                 return Ok(());
@@ -133,7 +116,6 @@ pub fn run(package: &str) -> Result<(), String> {
     }
 
     Err(format!("Package '{}' not found", package))
-    // 软件包 '{}' 未找到
 }
 
 /// Get the store directory.
@@ -156,13 +138,10 @@ fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
             .metadata()
             .map(|m| m.len())
             .map_err(|e| format!("Failed to get file size: {}", e));
-        // 获取文件大小失败：{}
     }
 
     for entry in fs::read_dir(path).map_err(|e| format!("Failed to read directory: {}", e))? {
-        // 读取目录失败：{}
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        // 读取条目失败：{}
         let entry_path = entry.path();
 
         if entry_path.is_file() {
@@ -204,7 +183,6 @@ fn show_dir_tree(path: &PathBuf, prefix: &str, max_depth: usize) -> Result<(), S
 
     let mut entries: Vec<_> = fs::read_dir(path)
         .map_err(|e| format!("Failed to read directory: {}", e))?
-        // 读取目录失败：{}
         .filter_map(|e| e.ok())
         .collect();
 

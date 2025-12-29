@@ -17,24 +17,19 @@ pub fn run() -> Result<(), String> {
 
     if !flake_path.exists() {
         return Err("no flake.neve found in current directory".to_string());
-        // 在当前目录中未找到 flake.neve
     }
 
     output::info("Loading flake...");
-    // 正在加载 flake...
 
     let mut flake =
         Flake::load(Path::new(".")).map_err(|e| format!("failed to load flake: {}", e))?;
-    // 加载 flake 失败：{}
 
     if flake.inputs.is_empty() {
         output::info("No inputs to update");
-        // 没有要更新的输入
         return Ok(());
     }
 
     output::info(&format!("Found {} input(s) to update", flake.inputs.len()));
-    // 找到 {} 个要更新的输入
 
     // Check for existing lock file
     // 检查现有锁文件
@@ -43,10 +38,8 @@ pub fn run() -> Result<(), String> {
 
     if had_lock {
         output::info("Updating existing lock file...");
-        // 正在更新现有锁文件...
     } else {
         output::info("Creating new lock file...");
-        // 正在创建新锁文件...
     }
 
     // Clear existing lock to force re-resolution
@@ -60,19 +53,16 @@ pub fn run() -> Result<(), String> {
 
     for (name, input) in &flake.inputs {
         output::info(&format!("Updating input '{}'...", name));
-        // 正在更新输入 '{}'...
 
         match update_input(&input.url, input.rev.as_deref(), input.branch.as_deref()) {
             Ok(entry) => {
                 flake.lock.inputs.insert(name.clone(), entry);
                 updated_count += 1;
                 output::success(&format!("  Updated: {}", name));
-                // 已更新：{}
             }
             Err(e) => {
                 failed_inputs.push((name.clone(), e.clone()));
                 output::warning(&format!("  Failed to update '{}': {}", name, e));
-                // 更新 '{}' 失败：{}
             }
         }
     }
@@ -83,13 +73,11 @@ pub fn run() -> Result<(), String> {
         flake
             .save_lock()
             .map_err(|e| format!("failed to save lock file: {}", e))?;
-        // 保存锁文件失败：{}
 
         output::success(&format!(
             "Updated {} input(s), lock file written to flake.lock",
             updated_count
         ));
-        // 已更新 {} 个输入，锁文件已写入 flake.lock
     }
 
     if !failed_inputs.is_empty() {
@@ -97,7 +85,6 @@ pub fn run() -> Result<(), String> {
             "{} input(s) could not be updated",
             failed_inputs.len()
         ));
-        // {} 个输入无法更新
         for (name, err) in &failed_inputs {
             output::warning(&format!("  {}: {}", name, err));
         }
@@ -111,7 +98,6 @@ pub fn run() -> Result<(), String> {
         Ok(())
     } else {
         Err("failed to update any inputs".to_string())
-        // 无法更新任何输入
     }
 }
 
@@ -176,7 +162,6 @@ fn update_github_input(
     let repo_path = url
         .strip_prefix("github:")
         .ok_or_else(|| "invalid github URL".to_string())?;
-    // 无效的 GitHub URL
 
     // Extract owner/repo and optional ref
     // 提取 owner/repo 和可选的 ref
@@ -194,7 +179,6 @@ fn update_github_input(
         }
     } else {
         return Err(format!("invalid github URL: {}", url));
-        // 无效的 GitHub URL：{}
     };
 
     // Determine the ref to use
@@ -207,10 +191,6 @@ fn update_github_input(
 
     // In a real implementation, we would:
     // 在真实实现中，我们将：
-    // 1. Query GitHub API for the latest commit
-    // 1. 查询 GitHub API 获取最新提交
-    // 2. Download and hash the tarball
-    // 2. 下载并哈希 tarball
     // For now, we generate a placeholder
     // 目前，我们生成一个占位符
 
@@ -254,12 +234,6 @@ fn update_git_input(
 
     // In a real implementation, we would:
     // 在真实实现中，我们将：
-    // 1. Clone/fetch the repository
-    // 1. 克隆/获取仓库
-    // 2. Get the commit hash
-    // 2. 获取提交哈希
-    // 3. Hash the contents
-    // 3. 哈希内容
 
     let content_hash = format!(
         "sha256-{}",
@@ -277,7 +251,6 @@ fn update_path_input(url: &str) -> Result<(String, Option<String>, String), Stri
 
     if !path.exists() {
         return Err(format!("path does not exist: {}", path.display()));
-        // 路径不存在：{}
     }
 
     // Hash the directory contents
@@ -360,12 +333,10 @@ fn hash_path_recursive(
     if path.is_file() {
         let content =
             fs::read(path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
-        // 无法读取 {}：{}
         content.hash(hasher);
     } else if path.is_dir() {
         let mut entries: Vec<_> = fs::read_dir(path)
             .map_err(|e| format!("cannot read dir {}: {}", path.display(), e))?
-            // 无法读取目录 {}：{}
             .filter_map(|e| e.ok())
             .collect();
         entries.sort_by_key(|e| e.file_name());

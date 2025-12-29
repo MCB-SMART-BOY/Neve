@@ -16,7 +16,6 @@ use std::rc::Rc;
 pub fn run() -> Result<(), String> {
     output::info(&format!("Neve REPL v{}", env!("CARGO_PKG_VERSION")));
     println!("Type :help for help, :quit to exit");
-    // 输入 :help 获取帮助，:quit 退出
     println!();
 
     let mut rl = DefaultEditor::new().map_err(|e| e.to_string())?;
@@ -79,28 +78,17 @@ pub fn run() -> Result<(), String> {
                             println!("REPL Commands:");
                             // REPL 命令：
                             println!("  :help, :h         Show this help");
-                            // 显示此帮助
                             println!("  :quit, :q         Exit the REPL");
-                            // 退出 REPL
                             println!("  :env              Show all current bindings");
-                            // 显示所有当前绑定
                             println!("  :type <expr>      Show the type of an expression");
-                            // 显示表达式的类型
                             println!("  :clear            Clear all bindings (keeps builtins)");
-                            // 清除所有绑定（保留内置函数）
                             println!("  :load <file>      Load and evaluate a Neve file");
-                            // 加载并求值 Neve 文件
                             println!();
                             println!("Tips:");
-                            // 提示：
                             println!("  - Use 'let x = ...' to define variables");
-                            // 使用 'let x = ...' 定义变量
                             println!("  - Use 'fn name(...) = ...' to define functions");
-                            // 使用 'fn name(...) = ...' 定义函数
                             println!("  - All definitions persist across inputs");
-                            // 所有定义在输入之间持续存在
                             println!("  - End line with \\ for multi-line input");
-                            // 以 \\ 结束行以进行多行输入
                             input_buffer.clear();
                             continue;
                         }
@@ -118,10 +106,8 @@ pub fn run() -> Result<(), String> {
 
                             if user_bindings.is_empty() {
                                 println!("(no user-defined bindings)");
-                                // （没有用户定义的绑定）
                             } else {
                                 println!("User-defined bindings:");
-                                // 用户定义的绑定：
                                 let mut sorted = user_bindings.clone();
                                 sorted.sort();
                                 for name in sorted {
@@ -136,29 +122,24 @@ pub fn run() -> Result<(), String> {
                                 builtins_count,
                                 user_bindings.len()
                             );
-                            // （{} 个内置函数，{} 个用户定义）
                             input_buffer.clear();
                             continue;
                         }
                         ":type" => {
                             if parts.len() < 2 {
                                 println!("Usage: :type <expression>");
-                                // 用法：:type <表达式>
                                 input_buffer.clear();
                                 continue;
                             }
                             let expr_str = parts[1..].join(" ");
                             println!("(Type inference not yet implemented for: {})", expr_str);
-                            // （类型推断尚未实现：{}）
                             println!("Hint: Full type checking will be available soon!");
-                            // 提示：完整的类型检查即将推出！
                             input_buffer.clear();
                             continue;
                         }
                         ":load" => {
                             if parts.len() < 2 {
                                 println!("Usage: :load <file.neve>");
-                                // 用法：:load <文件.neve>
                                 input_buffer.clear();
                                 continue;
                             }
@@ -227,17 +208,14 @@ pub fn run() -> Result<(), String> {
                                                 }
                                             }
                                             println!("Loaded: {}", file_path);
-                                            // 已加载：{}
                                         }
                                         Err(e) => {
                                             eprintln!("Error loading file: {:?}", e);
-                                            // 加载文件错误：{:?}
                                         }
                                     }
                                 }
                                 Err(e) => {
                                     eprintln!("Cannot read file '{}': {}", file_path, e);
-                                    // 无法读取文件 '{}'：{}
                                 }
                             }
                             input_buffer.clear();
@@ -246,15 +224,12 @@ pub fn run() -> Result<(), String> {
                         ":clear" => {
                             *env.borrow_mut() = AstEnv::with_builtins();
                             println!("Environment cleared");
-                            // 环境已清除
                             input_buffer.clear();
                             continue;
                         }
                         _ => {
                             println!("Unknown command: {}", input);
-                            // 未知命令：{}
                             println!("Type :help for available commands");
-                            // 输入 :help 获取可用命令
                             input_buffer.clear();
                             continue;
                         }
@@ -294,8 +269,6 @@ pub fn run() -> Result<(), String> {
                     Ok(value) => {
                         // After successful evaluation, we need to extract new bindings
                         // from the AST and add them to our persistent environment
-                        // 成功求值后，我们需要从 AST 中提取新绑定
-                        // 并将它们添加到持久环境中
                         for item in &ast.items {
                             if let neve_syntax::ItemKind::Let(let_def) = &item.kind {
                                 // Extract the binding name from the pattern
@@ -345,7 +318,6 @@ pub fn run() -> Result<(), String> {
                     }
                     Err(e) => {
                         eprintln!("Error: {:?}", e);
-                        // 错误：{:?}
                     }
                 }
 
@@ -368,7 +340,6 @@ pub fn run() -> Result<(), String> {
     }
 
     println!("Goodbye!");
-    // 再见！
     Ok(())
 }
 

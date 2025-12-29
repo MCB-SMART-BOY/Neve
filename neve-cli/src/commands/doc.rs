@@ -21,19 +21,12 @@ const DOC_CHANGELOG: &str = include_str!("../../../docs/changelog.md");
 /// 可用的文档主题。
 const TOPICS: &[(&str, &str, &str)] = &[
     ("quickstart", DOC_QUICKSTART, "5-minute quick start guide"),
-    // 5 分钟快速入门指南
     ("tutorial", DOC_TUTORIAL, "Complete language tutorial"),
-    // 完整的语言教程
     ("spec", DOC_SPEC, "Language specification"),
-    // 语言规范
     ("api", DOC_API, "Standard library API reference"),
-    // 标准库 API 参考
     ("philosophy", DOC_PHILOSOPHY, "Design philosophy"),
-    // 设计理念
     ("install", DOC_INSTALL, "Installation guide"),
-    // 安装指南
     ("changelog", DOC_CHANGELOG, "Version history"),
-    // 版本历史
 ];
 
 /// Create a styled skin for terminal rendering.
@@ -110,10 +103,8 @@ pub fn view(topic: &str, lang: Option<&str>) -> Result<(), String> {
         Some(c) => c,
         None => {
             eprintln!("Unknown topic: {}", topic);
-            // 未知主题：{}
             eprintln!();
             eprintln!("Available topics:");
-            // 可用主题：
             for (name, _, desc) in TOPICS {
                 eprintln!("  {:12} - {}", name, desc);
             }

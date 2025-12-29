@@ -228,21 +228,16 @@ pub fn warn_limited_sandbox() {
 
     if !caps.native_sandbox {
         eprintln!("\x1b[33mwarning:\x1b[0m Native sandboxed builds are only available on Linux.");
-        // 原生沙箱构建仅在 Linux 上可用。
 
         if caps.docker_available {
             eprintln!("         Using Docker backend for isolated builds.");
-            // 使用 Docker 后端进行隔离构建。
             eprintln!("         Use --backend native to force native mode (less isolation).");
-            // 使用 --backend native 强制使用原生模式（隔离性较低）。
         } else {
             eprintln!("         Builds will run with limited isolation.");
-            // 构建将以有限的隔离运行。
             eprintln!(
                 "         Install Docker for better isolation on {}.",
                 caps.os
             );
-            // 在 {} 上安装 Docker 以获得更好的隔离。
         }
         eprintln!();
     }
@@ -255,17 +250,11 @@ pub fn warn_system_config_unavailable() {
 
     if !caps.system_config {
         eprintln!("\x1b[33mwarning:\x1b[0m System configuration is only available on Linux.");
-        // 系统配置仅在 Linux 上可用。
         eprintln!("         This feature manages /etc, services, and system state.");
-        // 此功能管理 /etc、服务和系统状态。
         eprintln!("         On {}, you can still use Neve for:", caps.os);
-        // 在 {} 上，您仍然可以使用 Neve 来：
         eprintln!("           - Package definitions and builds (with Docker)");
-        // - 软件包定义和构建（使用 Docker）
         eprintln!("           - User-level environment management");
-        // - 用户级环境管理
         eprintln!("           - Development environment configuration");
-        // - 开发环境配置
         eprintln!();
     }
 }
@@ -278,16 +267,12 @@ pub fn print_cross_platform_note() {
     if caps.os != Os::Linux {
         println!();
         println!("\x1b[34mNote:\x1b[0m Running on {} {}.", caps.os, caps.arch);
-        // 正在 {} {} 上运行。
         println!("      Language features (eval, check, fmt, repl, lsp) work fully.");
-        // 语言功能（eval, check, fmt, repl, lsp）完全可用。
 
         if caps.docker_available {
             println!("      Package builds will use Docker for isolation.");
-            // 软件包构建将使用 Docker 进行隔离。
         } else {
             println!("      Install Docker for sandboxed package builds.");
-            // 安装 Docker 以进行沙箱软件包构建。
         }
     }
 }
