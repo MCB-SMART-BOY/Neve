@@ -25,6 +25,7 @@ neve-fmt.workspace = true
 clap.workspace = true
 rustyline.workspace = true
 serde_json.workspace = true
+termimad = "0.30"
 
 # Unix-only dependencies for package management features
 [target.'cfg(unix)'.dependencies]
