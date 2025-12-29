@@ -51,7 +51,8 @@ enum Commands {
     /// Start an interactive REPL
     Repl,
 
-    /// Build a package
+    /// Build a package (Unix only)
+    #[cfg(unix)]
     Build {
         /// Package name or path
         package: Option<String>,
@@ -61,13 +62,15 @@ enum Commands {
         backend: String,
     },
 
-    /// Package management commands
+    /// Package management commands (Unix only)
+    #[cfg(unix)]
     Package {
         #[command(subcommand)]
         action: PackageAction,
     },
 
-    /// Search for packages
+    /// Search for packages (Unix only)
+    #[cfg(unix)]
     Search {
         /// Search query
         query: String,
@@ -75,7 +78,7 @@ enum Commands {
 
     /// Show package or platform information
     Info {
-        /// Package name
+        /// Package name (Unix only)
         package: Option<String>,
 
         /// Show platform capabilities
@@ -83,16 +86,19 @@ enum Commands {
         platform: bool,
     },
 
-    /// Update dependencies
+    /// Update dependencies (Unix only)
+    #[cfg(unix)]
     Update,
 
-    /// System configuration commands
+    /// System configuration commands (Unix only)
+    #[cfg(unix)]
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
 
-    /// Store management commands
+    /// Store management commands (Unix only)
+    #[cfg(unix)]
     Store {
         #[command(subcommand)]
         action: StoreAction,
@@ -124,6 +130,7 @@ enum FmtAction {
     },
 }
 
+#[cfg(unix)]
 #[derive(Subcommand)]
 enum PackageAction {
     /// Install a package
@@ -142,6 +149,7 @@ enum PackageAction {
     Rollback,
 }
 
+#[cfg(unix)]
 #[derive(Subcommand)]
 enum ConfigAction {
     /// Build system configuration
@@ -154,6 +162,7 @@ enum ConfigAction {
     List,
 }
 
+#[cfg(unix)]
 #[derive(Subcommand)]
 enum StoreAction {
     /// Run garbage collection
@@ -166,6 +175,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
+        // Cross-platform commands (language features)
         Commands::Eval { expr } => commands::eval::run(&expr, cli.verbose),
         Commands::Run { file } => commands::run::run(&file, cli.verbose),
         Commands::Check { file } => commands::check::run(&file, cli.verbose),
@@ -175,28 +185,45 @@ fn main() {
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
         Commands::Repl => commands::repl::run(),
+        Commands::Info { package, platform } => {
+            if platform || package.is_none() {
+                commands::info::platform_info()
+            } else {
+                #[cfg(unix)]
+                {
+                    commands::info::run(package.as_deref().unwrap())
+                }
+                #[cfg(not(unix))]
+                {
+                    let _ = package;
+                    eprintln!("Package info is only available on Unix systems");
+                    Ok(())
+                }
+            }
+        }
+
+        // Unix-only commands (package management)
+        #[cfg(unix)]
         Commands::Build { package, backend } => commands::build::run(package.as_deref(), &backend),
+        #[cfg(unix)]
         Commands::Package { action } => match action {
             PackageAction::Install { package } => commands::install::run(&package),
             PackageAction::Remove { package } => commands::remove::run(&package),
             PackageAction::List => commands::install::list(),
             PackageAction::Rollback => commands::remove::rollback(),
         },
+        #[cfg(unix)]
         Commands::Search { query } => commands::search::run(&query),
-        Commands::Info { package, platform } => {
-            if platform || package.is_none() {
-                commands::info::platform_info()
-            } else {
-                commands::info::run(package.as_deref().unwrap())
-            }
-        }
+        #[cfg(unix)]
         Commands::Update => commands::update::run(),
+        #[cfg(unix)]
         Commands::Config { action } => match action {
             ConfigAction::Build => commands::config::build(),
             ConfigAction::Switch => commands::config::switch(),
             ConfigAction::Rollback => commands::config::rollback(),
             ConfigAction::List => commands::config::list_generations(),
         },
+        #[cfg(unix)]
         Commands::Store { action } => match action {
             StoreAction::Gc => commands::store::gc(),
             StoreAction::Info => commands::store::info(),

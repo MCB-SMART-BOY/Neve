@@ -20,12 +20,15 @@ neve-hir.workspace = true
 neve-typeck.workspace = true
 neve-eval.workspace = true
 neve-std.workspace = true
-neve-config.workspace = true
-neve-store.workspace = true
-neve-derive.workspace = true
-neve-builder.workspace = true
 neve-fmt.workspace = true
 
 clap.workspace = true
 rustyline.workspace = true
 serde_json.workspace = true
+
+# Unix-only dependencies for package management features
+[target.'cfg(unix)'.dependencies]
+neve-config.workspace = true
+neve-store.workspace = true
+neve-derive.workspace = true
+neve-builder.workspace = true
