@@ -1125,7 +1125,7 @@ fn test_eval_pipe_with_expression() {
 #[test]
 fn test_eval_match_literal() {
     assert!(matches!(
-        eval_source("let x = match 1 { 0 => 100, 1 => 200, _ => 300 };"),
+        eval_source("let x = match 1 { 0 -> 100, 1 -> 200, _ -> 300 };"),
         Ok(Value::Int(200))
     ));
 }
@@ -1133,7 +1133,7 @@ fn test_eval_match_literal() {
 #[test]
 fn test_eval_match_wildcard() {
     assert!(matches!(
-        eval_source("let x = match 5 { 0 => 100, 1 => 200, _ => 300 };"),
+        eval_source("let x = match 5 { 0 -> 100, 1 -> 200, _ -> 300 };"),
         Ok(Value::Int(300))
     ));
 }
@@ -1141,7 +1141,7 @@ fn test_eval_match_wildcard() {
 #[test]
 fn test_eval_match_first_arm() {
     assert!(matches!(
-        eval_source("let x = match 0 { 0 => 100, 1 => 200, _ => 300 };"),
+        eval_source("let x = match 0 { 0 -> 100, 1 -> 200, _ -> 300 };"),
         Ok(Value::Int(100))
     ));
 }
@@ -1149,7 +1149,7 @@ fn test_eval_match_first_arm() {
 #[test]
 fn test_eval_match_with_binding() {
     assert!(matches!(
-        eval_source("let x = match 42 { n => n + 1 };"),
+        eval_source("let x = match 42 { n -> n + 1 };"),
         Ok(Value::Int(43))
     ));
 }
@@ -1157,7 +1157,7 @@ fn test_eval_match_with_binding() {
 #[test]
 fn test_eval_match_tuple() {
     assert!(matches!(
-        eval_source("let x = match (1, 2) { (a, b) => a + b };"),
+        eval_source("let x = match (1, 2) { (a, b) -> a + b };"),
         Ok(Value::Int(3))
     ));
 }
@@ -1165,7 +1165,7 @@ fn test_eval_match_tuple() {
 #[test]
 fn test_eval_match_tuple_nested() {
     assert!(matches!(
-        eval_source("let x = match ((1, 2), 3) { ((a, b), c) => a + b + c };"),
+        eval_source("let x = match ((1, 2), 3) { ((a, b), c) -> a + b + c };"),
         Ok(Value::Int(6))
     ));
 }
@@ -1173,7 +1173,7 @@ fn test_eval_match_tuple_nested() {
 #[test]
 fn test_eval_match_list_pattern() {
     // Match a specific list
-    let result = eval_source("let x = match [1, 2] { [a, b] => a + b, _ => 0 };");
+    let result = eval_source("let x = match [1, 2] { [a, b] -> a + b, _ -> 0 };");
     if let Ok(Value::Int(n)) = result {
         assert_eq!(n, 3);
     }
@@ -1182,7 +1182,7 @@ fn test_eval_match_list_pattern() {
 #[test]
 fn test_eval_match_multiple_arms_first() {
     assert!(matches!(
-        eval_source("let x = match true { true => 1, false => 0 };"),
+        eval_source("let x = match true { true -> 1, false -> 0 };"),
         Ok(Value::Int(1))
     ));
 }
@@ -1190,7 +1190,7 @@ fn test_eval_match_multiple_arms_first() {
 #[test]
 fn test_eval_match_multiple_arms_second() {
     assert!(matches!(
-        eval_source("let x = match false { true => 1, false => 0 };"),
+        eval_source("let x = match false { true -> 1, false -> 0 };"),
         Ok(Value::Int(0))
     ));
 }
@@ -1370,7 +1370,7 @@ fn test_eval_call_non_function() {
 
 #[test]
 fn test_eval_pattern_match_failure() {
-    match eval_source("let x = match 5 { 1 => 10, 2 => 20 };") {
+    match eval_source("let x = match 5 { 1 -> 10, 2 -> 20 };") {
         Err(EvalError::PatternMatchFailed) => {}
         other => panic!("expected PatternMatchFailed error, got {:?}", other),
     }

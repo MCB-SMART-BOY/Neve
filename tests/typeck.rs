@@ -547,9 +547,9 @@ fn test_typeck_match_literal() {
     check_no_errors(
         "
         let x = match 1 {
-            0 => 100,
-            1 => 200,
-            _ => 300
+            0 -> 100,
+            1 -> 200,
+            _ -> 300
         };
     ",
     );
@@ -560,7 +560,7 @@ fn test_typeck_match_wildcard() {
     check_no_errors(
         "
         let x = match 5 {
-            _ => 42
+            _ -> 42
         };
     ",
     );
@@ -571,7 +571,7 @@ fn test_typeck_match_binding() {
     check_no_errors(
         "
         let x = match 42 {
-            n => n + 1
+            n -> n + 1
         };
     ",
     );
@@ -582,8 +582,8 @@ fn test_typeck_match_bool() {
     check_no_errors(
         "
         let x = match true {
-            true => 1,
-            false => 0
+            true -> 1,
+            false -> 0
         };
     ",
     );
@@ -594,7 +594,7 @@ fn test_typeck_match_tuple() {
     check_no_errors(
         "
         let x = match (1, 2) {
-            (a, b) => a + b
+            (a, b) -> a + b
         };
     ",
     );
@@ -605,7 +605,7 @@ fn test_typeck_match_nested_tuple() {
     check_no_errors(
         "
         let x = match ((1, 2), 3) {
-            ((a, b), c) => a + b + c
+            ((a, b), c) -> a + b + c
         };
     ",
     );
@@ -616,9 +616,9 @@ fn test_typeck_match_arm_type_mismatch() {
     check_has_errors(
         "
         let x = match 1 {
-            0 => 100,
-            1 => true,
-            _ => 300
+            0 -> 100,
+            1 -> true,
+            _ -> 300
         };
     ",
     );
@@ -629,8 +629,8 @@ fn test_typeck_match_returns_consistent_type() {
     check_no_errors(
         "
         let x = match 1 {
-            0 => false,
-            _ => true
+            0 -> false,
+            _ -> true
         };
     ",
     );
@@ -775,9 +775,9 @@ fn test_typeck_complex_expression_3() {
     check_no_errors(
         "
         let x = match (1, 2) {
-            (0, _) => 0,
-            (_, 0) => 0,
-            (a, b) => a * b
+            (0, _) -> 0,
+            (_, 0) -> 0,
+            (a, b) -> a * b
         };
     ",
     );
@@ -902,10 +902,10 @@ fn test_typeck_complex_match() {
     check_no_errors(
         "
         let x = match (1, (2, 3)) {
-            (0, _) => 0,
-            (_, (0, _)) => 1,
-            (_, (_, 0)) => 2,
-            (a, (b, c)) => a + b + c
+            (0, _) -> 0,
+            (_, (0, _)) -> 1,
+            (_, (_, 0)) -> 2,
+            (a, (b, c)) -> a + b + c
         };
     ",
     );
@@ -945,8 +945,8 @@ fn test_typeck_detects_match_arm_mismatch() {
     check_has_errors(
         "
         let x = match 1 {
-            0 => 0,
-            _ => \"not zero\"
+            0 -> 0,
+            _ -> \"not zero\"
         };
     ",
     );

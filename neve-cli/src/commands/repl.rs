@@ -222,8 +222,12 @@ pub fn run() -> Result<(), String> {
                     }
                 }
 
+                // Prepare input for parsing - wrap bare expressions as let bindings
+                let prepared_input = prepare_repl_input(input);
+                let is_expr_wrapped = prepared_input.starts_with("let __expr__ = ");
+                
                 // Parse the input
-                let (ast, diagnostics) = parse(input);
+                let (ast, diagnostics) = parse(&prepared_input);
 
                 if !diagnostics.is_empty() {
                     for diag in &diagnostics {
@@ -283,8 +287,8 @@ pub fn run() -> Result<(), String> {
                             }
                         }
 
-                        // Print non-unit results
-                        if !matches!(value, Value::Unit) {
+                        // Print non-unit results, or always print for wrapped expressions
+                        if is_expr_wrapped || !matches!(value, Value::Unit) {
                             println!("{:?}", value);
                         }
                     }
@@ -312,4 +316,36 @@ pub fn run() -> Result<(), String> {
 
     println!("Goodbye!");
     Ok(())
+}
+
+/// Prepare REPL input for parsing by wrapping bare expressions as let bindings.
+fn prepare_repl_input(input: &str) -> String {
+    let trimmed = input.trim();
+    
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    
+    // Check if it's already a valid item (starts with keyword)
+    let is_item = trimmed.starts_with("let ")
+        || trimmed.starts_with("fn ")
+        || trimmed.starts_with("type ")
+        || trimmed.starts_with("struct ")
+        || trimmed.starts_with("enum ")
+        || trimmed.starts_with("trait ")
+        || trimmed.starts_with("impl ")
+        || trimmed.starts_with("import ")
+        || trimmed.starts_with("pub ");
+    
+    if is_item {
+        // It's already an item, just ensure it ends with semicolon
+        if trimmed.ends_with(';') {
+            trimmed.to_string()
+        } else {
+            format!("{trimmed};")
+        }
+    } else {
+        // It's an expression, wrap it as a let binding
+        format!("let __expr__ = {trimmed};")
+    }
 }
