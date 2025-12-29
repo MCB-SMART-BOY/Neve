@@ -51,7 +51,16 @@ neve> r.greet(r.name)
 
 ### Install
 
-<details>
+<details open>
+<summary><b>Linux (one-line install)</b></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
+```
+
+</details>
+
+<details open>
 <summary><b>Windows (one-line install)</b></summary>
 
 Open PowerShell and run:
@@ -60,38 +69,36 @@ Open PowerShell and run:
 irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
 ```
 
-Or manually:
-1. Download `neve-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/MCB-SMART-BOY/neve/releases/latest)
-2. Extract `neve.exe` to a folder (e.g., `C:\neve`)
-3. Add that folder to your PATH
-
 </details>
 
 <details>
-<summary><b>Linux</b></summary>
+<summary><b>macOS (Homebrew)</b></summary>
 
 ```bash
-# Arch Linux
-yay -S neve-git
-
-# Other distros - download binary
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+brew tap MCB-SMART-BOY/neve
+brew install neve
 ```
 
 </details>
 
 <details>
-<summary><b>macOS</b></summary>
+<summary><b>Arch Linux (AUR)</b></summary>
 
 ```bash
-# Intel Mac
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+yay -S neve-git
+```
 
-# Apple Silicon
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+</details>
+
+<details>
+<summary><b>Nix</b></summary>
+
+```bash
+# Try without installing
+nix run github:MCB-SMART-BOY/nix-neve
+
+# Install to profile
+nix profile install github:MCB-SMART-BOY/nix-neve
 ```
 
 </details>
@@ -170,7 +177,16 @@ neve> r.greet(r.name)
 
 ### 安装
 
-<details>
+<details open>
+<summary><b>Linux（一键安装）</b></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
+```
+
+</details>
+
+<details open>
 <summary><b>Windows（一键安装）</b></summary>
 
 打开 PowerShell 运行：
@@ -179,38 +195,36 @@ neve> r.greet(r.name)
 irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
 ```
 
-或者手动安装：
-1. 从 [Releases](https://github.com/MCB-SMART-BOY/neve/releases/latest) 下载 `neve-x86_64-pc-windows-msvc.zip`
-2. 解压 `neve.exe` 到某个文件夹（比如 `C:\neve`）
-3. 把那个文件夹加到 PATH 环境变量
-
 </details>
 
 <details>
-<summary><b>Linux</b></summary>
+<summary><b>macOS (Homebrew)</b></summary>
 
 ```bash
-# Arch Linux
-yay -S neve-git
-
-# 其他发行版 - 下载二进制
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+brew tap MCB-SMART-BOY/neve
+brew install neve
 ```
 
 </details>
 
 <details>
-<summary><b>macOS</b></summary>
+<summary><b>Arch Linux (AUR)</b></summary>
 
 ```bash
-# Intel Mac
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+yay -S neve-git
+```
 
-# Apple Silicon
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+</details>
+
+<details>
+<summary><b>Nix</b></summary>
+
+```bash
+# 试用（不安装）
+nix run github:MCB-SMART-BOY/nix-neve
+
+# 安装到 profile
+nix profile install github:MCB-SMART-BOY/nix-neve
 ```
 
 </details>
