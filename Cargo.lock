@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "neve"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "clap",
  "neve-builder",
@@ -1159,7 +1159,7 @@ dependencies = [
 
 [[package]]
 name = "neve-builder"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-derive",
  "neve-fetch",
@@ -1173,11 +1173,11 @@ dependencies = [
 
 [[package]]
 name = "neve-common"
-version = "0.4.0"
+version = "0.4.1"
 
 [[package]]
 name = "neve-config"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-builder",
  "neve-common",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "neve-derive"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "neve-common",
@@ -1205,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "neve-diagnostic"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "ariadne",
  "neve-common",
@@ -1214,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "neve-eval"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
  "neve-derive",
@@ -1227,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fetch"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "flate2",
@@ -1242,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fmt"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-lexer",
  "neve-parser",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "neve-hir"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lexer"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "logos",
  "neve-common",
@@ -1270,7 +1270,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lsp"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "dashmap 6.1.0",
@@ -1290,7 +1290,7 @@ dependencies = [
 
 [[package]]
 name = "neve-parser"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1300,7 +1300,7 @@ dependencies = [
 
 [[package]]
 name = "neve-std"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
  "neve-eval",
@@ -1308,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "neve-store"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
  "neve-derive",
@@ -1320,14 +1320,14 @@ dependencies = [
 
 [[package]]
 name = "neve-syntax"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
 ]
 
 [[package]]
 name = "neve-typeck"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "neve-workspace"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "neve-builder",
  "neve-common",
