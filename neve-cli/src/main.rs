@@ -251,7 +251,6 @@ fn main() {
                 {
                     let _ = package;
                     eprintln!("Package info is only available on Unix systems");
-                    // 软件包信息仅在 Unix 系统上可用
                     Ok(())
                 }
             }

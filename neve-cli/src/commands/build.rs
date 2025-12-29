@@ -34,7 +34,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
                 "unknown backend: {}. Use 'native', 'docker', 'simple', or 'auto'",
                 backend_arg
             ));
-            // 未知后端：{}。使用 'native'、'docker'、'simple' 或 'auto'
         }
     };
 
@@ -47,7 +46,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
     // Show backend info
     // 显示后端信息
     output::info(&format!("Build backend: {}", backend));
-    // 构建后端：{}
 
     // Determine what to build
     // 确定要构建的内容
@@ -72,7 +70,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
                 ("default.neve".to_string(), None)
             } else {
                 return Err("no flake.neve or default.neve found in current directory".to_string());
-                // 在当前目录中未找到 flake.neve 或 default.neve
             }
         }
     };
@@ -80,17 +77,14 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
     let path = Path::new(&source_path);
     if !path.exists() {
         return Err(format!("file not found: {}", source_path));
-        // 文件未找到：{}
     }
 
     output::info(&format!("Evaluating {}", source_path));
-    // 正在求值 {}
 
     // Parse and evaluate the file
     // 解析并求值文件
     let source = fs::read_to_string(path)
         .map_err(|e| format!("cannot read file '{}': {}", source_path, e))?;
-    // 无法读取文件 '{}'：{}
 
     let (ast, diagnostics) = parse(&source);
 
@@ -100,7 +94,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
 
     if !diagnostics.is_empty() {
         return Err("parse error".to_string());
-        // 解析错误
     }
 
     // Evaluate the file
@@ -114,7 +107,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
     let value = evaluator
         .eval_file(&ast)
         .map_err(|e| format!("evaluation error: {:?}", e))?;
-    // 求值错误：{:?}
 
     // Extract derivation(s) from the result
     // 从结果中提取派生
@@ -122,19 +114,16 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
 
     if derivations.is_empty() {
         return Err("no derivations found to build".to_string());
-        // 未找到要构建的派生
     }
 
     output::info(&format!(
         "Found {} derivation(s) to build",
         derivations.len()
     ));
-    // 找到 {} 个要构建的派生
 
     // Open the store
     // 打开存储
     let store = Store::open().map_err(|e| format!("cannot open store: {}", e))?;
-    // 无法打开存储：{}
 
     // Create builder
     // 创建构建器
@@ -148,7 +137,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
 
     for drv in &derivations {
         output::info(&format!("Building {}-{}", drv.name, drv.version));
-        // 正在构建 {}-{}
 
         match builder.build(drv) {
             Ok(result) => {
@@ -158,22 +146,18 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
                     let path_display = store_path.display_name();
                     if output_name == "out" {
                         output::success(&format!("Built: {}", path_display));
-                        // 已构建：{}
                     } else {
                         output::success(&format!("Built {}: {}", output_name, path_display));
-                        // 已构建 {}：{}
                     }
                 }
 
                 if result.duration_secs > 0.1 {
                     output::info(&format!("Build time: {:.2}s", result.duration_secs));
-                    // 构建时间：{:.2}s
                 }
             }
             Err(e) => {
                 failed_count += 1;
                 output::error(&format!("Failed to build {}: {}", drv.name, e));
-                // 构建 {} 失败：{}
             }
         }
     }
@@ -188,7 +172,6 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
             built_count,
             elapsed.as_secs_f64()
         ));
-        // 成功构建 {} 个派生，耗时 {:.2}s
         Ok(())
     } else {
         output::error(&format!(
@@ -196,9 +179,7 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
             failed_count,
             derivations.len()
         ));
-        // {} 个构建中有 {} 个失败
         Err("build failed".to_string())
-        // 构建失败
     }
 }
 
@@ -218,7 +199,6 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
                     return extract_derivations(target_value, None);
                 } else {
                     return Err(format!("attribute '{}' not found", target_name));
-                    // 属性 '{}' 未找到
                 }
             }
 
@@ -246,7 +226,6 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
                             derivations.push(drv);
                         } else {
                             output::warning(&format!("skipping non-derivation: {}", name));
-                            // 跳过非派生：{}
                         }
                     }
                 }

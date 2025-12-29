@@ -24,13 +24,11 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
 
     if !parse_diagnostics.is_empty() {
         output::error(&format!("{} parse error(s) found", parse_diagnostics.len()));
-        // 发现 {} 个解析错误
         return Err("parse error".to_string());
     }
 
     if verbose {
         output::info(&format!("Parsed {} items", ast.items.len()));
-        // 已解析 {} 个项
     }
 
     // Lower to HIR
@@ -39,7 +37,6 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
 
     if verbose {
         output::info(&format!("Lowered to {} HIR items", hir.items.len()));
-        // 已降级到 {} 个 HIR 项
     }
 
     // Type check
@@ -52,11 +49,9 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
 
     if !type_diagnostics.is_empty() {
         output::error(&format!("{} type error(s) found", type_diagnostics.len()));
-        // 发现 {} 个类型错误
         return Err("type error".to_string());
     }
 
     output::success("OK - No errors found");
-    // 成功 - 未发现错误
     Ok(())
 }

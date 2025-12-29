@@ -26,7 +26,6 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
 
     if verbose {
         output::info(&format!("Parsed {} items", ast.items.len()));
-        // 已解析 {} 个项
     }
 
     // Evaluate using the AST evaluator with base path for imports

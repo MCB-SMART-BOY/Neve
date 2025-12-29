@@ -13,8 +13,6 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
     // 准备用于解析的源码
     // Strategy: if there's content after the last semicolon that looks like an expression,
     // wrap it in a let binding so it becomes a valid item
-    // 策略：如果最后一个分号后有看起来像表达式的内容，
-    // 将其包装在 let 绑定中使其成为有效的项
     let source = prepare_source(expr);
 
     let (file, diagnostics) = parse(&source);
