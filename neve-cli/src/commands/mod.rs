@@ -2,6 +2,7 @@
 
 // Cross-platform commands (language features)
 pub mod check;
+pub mod doc;
 pub mod eval;
 pub mod fmt;
 pub mod info;
