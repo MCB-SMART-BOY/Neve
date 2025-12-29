@@ -27,11 +27,11 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
 /// Prepare the source for parsing by wrapping expressions appropriately.
 fn prepare_source(expr: &str) -> String {
     let trimmed = expr.trim();
-    
+
     if trimmed.is_empty() {
         return String::new();
     }
-    
+
     // Check if it's already a valid item (starts with keyword)
     let is_item = trimmed.starts_with("let ")
         || trimmed.starts_with("fn ")
@@ -42,7 +42,7 @@ fn prepare_source(expr: &str) -> String {
         || trimmed.starts_with("impl ")
         || trimmed.starts_with("import ")
         || trimmed.starts_with("pub ");
-    
+
     if is_item {
         // It's already an item, just ensure it ends with semicolon
         if trimmed.ends_with(';') {
@@ -51,7 +51,7 @@ fn prepare_source(expr: &str) -> String {
             return format!("{trimmed};");
         }
     }
-    
+
     // For expressions, wrap in a block-based let binding
     // This handles expressions like `{ let x = 1; x * 2 }` or simple `1 + 2`
     // We wrap the expression: let __result__ = <expr>;
@@ -59,7 +59,11 @@ fn prepare_source(expr: &str) -> String {
     format!("let __result__ = {trimmed};")
 }
 
-fn eval_and_print(file: &neve_syntax::SourceFile, source: &str, verbose: bool) -> Result<(), String> {
+fn eval_and_print(
+    file: &neve_syntax::SourceFile,
+    source: &str,
+    verbose: bool,
+) -> Result<(), String> {
     if verbose {
         output::info(&format!("AST: {file:?}"));
     }

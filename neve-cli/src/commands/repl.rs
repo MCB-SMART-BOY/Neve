@@ -225,7 +225,7 @@ pub fn run() -> Result<(), String> {
                 // Prepare input for parsing - wrap bare expressions as let bindings
                 let prepared_input = prepare_repl_input(input);
                 let is_expr_wrapped = prepared_input.starts_with("let __expr__ = ");
-                
+
                 // Parse the input
                 let (ast, diagnostics) = parse(&prepared_input);
 
@@ -321,11 +321,11 @@ pub fn run() -> Result<(), String> {
 /// Prepare REPL input for parsing by wrapping bare expressions as let bindings.
 fn prepare_repl_input(input: &str) -> String {
     let trimmed = input.trim();
-    
+
     if trimmed.is_empty() {
         return String::new();
     }
-    
+
     // Check if it's already a valid item (starts with keyword)
     let is_item = trimmed.starts_with("let ")
         || trimmed.starts_with("fn ")
@@ -336,7 +336,7 @@ fn prepare_repl_input(input: &str) -> String {
         || trimmed.starts_with("impl ")
         || trimmed.starts_with("import ")
         || trimmed.starts_with("pub ");
-    
+
     if is_item {
         // It's already an item, just ensure it ends with semicolon
         if trimmed.ends_with(';') {
