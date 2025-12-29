@@ -1,8 +1,9 @@
 //! Documentation viewer command.
 //!
-//! Provides man-like access to embedded documentation.
+//! Provides man-like access to embedded documentation with terminal rendering.
 
 use std::io::Write;
+use termimad::MadSkin;
 
 // Embed documentation at compile time
 const DOC_QUICKSTART: &str = include_str!("../../../docs/quickstart.md");
@@ -24,37 +25,60 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ("changelog", DOC_CHANGELOG, "Version history"),
 ];
 
+/// Create a styled skin for terminal rendering
+fn create_skin() -> MadSkin {
+    let mut skin = MadSkin::default();
+
+    // Customize colors for better readability
+    skin.bold.set_fg(termimad::crossterm::style::Color::Cyan);
+    skin.italic
+        .set_fg(termimad::crossterm::style::Color::Magenta);
+    skin.inline_code
+        .set_fg(termimad::crossterm::style::Color::Green);
+    skin.code_block
+        .set_fg(termimad::crossterm::style::Color::Green);
+
+    skin
+}
+
 /// List available documentation topics
 pub fn list() -> Result<(), String> {
-    println!(
-        r#"
-╔═══════════════════════════════════════════════════════════════╗
-║                    NEVE DOCUMENTATION                         ║
-╚═══════════════════════════════════════════════════════════════╝
+    let skin = create_skin();
 
-Available topics:
-"#
-    );
+    let content = r#"
+# NEVE DOCUMENTATION
 
-    for (name, _, desc) in TOPICS {
-        println!("  {:12} - {}", name, desc);
-    }
+## Available topics:
 
-    println!(
-        r#"
-Usage:
-  neve doc <topic>          View a topic (e.g., neve doc quickstart)
-  neve doc <topic> --en     View English section only
-  neve doc <topic> --zh     View Chinese section only
-  neve doc --list           List all topics
+| Topic | Description |
+|-------|-------------|
+| quickstart | 5-minute quick start guide |
+| tutorial | Complete language tutorial |
+| spec | Language specification |
+| api | Standard library API reference |
+| philosophy | Design philosophy |
+| install | Installation guide |
+| changelog | Version history |
 
-Examples:
-  neve doc quickstart       Full quickstart guide
-  neve doc api --en         API reference (English)
-  neve doc spec --zh        Language spec (Chinese)
-"#
-    );
+## Usage:
 
+```
+neve doc <topic>          View a topic
+neve doc <topic> --en     View English section only
+neve doc <topic> --zh     View Chinese section only
+neve doc --list           List all topics
+```
+
+## Examples:
+
+```
+neve doc quickstart       Full quickstart guide
+neve doc api --en         API reference (English)
+neve doc spec --zh        Language spec (Chinese)
+```
+"#;
+
+    println!("{}", skin.term_text(content));
     Ok(())
 }
 
@@ -86,13 +110,35 @@ pub fn view(topic: &str, lang: Option<&str>) -> Result<(), String> {
         _ => content.to_string(),
     };
 
+    // Clean up HTML anchors and render
+    let cleaned = clean_markdown(&output);
+
+    // Render with termimad
+    let skin = create_skin();
+    let rendered = skin.term_text(&cleaned);
+
     // Try to use a pager for better reading experience
-    if try_pager(&output).is_err() {
+    if try_pager(&rendered.to_string()).is_err() {
         // Fallback to direct output
-        println!("{}", output);
+        println!("{}", rendered);
     }
 
     Ok(())
+}
+
+/// Clean up markdown for better terminal rendering
+fn clean_markdown(content: &str) -> String {
+    content
+        .lines()
+        .filter(|line| {
+            // Remove HTML anchor tags
+            !line.contains("<a name=")
+                && !line.contains("</a>")
+                && !line.contains("<div")
+                && !line.contains("</div>")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Extract a specific language section from the document
@@ -142,7 +188,7 @@ fn try_pager(content: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Try to find a pager
     let pager = std::env::var("PAGER").unwrap_or_else(|_| "less".to_string());
 
-    // Try 'less' with some nice options for markdown
+    // Try 'less' with some nice options for colored output
     let pagers = [
         (pager.as_str(), vec!["-R", "-S"]),
         ("less", vec!["-R", "-S"]),
