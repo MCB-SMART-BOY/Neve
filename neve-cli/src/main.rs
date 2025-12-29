@@ -51,6 +51,24 @@ enum Commands {
     /// Start an interactive REPL
     Repl,
 
+    /// View documentation (like man pages)
+    Doc {
+        /// Topic to view (quickstart, tutorial, spec, api, philosophy, install, changelog)
+        topic: Option<String>,
+
+        /// Show only English section
+        #[arg(long)]
+        en: bool,
+
+        /// Show only Chinese section
+        #[arg(long)]
+        zh: bool,
+
+        /// List all available topics
+        #[arg(long, short)]
+        list: bool,
+    },
+
     /// Build a package (Unix only)
     #[cfg(unix)]
     Build {
@@ -185,6 +203,20 @@ fn main() {
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
         Commands::Repl => commands::repl::run(),
+        Commands::Doc { topic, en, zh, list } => {
+            if list || topic.is_none() {
+                commands::doc::list()
+            } else {
+                let lang = if en {
+                    Some("en")
+                } else if zh {
+                    Some("zh")
+                } else {
+                    None
+                };
+                commands::doc::view(topic.as_deref().unwrap(), lang)
+            }
+        }
         Commands::Info { package, platform } => {
             if platform || package.is_none() {
                 commands::info::platform_info()
