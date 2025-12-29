@@ -2,9 +2,12 @@
 //!
 //! Shows detailed information about a package or platform.
 
-use crate::output;
 use crate::platform::{PlatformCapabilities, print_cross_platform_note};
+#[cfg(unix)]
+use crate::output;
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 /// Show platform capabilities and information.
@@ -48,7 +51,8 @@ pub fn platform_info() -> Result<(), String> {
     Ok(())
 }
 
-/// Show detailed information about a package.
+/// Show detailed information about a package (Unix only).
+#[cfg(unix)]
 pub fn run(package: &str) -> Result<(), String> {
     let store_dir = get_store_dir();
 
@@ -101,6 +105,7 @@ pub fn run(package: &str) -> Result<(), String> {
 }
 
 /// Get the store directory.
+#[cfg(unix)]
 fn get_store_dir() -> PathBuf {
     std::env::var("NEVE_STORE")
         .map(PathBuf::from)
@@ -108,6 +113,7 @@ fn get_store_dir() -> PathBuf {
 }
 
 /// Get the total size of a directory.
+#[cfg(unix)]
 fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
     let mut size = 0;
 
@@ -133,6 +139,7 @@ fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
 }
 
 /// Format a size in bytes as a human-readable string.
+#[cfg(unix)]
 fn format_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
@@ -150,6 +157,7 @@ fn format_size(size: u64) -> String {
 }
 
 /// Show a directory tree up to a certain depth.
+#[cfg(unix)]
 fn show_dir_tree(path: &PathBuf, prefix: &str, max_depth: usize) -> Result<(), String> {
     if max_depth == 0 {
         return Ok(());
