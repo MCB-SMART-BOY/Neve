@@ -7,8 +7,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  v0.3.1 / v0.3.0 / v0.2.0 / v0.1.0               │
-│  [中文]     #chinese   ──→  v0.3.1 / v0.3.0 / v0.2.0 / v0.1.0               │
+│  [English]  #english   ──→  v0.3.2 / v0.3.1 / v0.3.0 / v0.2.0 / v0.1.0      │
+│  [中文]     #chinese   ──→  v0.3.2 / v0.3.1 / v0.3.0 / v0.2.0 / v0.1.0      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,6 +21,15 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 # English
 
 > *What changed, when, and why.*
+
+## [0.3.2] - 2025-12-29
+
+### Added
+- **`neve doc` command**: Man-like documentation viewer with embedded docs
+  - View any topic: `neve doc quickstart`, `neve doc api`, etc.
+  - Language filter: `--en` for English only, `--zh` for Chinese only
+  - Uses pager (less/more) for comfortable reading
+  - Available topics: quickstart, tutorial, spec, api, philosophy, install, changelog
 
 ## [0.3.1] - 2025-12-29
 
@@ -104,6 +113,15 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > 改了啥、啥时候改的、为啥改。
 
+## [0.3.2] - 2025-12-29
+
+### 新功能
+- **`neve doc` 命令**: 类似 man 的文档查看器，文档直接嵌入二进制
+  - 查看任意主题: `neve doc quickstart`、`neve doc api` 等
+  - 语言过滤: `--en` 只看英文，`--zh` 只看中文
+  - 自动用分页器 (less/more) 显示，看着舒服
+  - 支持主题: quickstart、tutorial、spec、api、philosophy、install、changelog
+
 ## [0.3.1] - 2025-12-29
 
 ### 修复
@@ -180,6 +198,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.3.2]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.1.0...v0.2.0
