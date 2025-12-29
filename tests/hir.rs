@@ -78,7 +78,7 @@ fn test_lower_if_expr() {
 
 #[test]
 fn test_lower_match_expr() {
-    let source = "let x = match 1 { 0 => false, _ => true };";
+    let source = "let x = match 1 { 0 -> false, _ -> true };";
     let (ast, diagnostics) = parse(source);
     assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
 

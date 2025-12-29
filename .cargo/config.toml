@@ -1,0 +1,7 @@
+# Cargo configuration for Neve
+# This limits parallelism to prevent OOM on systems with many cores
+
+[build]
+# Limit parallel compilation jobs to prevent excessive memory usage
+# 20 cores * ~1-2GB per rustc instance can easily exhaust 32GB RAM
+jobs = 8

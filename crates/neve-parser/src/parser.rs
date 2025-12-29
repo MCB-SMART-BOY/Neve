@@ -407,6 +407,11 @@ impl Parser {
         }
 
         loop {
+            // Check for trailing comma before RParen
+            if self.check(TokenKind::RParen) {
+                break;
+            }
+
             let start = self.current_span();
             let is_lazy = self.eat(TokenKind::Lazy);
             let pattern = self.parse_pattern();
@@ -959,6 +964,17 @@ impl Parser {
                     },
                     span,
                 );
+            } else if self.check(TokenKind::HashLBrace) {
+                // Support for `func #{ ... }` syntax (function call with record argument)
+                let record = self.parse_record();
+                let span = expr.span.merge(record.span);
+                expr = Expr::new(
+                    ExprKind::Call {
+                        func: Box::new(expr),
+                        args: vec![record],
+                    },
+                    span,
+                );
             } else {
                 break;
             }
@@ -996,6 +1012,15 @@ impl Parser {
                 Expr::new(ExprKind::Bool(false), start)
             }
             TokenKind::Ident(_) => self.parse_ident_expr(),
+            // Handle 'self' as a variable expression in method bodies
+            TokenKind::SelfLower => {
+                self.advance();
+                let ident = Ident {
+                    name: "self".to_string(),
+                    span: start,
+                };
+                Expr::new(ExprKind::Var(ident), start)
+            }
             TokenKind::LParen => self.parse_paren_or_tuple(),
             TokenKind::LBracket => self.parse_list(),
             TokenKind::HashLBrace => self.parse_record(),
@@ -1336,7 +1361,7 @@ impl Parser {
                 None
             };
 
-            self.expect(TokenKind::FatArrow);
+            self.expect(TokenKind::Arrow);
             let body = self.parse_expr();
 
             let arm_end = self.previous_span();
@@ -1540,6 +1565,15 @@ impl Parser {
                 self.advance();
                 Pattern::new(PatternKind::Wildcard, start)
             }
+            // Handle 'self' as a special variable pattern in method parameters
+            TokenKind::SelfLower => {
+                self.advance();
+                let ident = Ident {
+                    name: "self".to_string(),
+                    span: start,
+                };
+                Pattern::new(PatternKind::Var(ident), start)
+            }
             TokenKind::Ident(_) => {
                 let ident = self.parse_ident();
                 if self.check(TokenKind::LParen) {
@@ -1699,6 +1733,8 @@ impl Parser {
             }
             _ => {
                 self.error("expected pattern");
+                // Advance to prevent infinite loop on unexpected tokens
+                self.advance();
                 Pattern::new(PatternKind::Wildcard, start)
             }
         }
