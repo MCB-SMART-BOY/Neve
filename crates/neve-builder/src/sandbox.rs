@@ -109,9 +109,10 @@ impl SecurityProfile {
     /// Create a minimal security profile (maximum restrictions).
     /// 创建最小安全配置文件（最大限制）。
     pub fn minimal() -> Self {
-        let mut profile = Self::default();
-        profile.cgroup_ns = true;
-        profile
+        Self {
+            cgroup_ns: true,
+            ..Default::default()
+        }
     }
 
     /// Create a permissive security profile (fewer restrictions).
