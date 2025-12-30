@@ -372,7 +372,7 @@ impl BuildAnalytics {
             ));
         }
 
-        dot.push_str("\n");
+        dot.push('\n');
 
         // Add edges
         // 添加边

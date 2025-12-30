@@ -1220,9 +1220,9 @@ impl AstEvaluator {
                     }
                     return (builtin.func)(&current_args).map_err(EvalError::TypeError);
                 }
-                Value::BuiltinFn(ref name, ref func) => {
+                Value::BuiltinFn(name, ref func) => {
                     // Special handling for force
-                    if *name == "force" {
+                    if name == "force" {
                         if current_args.len() != 1 {
                             return Err(EvalError::WrongArity);
                         }
