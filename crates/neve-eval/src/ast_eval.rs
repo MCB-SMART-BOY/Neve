@@ -1303,7 +1303,10 @@ impl AstEvaluator {
 
             // Block: evaluate statements, then final expression with TCO
             // Block: 求值语句，然后用 TCO 求值最终表达式
-            ExprKind::Block { stmts, expr: final_expr } => {
+            ExprKind::Block {
+                stmts,
+                expr: final_expr,
+            } => {
                 let mut new_env = AstEnv::child(self.env.clone());
 
                 for stmt in stmts {

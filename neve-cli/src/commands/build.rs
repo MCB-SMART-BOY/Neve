@@ -136,7 +136,7 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
     let mut built_count = 0;
     let mut failed_count = 0;
     let total = derivations.len();
-    
+
     let mut progress = output::ProgressBar::new(total, "Building");
 
     for drv in &derivations {
@@ -156,7 +156,10 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
                 }
 
                 if result.duration_secs > 0.1 {
-                    output::info(&format!("Build time: {}", output::format_duration(result.duration_secs as u64)));
+                    output::info(&format!(
+                        "Build time: {}",
+                        output::format_duration(result.duration_secs as u64)
+                    ));
                 }
             }
             Err(e) => {
@@ -166,7 +169,7 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
         }
         progress.inc();
     }
-    
+
     progress.finish();
 
     let elapsed = start.elapsed();

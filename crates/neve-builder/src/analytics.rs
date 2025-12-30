@@ -40,7 +40,11 @@ pub enum BuildEvent {
     /// Phase started. / 阶段开始。
     PhaseStarted { id: BuildId, phase: String },
     /// Phase completed. / 阶段完成。
-    PhaseCompleted { id: BuildId, phase: String, duration_ms: u64 },
+    PhaseCompleted {
+        id: BuildId,
+        phase: String,
+        duration_ms: u64,
+    },
     /// Download started. / 下载开始。
     DownloadStarted { id: BuildId, url: String, size: u64 },
     /// Download completed. / 下载完成。
@@ -130,9 +134,15 @@ impl BuildAnalytics {
                 }
                 self.cache_hits += 1;
             }
-            BuildEvent::PhaseCompleted { id, phase, duration_ms } => {
+            BuildEvent::PhaseCompleted {
+                id,
+                phase,
+                duration_ms,
+            } => {
                 if let Some(stats) = self.builds.get_mut(&id) {
-                    stats.phase_times.insert(phase, Duration::from_millis(duration_ms));
+                    stats
+                        .phase_times
+                        .insert(phase, Duration::from_millis(duration_ms));
                 }
             }
             BuildEvent::DownloadStarted { id, size, .. } => {
@@ -245,11 +255,7 @@ impl BuildAnalytics {
     /// Get the slowest builds.
     /// 获取最慢的构建。
     pub fn slowest_builds(&self, n: usize) -> Vec<(&BuildId, &BuildStats)> {
-        let mut builds: Vec<_> = self
-            .builds
-            .iter()
-            .filter(|(_, s)| !s.cache_hit)
-            .collect();
+        let mut builds: Vec<_> = self.builds.iter().filter(|(_, s)| !s.cache_hit).collect();
         builds.sort_by(|a, b| b.1.total_duration.cmp(&a.1.total_duration));
         builds.into_iter().take(n).collect()
     }
@@ -359,11 +365,7 @@ impl BuildAnalytics {
         // 根据缓存命中添加带样式的节点
         for (id, stats) in &self.builds {
             let color = if stats.cache_hit { "green" } else { "blue" };
-            let label = format!(
-                "{}\\n{}",
-                stats.name,
-                format_duration(stats.total_duration)
-            );
+            let label = format!("{}\\n{}", stats.name, format_duration(stats.total_duration));
             dot.push_str(&format!(
                 "  \"{}\" [label=\"{}\", color=\"{}\"];\n",
                 id, label, color
@@ -385,9 +387,9 @@ impl BuildAnalytics {
     /// Save analytics to a file.
     /// 将分析保存到文件。
     pub fn save(&self, path: &PathBuf) -> std::io::Result<()> {
-        let json = self.to_json().map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })?;
+        let json = self
+            .to_json()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
         std::fs::write(path, json)
     }
 
@@ -395,9 +397,8 @@ impl BuildAnalytics {
     /// 从文件加载分析。
     pub fn load(path: &PathBuf) -> std::io::Result<Self> {
         let json = std::fs::read_to_string(path)?;
-        serde_json::from_str(&json).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })
+        serde_json::from_str(&json)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }
 }
 
@@ -426,7 +427,8 @@ impl AnalyticsCollector {
     /// 开始跟踪构建。
     pub fn start_build(&mut self, id: BuildId, name: String) {
         self.build_starts.insert(id.clone(), Instant::now());
-        self.analytics.record_event(BuildEvent::Started { id, name });
+        self.analytics
+            .record_event(BuildEvent::Started { id, name });
     }
 
     /// Record a cache hit.
@@ -445,24 +447,25 @@ impl AnalyticsCollector {
             .map(|start| start.elapsed().as_millis() as u64)
             .unwrap_or(0);
 
-        self.analytics.record_event(BuildEvent::Completed {
-            id,
-            duration_ms,
-        });
+        self.analytics
+            .record_event(BuildEvent::Completed { id, duration_ms });
     }
 
     /// Record a build failure.
     /// 记录构建失败。
     pub fn fail_build(&mut self, id: BuildId, error: String) {
         self.build_starts.remove(&id);
-        self.analytics.record_event(BuildEvent::Failed { id, error });
+        self.analytics
+            .record_event(BuildEvent::Failed { id, error });
     }
 
     /// Start a build phase.
     /// 开始构建阶段。
     pub fn start_phase(&mut self, id: BuildId, phase: String) {
-        self.phase_starts.insert((id.clone(), phase.clone()), Instant::now());
-        self.analytics.record_event(BuildEvent::PhaseStarted { id, phase });
+        self.phase_starts
+            .insert((id.clone(), phase.clone()), Instant::now());
+        self.analytics
+            .record_event(BuildEvent::PhaseStarted { id, phase });
     }
 
     /// Complete a build phase.

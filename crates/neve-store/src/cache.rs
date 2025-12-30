@@ -336,9 +336,9 @@ impl BinaryCache {
             // gzip 解压
             let mut decoder = flate2::read::GzDecoder::new(data);
             let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|e| CacheError::Compression(format!("gzip decompression failed: {}", e)))?;
+            decoder.read_to_end(&mut decompressed).map_err(|e| {
+                CacheError::Compression(format!("gzip decompression failed: {}", e))
+            })?;
             Ok(decompressed)
         } else if path_str.ends_with(".nar.xz") {
             // xz decompression
@@ -492,24 +492,24 @@ impl BinaryCache {
         match format {
             CompressionFormat::None => Ok(data.to_vec()),
             CompressionFormat::Gzip => {
-                let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-                encoder
-                    .write_all(data)
-                    .map_err(|e| CacheError::Compression(format!("gzip compression failed: {}", e)))?;
+                let mut encoder =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder.write_all(data).map_err(|e| {
+                    CacheError::Compression(format!("gzip compression failed: {}", e))
+                })?;
                 encoder
                     .finish()
                     .map_err(|e| CacheError::Compression(format!("gzip finish failed: {}", e)))
             }
             CompressionFormat::Xz => {
                 let mut compressed = Vec::new();
-                lzma_rs::xz_compress(&mut std::io::Cursor::new(data), &mut compressed)
-                    .map_err(|e| CacheError::Compression(format!("xz compression failed: {}", e)))?;
+                lzma_rs::xz_compress(&mut std::io::Cursor::new(data), &mut compressed).map_err(
+                    |e| CacheError::Compression(format!("xz compression failed: {}", e)),
+                )?;
                 Ok(compressed)
             }
-            CompressionFormat::Zstd => {
-                zstd::encode_all(std::io::Cursor::new(data), 3)
-                    .map_err(|e| CacheError::Compression(format!("zstd compression failed: {}", e)))
-            }
+            CompressionFormat::Zstd => zstd::encode_all(std::io::Cursor::new(data), 3)
+                .map_err(|e| CacheError::Compression(format!("zstd compression failed: {}", e))),
         }
     }
 

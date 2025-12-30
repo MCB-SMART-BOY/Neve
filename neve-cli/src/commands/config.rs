@@ -247,7 +247,7 @@ pub fn list_generations() -> Result<(), String> {
     output::header("System Configuration Generations");
 
     let mut table = output::Table::new(vec!["#", "Name", "Description", "Status"]);
-    
+
     for generation in generations.iter().rev() {
         let status = if Some(generation.number) == current {
             "current"
@@ -256,10 +256,10 @@ pub fn list_generations() -> Result<(), String> {
         };
         let name = generation.metadata.name.as_deref().unwrap_or("unnamed");
         let desc = generation.metadata.description.as_deref().unwrap_or("");
-        
+
         table.add_row(vec![&generation.number.to_string(), name, desc, status]);
     }
-    
+
     table.print();
 
     Ok(())
@@ -290,23 +290,24 @@ pub fn switch_interactive() -> Result<(), String> {
     // Show available generations
     // 显示可用代
     list_generations()?;
-    
+
     println!();
-    
+
     // Prompt for generation number
     // 提示输入代编号
     if let Some(input) = output::prompt("Enter generation number to switch to") {
-        let gen_num: u64 = input.parse()
+        let gen_num: u64 = input
+            .parse()
             .map_err(|_| format!("Invalid generation number: {}", input))?;
-        
+
         let generation = gen_manager
             .switch_to(gen_num)
             .map_err(|e| format!("Failed to switch to generation {}: {}", gen_num, e))?;
-        
+
         output::success(&format!("Switched to generation {}.", generation.number));
     } else {
         output::info("Switch cancelled.");
     }
-    
+
     Ok(())
 }

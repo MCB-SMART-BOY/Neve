@@ -206,10 +206,10 @@ pub fn list() -> Result<(), String> {
         .map_err(|e| format!("Failed to read manifest: {}", e))?;
 
     output::header("Installed Packages");
-    
+
     let mut table = output::Table::new(vec!["#", "Package"]);
     let mut count = 0;
-    
+
     for line in manifest.lines() {
         if !line.is_empty() {
             count += 1;
@@ -222,7 +222,7 @@ pub fn list() -> Result<(), String> {
             table.add_row(vec![&count.to_string(), &name]);
         }
     }
-    
+
     table.print();
 
     Ok(())
