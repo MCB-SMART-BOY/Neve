@@ -255,83 +255,117 @@ fn hash_dir(path: &Path) -> Result<Hash, StoreError> {
     Ok(hasher.finalize())
 }
 
-/// Recursively hash directory contents.
-/// 递归哈希目录内容。
+/// Iteratively hash directory contents (stack-safe for deep directories).
+/// 迭代式哈希目录内容（对深层目录栈安全）。
 fn hash_dir_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), StoreError> {
-    let mut entries: Vec<_> = fs::read_dir(path)?.collect::<Result<_, _>>()?;
-    entries.sort_by_key(|e| e.file_name());
+    // Use a stack to avoid recursion and potential stack overflow
+    // 使用栈避免递归和潜在的栈溢出
+    let mut stack: Vec<PathBuf> = vec![path.to_path_buf()];
 
-    for entry in entries {
-        let path = entry.path();
-        let name = entry.file_name();
-        hasher.update(name.as_encoded_bytes());
+    while let Some(current) = stack.pop() {
+        let mut entries: Vec<_> = fs::read_dir(&current)?.collect::<Result<_, _>>()?;
+        entries.sort_by_key(|e| e.file_name());
 
-        if path.is_dir() {
-            hasher.update(b"d");
-            hash_dir_recursive(&path, hasher)?;
-        } else {
-            hasher.update(b"f");
-            let content = fs::read(&path)?;
-            hasher.update(&content);
+        for entry in entries {
+            let entry_path = entry.path();
+            let name = entry.file_name();
+            hasher.update(name.as_encoded_bytes());
+
+            if entry_path.is_dir() {
+                hasher.update(b"d");
+                stack.push(entry_path);
+            } else {
+                hasher.update(b"f");
+                let content = fs::read(&entry_path)?;
+                hasher.update(&content);
+            }
         }
     }
 
     Ok(())
 }
 
-/// Recursively copy a directory.
-/// 递归复制目录。
+/// Iteratively copy a directory (stack-safe for deep directories).
+/// 迭代式复制目录（对深层目录栈安全）。
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), StoreError> {
-    fs::create_dir_all(dst)?;
+    // Use a work queue to avoid recursion
+    // 使用工作队列避免递归
+    let mut work_queue: Vec<(PathBuf, PathBuf)> = vec![(src.to_path_buf(), dst.to_path_buf())];
 
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
+    while let Some((src_dir, dst_dir)) = work_queue.pop() {
+        fs::create_dir_all(&dst_dir)?;
 
-        if src_path.is_dir() {
-            copy_dir_recursive(&src_path, &dst_path)?;
-        } else {
-            fs::copy(&src_path, &dst_path)?;
+        for entry in fs::read_dir(&src_dir)? {
+            let entry = entry?;
+            let src_path = entry.path();
+            let dst_path = dst_dir.join(entry.file_name());
+
+            if src_path.is_dir() {
+                work_queue.push((src_path, dst_path));
+            } else {
+                fs::copy(&src_path, &dst_path)?;
+            }
         }
     }
 
     Ok(())
 }
 
-/// Recursively make a path read-only.
-/// 递归地将路径设为只读。
+/// Iteratively make a path read-only (stack-safe for deep directories).
+/// 迭代式将路径设为只读（对深层目录栈安全）。
 fn make_readonly_recursive(path: &Path) -> Result<(), StoreError> {
-    if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            make_readonly_recursive(&entry?.path())?;
+    // Collect all paths first, then set permissions (children before parents)
+    // 先收集所有路径，再设置权限（子目录在父目录之前）
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut stack: Vec<PathBuf> = vec![path.to_path_buf()];
+
+    while let Some(current) = stack.pop() {
+        paths.push(current.clone());
+        if current.is_dir() {
+            for entry in fs::read_dir(&current)? {
+                stack.push(entry?.path());
+            }
         }
     }
 
-    let mut perms = fs::metadata(path)?.permissions();
-    perms.set_readonly(true);
-    fs::set_permissions(path, perms)?;
+    // Set permissions in reverse order (children first, then parents)
+    // 按逆序设置权限（先子目录，后父目录）
+    for p in paths.into_iter().rev() {
+        let mut perms = fs::metadata(&p)?.permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&p, perms)?;
+    }
 
     Ok(())
 }
 
-/// Recursively make a path writable.
-/// 递归地将路径设为可写。
+/// Iteratively make a path writable (stack-safe for deep directories).
+/// 迭代式将路径设为可写（对深层目录栈安全）。
 #[cfg(unix)]
 fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
     use std::os::unix::fs::PermissionsExt;
 
-    let perms = fs::metadata(path)?.permissions();
-    // Set user read/write permissions (0o644 for files, 0o755 for dirs)
-    // 设置用户读/写权限（文件为 0o644，目录为 0o755）
-    let mode = if path.is_dir() { 0o755 } else { 0o644 };
-    let new_perms = fs::Permissions::from_mode(perms.mode() | mode);
-    fs::set_permissions(path, new_perms)?;
+    // Collect all paths first (parents before children for writable)
+    // 先收集所有路径（对于可写，父目录在子目录之前）
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut stack: Vec<PathBuf> = vec![path.to_path_buf()];
 
-    if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            make_writable_recursive(&entry?.path())?;
+    while let Some(current) = stack.pop() {
+        paths.push(current.clone());
+        if current.is_dir() {
+            for entry in fs::read_dir(&current)? {
+                stack.push(entry?.path());
+            }
         }
+    }
+
+    // Set permissions (parents first so we can access children)
+    // 设置权限（先父目录以便访问子目录）
+    for p in &paths {
+        let perms = fs::metadata(p)?.permissions();
+        let mode = if p.is_dir() { 0o755 } else { 0o644 };
+        let new_perms = fs::Permissions::from_mode(perms.mode() | mode);
+        fs::set_permissions(p, new_perms)?;
     }
 
     Ok(())
@@ -339,15 +373,27 @@ fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
 
 #[cfg(not(unix))]
 fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
-    let mut perms = fs::metadata(path)?.permissions();
-    #[allow(clippy::permissions_set_readonly_false)]
-    perms.set_readonly(false);
-    fs::set_permissions(path, perms)?;
+    // Collect all paths first
+    // 先收集所有路径
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut stack: Vec<PathBuf> = vec![path.to_path_buf()];
 
-    if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            make_writable_recursive(&entry?.path())?;
+    while let Some(current) = stack.pop() {
+        paths.push(current.clone());
+        if current.is_dir() {
+            for entry in fs::read_dir(&current)? {
+                stack.push(entry?.path());
+            }
         }
+    }
+
+    // Set permissions
+    // 设置权限
+    for p in &paths {
+        let mut perms = fs::metadata(p)?.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(p, perms)?;
     }
 
     Ok(())

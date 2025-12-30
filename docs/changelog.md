@@ -7,8 +7,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x / v0.3.x      │
-│  [中文]     #chinese   ──→  v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x / v0.3.x      │
+│  [English]  #english   ──→  v0.6.2 / v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x      │
+│  [中文]     #chinese   ──→  v0.6.2 / v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,6 +21,22 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 # English
 
 > *What changed, when, and why.*
+
+## [0.6.2] - 2025-12-30
+
+### Added
+- **Architecture documentation**: Comprehensive guide for contributors (`docs/architecture.md`)
+- **CONTRIBUTING.md**: Bilingual contribution guidelines with setup instructions
+- **Security audit in CI**: Added `cargo audit` for dependency vulnerability scanning
+
+### Improved
+- **Release profile optimization**: LTO, strip, single codegen-unit for smaller binaries
+- **CI enhancement**: Clippy now checks all workspace crates, not just the main package
+- **Stack safety**: Converted recursive directory operations to iterative (prevents stack overflow on deep directories)
+
+### Developer Experience
+- **MSRV declaration**: Added `rust-version = "1.85"` for Rust 2024 edition
+- **Dev profile optimization**: Faster development builds with opt-level tuning
 
 ## [0.6.1] - 2025-12-30
 
@@ -163,6 +179,22 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > 改了啥、啥时候改的、为啥改。
 
+## [0.6.2] - 2025-12-30
+
+### 新功能
+- **架构文档**: 为贡献者提供的全面指南 (`docs/architecture.md`)
+- **CONTRIBUTING.md**: 中英双语贡献指南，包含环境配置说明
+- **CI 安全审计**: 添加 `cargo audit` 检测依赖漏洞
+
+### 改进
+- **Release 配置优化**: LTO、符号剥离、单代码生成单元，生成更小的二进制文件
+- **CI 增强**: Clippy 现在检查所有 workspace crate，而不仅是主包
+- **栈安全**: 将递归目录操作转换为迭代（防止深层目录栈溢出）
+
+### 开发体验
+- **MSRV 声明**: 添加 `rust-version = "1.85"` 支持 Rust 2024 edition
+- **开发配置优化**: 调整 opt-level 加快开发构建速度
+
 ## [0.6.1] - 2025-12-30
 
 ### 修复
@@ -298,6 +330,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.6.2]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.1...v0.5.0

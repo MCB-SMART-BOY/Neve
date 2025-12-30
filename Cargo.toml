@@ -1,6 +1,6 @@
 [package]
 name = "neve-workspace"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 license = "MPL-2.0"
 publish = false
@@ -13,10 +13,28 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/MCB-SMART-BOY/neve"
+rust-version = "1.85"
+
+# Optimized release profile for smaller, faster binaries
+# 优化的 release profile，生成更小更快的二进制文件
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
+opt-level = 3
+
+# Development profile with some optimizations for faster iteration
+# 开发 profile，保持一些优化以加快迭代
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
 
 [workspace.dependencies]
 # Internal crates
