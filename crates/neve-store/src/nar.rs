@@ -106,9 +106,7 @@ impl<W: Write> NarWriter<W> {
 
             // Read and sort directory entries for determinism
             // 读取并排序目录条目以确保确定性
-            let mut entries: Vec<_> = fs::read_dir(path)?
-                .filter_map(|e| e.ok())
-                .collect();
+            let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
             entries.sort_by_key(|e| e.file_name());
 
             for entry in entries {

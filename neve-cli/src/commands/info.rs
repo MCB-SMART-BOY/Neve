@@ -20,12 +20,12 @@ pub fn platform_info() -> Result<(), String> {
     caps.print_info();
 
     output::section("Feature Availability");
-    
+
     let mut table = output::Table::new(vec!["Feature", "Status"]);
     table.add_row(vec!["Language (eval, check, repl)", "yes"]);
     table.add_row(vec!["Formatting", "yes"]);
     table.add_row(vec!["LSP", "yes"]);
-    
+
     if caps.native_sandbox {
         table.add_row(vec!["Native sandboxed builds", "yes"]);
     } else if caps.docker_available {
@@ -45,7 +45,7 @@ pub fn platform_info() -> Result<(), String> {
     } else {
         table.add_row(vec!["System configuration", "Linux only"]);
     }
-    
+
     table.print();
 
     // Show cross-platform note if not on Linux

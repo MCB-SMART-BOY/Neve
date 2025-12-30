@@ -28,7 +28,7 @@ pub fn run(query: &str) -> Result<(), String> {
     // Search in package index (if available)
     // 在软件包索引中搜索（如果可用）
     let index_matches = search_index(query)?;
-    
+
     status.success(Some(&format!("Search complete for '{query}'")));
 
     if !store_matches.is_empty() {

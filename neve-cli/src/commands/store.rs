@@ -11,9 +11,7 @@ pub fn gc() -> Result<(), String> {
 
     let store_result = Store::open();
     let mut store = match store_result {
-        Ok(s) => {
-            s
-        }
+        Ok(s) => s,
         Err(e) => {
             status.fail(Some("Failed to open store"));
             return Err(format!("Failed to open store: {}", e));

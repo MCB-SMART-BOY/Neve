@@ -51,7 +51,7 @@ pub fn run() -> Result<(), String> {
     let mut updated_count = 0;
     let mut failed_inputs = Vec::new();
     let total_inputs = flake.inputs.len();
-    
+
     let mut progress = output::ProgressBar::new(total_inputs, "Updating inputs");
 
     for (i, (name, input)) in flake.inputs.iter().enumerate() {
@@ -70,8 +70,11 @@ pub fn run() -> Result<(), String> {
         }
         progress.update(i + 1);
     }
-    
-    progress.finish_with_message(&format!("Updated {} of {} input(s)", updated_count, total_inputs));
+
+    progress.finish_with_message(&format!(
+        "Updated {} of {} input(s)",
+        updated_count, total_inputs
+    ));
 
     // Save the lock file
     // 保存锁文件

@@ -498,15 +498,15 @@ impl<'src> Lexer<'src> {
     /// 解析转义字符序列。
     fn escape_char(&mut self) -> Option<char> {
         match self.advance() {
-            Some((_, 'n')) => Some('\n'),   // newline - 换行
-            Some((_, 'r')) => Some('\r'),   // carriage return - 回车
-            Some((_, 't')) => Some('\t'),   // tab - 制表符
-            Some((_, '0')) => Some('\0'),   // null - 空字符
-            Some((_, '\\')) => Some('\\'),  // backslash - 反斜杠
-            Some((_, '"')) => Some('"'),    // double quote - 双引号
-            Some((_, '\'')) => Some('\''),  // single quote - 单引号
-            Some((_, '{')) => Some('{'),    // left brace - 左花括号
-            Some((_, '}')) => Some('}'),    // right brace - 右花括号
+            Some((_, 'n')) => Some('\n'),  // newline - 换行
+            Some((_, 'r')) => Some('\r'),  // carriage return - 回车
+            Some((_, 't')) => Some('\t'),  // tab - 制表符
+            Some((_, '0')) => Some('\0'),  // null - 空字符
+            Some((_, '\\')) => Some('\\'), // backslash - 反斜杠
+            Some((_, '"')) => Some('"'),   // double quote - 双引号
+            Some((_, '\'')) => Some('\''), // single quote - 单引号
+            Some((_, '{')) => Some('{'),   // left brace - 左花括号
+            Some((_, '}')) => Some('}'),   // right brace - 右花括号
             Some((pos, ch)) => {
                 let span = Span::from_usize(pos, self.pos);
                 self.diagnostics.push(

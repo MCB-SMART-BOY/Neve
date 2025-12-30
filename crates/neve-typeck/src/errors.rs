@@ -634,9 +634,9 @@ pub fn redundant_annotation(inferred: &Ty, span: Span) -> Diagnostic {
 /// 使用 Levenshtein 距离进行模糊匹配。
 pub fn find_similar_name<'a>(name: &str, candidates: &'a [String]) -> Option<&'a str> {
     let max_distance = match name.len() {
-        0..=2 => 0,   // Very short names: exact match only / 非常短的名称：仅精确匹配
-        3..=5 => 1,   // Short names: 1 edit distance / 短名称：1 编辑距离
-        _ => 2,       // Longer names: 2 edit distance / 较长名称：2 编辑距离
+        0..=2 => 0, // Very short names: exact match only / 非常短的名称：仅精确匹配
+        3..=5 => 1, // Short names: 1 edit distance / 短名称：1 编辑距离
+        _ => 2,     // Longer names: 2 edit distance / 较长名称：2 编辑距离
     };
 
     candidates
@@ -708,9 +708,7 @@ pub fn suggest_conversion(from: &Ty, to: &Ty) -> Option<String> {
         (TyKind::Char, TyKind::String) => Some("toString(value)".to_string()),
 
         // Char to String / 字符到字符串
-        (TyKind::String, TyKind::Char) => {
-            Some("use string indexing: str[0]".to_string())
-        }
+        (TyKind::String, TyKind::Char) => Some("use string indexing: str[0]".to_string()),
 
         // List to String / 列表到字符串
         (TyKind::Named(_, _), TyKind::String) => Some("use `join` or `toString`".to_string()),
@@ -719,7 +717,9 @@ pub fn suggest_conversion(from: &Ty, to: &Ty) -> Option<String> {
         (TyKind::Record(_), _) => Some("access a specific field with `.field`".to_string()),
 
         // Tuple element access / 元组元素访问
-        (TyKind::Tuple(_), _) => Some("access a specific element with `.0`, `.1`, etc.".to_string()),
+        (TyKind::Tuple(_), _) => {
+            Some("access a specific element with `.0`, `.1`, etc.".to_string())
+        }
 
         // Option/Result unwrap / Option/Result 解包
         (TyKind::Named(_, args), _) if !args.is_empty() => {
@@ -741,19 +741,26 @@ pub fn field_access_on_non_record(ty: &Ty, field: &str, span: Span) -> Diagnosti
         format!("cannot access field `{}` on type `{}`", field, ty_str),
     )
     .with_code(ErrorCode::UnknownField)
-    .with_label(Label::new(span, format!("type `{}` is not a record", ty_str)));
+    .with_label(Label::new(
+        span,
+        format!("type `{}` is not a record", ty_str),
+    ));
 
     // Add context-specific help
     match &ty.kind {
         TyKind::Tuple(elems) => {
-            diag = diag
-                .with_note(format!("tuples have {} elements, accessed with .0, .1, etc.", elems.len()));
+            diag = diag.with_note(format!(
+                "tuples have {} elements, accessed with .0, .1, etc.",
+                elems.len()
+            ));
         }
         TyKind::Named(_, _) => {
             diag = diag.with_note("this is a named type, not a record");
         }
         TyKind::Fn(_, _) => {
-            diag = diag.with_note("functions don't have fields - did you mean to call this function first?");
+            diag = diag.with_note(
+                "functions don't have fields - did you mean to call this function first?",
+            );
         }
         _ => {}
     }
@@ -772,7 +779,10 @@ pub fn tuple_index_on_non_tuple(ty: &Ty, index: u32, span: Span) -> Diagnostic {
         format!("cannot index into type `{}` with `.{}`", ty_str, index),
     )
     .with_code(ErrorCode::TypeMismatch)
-    .with_label(Label::new(span, format!("type `{}` is not a tuple", ty_str)));
+    .with_label(Label::new(
+        span,
+        format!("type `{}` is not a tuple", ty_str),
+    ));
 
     // Add context-specific help
     match &ty.kind {
@@ -802,13 +812,18 @@ pub fn list_index_on_non_list(ty: &Ty, span: Span) -> Diagnostic {
         format!("cannot index into type `{}`", ty_str),
     )
     .with_code(ErrorCode::TypeMismatch)
-    .with_label(Label::new(span, format!("type `{}` is not indexable", ty_str)));
+    .with_label(Label::new(
+        span,
+        format!("type `{}` is not indexable", ty_str),
+    ));
 
     // Add context-specific help
     match &ty.kind {
         TyKind::Tuple(elems) => {
-            diag = diag
-                .with_note(format!("tuples use compile-time indices (.0, .1, ..., .{})", elems.len().saturating_sub(1)));
+            diag = diag.with_note(format!(
+                "tuples use compile-time indices (.0, .1, ..., .{})",
+                elems.len().saturating_sub(1)
+            ));
         }
         TyKind::Record(_) => {
             diag = diag.with_note("records use field names, not indices");
@@ -833,8 +848,14 @@ pub fn non_bool_condition(ty: &Ty, context: &str, span: Span) -> Diagnostic {
         format!("{} condition must be a Bool", context),
     )
     .with_code(ErrorCode::TypeMismatch)
-    .with_label(Label::new(span, format!("expected Bool, found `{}`", ty_str)))
-    .with_note(format!("the condition in {} must evaluate to true or false", context))
+    .with_label(Label::new(
+        span,
+        format!("expected Bool, found `{}`", ty_str),
+    ))
+    .with_note(format!(
+        "the condition in {} must evaluate to true or false",
+        context
+    ))
 }
 
 /// Create an error for using break/continue outside of a loop.
@@ -846,8 +867,14 @@ pub fn break_outside_loop(keyword: &str, span: Span) -> Diagnostic {
         format!("`{}` outside of loop", keyword),
     )
     .with_code(ErrorCode::TypeMismatch)
-    .with_label(Label::new(span, format!("cannot `{}` outside of a loop", keyword)))
-    .with_note(format!("`{}` can only be used inside a loop (for, while, loop)", keyword))
+    .with_label(Label::new(
+        span,
+        format!("cannot `{}` outside of a loop", keyword),
+    ))
+    .with_note(format!(
+        "`{}` can only be used inside a loop (for, while, loop)",
+        keyword
+    ))
 }
 
 /// Create an error for return outside of a function.

@@ -26,7 +26,6 @@ impl Token {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // ===== Literals 字面量 =====
-    
     /// Integer literal - 整数字面量
     Int(i64),
     /// Float literal - 浮点数字面量
@@ -42,7 +41,6 @@ pub enum TokenKind {
     PathLit(String),
 
     // ===== Interpolated string parts 插值字符串部分 =====
-    
     /// Start of interpolated string `` ` ``
     /// 插值字符串开始 `` ` ``
     InterpolatedStart,
@@ -60,12 +58,10 @@ pub enum TokenKind {
     InterpolationEnd,
 
     // ===== Identifiers 标识符 =====
-    
     /// Identifier - 标识符
     Ident(String),
 
     // ===== Keywords 关键字 =====
-    
     Let,       // let - 变量绑定
     Fn,        // fn - 函数
     Type,      // type - 类型别名
@@ -88,7 +84,6 @@ pub enum TokenKind {
     False,     // false - 假
 
     // ===== Delimiters 分隔符 =====
-    
     LParen,     // ( - 左圆括号
     RParen,     // ) - 右圆括号
     LBracket,   // [ - 左方括号
@@ -98,7 +93,6 @@ pub enum TokenKind {
     HashLBrace, // #{ - 记录开始
 
     // ===== Operators 操作符 =====
-    
     Plus,             // + - 加
     Minus,            // - - 减
     Star,             // * - 乘
@@ -128,14 +122,12 @@ pub enum TokenKind {
     Question,         // ? - 错误传播
 
     // ===== Punctuation 标点 =====
-    
     Comma,     // , - 逗号
     Colon,     // : - 冒号
     Semicolon, // ; - 分号
     Dot,       // . - 点
 
     // ===== Special 特殊 =====
-    
     /// End of file - 文件结束
     Eof,
     /// Lexer error - 词法错误

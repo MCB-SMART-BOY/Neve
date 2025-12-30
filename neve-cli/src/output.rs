@@ -7,8 +7,8 @@
 //! 表格和结构化格式化。
 
 use std::io::{self, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -251,11 +251,7 @@ impl ProgressBar {
         let empty = self.width - filled;
 
         if supports_color() {
-            let bar = format!(
-                "{}{}",
-                "█".repeat(filled),
-                "░".repeat(empty)
-            );
+            let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
             print!(
                 "\r{} {} {} [{}/{}] {}%",
                 colorize(CYAN, "⏳"),
@@ -266,18 +262,10 @@ impl ProgressBar {
                 percent
             );
         } else {
-            let bar = format!(
-                "{}{}",
-                "#".repeat(filled),
-                "-".repeat(empty)
-            );
+            let bar = format!("{}{}", "#".repeat(filled), "-".repeat(empty));
             print!(
                 "\r{} [{}] {}/{} {}%",
-                self.message,
-                bar,
-                self.current,
-                self.total,
-                percent
+                self.message, bar, self.current, self.total, percent
             );
         }
         let _ = io::stdout().flush();
@@ -352,7 +340,13 @@ impl Table {
         let separator: String = self
             .column_widths
             .iter()
-            .map(|w| if supports_color() { "─".repeat(*w) } else { "-".repeat(*w) })
+            .map(|w| {
+                if supports_color() {
+                    "─".repeat(*w)
+                } else {
+                    "-".repeat(*w)
+                }
+            })
             .collect::<Vec<_>>()
             .join("  ");
         println!("{}", colorize(DIM, &separator));
@@ -428,11 +422,7 @@ pub fn prompt(message: &str) -> Option<String> {
     let mut input = String::new();
     if io::stdin().read_line(&mut input).is_ok() {
         let input = input.trim().to_string();
-        if input.is_empty() {
-            None
-        } else {
-            Some(input)
-        }
+        if input.is_empty() { None } else { Some(input) }
     } else {
         None
     }
