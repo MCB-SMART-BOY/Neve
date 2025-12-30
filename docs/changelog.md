@@ -22,6 +22,14 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > *What changed, when, and why.*
 
+## [0.6.4] - 2025-12-30
+
+### Fixed
+- **CI**: Fixed cross-compilation setup using `taiki-e/install-action`
+- **Formatting**: Fixed code formatting issues
+
+---
+
 ## [0.6.3] - 2025-12-30
 
 ### Improved
