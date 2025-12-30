@@ -13,3 +13,7 @@ neve-fetch.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+flate2.workspace = true
+lzma-rs.workspace = true
+zstd.workspace = true
+tempfile.workspace = true

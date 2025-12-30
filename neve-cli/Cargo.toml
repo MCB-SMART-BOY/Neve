@@ -33,3 +33,4 @@ neve-config.workspace = true
 neve-store.workspace = true
 neve-derive.workspace = true
 neve-builder.workspace = true
+libc = "0.2"

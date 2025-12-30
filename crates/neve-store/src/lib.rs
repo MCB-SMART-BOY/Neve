@@ -10,6 +10,7 @@
 pub mod cache;
 mod db;
 pub mod gc;
+pub mod nar;
 mod path;
 mod store;
 

@@ -6,12 +6,14 @@
 //! 二进制缓存允许在机器之间共享预构建的存储路径，
 //! 避免从源码重新构建包。
 
+use crate::nar::{self, NarError};
 use crate::{Store, StoreError};
 use neve_derive::{Derivation, Hash, StorePath};
 use neve_fetch::Fetcher;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -54,6 +56,10 @@ pub enum CacheError {
     /// Compression error. / 压缩错误。
     #[error("compression error: {0}")]
     Compression(String),
+
+    /// NAR error. / NAR 错误。
+    #[error("NAR error: {0}")]
+    Nar(#[from] NarError),
 
     /// Cache not found. / 未找到缓存。
     #[error("cache not found: {0}")]
@@ -292,7 +298,7 @@ impl BinaryCache {
 
     /// Extract a NAR archive to the store.
     /// 将 NAR 归档提取到存储。
-    fn extract_nar(&self, _nar_file: &Path, path: &StorePath) -> Result<(), CacheError> {
+    fn extract_nar(&self, nar_file: &Path, path: &StorePath) -> Result<(), CacheError> {
         let dest = self.store.to_path(path);
 
         // Create parent directory
@@ -301,32 +307,65 @@ impl BinaryCache {
             fs::create_dir_all(parent)?;
         }
 
-        // For now, this is a placeholder - actual NAR extraction would use tar/compression libs
-        // In a real implementation, we would:
-        // 1. Decompress based on format
-        // 2. Extract tar archive
-        // 3. Set permissions correctly
-        // 目前这是一个占位符 - 实际的 NAR 提取会使用 tar/压缩库
-        // 在实际实现中，我们会：
-        // 1. 根据格式解压
-        // 2. 提取 tar 归档
-        // 3. 正确设置权限
+        // Read the compressed NAR file
+        // 读取压缩的 NAR 文件
+        let compressed_data = fs::read(nar_file)?;
 
-        // Placeholder: just create the directory
-        // 占位符：只创建目录
-        fs::create_dir_all(&dest)?;
+        // Decompress based on file extension
+        // 根据文件扩展名解压
+        let nar_data = self.decompress_nar(&compressed_data, nar_file)?;
+
+        // Extract using our NAR implementation
+        // 使用我们的 NAR 实现提取
+        nar::extract_nar(&nar_data, &dest)?;
 
         Ok(())
     }
 
-    /// Compute the hash of a store path.
-    /// 计算存储路径的哈希。
-    fn compute_path_hash(&self, _path: &Path) -> Result<Hash, CacheError> {
-        // This would recursively hash all files in the path
-        // 这会递归哈希路径中的所有文件
-        // For now, return a placeholder
-        // 目前返回占位符
-        Ok(Hash::of(b"placeholder"))
+    /// Decompress NAR data based on file extension.
+    /// 根据文件扩展名解压 NAR 数据。
+    fn decompress_nar(&self, data: &[u8], path: &Path) -> Result<Vec<u8>, CacheError> {
+        let path_str = path.to_string_lossy();
+
+        if path_str.ends_with(".nar") {
+            // No compression
+            // 无压缩
+            Ok(data.to_vec())
+        } else if path_str.ends_with(".nar.gz") {
+            // gzip decompression
+            // gzip 解压
+            let mut decoder = flate2::read::GzDecoder::new(data);
+            let mut decompressed = Vec::new();
+            decoder
+                .read_to_end(&mut decompressed)
+                .map_err(|e| CacheError::Compression(format!("gzip decompression failed: {}", e)))?;
+            Ok(decompressed)
+        } else if path_str.ends_with(".nar.xz") {
+            // xz decompression
+            // xz 解压
+            let mut decompressed = Vec::new();
+            lzma_rs::xz_decompress(&mut std::io::Cursor::new(data), &mut decompressed)
+                .map_err(|e| CacheError::Compression(format!("xz decompression failed: {}", e)))?;
+            Ok(decompressed)
+        } else if path_str.ends_with(".nar.zst") {
+            // zstd decompression
+            // zstd 解压
+            zstd::decode_all(std::io::Cursor::new(data))
+                .map_err(|e| CacheError::Compression(format!("zstd decompression failed: {}", e)))
+        } else {
+            // Assume uncompressed
+            // 假设未压缩
+            Ok(data.to_vec())
+        }
+    }
+
+    /// Compute the hash of a store path using NAR format.
+    /// 使用 NAR 格式计算存储路径的哈希。
+    fn compute_path_hash(&self, path: &Path) -> Result<Hash, CacheError> {
+        // Hash the path using NAR format for deterministic results
+        // 使用 NAR 格式哈希路径以获得确定性结果
+        let hash = nar::hash_path(path)?;
+        Ok(hash)
     }
 
     /// Parse a .narinfo file.
@@ -429,23 +468,49 @@ impl BinaryCache {
     /// Create a NAR archive of a store path.
     /// 创建存储路径的 NAR 归档。
     fn create_nar(&self, path: &StorePath) -> Result<PathBuf, CacheError> {
-        let _store_path = self.store.to_path(path);
+        let store_path = self.store.to_path(path);
         let nar_file = self.cache_dir.join(format!("{}.nar.xz", path.hash()));
 
-        // In a real implementation, this would:
-        // 1. Create a tar archive of the store path
-        // 2. Compress with xz
-        // 3. Write to nar_file
-        // 在实际实现中，这会：
-        // 1. 创建存储路径的 tar 归档
-        // 2. 用 xz 压缩
-        // 3. 写入 nar_file
+        // Create NAR archive using our implementation
+        // 使用我们的实现创建 NAR 归档
+        let nar_data = nar::create_nar(&store_path)?;
 
-        // Placeholder: create empty file
-        // 占位符：创建空文件
-        fs::write(&nar_file, b"")?;
+        // Compress with xz
+        // 使用 xz 压缩
+        let compressed = self.compress_nar(&nar_data, CompressionFormat::Xz)?;
+
+        // Write to file
+        // 写入文件
+        fs::write(&nar_file, compressed)?;
 
         Ok(nar_file)
+    }
+
+    /// Compress NAR data with the specified format.
+    /// 使用指定格式压缩 NAR 数据。
+    fn compress_nar(&self, data: &[u8], format: CompressionFormat) -> Result<Vec<u8>, CacheError> {
+        match format {
+            CompressionFormat::None => Ok(data.to_vec()),
+            CompressionFormat::Gzip => {
+                let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder
+                    .write_all(data)
+                    .map_err(|e| CacheError::Compression(format!("gzip compression failed: {}", e)))?;
+                encoder
+                    .finish()
+                    .map_err(|e| CacheError::Compression(format!("gzip finish failed: {}", e)))
+            }
+            CompressionFormat::Xz => {
+                let mut compressed = Vec::new();
+                lzma_rs::xz_compress(&mut std::io::Cursor::new(data), &mut compressed)
+                    .map_err(|e| CacheError::Compression(format!("xz compression failed: {}", e)))?;
+                Ok(compressed)
+            }
+            CompressionFormat::Zstd => {
+                zstd::encode_all(std::io::Cursor::new(data), 3)
+                    .map_err(|e| CacheError::Compression(format!("zstd compression failed: {}", e)))
+            }
+        }
     }
 
     /// Get cache statistics.
@@ -509,7 +574,8 @@ mod tests {
 
     #[test]
     fn test_cache_priority_sorting() {
-        let store = Store::open().unwrap();
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = Store::open_at(temp.path().to_path_buf()).unwrap();
         let mut cache = BinaryCache::new(store).unwrap();
 
         cache.add_cache(CacheConfig {

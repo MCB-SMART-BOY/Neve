@@ -4,7 +4,6 @@
 //! Shows detailed information about a package or platform.
 //! 显示软件包或平台的详细信息。
 
-#[cfg(unix)]
 use crate::output;
 use crate::platform::{PlatformCapabilities, print_cross_platform_note};
 #[cfg(unix)]
@@ -15,42 +14,39 @@ use std::path::PathBuf;
 /// Show platform capabilities and information.
 /// 显示平台功能和信息。
 pub fn platform_info() -> Result<(), String> {
-    println!("Neve Platform Information");
-    // Neve 平台信息
-    println!("==========================");
-    println!();
+    output::header("Neve Platform Information");
 
     let caps = PlatformCapabilities::detect();
     caps.print_info();
 
-    println!();
-    println!("Feature Availability:");
-    println!("  Language (eval, check, repl):  \x1b[32myes\x1b[0m");
-    println!("  Formatting:                    \x1b[32myes\x1b[0m");
-    println!("  LSP:                           \x1b[32myes\x1b[0m");
-    // LSP：是
-
+    output::section("Feature Availability");
+    
+    let mut table = output::Table::new(vec!["Feature", "Status"]);
+    table.add_row(vec!["Language (eval, check, repl)", "yes"]);
+    table.add_row(vec!["Formatting", "yes"]);
+    table.add_row(vec!["LSP", "yes"]);
+    
     if caps.native_sandbox {
-        println!("  Native sandboxed builds:       \x1b[32myes\x1b[0m");
+        table.add_row(vec!["Native sandboxed builds", "yes"]);
     } else if caps.docker_available {
-        println!("  Native sandboxed builds:       \x1b[33mno (using Docker)\x1b[0m");
+        table.add_row(vec!["Native sandboxed builds", "no (using Docker)"]);
     } else {
-        println!("  Native sandboxed builds:       \x1b[31mno\x1b[0m");
+        table.add_row(vec!["Native sandboxed builds", "no"]);
     }
 
     if caps.docker_available {
-        println!("  Docker builds:                 \x1b[32myes\x1b[0m");
-        // Docker 构建：是
+        table.add_row(vec!["Docker builds", "yes"]);
     } else {
-        println!("  Docker builds:                 \x1b[31mno (Docker not found)\x1b[0m");
-        // Docker 构建：否（未找到 Docker）
+        table.add_row(vec!["Docker builds", "no (Docker not found)"]);
     }
 
     if caps.system_config {
-        println!("  System configuration:          \x1b[32myes\x1b[0m");
+        table.add_row(vec!["System configuration", "yes"]);
     } else {
-        println!("  System configuration:          \x1b[33mLinux only\x1b[0m");
+        table.add_row(vec!["System configuration", "Linux only"]);
     }
+    
+    table.print();
 
     // Show cross-platform note if not on Linux
     // 如果不在 Linux 上，显示跨平台说明
@@ -76,8 +72,8 @@ pub fn run(package: &str) -> Result<(), String> {
             if name_str.contains(package) {
                 let path = entry.path();
 
-                output::info(&format!("Package: {name_str}"));
-                println!("Path: {}", path.display());
+                output::header(&format!("Package: {name_str}"));
+                output::kv("Path", &path.display().to_string());
 
                 // Read derivation info if available
                 // 如果可用，读取派生信息
@@ -85,16 +81,16 @@ pub fn run(package: &str) -> Result<(), String> {
                 if drv_path.exists()
                     && let Ok(drv_content) = fs::read_to_string(&drv_path)
                 {
-                    println!("Derivation: {}", drv_path.display());
+                    output::kv("Derivation", &drv_path.display().to_string());
 
                     // Parse JSON derivation
                     // 解析 JSON 派生
                     if let Ok(drv) = serde_json::from_str::<serde_json::Value>(&drv_content) {
                         if let Some(name) = drv.get("name").and_then(|v| v.as_str()) {
-                            println!("Name: {name}");
+                            output::kv("Name", name);
                         }
                         if let Some(system) = drv.get("system").and_then(|v| v.as_str()) {
-                            println!("System: {system}");
+                            output::kv("System", system);
                         }
                     }
                 }
@@ -102,12 +98,12 @@ pub fn run(package: &str) -> Result<(), String> {
                 // Show size
                 // 显示大小
                 if let Ok(size) = get_dir_size(&path) {
-                    println!("Size: {}", format_size(size));
+                    output::kv("Size", &output::format_size(size));
                 }
 
                 // Show contents
                 // 显示内容
-                println!("\nContents:");
+                output::section("Contents");
                 show_dir_tree(&path, "", 2)?;
 
                 return Ok(());
@@ -152,25 +148,6 @@ fn get_dir_size(path: &PathBuf) -> Result<u64, String> {
     }
 
     Ok(size)
-}
-
-/// Format a size in bytes as a human-readable string.
-/// 将字节大小格式化为人类可读的字符串。
-#[cfg(unix)]
-fn format_size(size: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-
-    if size >= GB {
-        format!("{:.2} GB", size as f64 / GB as f64)
-    } else if size >= MB {
-        format!("{:.2} MB", size as f64 / MB as f64)
-    } else if size >= KB {
-        format!("{:.2} KB", size as f64 / KB as f64)
-    } else {
-        format!("{} B", size)
-    }
 }
 
 /// Show a directory tree up to a certain depth.

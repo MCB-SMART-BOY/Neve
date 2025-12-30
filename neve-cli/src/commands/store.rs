@@ -7,9 +7,18 @@ use neve_store::{Store, gc::GarbageCollector};
 /// Run garbage collection.
 /// 运行垃圾回收。
 pub fn gc() -> Result<(), String> {
-    output::info("Running garbage collection...");
+    let status = output::Status::new("Analyzing store for garbage collection");
 
-    let mut store = Store::open().map_err(|e| format!("Failed to open store: {}", e))?;
+    let store_result = Store::open();
+    let mut store = match store_result {
+        Ok(s) => {
+            s
+        }
+        Err(e) => {
+            status.fail(Some("Failed to open store"));
+            return Err(format!("Failed to open store: {}", e));
+        }
+    };
 
     let mut gc = GarbageCollector::new(&mut store);
 
@@ -19,30 +28,48 @@ pub fn gc() -> Result<(), String> {
         .dry_run()
         .map_err(|e| format!("Failed to analyze store: {}", e))?;
 
+    status.success(Some("Store analysis complete"));
+
     if to_delete.is_empty() {
         output::success("No garbage to collect.");
         return Ok(());
     }
 
-    output::info(&format!("Found {} paths to delete:", to_delete.len()));
+    output::header("Garbage Collection");
+    output::kv("Paths to delete", &to_delete.len().to_string());
+    println!();
+
     for path in &to_delete {
-        println!("  {}", path.display_name());
+        output::list_item(&path.display_name());
     }
 
     println!();
-    output::info("Deleting...");
 
-    let result = gc
-        .collect()
-        .map_err(|e| format!("Failed to collect garbage: {}", e))?;
+    // Confirm before deletion
+    // 删除前确认
+    if !output::confirm("Proceed with deletion?") {
+        output::info("Garbage collection cancelled");
+        return Ok(());
+    }
 
-    output::success(&format!(
-        "Deleted {} paths, freed {}.",
-        result.deleted,
-        result.freed_human()
-    ));
+    let delete_status = output::Status::new("Deleting garbage paths");
 
-    Ok(())
+    let collect_result = gc.collect();
+    match collect_result {
+        Ok(result) => {
+            delete_status.success(None);
+            output::success(&format!(
+                "Deleted {} paths, freed {}.",
+                result.deleted,
+                result.freed_human()
+            ));
+            Ok(())
+        }
+        Err(e) => {
+            delete_status.fail(Some("Deletion failed"));
+            Err(format!("Failed to collect garbage: {}", e))
+        }
+    }
 }
 
 /// Show store information.
@@ -58,42 +85,24 @@ pub fn info() -> Result<(), String> {
         .size()
         .map_err(|e| format!("Failed to get store size: {}", e))?;
 
-    println!("Neve Store Information");
-    // Neve 存储信息
-    println!("======================");
-    println!();
-    println!("Location: {}", store.root().display());
-    println!("Paths:    {}", paths.len());
-    println!("Size:     {}", format_size(size));
+    output::header("Neve Store Information");
+    output::kv("Location", &store.root().display().to_string());
+    output::kv("Paths", &paths.len().to_string());
+    output::kv("Size", &output::format_size(size));
     println!();
 
     if !paths.is_empty() {
-        println!("Recent paths:");
-        for path in paths.iter().take(10) {
-            println!("  {}", path.display_name());
+        output::section("Recent paths");
+        let mut table = output::Table::new(vec!["#", "Path"]);
+        for (i, path) in paths.iter().take(10).enumerate() {
+            table.add_row(vec![&(i + 1).to_string(), &path.display_name()]);
         }
+        table.print();
+
         if paths.len() > 10 {
-            println!("  ... and {} more", paths.len() - 10);
+            output::info(&format!("... and {} more", paths.len() - 10));
         }
     }
 
     Ok(())
-}
-
-/// Format a size in bytes to a human-readable string.
-/// 将字节大小格式化为人类可读的字符串。
-fn format_size(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-
-    if bytes >= GB {
-        format!("{:.2} GiB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.2} MiB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.2} KiB", bytes as f64 / KB as f64)
-    } else {
-        format!("{} B", bytes)
-    }
 }

@@ -13,40 +13,46 @@ use std::path::PathBuf;
 pub fn run(query: &str) -> Result<(), String> {
     let store_dir = get_store_dir();
 
-    output::info(&format!("Searching for '{query}'..."));
-    println!();
+    let status = output::Status::new(&format!("Searching for '{query}'"));
 
     let mut found = false;
 
     // Search in store
     // 在存储中搜索
-    if store_dir.exists() {
-        let matches = search_store(&store_dir, query)?;
-        if !matches.is_empty() {
-            println!("Installed packages:");
-            for (name, path) in &matches {
-                println!("  {} - {}", name, path.display());
-            }
-            found = true;
-        }
-    }
+    let store_matches = if store_dir.exists() {
+        search_store(&store_dir, query)?
+    } else {
+        Vec::new()
+    };
 
     // Search in package index (if available)
     // 在软件包索引中搜索（如果可用）
     let index_matches = search_index(query)?;
+    
+    status.success(Some(&format!("Search complete for '{query}'")));
+
+    if !store_matches.is_empty() {
+        output::section("Installed packages");
+        let mut table = output::Table::new(vec!["Package", "Path"]);
+        for (name, path) in &store_matches {
+            table.add_row(vec![name, &path.display().to_string()]);
+        }
+        table.print();
+        found = true;
+    }
+
     if !index_matches.is_empty() {
-        if found {
-            println!();
-        }
-        println!("Available packages:");
+        output::section("Available packages");
+        let mut table = output::Table::new(vec!["Package", "Description"]);
         for (name, description) in &index_matches {
-            println!("  {} - {}", name, description);
+            table.add_row(vec![name, description]);
         }
+        table.print();
         found = true;
     }
 
     if !found {
-        println!("No packages found matching '{}'", query);
+        output::warning(&format!("No packages found matching '{}'", query));
     }
 
     Ok(())

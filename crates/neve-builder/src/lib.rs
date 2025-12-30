@@ -9,6 +9,7 @@
 //! - Output collection and registration / 输出收集和注册
 //! - Docker-based builds for cross-platform support / 基于 Docker 的跨平台构建支持
 
+pub mod analytics;
 pub mod docker;
 pub mod executor;
 pub mod output;
