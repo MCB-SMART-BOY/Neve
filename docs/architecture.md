@@ -200,6 +200,20 @@ Type system features:
 - Trait constraints (like Rust/Haskell)
 - Row polymorphism for records
 
+### 5. Incremental Compilation / 增量编译
+
+Module loading uses content-addressed caching:
+- File modification time (mtime) tracking
+- Content hash validation (for unreliable mtime)
+- Dirty flag for explicit invalidation
+- Dependency chain invalidation
+
+模块加载使用内容寻址缓存：
+- 文件修改时间 (mtime) 跟踪
+- 内容哈希验证（用于不可靠的 mtime）
+- 脏标志用于显式失效
+- 依赖链失效传播
+
 类型系统特性：
 - 完整类型推导
 - 参数多态
@@ -290,19 +304,19 @@ Release profile settings:
 ## Contributing Areas / 贡献方向
 
 ### High Priority / 高优先级
-- LSP completion & hover
-- Package dependency resolution
-- Type error messages
+- LSP completion & hover / LSP 补全与悬停
+- Package dependency resolution / 包依赖解析
+- Type error messages / 类型错误信息
 
 ### Medium Priority / 中优先级
-- Pattern match compilation
-- Remote build cache
-- Performance profiling
+- Pattern match compilation / 模式匹配编译
+- Remote build cache / 远程构建缓存
+- Performance profiling / 性能分析
 
 ### Lower Priority / 低优先级
-- Windows system config
-- macOS native sandbox
-- Additional standard library modules
+- Windows system config / Windows 系统配置
+- macOS native sandbox / macOS 原生沙箱
+- Additional standard library modules / 更多标准库模块
 
 ---
 

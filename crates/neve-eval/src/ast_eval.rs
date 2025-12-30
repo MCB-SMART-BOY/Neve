@@ -167,6 +167,55 @@ impl AstEnv {
             .map(|b| b.is_public)
             .unwrap_or(false)
     }
+
+    /// Check if a variable exists without cloning its value.
+    /// 检查变量是否存在而不克隆其值。
+    pub fn contains(&self, name: &str) -> bool {
+        if self.bindings.contains_key(name) {
+            return true;
+        }
+        if let Some(parent) = &self.parent {
+            return parent.contains(name);
+        }
+        false
+    }
+
+    /// Get the number of bindings in this scope (not including parent).
+    /// 获取此作用域中的绑定数量（不包括父环境）。
+    pub fn len(&self) -> usize {
+        self.bindings.len()
+    }
+
+    /// Check if this scope is empty (not including parent).
+    /// 检查此作用域是否为空（不包括父环境）。
+    pub fn is_empty(&self) -> bool {
+        self.bindings.is_empty()
+    }
+
+    /// Define multiple bindings at once (batch operation).
+    /// 一次定义多个绑定（批量操作）。
+    pub fn define_many(&mut self, bindings: impl IntoIterator<Item = (String, Value)>) {
+        for (name, value) in bindings {
+            self.bindings.insert(
+                name,
+                Binding {
+                    value,
+                    is_public: false,
+                },
+            );
+        }
+    }
+
+    /// Define multiple bindings with visibility at once.
+    /// 一次定义多个具有可见性的绑定。
+    pub fn define_many_with_visibility(
+        &mut self,
+        bindings: impl IntoIterator<Item = (String, Value, bool)>,
+    ) {
+        for (name, value, is_public) in bindings {
+            self.bindings.insert(name, Binding { value, is_public });
+        }
+    }
 }
 
 /// AST evaluator.
@@ -1429,13 +1478,16 @@ impl AstEvaluator {
     }
 
     /// filter(pred, list) - Keep elements where pred(elem) is true
+    /// filter(谓词, 列表) - 保留谓词(元素)为真的元素
     fn builtin_filter(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
         let items = match list {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("filter expects a list".to_string())),
         };
 
-        let mut results = Vec::new();
+        // Pre-allocate with input size as upper bound
+        // 以输入大小作为上限进行预分配
+        let mut results = Vec::with_capacity(items.len());
         for item in items.iter() {
             let result = self.apply(pred.clone(), vec![item.clone()])?;
             if let Value::Bool(true) = result {
@@ -1541,6 +1593,7 @@ impl AstEvaluator {
     }
 
     /// mapAttrs(f, attrs) - Apply f(name, value) to each attribute
+    /// mapAttrs(函数, 属性) - 对每个属性应用 f(名称, 值)
     fn builtin_map_attrs(&mut self, func: &Value, attrs: &Value) -> Result<Value, EvalError> {
         let fields = match attrs {
             Value::Record(fields) => fields,
@@ -1551,7 +1604,9 @@ impl AstEvaluator {
             }
         };
 
-        let mut results = HashMap::new();
+        // Pre-allocate with exact size
+        // 使用精确大小进行预分配
+        let mut results = HashMap::with_capacity(fields.len());
         for (name, value) in fields.iter() {
             let result = self.apply(
                 func.clone(),
@@ -1563,6 +1618,7 @@ impl AstEvaluator {
     }
 
     /// filterAttrs(pred, attrs) - Keep attrs where pred(name, value) is true
+    /// filterAttrs(谓词, 属性) - 保留谓词(名称, 值)为真的属性
     fn builtin_filter_attrs(&mut self, pred: &Value, attrs: &Value) -> Result<Value, EvalError> {
         let fields = match attrs {
             Value::Record(fields) => fields,
@@ -1573,7 +1629,9 @@ impl AstEvaluator {
             }
         };
 
-        let mut results = HashMap::new();
+        // Pre-allocate with input size as upper bound
+        // 以输入大小作为上限进行预分配
+        let mut results = HashMap::with_capacity(fields.len());
         for (name, value) in fields.iter() {
             let result = self.apply(
                 pred.clone(),
@@ -1609,14 +1667,18 @@ impl AstEvaluator {
     }
 
     /// partition(pred, list) - Split into { right = [...], wrong = [...] }
+    /// partition(谓词, 列表) - 分割为 { right = [...], wrong = [...] }
     fn builtin_partition(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
         let items = match list {
             Value::List(items) => items,
             _ => return Err(EvalError::TypeError("partition expects a list".to_string())),
         };
 
-        let mut right = Vec::new();
-        let mut wrong = Vec::new();
+        // Pre-allocate with half the input size as estimate
+        // 以输入大小的一半作为估计进行预分配
+        let half_len = items.len().div_ceil(2);
+        let mut right = Vec::with_capacity(half_len);
+        let mut wrong = Vec::with_capacity(half_len);
         for item in items.iter() {
             let result = self.apply(pred.clone(), vec![item.clone()])?;
             if let Value::Bool(true) = result {
@@ -1626,7 +1688,7 @@ impl AstEvaluator {
             }
         }
 
-        let mut record = HashMap::new();
+        let mut record = HashMap::with_capacity(2);
         record.insert("right".to_string(), Value::List(Rc::new(right)));
         record.insert("wrong".to_string(), Value::List(Rc::new(wrong)));
         Ok(Value::Record(Rc::new(record)))
@@ -1721,6 +1783,28 @@ impl AstEvaluator {
     }
 
     fn match_pattern(pattern: &Pattern, value: &Value) -> Option<Vec<(String, Value)>> {
+        // Pre-calculate expected binding count to reduce allocations
+        // 预先计算预期绑定数量以减少分配
+        fn estimate_bindings(pattern: &Pattern) -> usize {
+            match &pattern.kind {
+                PatternKind::Wildcard => 0,
+                PatternKind::Var(ident) => if ident.name == "_" { 0 } else { 1 },
+                PatternKind::Literal(_) => 0,
+                PatternKind::Tuple(patterns) | PatternKind::List(patterns) => {
+                    patterns.iter().map(estimate_bindings).sum()
+                }
+                PatternKind::Record { fields, .. } => fields.len(),
+                PatternKind::Constructor { args, .. } => {
+                    args.iter().map(estimate_bindings).sum()
+                }
+                PatternKind::Or(patterns) => {
+                    patterns.first().map(estimate_bindings).unwrap_or(0)
+                }
+                PatternKind::Binding { pattern, .. } => 1 + estimate_bindings(pattern),
+                _ => 0,
+            }
+        }
+
         match &pattern.kind {
             PatternKind::Wildcard => Some(Vec::new()),
             PatternKind::Var(ident) => {
@@ -1746,7 +1830,8 @@ impl AstEvaluator {
                     if patterns.len() != values.len() {
                         return None;
                     }
-                    let mut bindings = Vec::new();
+                    let capacity = patterns.iter().map(estimate_bindings).sum();
+                    let mut bindings = Vec::with_capacity(capacity);
                     for (p, v) in patterns.iter().zip(values.iter()) {
                         bindings.extend(Self::match_pattern(p, v)?);
                     }
@@ -1760,7 +1845,8 @@ impl AstEvaluator {
                     if patterns.len() != values.len() {
                         return None;
                     }
-                    let mut bindings = Vec::new();
+                    let capacity = patterns.iter().map(estimate_bindings).sum();
+                    let mut bindings = Vec::with_capacity(capacity);
                     for (p, v) in patterns.iter().zip(values.iter()) {
                         bindings.extend(Self::match_pattern(p, v)?);
                     }
@@ -1771,7 +1857,7 @@ impl AstEvaluator {
             }
             PatternKind::Record { fields, rest: _ } => {
                 if let Value::Record(record) = value {
-                    let mut bindings = Vec::new();
+                    let mut bindings = Vec::with_capacity(fields.len());
                     for field in fields {
                         let val = record.get(&field.name.name)?;
                         if let Some(ref pat) = field.pattern {
@@ -1812,11 +1898,6 @@ impl AstEvaluator {
         }
     }
 
-    #[allow(dead_code)]
-    fn bind_pattern(&mut self, pattern: &Pattern, value: Value) -> Result<(), EvalError> {
-        self.bind_pattern_with_visibility(pattern, value, false)
-    }
-
     fn bind_pattern_with_visibility(
         &mut self,
         pattern: &Pattern,
@@ -1837,9 +1918,9 @@ impl AstEvaluator {
         env: &mut AstEnv,
     ) -> Result<(), EvalError> {
         let bindings = Self::match_pattern(pattern, &value).ok_or(EvalError::PatternMatchFailed)?;
-        for (name, val) in bindings {
-            env.define(name, val);
-        }
+        // Use batch define to reduce HashMap operations
+        // 使用批量定义以减少 HashMap 操作
+        env.define_many(bindings);
         Ok(())
     }
 

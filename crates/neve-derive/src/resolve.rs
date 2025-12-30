@@ -59,7 +59,9 @@ impl Version {
     /// 解析版本字符串。
     pub fn parse(s: &str) -> Result<Self, VersionParseError> {
         let mut parts = s.split('-');
-        let version_part = parts.next().unwrap();
+        // Safe: split always returns at least one element
+        // 安全：split 总是返回至少一个元素
+        let version_part = parts.next().expect("split always yields at least one part");
         let pre = parts.next().map(String::from);
 
         let nums: Vec<&str> = version_part.split('.').collect();
@@ -539,7 +541,12 @@ impl<'a, R: PackageRegistry> Resolver<'a, R> {
 
             if in_progress.contains(name) {
                 path.push(name.to_string());
-                let cycle_start = path.iter().position(|n| n == name).unwrap();
+                // Safe: we just pushed `name` to path, so it must exist
+                // 安全：我们刚刚将 `name` 推入 path，所以它一定存在
+                let cycle_start = path
+                    .iter()
+                    .position(|n| n == name)
+                    .expect("name was just pushed to path");
                 return Err(ResolveError::CyclicDependency(path[cycle_start..].to_vec()));
             }
 

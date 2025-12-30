@@ -7,10 +7,12 @@
 //! - Resolving module paths (self, super, crate) / 解析模块路径（self、super、crate）
 //! - Loading and caching modules / 加载和缓存模块
 //! - Managing module dependencies / 管理模块依赖
+//! - Incremental compilation with file timestamps / 基于文件时间戳的增量编译
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use neve_diagnostic::Diagnostic;
 
@@ -154,6 +156,95 @@ pub struct ModuleInfo {
     pub exports: HashMap<String, DefId>,
     /// All items with visibility. / 所有带有可见性的项。
     pub items: HashMap<String, (DefId, Visibility)>,
+    /// File modification time for incremental compilation.
+    /// 用于增量编译的文件修改时间。
+    pub mtime: Option<SystemTime>,
+}
+
+/// Cache entry for incremental compilation.
+/// 用于增量编译的缓存条目。
+#[derive(Debug, Clone)]
+pub struct ModuleCache {
+    /// Modification time when cached. / 缓存时的修改时间。
+    pub mtime: SystemTime,
+    /// Cached parsed AST hash (for content-based invalidation).
+    /// 缓存的已解析 AST 哈希（用于基于内容的失效）。
+    pub source_hash: u64,
+    /// Whether the module needs recompilation. / 模块是否需要重新编译。
+    pub dirty: bool,
+}
+
+impl ModuleCache {
+    /// Create a new cache entry. / 创建新的缓存条目。
+    pub fn new(mtime: SystemTime, source_hash: u64) -> Self {
+        Self {
+            mtime,
+            source_hash,
+            dirty: false,
+        }
+    }
+
+    /// Check if the cache is valid for the given file.
+    /// 检查缓存对于给定文件是否有效。
+    pub fn is_valid(&self, file_path: &Path) -> bool {
+        if self.dirty {
+            return false;
+        }
+        if let Ok(metadata) = fs::metadata(file_path)
+            && let Ok(mtime) = metadata.modified()
+        {
+            return self.mtime == mtime;
+        }
+        false
+    }
+
+    /// Check if the cache is valid using content hash (for when mtime is unreliable).
+    /// 使用内容哈希检查缓存是否有效（用于 mtime 不可靠时）。
+    pub fn is_valid_by_hash(&self, source: &str) -> bool {
+        if self.dirty {
+            return false;
+        }
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        source.hash(&mut hasher);
+        hasher.finish() == self.source_hash
+    }
+
+    /// Mark cache entry as dirty (needs recompilation).
+    /// 将缓存条目标记为脏（需要重新编译）。
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Clear the dirty flag after successful recompilation.
+    /// 成功重新编译后清除脏标志。
+    pub fn mark_clean(&mut self) {
+        self.dirty = false;
+    }
+
+    /// Check if cache entry is dirty. / 检查缓存条目是否为脏。
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// Get the source hash (for content-based cache invalidation).
+    /// 获取源哈希（用于基于内容的缓存失效）。
+    pub fn source_hash(&self) -> u64 {
+        self.source_hash
+    }
+
+    /// Get the modification time. / 获取修改时间。
+    pub fn mtime(&self) -> SystemTime {
+        self.mtime
+    }
+
+    /// Update the cache with new mtime and hash.
+    /// 使用新的 mtime 和哈希更新缓存。
+    pub fn update(&mut self, mtime: SystemTime, source_hash: u64) {
+        self.mtime = mtime;
+        self.source_hash = source_hash;
+        self.dirty = false;
+    }
 }
 
 /// Module loader responsible for discovering and loading modules.
@@ -181,6 +272,23 @@ pub struct ModuleLoader {
     /// Loading stack to track the import chain.
     /// 加载栈用于跟踪导入链。
     loading_stack: Vec<Vec<String>>,
+    /// Cache for incremental compilation (file path -> cache entry).
+    /// 用于增量编译的缓存（文件路径 -> 缓存条目）。
+    file_cache: HashMap<PathBuf, ModuleCache>,
+    /// Statistics for cache hits/misses. / 缓存命中/未命中统计。
+    cache_stats: CacheStats,
+}
+
+/// Statistics for incremental compilation cache.
+/// 增量编译缓存的统计信息。
+#[derive(Debug, Clone, Default)]
+pub struct CacheStats {
+    /// Number of cache hits. / 缓存命中次数。
+    pub hits: usize,
+    /// Number of cache misses. / 缓存未命中次数。
+    pub misses: usize,
+    /// Number of modules recompiled. / 重新编译的模块数。
+    pub recompiled: usize,
 }
 
 impl ModuleLoader {
@@ -197,6 +305,8 @@ impl ModuleLoader {
             diagnostics: Vec::new(),
             loading: HashSet::new(),
             loading_stack: Vec::new(),
+            file_cache: HashMap::new(),
+            cache_stats: CacheStats::default(),
         }
     }
 
@@ -223,6 +333,150 @@ impl ModuleLoader {
     /// 取出收集的诊断信息。
     pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
         std::mem::take(&mut self.diagnostics)
+    }
+
+    /// Get cache statistics. / 获取缓存统计信息。
+    pub fn cache_stats(&self) -> &CacheStats {
+        &self.cache_stats
+    }
+
+    /// Check if a file needs recompilation based on modification time or dirty flag.
+    /// 根据修改时间或脏标志检查文件是否需要重新编译。
+    fn needs_recompile(&self, file_path: &Path) -> bool {
+        if let Some(cache) = self.file_cache.get(file_path) {
+            // Check dirty flag first, then mtime-based validation
+            // 首先检查脏标志，然后检查基于 mtime 的验证
+            cache.is_dirty() || !cache.is_valid(file_path)
+        } else {
+            true // No cache entry, needs compilation / 没有缓存条目，需要编译
+        }
+    }
+
+    /// Get file modification time. / 获取文件修改时间。
+    fn get_mtime(file_path: &Path) -> Option<SystemTime> {
+        fs::metadata(file_path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+    }
+
+    /// Simple hash of source content for cache validation.
+    /// 用于缓存验证的源内容简单哈希。
+    fn hash_source(source: &str) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        source.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Update cache entry for a file. / 更新文件的缓存条目。
+    fn update_cache(&mut self, file_path: &Path, source: &str) {
+        if let Some(mtime) = Self::get_mtime(file_path) {
+            let hash = Self::hash_source(source);
+            // Use update() if cache entry exists, otherwise create new
+            // 如果缓存条目存在则使用 update()，否则创建新条目
+            if let Some(cache) = self.file_cache.get_mut(file_path) {
+                cache.update(mtime, hash);
+            } else {
+                self.file_cache
+                    .insert(file_path.to_path_buf(), ModuleCache::new(mtime, hash));
+            }
+        }
+    }
+
+    /// Invalidate cache for a file. / 使文件的缓存失效。
+    pub fn invalidate_cache(&mut self, file_path: &Path) {
+        self.file_cache.remove(file_path);
+    }
+
+    /// Clear all cache entries. / 清除所有缓存条目。
+    pub fn clear_cache(&mut self) {
+        self.file_cache.clear();
+        self.cache_stats = CacheStats::default();
+    }
+
+    /// Get list of files that need recompilation.
+    /// 获取需要重新编译的文件列表。
+    pub fn get_dirty_files(&self) -> Vec<PathBuf> {
+        self.file_cache
+            .iter()
+            .filter(|(path, cache)| cache.is_dirty() || !cache.is_valid(path))
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+
+    /// Check if a file's content has changed using hash comparison.
+    /// Returns true if content has changed or file cannot be read.
+    /// 使用哈希比较检查文件内容是否已更改。
+    /// 如果内容已更改或文件无法读取，则返回 true。
+    pub fn has_content_changed(&self, file_path: &Path) -> bool {
+        if let Some(cache) = self.file_cache.get(file_path) {
+            if let Ok(source) = fs::read_to_string(file_path) {
+                !cache.is_valid_by_hash(&source)
+            } else {
+                true // Cannot read file, assume changed / 无法读取文件，假定已更改
+            }
+        } else {
+            true // No cache entry / 没有缓存条目
+        }
+    }
+
+    /// Get cached modification time for a file.
+    /// 获取文件的缓存修改时间。
+    pub fn get_cached_mtime(&self, file_path: &Path) -> Option<SystemTime> {
+        self.file_cache.get(file_path).map(|cache| cache.mtime())
+    }
+
+    /// Get cached source hash for a file.
+    /// 获取文件的缓存源哈希。
+    pub fn get_cached_hash(&self, file_path: &Path) -> Option<u64> {
+        self.file_cache
+            .get(file_path)
+            .map(|cache| cache.source_hash())
+    }
+
+    /// Mark a file as dirty (needs recompilation).
+    /// 将文件标记为脏（需要重新编译）。
+    pub fn mark_file_dirty(&mut self, file_path: &Path) {
+        if let Some(cache) = self.file_cache.get_mut(file_path) {
+            cache.mark_dirty();
+        }
+    }
+
+    /// Mark a file as clean after successful recompilation.
+    /// 成功重新编译后将文件标记为干净。
+    pub fn mark_file_clean(&mut self, file_path: &Path) {
+        if let Some(cache) = self.file_cache.get_mut(file_path) {
+            cache.mark_clean();
+        }
+    }
+
+    /// Mark all dependents of a file as dirty (for incremental recompilation).
+    /// This marks the file itself and all files in the same module tree as needing recompilation.
+    /// 将文件的所有依赖项标记为脏（用于增量重新编译）。
+    /// 这会将文件本身及同一模块树中的所有文件标记为需要重新编译。
+    pub fn invalidate_dependents(&mut self, file_path: &Path) {
+        // Find the module for this file path
+        // 查找此文件路径对应的模块
+        let module_id = self
+            .modules
+            .iter()
+            .find(|(_, info)| info.file_path == file_path)
+            .map(|(id, _)| *id);
+
+        if let Some(module_id) = module_id {
+            // Mark all child modules as dirty (they may depend on parent)
+            // 将所有子模块标记为脏（它们可能依赖于父模块）
+            let dependents: Vec<PathBuf> = self
+                .modules
+                .iter()
+                .filter(|(_, info)| info.parent == Some(module_id))
+                .map(|(_, info)| info.file_path.clone())
+                .collect();
+
+            for dependent_path in dependents {
+                self.mark_file_dirty(&dependent_path);
+            }
+        }
     }
 
     /// Allocate a new module ID.
@@ -382,6 +636,15 @@ impl ModuleLoader {
         self.loading.insert(path.to_vec());
         self.loading_stack.push(path.to_vec());
 
+        // Check if file needs recompilation (incremental compilation)
+        // 检查文件是否需要重新编译（增量编译）
+        let needs_recompile = self.needs_recompile(&file_path);
+        if needs_recompile {
+            self.cache_stats.misses += 1;
+        } else {
+            self.cache_stats.hits += 1;
+        }
+
         // Read and parse the file
         // 读取并解析文件
         let source = fs::read_to_string(&file_path)
@@ -390,6 +653,15 @@ impl ModuleLoader {
         // Parse the source
         // 解析源代码
         let (source_file, parse_errors) = neve_parser::parse(&source);
+
+        // Update cache with new mtime and source hash
+        // 使用新的 mtime 和源哈希更新缓存
+        self.update_cache(&file_path, &source);
+
+        // Track recompilation stats / 跟踪重新编译统计
+        if needs_recompile {
+            self.cache_stats.recompiled += 1;
+        }
 
         // Collect parse errors
         // 收集解析错误
@@ -472,6 +744,7 @@ impl ModuleLoader {
 
         // Create module info
         // 创建模块信息
+        let mtime = Self::get_mtime(&file_path);
         let info = ModuleInfo {
             id: module_id,
             path: path.to_vec(),
@@ -480,6 +753,7 @@ impl ModuleLoader {
             children: Vec::new(),
             exports: HashMap::new(),
             items: HashMap::new(),
+            mtime,
         };
 
         // Register the module as loaded (only after dependencies are loaded)
@@ -870,10 +1144,15 @@ mod tests {
         let result = loader.make_absolute(&path, Some(&["mymod".into()]));
         assert_eq!(result, Some(vec!["mymod".into(), "utils".into()]));
 
-        // Super-relative path
-        // super 相对路径
+        // Super-relative path (goes up two levels: current file and parent directory)
+        // super 相对路径（向上两级：当前文件和父目录）
+        // From ["mylib", "submod", "worker"], super.config resolves to ["mylib", "config"]
+        // 从 ["mylib", "submod", "worker"]，super.config 解析为 ["mylib", "config"]
         let path = ModulePath::super_(vec!["common".into()]);
-        let result = loader.make_absolute(&path, Some(&["parent".into(), "child".into()]));
+        let result = loader.make_absolute(
+            &path,
+            Some(&["parent".into(), "child".into(), "file".into()]),
+        );
         assert_eq!(result, Some(vec!["parent".into(), "common".into()]));
     }
 

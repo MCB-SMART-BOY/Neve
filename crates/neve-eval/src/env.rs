@@ -70,6 +70,42 @@ impl Environment {
         }
         None
     }
+
+    /// Check if a variable exists without cloning.
+    /// 检查变量是否存在而不克隆。
+    ///
+    /// More efficient than `get().is_some()` when you only need to check existence.
+    /// 当只需要检查存在性时，比 `get().is_some()` 更高效。
+    pub fn contains(&self, id: LocalId) -> bool {
+        if self.bindings.borrow().contains_key(&id) {
+            return true;
+        }
+        if let Some(parent) = &self.parent {
+            return parent.contains(id);
+        }
+        false
+    }
+
+    /// Get the number of bindings in the current scope (not including parents).
+    /// 获取当前作用域中的绑定数量（不包括父作用域）。
+    pub fn len(&self) -> usize {
+        self.bindings.borrow().len()
+    }
+
+    /// Check if the current scope is empty.
+    /// 检查当前作用域是否为空。
+    pub fn is_empty(&self) -> bool {
+        self.bindings.borrow().is_empty()
+    }
+
+    /// Define multiple variables at once (more efficient for batch operations).
+    /// 一次定义多个变量（对批量操作更高效）。
+    pub fn define_many(&self, bindings: impl IntoIterator<Item = (LocalId, Value)>) {
+        let mut map = self.bindings.borrow_mut();
+        for (id, value) in bindings {
+            map.insert(id, value);
+        }
+    }
 }
 
 impl Default for Environment {

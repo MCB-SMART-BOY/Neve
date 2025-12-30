@@ -1191,7 +1191,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::List(items) => {
-                        let mut seen = Vec::new();
+                        // Pre-allocate with input size as upper bound
+                        // 以输入大小作为上限进行预分配
+                        let mut seen = Vec::with_capacity(items.len());
                         for item in items.iter() {
                             if !seen.contains(item) {
                                 seen.push(item.clone());
@@ -1456,8 +1458,12 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Record(a), Value::Record(b)) => {
-                        let mut result = (**a).clone();
-                        result.extend((**b).clone());
+                        // Pre-allocate with combined size
+                        // 使用合并后的大小进行预分配
+                        let mut result =
+                            std::collections::HashMap::with_capacity(a.len() + b.len());
+                        result.extend(a.iter().map(|(k, v)| (k.clone(), v.clone())));
+                        result.extend(b.iter().map(|(k, v)| (k.clone(), v.clone())));
                         Ok(Value::Record(Rc::new(result)))
                     }
                     _ => Err("merge expects two records".to_string()),
@@ -1473,9 +1479,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     fn merge_deep(a: &Value, b: &Value) -> Value {
                         match (a, b) {
                             (Value::Record(ra), Value::Record(rb)) => {
-                                let mut result = (**ra).clone();
+                                // Pre-allocate with combined size
+                                // 使用合并后的大小进行预分配
+                                let mut result =
+                                    std::collections::HashMap::with_capacity(ra.len() + rb.len());
+                                result.extend(ra.iter().map(|(k, v)| (k.clone(), v.clone())));
                                 for (k, v) in rb.iter() {
-                                    if let Some(existing) = result.get(k) {
+                                    if let Some(existing) = ra.get(k) {
                                         result.insert(k.clone(), merge_deep(existing, v));
                                     } else {
                                         result.insert(k.clone(), v.clone());
@@ -1502,7 +1512,9 @@ fn json_to_value(s: &str) -> Result<Value, String> {
     }
 
     // Parse based on first character
-    match s.chars().next().unwrap() {
+    // Safe: we just checked s is not empty
+    // 安全：我们刚检查过 s 不为空
+    match s.chars().next().expect("string is non-empty") {
         'n' if s == "null" => Ok(Value::None),
         't' if s == "true" => Ok(Value::Bool(true)),
         'f' if s == "false" => Ok(Value::Bool(false)),

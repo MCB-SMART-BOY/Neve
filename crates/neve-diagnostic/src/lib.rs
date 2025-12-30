@@ -48,5 +48,5 @@ pub fn emit(source: &str, filename: &str, diagnostic: &Diagnostic) {
     report
         .finish()
         .eprint((filename, Source::from(source)))
-        .unwrap();
+        .expect("failed to print diagnostic to stderr");
 }
