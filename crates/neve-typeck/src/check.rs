@@ -251,7 +251,9 @@ impl TypeChecker {
     /// Resolve a type alias to its target type.
     /// 将类型别名解析为其目标类型。
     pub fn resolve_type_alias(&self, def_id: DefId) -> Option<Ty> {
-        self.type_aliases.get(&def_id).map(|info| info.target.clone())
+        self.type_aliases
+            .get(&def_id)
+            .map(|info| info.target.clone())
     }
 
     /// Get the collected diagnostics.

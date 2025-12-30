@@ -1216,7 +1216,6 @@ impl Backend {
 
         items
     }
-
 }
 
 /// Helper function to convert symbol kind.

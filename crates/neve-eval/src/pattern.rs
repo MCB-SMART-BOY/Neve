@@ -83,7 +83,11 @@ pub fn pattern_specificity(pattern: &Pattern) -> Specificity {
             }
             spec
         }
-        PatternKind::ListRest { init, rest: _, tail } => {
+        PatternKind::ListRest {
+            init,
+            rest: _,
+            tail,
+        } => {
             let mut spec = Specificity::CONSTRUCTOR_BASE;
             for p in init.iter().chain(tail.iter()) {
                 spec = spec.combine(pattern_specificity(p));
@@ -159,9 +163,10 @@ pub fn is_irrefutable(pattern: &Pattern) -> bool {
         PatternKind::Binding { pattern, .. } => is_irrefutable(pattern),
         PatternKind::Tuple(patterns) => patterns.iter().all(is_irrefutable),
         PatternKind::Record { fields, rest } => {
-            *rest && fields.iter().all(|f| {
-                f.pattern.as_ref().map(is_irrefutable).unwrap_or(true)
-            })
+            *rest
+                && fields
+                    .iter()
+                    .all(|f| f.pattern.as_ref().map(is_irrefutable).unwrap_or(true))
         }
         _ => false,
     }
@@ -207,7 +212,10 @@ pub fn get_discriminant(pattern: &Pattern) -> Discriminant {
         }
         PatternKind::Or(patterns) => {
             // Use discriminant of first alternative / 使用第一个替代项的判别
-            patterns.first().map(get_discriminant).unwrap_or(Discriminant::None)
+            patterns
+                .first()
+                .map(get_discriminant)
+                .unwrap_or(Discriminant::None)
         }
         PatternKind::Binding { pattern, .. } => get_discriminant(pattern),
     }
@@ -269,7 +277,7 @@ pub fn analyze_match(patterns: &[&Pattern]) -> MatchHints {
 
     for (i, pattern) in patterns.iter().enumerate() {
         let is_last = i == patterns.len() - 1;
-        
+
         if is_irrefutable(pattern) {
             has_catchall = true;
             if !is_last {
@@ -285,10 +293,7 @@ pub fn analyze_match(patterns: &[&Pattern]) -> MatchHints {
     }
 
     // Find primary discriminant (most common) / 找到主要判别（最常见的）
-    let primary_discriminant = discriminants
-        .first()
-        .cloned()
-        .unwrap_or(Discriminant::None);
+    let primary_discriminant = discriminants.first().cloned().unwrap_or(Discriminant::None);
 
     // Could reorder if no irrefutable patterns before last
     // 如果最后一个之前没有不可反驳的模式，则可以重新排序
