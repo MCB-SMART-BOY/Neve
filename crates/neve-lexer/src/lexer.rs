@@ -672,7 +672,9 @@ impl<'src> Lexer<'src> {
             is_float = true;
 
             if let Some('+' | '-') = self.peek_char() {
-                value.push(self.advance().unwrap().1);
+                // Safe: peek_char returned Some, so advance will return Some
+                // 安全：peek_char 返回了 Some，所以 advance 也会返回 Some
+                value.push(self.advance().expect("peeked char exists").1);
             }
 
             while let Some(ch) = self.peek_char() {

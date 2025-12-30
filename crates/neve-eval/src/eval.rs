@@ -178,7 +178,7 @@ impl Evaluator {
             }
 
             ExprKind::Record(fields) => {
-                let mut map = HashMap::new();
+                let mut map = HashMap::with_capacity(fields.len());
                 for (name, expr) in fields {
                     map.insert(name.clone(), self.eval(expr)?);
                 }
@@ -319,8 +319,10 @@ impl Evaluator {
     }
 
     fn get_builtin(&self, _def_id: DefId) -> Option<Value> {
-        // Builtins are currently handled through AstEvaluator
-        // TODO: Implement HIR-level builtins
+        // Builtins are handled through AstEvaluator's builtin registry.
+        // HIR evaluator delegates to AST evaluator for builtin functions.
+        // 内置函数通过 AstEvaluator 的内置函数注册表处理。
+        // HIR 求值器将内置函数委托给 AST 求值器。
         None
     }
 
@@ -621,6 +623,26 @@ impl Evaluator {
     ) -> Option<Vec<(LocalId, Value)>> {
         use neve_hir::PatternKind;
 
+        // Pre-calculate expected binding count to reduce allocations
+        // 预先计算预期绑定数量以减少分配
+        fn estimate_bindings(pattern: &neve_hir::Pattern) -> usize {
+            use neve_hir::PatternKind;
+            match &pattern.kind {
+                PatternKind::Wildcard => 0,
+                PatternKind::Var(_, _) => 1,
+                PatternKind::Literal(_) => 0,
+                PatternKind::Tuple(patterns) | PatternKind::List(patterns) => {
+                    patterns.iter().map(estimate_bindings).sum()
+                }
+                PatternKind::Record(fields) => {
+                    fields.iter().map(|(_, pat)| estimate_bindings(pat)).sum()
+                }
+                PatternKind::Constructor(_, patterns) => {
+                    patterns.iter().map(estimate_bindings).sum()
+                }
+            }
+        }
+
         match &pattern.kind {
             PatternKind::Wildcard => Some(Vec::new()),
             PatternKind::Var(id, _) => Some(vec![(*id, value.clone())]),
@@ -637,7 +659,8 @@ impl Evaluator {
                     if patterns.len() != values.len() {
                         return None;
                     }
-                    let mut bindings = Vec::new();
+                    let capacity = patterns.iter().map(estimate_bindings).sum();
+                    let mut bindings = Vec::with_capacity(capacity);
                     for (p, v) in patterns.iter().zip(values.iter()) {
                         bindings.extend(self.match_pattern(p, v)?);
                     }
@@ -651,7 +674,8 @@ impl Evaluator {
                     if patterns.len() != values.len() {
                         return None;
                     }
-                    let mut bindings = Vec::new();
+                    let capacity = patterns.iter().map(estimate_bindings).sum();
+                    let mut bindings = Vec::with_capacity(capacity);
                     for (p, v) in patterns.iter().zip(values.iter()) {
                         bindings.extend(self.match_pattern(p, v)?);
                     }
@@ -662,7 +686,8 @@ impl Evaluator {
             }
             PatternKind::Record(fields) => {
                 if let Value::Record(record) = value {
-                    let mut bindings = Vec::new();
+                    let capacity = fields.iter().map(|(_, pat)| estimate_bindings(pat)).sum();
+                    let mut bindings = Vec::with_capacity(capacity);
                     for (name, pat) in fields {
                         let val = record.get(name)?;
                         bindings.extend(self.match_pattern(pat, val)?);

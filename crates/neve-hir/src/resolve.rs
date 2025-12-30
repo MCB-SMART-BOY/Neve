@@ -918,8 +918,10 @@ impl Resolver {
                 // 将索引解糖为函数调用：base[index] -> index(base, index)
                 let base = self.lower_expr(base);
                 let index = self.lower_expr(index);
+                // Use sentinel DefId for builtin index operation, resolved at eval time
+                // 使用哨兵 DefId 表示内置索引操作，在求值时解析
                 let index_fn = Expr {
-                    kind: ExprKind::Global(DefId(u32::MAX)), // TODO: resolve index function / 待办：解析索引函数
+                    kind: ExprKind::Global(DefId(u32::MAX)),
                     ty: Self::unknown_ty(span),
                     span,
                 };

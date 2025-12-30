@@ -13,8 +13,9 @@ use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify}
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode};
 use neve_hir::{
-    BinOp, DefId, Expr, ExprKind, FnDef, ImplDef, Item, ItemKind, Literal, LocalId, MatchArm,
-    Module, Pattern, PatternKind, Stmt, StmtKind, TraitDef, Ty, TyKind, UnaryOp,
+    BinOp, DefId, EnumDef, Expr, ExprKind, FnDef, ImplDef, Item, ItemKind, Literal, LocalId,
+    MatchArm, Module, Pattern, PatternKind, Stmt, StmtKind, StructDef, TraitDef, Ty, TyKind,
+    TypeAlias, UnaryOp,
 };
 use std::collections::HashMap;
 
@@ -32,6 +33,30 @@ struct LocalInfo {
     used: bool,
 }
 
+/// Information about a struct type definition.
+/// 结构体类型定义的信息。
+#[derive(Clone)]
+struct StructInfo {
+    /// Field types (name -> type). / 字段类型（名称 -> 类型）。
+    fields: HashMap<String, Ty>,
+}
+
+/// Information about an enum type definition.
+/// 枚举类型定义的信息。
+#[derive(Clone)]
+struct EnumInfo {
+    /// Variant constructors (name -> field types). / 变体构造函数（名称 -> 字段类型）。
+    variants: HashMap<String, Vec<Ty>>,
+}
+
+/// Information about a type alias.
+/// 类型别名的信息。
+#[derive(Clone)]
+struct TypeAliasInfo {
+    /// Target type. / 目标类型。
+    target: Ty,
+}
+
 /// The type checker.
 /// 类型检查器。
 pub struct TypeChecker {
@@ -46,7 +71,6 @@ pub struct TypeChecker {
     globals: HashMap<DefId, Ty>,
     /// Span of global definitions for error reporting.
     /// 全局定义的位置信息，用于错误报告。
-    #[allow(dead_code)]
     global_spans: HashMap<DefId, Span>,
     /// Types of local variables with usage tracking.
     /// 局部变量的类型及使用情况跟踪。
@@ -57,6 +81,12 @@ pub struct TypeChecker {
     /// Map from def_id to trait_id.
     /// 定义 ID 到特征 ID 的映射。
     trait_ids: HashMap<DefId, TraitId>,
+    /// Struct type definitions. / 结构体类型定义。
+    structs: HashMap<DefId, StructInfo>,
+    /// Enum type definitions. / 枚举类型定义。
+    enums: HashMap<DefId, EnumInfo>,
+    /// Type alias definitions. / 类型别名定义。
+    type_aliases: HashMap<DefId, TypeAliasInfo>,
     /// Collected diagnostics.
     /// 收集的诊断信息。
     diagnostics: Vec<Diagnostic>,
@@ -75,6 +105,9 @@ impl TypeChecker {
             locals: HashMap::new(),
             trait_resolver: TraitResolver::new(),
             trait_ids: HashMap::new(),
+            structs: HashMap::new(),
+            enums: HashMap::new(),
+            type_aliases: HashMap::new(),
             diagnostics: Vec::new(),
             check_unused: true,
         }
@@ -175,6 +208,50 @@ impl TypeChecker {
     /// 获取特征解析器（供外部使用）。
     pub fn trait_resolver(&self) -> &TraitResolver {
         &self.trait_resolver
+    }
+
+    /// Get the span of a global definition by its DefId.
+    /// 通过 DefId 获取全局定义的位置信息。
+    pub fn global_span(&self, def_id: DefId) -> Option<Span> {
+        self.global_spans.get(&def_id).copied()
+    }
+
+    /// Get struct field type by name.
+    /// 通过名称获取结构体字段类型。
+    pub fn struct_field_type(&self, def_id: DefId, field_name: &str) -> Option<Ty> {
+        self.structs
+            .get(&def_id)
+            .and_then(|info| info.fields.get(field_name).cloned())
+    }
+
+    /// Get all struct field names.
+    /// 获取所有结构体字段名称。
+    pub fn struct_fields(&self, def_id: DefId) -> Option<Vec<String>> {
+        self.structs
+            .get(&def_id)
+            .map(|info| info.fields.keys().cloned().collect())
+    }
+
+    /// Get enum variant field types by variant name.
+    /// 通过变体名称获取枚举变体字段类型。
+    pub fn enum_variant_types(&self, def_id: DefId, variant_name: &str) -> Option<Vec<Ty>> {
+        self.enums
+            .get(&def_id)
+            .and_then(|info| info.variants.get(variant_name).cloned())
+    }
+
+    /// Get all enum variant names.
+    /// 获取所有枚举变体名称。
+    pub fn enum_variants(&self, def_id: DefId) -> Option<Vec<String>> {
+        self.enums
+            .get(&def_id)
+            .map(|info| info.variants.keys().cloned().collect())
+    }
+
+    /// Resolve a type alias to its target type.
+    /// 将类型别名解析为其目标类型。
+    pub fn resolve_type_alias(&self, def_id: DefId) -> Option<Ty> {
+        self.type_aliases.get(&def_id).map(|info| info.target.clone())
     }
 
     /// Get the collected diagnostics.
@@ -281,6 +358,10 @@ impl TypeChecker {
     // ===== First pass: collect signatures 第一遍：收集签名 =====
 
     fn collect_item(&mut self, item: &Item) {
+        // Record span for all global definitions (for error reporting)
+        // 记录所有全局定义的位置信息（用于错误报告）
+        self.global_spans.insert(item.id, item.span);
+
         match &item.kind {
             ItemKind::Fn(fn_def) => {
                 let fn_ty = self.fn_signature(fn_def);
@@ -292,8 +373,14 @@ impl TypeChecker {
             ItemKind::Impl(impl_def) => {
                 self.collect_impl(item.id, impl_def);
             }
-            ItemKind::Struct(_) | ItemKind::Enum(_) | ItemKind::TypeAlias(_) => {
-                // TODO: Handle struct/enum/type alias definitions
+            ItemKind::Struct(struct_def) => {
+                self.collect_struct(item.id, struct_def);
+            }
+            ItemKind::Enum(enum_def) => {
+                self.collect_enum(item.id, enum_def);
+            }
+            ItemKind::TypeAlias(type_alias) => {
+                self.collect_type_alias(item.id, type_alias);
             }
         }
     }
@@ -305,6 +392,62 @@ impl TypeChecker {
 
     fn collect_impl(&mut self, def_id: DefId, impl_def: &ImplDef) {
         self.trait_resolver.register_impl(def_id, impl_def);
+    }
+
+    /// Collect struct type definition.
+    /// 收集结构体类型定义。
+    fn collect_struct(&mut self, def_id: DefId, struct_def: &StructDef) {
+        let mut fields = HashMap::new();
+        for field in &struct_def.fields {
+            fields.insert(field.name.clone(), field.ty.clone());
+        }
+
+        let info = StructInfo { fields };
+
+        self.structs.insert(def_id, info);
+
+        // Register the struct type in globals as a type constructor
+        // 将结构体类型注册为类型构造函数
+        let struct_ty = Ty {
+            kind: TyKind::Named(def_id, Vec::new()),
+            span: Span::DUMMY,
+        };
+        self.globals.insert(def_id, struct_ty);
+    }
+
+    /// Collect enum type definition.
+    /// 收集枚举类型定义。
+    fn collect_enum(&mut self, def_id: DefId, enum_def: &EnumDef) {
+        let mut variants = HashMap::new();
+        for variant in &enum_def.variants {
+            variants.insert(variant.name.clone(), variant.fields.clone());
+        }
+
+        let info = EnumInfo { variants };
+
+        self.enums.insert(def_id, info);
+
+        // Register the enum type in globals as a type constructor
+        // 将枚举类型注册为类型构造函数
+        let enum_ty = Ty {
+            kind: TyKind::Named(def_id, Vec::new()),
+            span: Span::DUMMY,
+        };
+        self.globals.insert(def_id, enum_ty);
+    }
+
+    /// Collect type alias definition.
+    /// 收集类型别名定义。
+    fn collect_type_alias(&mut self, def_id: DefId, type_alias: &TypeAlias) {
+        let info = TypeAliasInfo {
+            target: type_alias.ty.clone(),
+        };
+
+        self.type_aliases.insert(def_id, info);
+
+        // Register the alias as pointing to the target type
+        // 将别名注册为指向目标类型
+        self.globals.insert(def_id, type_alias.ty.clone());
     }
 
     fn fn_signature(&mut self, fn_def: &FnDef) -> Ty {
@@ -863,11 +1006,30 @@ impl TypeChecker {
                 }
             }
 
-            PatternKind::Constructor(_def_id, patterns) => {
-                // TODO: Look up constructor signature
-                let arg_ty = self.fresh_var();
-                for pat in patterns {
-                    self.check_pattern(pat, &arg_ty);
+            PatternKind::Constructor(def_id, patterns) => {
+                // Look up constructor signature from enum definitions
+                // 从枚举定义中查找构造函数签名
+                // Clone field types to avoid borrow conflict
+                // 克隆字段类型以避免借用冲突
+                let field_types: Option<Vec<Ty>> = self.enums.get(def_id).and_then(|enum_info| {
+                    enum_info
+                        .variants
+                        .iter()
+                        .find(|(_, fields)| fields.len() == patterns.len())
+                        .map(|(_, fields)| fields.clone())
+                });
+
+                if let Some(types) = field_types {
+                    for (pat, ty) in patterns.iter().zip(types.iter()) {
+                        self.check_pattern(pat, ty);
+                    }
+                } else {
+                    // Unknown constructor or no matching variant, use fresh type variables
+                    // 未知构造函数或无匹配变体，使用新类型变量
+                    for pat in patterns {
+                        let arg_ty = self.fresh_var();
+                        self.check_pattern(pat, &arg_ty);
+                    }
                 }
             }
         }

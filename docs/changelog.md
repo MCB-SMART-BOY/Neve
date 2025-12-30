@@ -22,17 +22,34 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > *What changed, when, and why.*
 
+## [0.6.3] - 2025-12-30
+
+### Improved
+- **Documentation overhaul**: Updated docs/README.md as comprehensive documentation hub
+- **Architecture docs**: Added incremental compilation design section
+- **Changelog**: Synchronized with all v0.6.2 changes
+
+---
+
 ## [0.6.2] - 2025-12-30
 
 ### Added
 - **Architecture documentation**: Comprehensive guide for contributors (`docs/architecture.md`)
 - **CONTRIBUTING.md**: Bilingual contribution guidelines with setup instructions
 - **Security audit in CI**: Added `cargo audit` for dependency vulnerability scanning
+- **Incremental compilation cache**: ModuleCache with content-hash validation and dirty tracking
+- **Cache query methods**: `has_content_changed()`, `get_cached_mtime()`, `get_cached_hash()` for fine-grained cache control
 
 ### Improved
 - **Release profile optimization**: LTO, strip, single codegen-unit for smaller binaries
 - **CI enhancement**: Clippy now checks all workspace crates, not just the main package
 - **Stack safety**: Converted recursive directory operations to iterative (prevents stack overflow on deep directories)
+- **Memory optimization**: Pre-allocated capacity for `partition()`, `filter()`, `map_attrs()`, `filter_attrs()` operations
+- **Zero warnings**: Fixed all clippy warnings including unused fields and manual `div_ceil` implementations
+
+### Fixed
+- **Super path resolution**: Fixed `super` import to correctly navigate module hierarchy (was skipping two levels instead of one in unit test)
+- **Type checker simplification**: Removed unused `name` and `generic_count` fields from StructInfo/EnumInfo/TypeAliasInfo
 
 ### Developer Experience
 - **MSRV declaration**: Added `rust-version = "1.85"` for Rust 2024 edition
@@ -179,17 +196,34 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > 改了啥、啥时候改的、为啥改。
 
+## [0.6.3] - 2025-12-30
+
+### 改进
+- **文档大改版**: 更新 docs/README.md 为综合文档中心
+- **架构文档**: 添加增量编译设计章节
+- **更新日志**: 同步所有 v0.6.2 变更
+
+---
+
 ## [0.6.2] - 2025-12-30
 
 ### 新功能
 - **架构文档**: 为贡献者提供的全面指南 (`docs/architecture.md`)
 - **CONTRIBUTING.md**: 中英双语贡献指南，包含环境配置说明
 - **CI 安全审计**: 添加 `cargo audit` 检测依赖漏洞
+- **增量编译缓存**: ModuleCache 支持内容哈希验证和脏标记跟踪
+- **缓存查询方法**: `has_content_changed()`、`get_cached_mtime()`、`get_cached_hash()` 提供细粒度缓存控制
 
 ### 改进
 - **Release 配置优化**: LTO、符号剥离、单代码生成单元，生成更小的二进制文件
 - **CI 增强**: Clippy 现在检查所有 workspace crate，而不仅是主包
 - **栈安全**: 将递归目录操作转换为迭代（防止深层目录栈溢出）
+- **内存优化**: 为 `partition()`、`filter()`、`map_attrs()`、`filter_attrs()` 操作预分配容量
+- **零警告**: 修复所有 clippy 警告，包括未使用字段和手动 `div_ceil` 实现
+
+### 修复
+- **Super 路径解析**: 修复 `super` 导入以正确导航模块层级（单元测试中原本跳过了两级而非一级）
+- **类型检查器简化**: 移除 StructInfo/EnumInfo/TypeAliasInfo 中未使用的 `name` 和 `generic_count` 字段
 
 ### 开发体验
 - **MSRV 声明**: 添加 `rust-version = "1.85"` 支持 Rust 2024 edition
@@ -330,6 +364,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.6.3]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.5.0...v0.6.0

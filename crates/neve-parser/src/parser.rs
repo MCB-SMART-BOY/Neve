@@ -1827,13 +1827,17 @@ impl Parser {
         }
 
         if patterns.len() == 1 {
-            patterns.pop().unwrap()
+            // Safe: we just checked len == 1
+            // 安全：我们刚检查过 len == 1
+            patterns.pop().expect("patterns has exactly one element")
         } else {
+            // Safe: patterns has at least 2 elements (len != 1 and we parsed at least one)
+            // 安全：patterns 至少有 2 个元素（len != 1 且我们至少解析了一个）
             let span = patterns
                 .first()
-                .unwrap()
+                .expect("patterns is non-empty")
                 .span
-                .merge(patterns.last().unwrap().span);
+                .merge(patterns.last().expect("patterns is non-empty").span);
             Pattern::new(PatternKind::Or(patterns), span)
         }
     }

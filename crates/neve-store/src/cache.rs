@@ -458,9 +458,11 @@ impl BinaryCache {
             fs::copy(&nar_file, nar_dest)?;
         }
 
-        // TODO: Upload to remote cache via HTTP PUT
-        // 待办：通过 HTTP PUT 上传到远程缓存
-        // if let Some(url) = &cache.url { ... }
+        // Remote cache upload is not yet implemented.
+        // When implemented, this would upload NAR archives to the remote URL.
+        // 远程缓存上传尚未实现。
+        // 实现后，这将把 NAR 归档上传到远程 URL。
+        // Example: if let Some(url) = &cache.url { http_put(url, nar_data) }
 
         Ok(())
     }

@@ -135,8 +135,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri.to_string();
         self.documents.remove(&uri);
 
-        // Clear diagnostics
-        // 清除诊断信息
+        // Clear diagnostics / 清除诊断信息
         self.client
             .publish_diagnostics(params.text_document.uri, vec![], None)
             .await;
@@ -153,13 +152,11 @@ impl LanguageServer for Backend {
         if let Some(doc) = self.documents.get(&uri) {
             let offset = doc.offset_at(pos.line, pos.character);
 
-            // Try to get symbol information first
-            // 首先尝试获取符号信息
+            // Try to get symbol information first / 首先尝试获取符号信息
             if let Some(ref index) = doc.symbol_index
                 && let Some(symbol) = index.find_definition_at(offset)
             {
-                // Format symbol kind nicely
-                // 格式化符号类型
+                // Format symbol kind nicely / 格式化符号类型
                 let kind_str = match symbol.kind {
                     IndexSymbolKind::Function => "function",
                     IndexSymbolKind::Variable => "variable",
@@ -178,8 +175,7 @@ impl LanguageServer for Backend {
                 let full_start: usize = symbol.full_span.start.into();
                 let full_end: usize = symbol.full_span.end.into();
                 let definition_text = if full_end <= doc.content.len() {
-                    // Limit to first line for display
-                    // 限制显示第一行
+                    // Limit to first line for display / 限制显示第一行
                     let full_text = &doc.content[full_start..full_end];
                     let first_line = full_text.lines().next().unwrap_or(full_text);
                     if first_line.len() > 80 {
@@ -213,8 +209,7 @@ impl LanguageServer for Backend {
                 }));
             }
 
-            // Fallback to token-based hover
-            // 回退到基于 token 的悬停
+            // Fallback to token-based hover / 回退到基于 token 的悬停
             let lexer = Lexer::new(&doc.content);
             let (tokens, _) = lexer.tokenize();
 
@@ -251,20 +246,17 @@ impl LanguageServer for Backend {
 
         let mut items = Vec::new();
 
-        // Get context for smarter completion
-        // 获取上下文以实现更智能的补全
+        // Get context for smarter completion / 获取上下文以实现更智能的补全
         let trigger_char = params
             .context
             .as_ref()
             .and_then(|c| c.trigger_character.as_deref());
 
-        // Check if we're after a dot (member access)
-        // 检查是否在点后面（成员访问）
+        // Check if we're after a dot (member access) / 检查是否在点后面（成员访问）
         let is_dot_completion = trigger_char == Some(".");
 
         if is_dot_completion {
-            // Method completion based on type
-            // 基于类型的方法补全
+            // Method completion based on type / 基于类型的方法补全
             items.extend(self.get_method_completions());
         } else {
             // Keywords / 关键字
@@ -284,6 +276,331 @@ impl LanguageServer for Backend {
         }
 
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri.to_string();
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Ok(formatted) = neve_fmt::format(&doc.content)
+            && formatted != doc.content
+        {
+            let lines: Vec<&str> = doc.content.lines().collect();
+            let end_line = lines.len().saturating_sub(1) as u32;
+            let end_col = lines.last().map(|l| l.len() as u32).unwrap_or(0);
+
+            return Ok(Some(vec![TextEdit {
+                range: Range {
+                    start: Position::new(0, 0),
+                    end: Position::new(end_line, end_col),
+                },
+                new_text: formatted,
+            }]));
+        }
+
+        Ok(None)
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri.to_string();
+
+        if let Some(doc) = self.documents.get(&uri) {
+            let lexer = Lexer::new(&doc.content);
+            let (tokens, _) = lexer.tokenize();
+            let semantic_tokens = generate_semantic_tokens_with_context(&tokens, &doc.content);
+
+            return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: semantic_tokens,
+            })));
+        }
+
+        Ok(None)
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri.to_string();
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref ast) = doc.ast
+        {
+            let mut symbols = Vec::new();
+
+            for item in &ast.items {
+                use neve_syntax::ItemKind;
+
+                let (name, kind) = match &item.kind {
+                    ItemKind::Let(def) => {
+                        // Extract name from pattern / 从模式中提取名称
+                        let name = format!("{:?}", def.pattern.kind);
+                        (name, SymbolKind::VARIABLE)
+                    }
+                    ItemKind::Fn(def) => (def.name.name.clone(), SymbolKind::FUNCTION),
+                    ItemKind::TypeAlias(def) => (def.name.name.clone(), SymbolKind::TYPE_PARAMETER),
+                    ItemKind::Struct(def) => (def.name.name.clone(), SymbolKind::STRUCT),
+                    ItemKind::Enum(def) => (def.name.name.clone(), SymbolKind::ENUM),
+                    ItemKind::Trait(def) => (def.name.name.clone(), SymbolKind::INTERFACE),
+                    ItemKind::Impl(_) => continue,
+                    ItemKind::Import(_) => continue,
+                };
+
+                let start: usize = item.span.start.into();
+                let end: usize = item.span.end.into();
+                let (start_line, start_col) = doc.position_at(start);
+                let (end_line, end_col) = doc.position_at(end);
+
+                #[allow(deprecated)]
+                symbols.push(DocumentSymbol {
+                    name,
+                    detail: None,
+                    kind,
+                    tags: None,
+                    deprecated: None,
+                    range: Range {
+                        start: Position::new(start_line, start_col),
+                        end: Position::new(end_line, end_col),
+                    },
+                    selection_range: Range {
+                        start: Position::new(start_line, start_col),
+                        end: Position::new(end_line, end_col),
+                    },
+                    children: None,
+                });
+            }
+
+            return Ok(Some(DocumentSymbolResponse::Nested(symbols)));
+        }
+
+        Ok(None)
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
+        let pos = params.text_document_position_params.position;
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref index) = doc.symbol_index
+        {
+            let offset = doc.offset_at(pos.line, pos.character);
+
+            if let Some(symbol) = index.find_definition_at(offset) {
+                let start: usize = symbol.def_span.start.into();
+                let end: usize = symbol.def_span.end.into();
+                let (start_line, start_col) = doc.position_at(start);
+                let (end_line, end_col) = doc.position_at(end);
+
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: params
+                        .text_document_position_params
+                        .text_document
+                        .uri
+                        .clone(),
+                    range: Range {
+                        start: Position::new(start_line, start_col),
+                        end: Position::new(end_line, end_col),
+                    },
+                })));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = params.text_document_position.text_document.uri.to_string();
+        let pos = params.text_document_position.position;
+        let include_declaration = params.context.include_declaration;
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref index) = doc.symbol_index
+        {
+            let offset = doc.offset_at(pos.line, pos.character);
+            let refs = index.find_references_at(offset, include_declaration);
+
+            if !refs.is_empty() {
+                let locations: Vec<Location> = refs
+                    .iter()
+                    .map(|r| {
+                        let start: usize = r.span.start.into();
+                        let end: usize = r.span.end.into();
+                        let (start_line, start_col) = doc.position_at(start);
+                        let (end_line, end_col) = doc.position_at(end);
+
+                        Location {
+                            uri: params.text_document_position.text_document.uri.clone(),
+                            range: Range {
+                                start: Position::new(start_line, start_col),
+                                end: Position::new(end_line, end_col),
+                            },
+                        }
+                    })
+                    .collect();
+
+                return Ok(Some(locations));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri.to_string();
+        let pos = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref index) = doc.symbol_index
+        {
+            let offset = doc.offset_at(pos.line, pos.character);
+
+            // Find the symbol name at this position / 在此位置查找符号名称
+            if let Some(name) = index.find_name_at(offset) {
+                // Check if this is a valid symbol that can be renamed
+                // 通过验证是否有定义来检查这是否是可以重命名的有效符号
+                if index.get_definitions(&name).is_none() {
+                    return Ok(None);
+                }
+
+                // Get all references to this symbol / 获取此符号的所有引用
+                let refs = index.get_references(&name);
+
+                if !refs.is_empty() {
+                    let edits: Vec<TextEdit> = refs
+                        .iter()
+                        .map(|r| {
+                            let start: usize = r.span.start.into();
+                            let end: usize = r.span.end.into();
+                            let (start_line, start_col) = doc.position_at(start);
+                            let (end_line, end_col) = doc.position_at(end);
+
+                            TextEdit {
+                                range: Range {
+                                    start: Position::new(start_line, start_col),
+                                    end: Position::new(end_line, end_col),
+                                },
+                                new_text: new_name.clone(),
+                            }
+                        })
+                        .collect();
+
+                    let mut changes = std::collections::HashMap::new();
+                    changes.insert(
+                        params.text_document_position.text_document.uri.clone(),
+                        edits,
+                    );
+
+                    return Ok(Some(WorkspaceEdit {
+                        changes: Some(changes),
+                        document_changes: None,
+                        change_annotations: None,
+                    }));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri.to_string();
+        let pos = params.position;
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref index) = doc.symbol_index
+        {
+            let offset = doc.offset_at(pos.line, pos.character);
+
+            // Find the symbol at this position / 在此位置查找符号
+            if let Some(name) = index.find_name_at(offset) {
+                // Find the reference at this position to get its span
+                // 查找此位置的引用以获取其范围
+                for r in &index.references {
+                    let start: usize = r.span.start.into();
+                    let end: usize = r.span.end.into();
+                    if start <= offset && offset < end {
+                        let (start_line, start_col) = doc.position_at(start);
+                        let (end_line, end_col) = doc.position_at(end);
+
+                        return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                            range: Range {
+                                start: Position::new(start_line, start_col),
+                                end: Position::new(end_line, end_col),
+                            },
+                            placeholder: name,
+                        }));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let query = params.query.to_lowercase();
+        let mut symbols = Vec::new();
+
+        // Search across all open documents / 在所有打开的文档中搜索
+        for entry in self.documents.iter() {
+            let doc = entry.value();
+            let uri =
+                Url::parse(&doc.uri).unwrap_or_else(|_| Url::parse("file:///unknown").unwrap());
+
+            if let Some(ref index) = doc.symbol_index {
+                for (name, defs) in &index.definitions {
+                    // Filter by query / 按查询过滤
+                    if query.is_empty() || name.to_lowercase().contains(&query) {
+                        for def in defs {
+                            let start: usize = def.def_span.start.into();
+                            let end: usize = def.def_span.end.into();
+                            let (start_line, start_col) = doc.position_at(start);
+                            let (end_line, end_col) = doc.position_at(end);
+
+                            #[allow(deprecated)]
+                            symbols.push(SymbolInformation {
+                                name: name.clone(),
+                                kind: convert_symbol_kind(def.kind),
+                                tags: None,
+                                deprecated: None,
+                                location: Location {
+                                    uri: uri.clone(),
+                                    range: Range {
+                                        start: Position::new(start_line, start_col),
+                                        end: Position::new(end_line, end_col),
+                                    },
+                                },
+                                container_name: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if symbols.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(symbols))
+        }
     }
 }
 
@@ -900,373 +1217,10 @@ impl Backend {
         items
     }
 
-    /// Format a document.
-    /// 格式化文档。
-    #[allow(dead_code)]
-    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        let uri = params.text_document.uri.to_string();
-
-        if let Some(doc) = self.documents.get(&uri)
-            && let Ok(formatted) = neve_fmt::format(&doc.content)
-            && formatted != doc.content
-        {
-            let lines: Vec<&str> = doc.content.lines().collect();
-            let end_line = lines.len().saturating_sub(1) as u32;
-            let end_col = lines.last().map(|l| l.len() as u32).unwrap_or(0);
-
-            return Ok(Some(vec![TextEdit {
-                range: Range {
-                    start: Position::new(0, 0),
-                    end: Position::new(end_line, end_col),
-                },
-                new_text: formatted,
-            }]));
-        }
-
-        Ok(None)
-    }
-
-    /// Get semantic tokens for a document.
-    /// 获取文档的语义 token。
-    #[allow(dead_code)]
-    async fn semantic_tokens_full(
-        &self,
-        params: SemanticTokensParams,
-    ) -> Result<Option<SemanticTokensResult>> {
-        let uri = params.text_document.uri.to_string();
-
-        if let Some(doc) = self.documents.get(&uri) {
-            let lexer = Lexer::new(&doc.content);
-            let (tokens, _) = lexer.tokenize();
-            let semantic_tokens = generate_semantic_tokens_with_context(&tokens, &doc.content);
-
-            return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-                result_id: None,
-                data: semantic_tokens,
-            })));
-        }
-
-        Ok(None)
-    }
-
-    /// Get document symbols.
-    /// 获取文档符号。
-    #[allow(dead_code)]
-    async fn document_symbol(
-        &self,
-        params: DocumentSymbolParams,
-    ) -> Result<Option<DocumentSymbolResponse>> {
-        let uri = params.text_document.uri.to_string();
-
-        if let Some(doc) = self.documents.get(&uri)
-            && let Some(ref ast) = doc.ast
-        {
-            let mut symbols = Vec::new();
-
-            for item in &ast.items {
-                use neve_syntax::ItemKind;
-
-                let (name, kind) = match &item.kind {
-                    ItemKind::Let(def) => {
-                        // Extract name from pattern
-                        // 从模式中提取名称
-                        let name = format!("{:?}", def.pattern.kind);
-                        (name, SymbolKind::VARIABLE)
-                    }
-                    ItemKind::Fn(def) => (def.name.name.clone(), SymbolKind::FUNCTION),
-                    ItemKind::TypeAlias(def) => (def.name.name.clone(), SymbolKind::TYPE_PARAMETER),
-                    ItemKind::Struct(def) => (def.name.name.clone(), SymbolKind::STRUCT),
-                    ItemKind::Enum(def) => (def.name.name.clone(), SymbolKind::ENUM),
-                    ItemKind::Trait(def) => (def.name.name.clone(), SymbolKind::INTERFACE),
-                    ItemKind::Impl(_) => continue,
-                    ItemKind::Import(_) => continue,
-                };
-
-                let start: usize = item.span.start.into();
-                let end: usize = item.span.end.into();
-                let (start_line, start_col) = doc.position_at(start);
-                let (end_line, end_col) = doc.position_at(end);
-
-                #[allow(deprecated)]
-                symbols.push(DocumentSymbol {
-                    name,
-                    detail: None,
-                    kind,
-                    tags: None,
-                    deprecated: None,
-                    range: Range {
-                        start: Position::new(start_line, start_col),
-                        end: Position::new(end_line, end_col),
-                    },
-                    selection_range: Range {
-                        start: Position::new(start_line, start_col),
-                        end: Position::new(end_line, end_col),
-                    },
-                    children: None,
-                });
-            }
-
-            return Ok(Some(DocumentSymbolResponse::Nested(symbols)));
-        }
-
-        Ok(None)
-    }
-
-    /// Go to definition.
-    /// 跳转到定义。
-    #[allow(dead_code)]
-    async fn goto_definition(
-        &self,
-        params: GotoDefinitionParams,
-    ) -> Result<Option<GotoDefinitionResponse>> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .to_string();
-        let pos = params.text_document_position_params.position;
-
-        if let Some(doc) = self.documents.get(&uri)
-            && let Some(ref index) = doc.symbol_index
-        {
-            let offset = doc.offset_at(pos.line, pos.character);
-
-            if let Some(symbol) = index.find_definition_at(offset) {
-                let start: usize = symbol.def_span.start.into();
-                let end: usize = symbol.def_span.end.into();
-                let (start_line, start_col) = doc.position_at(start);
-                let (end_line, end_col) = doc.position_at(end);
-
-                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                    uri: params
-                        .text_document_position_params
-                        .text_document
-                        .uri
-                        .clone(),
-                    range: Range {
-                        start: Position::new(start_line, start_col),
-                        end: Position::new(end_line, end_col),
-                    },
-                })));
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Find all references.
-    /// 查找所有引用。
-    #[allow(dead_code)]
-    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
-        let uri = params.text_document_position.text_document.uri.to_string();
-        let pos = params.text_document_position.position;
-        let include_declaration = params.context.include_declaration;
-
-        if let Some(doc) = self.documents.get(&uri)
-            && let Some(ref index) = doc.symbol_index
-        {
-            let offset = doc.offset_at(pos.line, pos.character);
-            let refs = index.find_references_at(offset, include_declaration);
-
-            if !refs.is_empty() {
-                let locations: Vec<Location> = refs
-                    .iter()
-                    .map(|r| {
-                        let start: usize = r.span.start.into();
-                        let end: usize = r.span.end.into();
-                        let (start_line, start_col) = doc.position_at(start);
-                        let (end_line, end_col) = doc.position_at(end);
-
-                        Location {
-                            uri: params.text_document_position.text_document.uri.clone(),
-                            range: Range {
-                                start: Position::new(start_line, start_col),
-                                end: Position::new(end_line, end_col),
-                            },
-                        }
-                    })
-                    .collect();
-
-                return Ok(Some(locations));
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Rename a symbol.
-    /// 重命名符号。
-    #[allow(dead_code)]
-    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        let uri = params.text_document_position.text_document.uri.to_string();
-        let pos = params.text_document_position.position;
-        let new_name = params.new_name;
-
-        if let Some(doc) = self.documents.get(&uri) {
-            // Use the document's stored URI for consistency
-            // 使用文档存储的 URI 以保持一致性
-            let doc_uri = &doc.uri;
-            let _ = doc_uri; // Acknowledge the field is used for identification
-
-            if let Some(ref index) = doc.symbol_index {
-                let offset = doc.offset_at(pos.line, pos.character);
-
-                // Find the symbol name at this position
-                // 在此位置查找符号名称
-                if let Some(name) = index.find_name_at(offset) {
-                    // Check if this is a valid symbol that can be renamed
-                    // by verifying it has a definition
-                    // 通过验证是否有定义来检查这是否是可以重命名的有效符号
-                    if index.get_definitions(&name).is_none() {
-                        // Symbol has no definition in this file, cannot rename
-                        // 符号在此文件中没有定义，无法重命名
-                        return Ok(None);
-                    }
-
-                    // Get all references to this symbol
-                    // 获取此符号的所有引用
-                    let refs = index.get_references(&name);
-
-                    if !refs.is_empty() {
-                        let edits: Vec<TextEdit> = refs
-                            .iter()
-                            .map(|r| {
-                                let start: usize = r.span.start.into();
-                                let end: usize = r.span.end.into();
-                                let (start_line, start_col) = doc.position_at(start);
-                                let (end_line, end_col) = doc.position_at(end);
-
-                                TextEdit {
-                                    range: Range {
-                                        start: Position::new(start_line, start_col),
-                                        end: Position::new(end_line, end_col),
-                                    },
-                                    new_text: new_name.clone(),
-                                }
-                            })
-                            .collect();
-
-                        let mut changes = std::collections::HashMap::new();
-                        changes.insert(
-                            params.text_document_position.text_document.uri.clone(),
-                            edits,
-                        );
-
-                        return Ok(Some(WorkspaceEdit {
-                            changes: Some(changes),
-                            document_changes: None,
-                            change_annotations: None,
-                        }));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Prepare rename operation.
-    /// 准备重命名操作。
-    #[allow(dead_code)]
-    async fn prepare_rename(
-        &self,
-        params: TextDocumentPositionParams,
-    ) -> Result<Option<PrepareRenameResponse>> {
-        let uri = params.text_document.uri.to_string();
-        let pos = params.position;
-
-        if let Some(doc) = self.documents.get(&uri)
-            && let Some(ref index) = doc.symbol_index
-        {
-            let offset = doc.offset_at(pos.line, pos.character);
-
-            // Find the symbol at this position
-            // 在此位置查找符号
-            if let Some(name) = index.find_name_at(offset) {
-                // Find the reference at this position to get its span
-                // 查找此位置的引用以获取其范围
-                for r in &index.references {
-                    let start: usize = r.span.start.into();
-                    let end: usize = r.span.end.into();
-                    if start <= offset && offset < end {
-                        let (start_line, start_col) = doc.position_at(start);
-                        let (end_line, end_col) = doc.position_at(end);
-
-                        return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-                            range: Range {
-                                start: Position::new(start_line, start_col),
-                                end: Position::new(end_line, end_col),
-                            },
-                            placeholder: name,
-                        }));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Workspace symbol search.
-    /// 工作区符号搜索。
-    #[allow(dead_code)]
-    async fn symbol(
-        &self,
-        params: WorkspaceSymbolParams,
-    ) -> Result<Option<Vec<SymbolInformation>>> {
-        let query = params.query.to_lowercase();
-        let mut symbols = Vec::new();
-
-        // Search across all open documents
-        // 在所有打开的文档中搜索
-        for entry in self.documents.iter() {
-            let doc = entry.value();
-            let uri =
-                Url::parse(&doc.uri).unwrap_or_else(|_| Url::parse("file:///unknown").unwrap());
-
-            if let Some(ref index) = doc.symbol_index {
-                for (name, defs) in &index.definitions {
-                    // Filter by query
-                    // 按查询过滤
-                    if query.is_empty() || name.to_lowercase().contains(&query) {
-                        for def in defs {
-                            let start: usize = def.def_span.start.into();
-                            let end: usize = def.def_span.end.into();
-                            let (start_line, start_col) = doc.position_at(start);
-                            let (end_line, end_col) = doc.position_at(end);
-
-                            #[allow(deprecated)]
-                            symbols.push(SymbolInformation {
-                                name: name.clone(),
-                                kind: convert_symbol_kind(def.kind),
-                                tags: None,
-                                deprecated: None,
-                                location: Location {
-                                    uri: uri.clone(),
-                                    range: Range {
-                                        start: Position::new(start_line, start_col),
-                                        end: Position::new(end_line, end_col),
-                                    },
-                                },
-                                container_name: None,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        if symbols.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(symbols))
-        }
-    }
 }
 
 /// Helper function to convert symbol kind.
 /// 转换符号类型的辅助函数。
-#[allow(dead_code)]
 fn convert_symbol_kind(kind: IndexSymbolKind) -> SymbolKind {
     match kind {
         IndexSymbolKind::Function => SymbolKind::FUNCTION,
