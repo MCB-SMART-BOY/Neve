@@ -1788,18 +1788,20 @@ impl AstEvaluator {
         fn estimate_bindings(pattern: &Pattern) -> usize {
             match &pattern.kind {
                 PatternKind::Wildcard => 0,
-                PatternKind::Var(ident) => if ident.name == "_" { 0 } else { 1 },
+                PatternKind::Var(ident) => {
+                    if ident.name == "_" {
+                        0
+                    } else {
+                        1
+                    }
+                }
                 PatternKind::Literal(_) => 0,
                 PatternKind::Tuple(patterns) | PatternKind::List(patterns) => {
                     patterns.iter().map(estimate_bindings).sum()
                 }
                 PatternKind::Record { fields, .. } => fields.len(),
-                PatternKind::Constructor { args, .. } => {
-                    args.iter().map(estimate_bindings).sum()
-                }
-                PatternKind::Or(patterns) => {
-                    patterns.first().map(estimate_bindings).unwrap_or(0)
-                }
+                PatternKind::Constructor { args, .. } => args.iter().map(estimate_bindings).sum(),
+                PatternKind::Or(patterns) => patterns.first().map(estimate_bindings).unwrap_or(0),
                 PatternKind::Binding { pattern, .. } => 1 + estimate_bindings(pattern),
                 _ => 0,
             }

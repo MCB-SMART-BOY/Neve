@@ -354,9 +354,7 @@ impl ModuleLoader {
 
     /// Get file modification time. / 获取文件修改时间。
     fn get_mtime(file_path: &Path) -> Option<SystemTime> {
-        fs::metadata(file_path)
-            .ok()
-            .and_then(|m| m.modified().ok())
+        fs::metadata(file_path).ok().and_then(|m| m.modified().ok())
     }
 
     /// Simple hash of source content for cache validation.

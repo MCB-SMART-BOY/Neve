@@ -35,5 +35,5 @@ pub use ast_eval::{AstEnv, AstEvaluator};
 pub use builtin::builtins;
 pub use env::Environment;
 pub use eval::{EvalError, Evaluator};
-pub use pattern::{analyze_match, is_irrefutable, pattern_specificity, MatchHints, Specificity};
+pub use pattern::{MatchHints, Specificity, analyze_match, is_irrefutable, pattern_specificity};
 pub use value::{AstClosure, BuiltinFn, Value};
