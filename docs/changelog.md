@@ -7,8 +7,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  v0.6.0 / v0.5.0 / v0.4.x / v0.3.x / v0.2.0      │
-│  [中文]     #chinese   ──→  v0.6.0 / v0.5.0 / v0.4.x / v0.3.x / v0.2.0      │
+│  [English]  #english   ──→  v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x / v0.3.x      │
+│  [中文]     #chinese   ──→  v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x / v0.3.x      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,6 +21,12 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 # English
 
 > *What changed, when, and why.*
+
+## [0.6.1] - 2025-12-30
+
+### Fixed
+- **CI compatibility**: Resolved all clippy warnings for stable CI builds
+- **Code quality**: Fixed needless borrows, loop indexing patterns, and struct initialization
 
 ## [0.6.0] - 2025-12-30
 
@@ -157,6 +163,12 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > 改了啥、啥时候改的、为啥改。
 
+## [0.6.1] - 2025-12-30
+
+### 修复
+- **CI 兼容性**: 解决所有 clippy 警告，确保 CI 构建稳定
+- **代码质量**: 修复多余借用、循环索引模式和结构体初始化问题
+
 ## [0.6.0] - 2025-12-30
 
 ### 新功能
@@ -286,6 +298,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.6.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.0...v0.4.1
