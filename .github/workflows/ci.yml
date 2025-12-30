@@ -8,6 +8,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_HOME: ${{ github.workspace }}/.cargo
+  CARGO_INCREMENTAL: 0
 
 jobs:
   test:
@@ -59,9 +61,27 @@ jobs:
         run: cargo fmt -- --check
         if: matrix.os == 'ubuntu-latest'
 
-      - name: Run clippy
-        run: cargo clippy -p neve -- -D warnings
+      - name: Run clippy (all workspace crates)
+        run: cargo clippy --workspace -- -D warnings
         if: matrix.os == 'ubuntu-latest'
+
+  # Security audit for dependency vulnerabilities
+  # 依赖安全审计
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+        continue-on-error: true  # Don't fail CI on audit warnings, just report
 
   build-check:
     name: Build check on ${{ matrix.target }}
