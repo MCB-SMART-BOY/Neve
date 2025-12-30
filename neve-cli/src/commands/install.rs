@@ -205,18 +205,25 @@ pub fn list() -> Result<(), String> {
     let manifest = fs::read_to_string(&manifest_path)
         .map_err(|e| format!("Failed to read manifest: {}", e))?;
 
-    println!("Installed packages:");
+    output::header("Installed Packages");
+    
+    let mut table = output::Table::new(vec!["#", "Package"]);
+    let mut count = 0;
+    
     for line in manifest.lines() {
         if !line.is_empty() {
+            count += 1;
             // Extract package name from path
             // 从路径中提取软件包名称
             let name = PathBuf::from(line)
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| line.to_string());
-            println!("  {}", name);
+            table.add_row(vec![&count.to_string(), &name]);
         }
     }
+    
+    table.print();
 
     Ok(())
 }

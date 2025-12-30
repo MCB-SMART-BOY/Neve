@@ -43,8 +43,9 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
         warn_limited_sandbox();
     }
 
-    // Show backend info
-    // 显示后端信息
+    // Show backend info using debug for less verbose output
+    // 使用 debug 显示后端信息以减少冗余输出
+    output::debug(&format!("Build backend: {}", backend));
     output::info(&format!("Build backend: {}", backend));
 
     // Determine what to build
@@ -134,9 +135,12 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
     // 构建每个派生
     let mut built_count = 0;
     let mut failed_count = 0;
+    let total = derivations.len();
+    
+    let mut progress = output::ProgressBar::new(total, "Building");
 
     for drv in &derivations {
-        output::info(&format!("Building {}-{}", drv.name, drv.version));
+        output::highlight(&format!("▶ Building {}-{}", drv.name, drv.version));
 
         match builder.build(drv) {
             Ok(result) => {
@@ -152,7 +156,7 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
                 }
 
                 if result.duration_secs > 0.1 {
-                    output::info(&format!("Build time: {:.2}s", result.duration_secs));
+                    output::info(&format!("Build time: {}", output::format_duration(result.duration_secs as u64)));
                 }
             }
             Err(e) => {
@@ -160,7 +164,10 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
                 output::error(&format!("Failed to build {}: {}", drv.name, e));
             }
         }
+        progress.inc();
     }
+    
+    progress.finish();
 
     let elapsed = start.elapsed();
 

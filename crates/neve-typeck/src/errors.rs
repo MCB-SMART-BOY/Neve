@@ -626,3 +626,266 @@ pub fn redundant_annotation(inferred: &Ty, span: Span) -> Diagnostic {
         ))
         .with_help("consider removing the type annotation")
 }
+
+/// Find the most similar name to a given name from a list of candidates.
+/// 从候选列表中找到与给定名称最相似的名称。
+///
+/// Uses Levenshtein distance for fuzzy matching.
+/// 使用 Levenshtein 距离进行模糊匹配。
+pub fn find_similar_name<'a>(name: &str, candidates: &'a [String]) -> Option<&'a str> {
+    let max_distance = match name.len() {
+        0..=2 => 0,   // Very short names: exact match only / 非常短的名称：仅精确匹配
+        3..=5 => 1,   // Short names: 1 edit distance / 短名称：1 编辑距离
+        _ => 2,       // Longer names: 2 edit distance / 较长名称：2 编辑距离
+    };
+
+    candidates
+        .iter()
+        .filter_map(|candidate| {
+            let distance = levenshtein_distance(name, candidate);
+            if distance <= max_distance {
+                Some((candidate.as_str(), distance))
+            } else {
+                None
+            }
+        })
+        .min_by_key(|(_, d)| *d)
+        .map(|(s, _)| s)
+}
+
+/// Calculate the Levenshtein distance between two strings.
+/// 计算两个字符串之间的 Levenshtein 距离。
+fn levenshtein_distance(a: &str, b: &str) -> usize {
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+    let a_len = a_chars.len();
+    let b_len = b_chars.len();
+
+    if a_len == 0 {
+        return b_len;
+    }
+    if b_len == 0 {
+        return a_len;
+    }
+
+    let mut matrix = vec![vec![0; b_len + 1]; a_len + 1];
+
+    for i in 0..=a_len {
+        matrix[i][0] = i;
+    }
+    for j in 0..=b_len {
+        matrix[0][j] = j;
+    }
+
+    for i in 1..=a_len {
+        for j in 1..=b_len {
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
+            matrix[i][j] = (matrix[i - 1][j] + 1)
+                .min(matrix[i][j - 1] + 1)
+                .min(matrix[i - 1][j - 1] + cost);
+        }
+    }
+
+    matrix[a_len][b_len]
+}
+
+/// Suggest a type conversion between two types.
+/// 建议两种类型之间的类型转换。
+pub fn suggest_conversion(from: &Ty, to: &Ty) -> Option<String> {
+    match (&from.kind, &to.kind) {
+        // Numeric conversions / 数值转换
+        (TyKind::Int, TyKind::Float) => Some("toFloat(value)".to_string()),
+        (TyKind::Float, TyKind::Int) => Some("toInt(value)".to_string()),
+
+        // String conversions / 字符串转换
+        (TyKind::Int, TyKind::String) => Some("toString(value)".to_string()),
+        (TyKind::Float, TyKind::String) => Some("toString(value)".to_string()),
+        (TyKind::Bool, TyKind::String) => Some("toString(value)".to_string()),
+        (TyKind::Char, TyKind::String) => Some("toString(value)".to_string()),
+
+        // Char to String / 字符到字符串
+        (TyKind::String, TyKind::Char) => {
+            Some("use string indexing: str[0]".to_string())
+        }
+
+        // List to String / 列表到字符串
+        (TyKind::Named(_, _), TyKind::String) => Some("use `join` or `toString`".to_string()),
+
+        // Record field access / 记录字段访问
+        (TyKind::Record(_), _) => Some("access a specific field with `.field`".to_string()),
+
+        // Tuple element access / 元组元素访问
+        (TyKind::Tuple(_), _) => Some("access a specific element with `.0`, `.1`, etc.".to_string()),
+
+        // Option/Result unwrap / Option/Result 解包
+        (TyKind::Named(_, args), _) if !args.is_empty() => {
+            Some("use `?` operator or pattern matching to unwrap".to_string())
+        }
+
+        _ => None,
+    }
+}
+
+/// Create an error for accessing field on wrong type.
+/// 创建在错误类型上访问字段的错误。
+pub fn field_access_on_non_record(ty: &Ty, field: &str, span: Span) -> Diagnostic {
+    let ty_str = format_type(ty);
+
+    let mut diag = Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("cannot access field `{}` on type `{}`", field, ty_str),
+    )
+    .with_code(ErrorCode::UnknownField)
+    .with_label(Label::new(span, format!("type `{}` is not a record", ty_str)));
+
+    // Add context-specific help
+    match &ty.kind {
+        TyKind::Tuple(elems) => {
+            diag = diag
+                .with_note(format!("tuples have {} elements, accessed with .0, .1, etc.", elems.len()));
+        }
+        TyKind::Named(_, _) => {
+            diag = diag.with_note("this is a named type, not a record");
+        }
+        TyKind::Fn(_, _) => {
+            diag = diag.with_note("functions don't have fields - did you mean to call this function first?");
+        }
+        _ => {}
+    }
+
+    diag
+}
+
+/// Create an error for tuple index on wrong type.
+/// 创建在错误类型上进行元组索引的错误。
+pub fn tuple_index_on_non_tuple(ty: &Ty, index: u32, span: Span) -> Diagnostic {
+    let ty_str = format_type(ty);
+
+    let mut diag = Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("cannot index into type `{}` with `.{}`", ty_str, index),
+    )
+    .with_code(ErrorCode::TypeMismatch)
+    .with_label(Label::new(span, format!("type `{}` is not a tuple", ty_str)));
+
+    // Add context-specific help
+    match &ty.kind {
+        TyKind::Record(fields) => {
+            let field_names: Vec<_> = fields.iter().map(|(n, _)| n.as_str()).collect();
+            diag = diag
+                .with_note("records are accessed with field names, not numeric indices")
+                .with_help(format!("available fields: {}", field_names.join(", ")));
+        }
+        TyKind::Named(_, _) => {
+            diag = diag.with_note("use pattern matching to destructure this type");
+        }
+        _ => {}
+    }
+
+    diag
+}
+
+/// Create an error for list index on wrong type.
+/// 创建在错误类型上进行列表索引的错误。
+pub fn list_index_on_non_list(ty: &Ty, span: Span) -> Diagnostic {
+    let ty_str = format_type(ty);
+
+    let mut diag = Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("cannot index into type `{}`", ty_str),
+    )
+    .with_code(ErrorCode::TypeMismatch)
+    .with_label(Label::new(span, format!("type `{}` is not indexable", ty_str)));
+
+    // Add context-specific help
+    match &ty.kind {
+        TyKind::Tuple(elems) => {
+            diag = diag
+                .with_note(format!("tuples use compile-time indices (.0, .1, ..., .{})", elems.len().saturating_sub(1)));
+        }
+        TyKind::Record(_) => {
+            diag = diag.with_note("records use field names, not indices");
+        }
+        TyKind::String => {
+            diag = diag.with_help("strings can be indexed with [n] to get individual characters");
+        }
+        _ => {}
+    }
+
+    diag
+}
+
+/// Create an error for condition not being a boolean.
+/// 创建条件不是布尔值的错误。
+pub fn non_bool_condition(ty: &Ty, context: &str, span: Span) -> Diagnostic {
+    let ty_str = format_type(ty);
+
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("{} condition must be a Bool", context),
+    )
+    .with_code(ErrorCode::TypeMismatch)
+    .with_label(Label::new(span, format!("expected Bool, found `{}`", ty_str)))
+    .with_note(format!("the condition in {} must evaluate to true or false", context))
+}
+
+/// Create an error for using break/continue outside of a loop.
+/// 创建在循环外使用 break/continue 的错误。
+pub fn break_outside_loop(keyword: &str, span: Span) -> Diagnostic {
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("`{}` outside of loop", keyword),
+    )
+    .with_code(ErrorCode::TypeMismatch)
+    .with_label(Label::new(span, format!("cannot `{}` outside of a loop", keyword)))
+    .with_note(format!("`{}` can only be used inside a loop (for, while, loop)", keyword))
+}
+
+/// Create an error for return outside of a function.
+/// 创建在函数外使用 return 的错误。
+pub fn return_outside_function(span: Span) -> Diagnostic {
+    Diagnostic::error(DiagnosticKind::Type, span, "`return` outside of function")
+        .with_code(ErrorCode::TypeMismatch)
+        .with_label(Label::new(span, "cannot return here"))
+        .with_note("`return` can only be used inside a function body")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_levenshtein_distance() {
+        assert_eq!(levenshtein_distance("", ""), 0);
+        assert_eq!(levenshtein_distance("a", ""), 1);
+        assert_eq!(levenshtein_distance("", "a"), 1);
+        assert_eq!(levenshtein_distance("abc", "abc"), 0);
+        assert_eq!(levenshtein_distance("abc", "abd"), 1);
+        assert_eq!(levenshtein_distance("abc", "ab"), 1);
+        assert_eq!(levenshtein_distance("abc", "abcd"), 1);
+        assert_eq!(levenshtein_distance("kitten", "sitting"), 3);
+    }
+
+    #[test]
+    fn test_find_similar_name() {
+        let candidates = vec![
+            "println".to_string(),
+            "print".to_string(),
+            "printf".to_string(),
+            "display".to_string(),
+        ];
+
+        assert_eq!(find_similar_name("prin", &candidates), Some("print"));
+        assert_eq!(find_similar_name("printt", &candidates), Some("print"));
+        assert_eq!(find_similar_name("xyz", &candidates), None);
+    }
+}

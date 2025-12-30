@@ -50,9 +50,12 @@ pub fn run() -> Result<(), String> {
     // 解析并锁定所有输入
     let mut updated_count = 0;
     let mut failed_inputs = Vec::new();
+    let total_inputs = flake.inputs.len();
+    
+    let mut progress = output::ProgressBar::new(total_inputs, "Updating inputs");
 
-    for (name, input) in &flake.inputs {
-        output::info(&format!("Updating input '{}'...", name));
+    for (i, (name, input)) in flake.inputs.iter().enumerate() {
+        output::numbered_item(i + 1, &format!("Updating '{}'", name));
 
         match update_input(&input.url, input.rev.as_deref(), input.branch.as_deref()) {
             Ok(entry) => {
@@ -65,7 +68,10 @@ pub fn run() -> Result<(), String> {
                 output::warning(&format!("  Failed to update '{}': {}", name, e));
             }
         }
+        progress.update(i + 1);
     }
+    
+    progress.finish_with_message(&format!("Updated {} of {} input(s)", updated_count, total_inputs));
 
     // Save the lock file
     // 保存锁文件

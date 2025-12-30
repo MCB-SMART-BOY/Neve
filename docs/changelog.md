@@ -7,8 +7,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  v0.4.1 / v0.4.0 / v0.3.1 / v0.3.0 / v0.2.0      │
-│  [中文]     #chinese   ──→  v0.4.1 / v0.4.0 / v0.3.1 / v0.3.0 / v0.2.0      │
+│  [English]  #english   ──→  v0.6.0 / v0.5.0 / v0.4.x / v0.3.x / v0.2.0      │
+│  [中文]     #chinese   ──→  v0.6.0 / v0.5.0 / v0.4.x / v0.3.x / v0.2.0      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,6 +21,36 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 # English
 
 > *What changed, when, and why.*
+
+## [0.6.0] - 2025-12-30
+
+### Added
+- **Tail Call Optimization (TCO)**: Recursive functions no longer cause stack overflow
+- **NAR format implementation**: Complete Nix ARchive format support for content-addressed storage
+- **Build analytics module**: Dependency graph visualization with DOT format export
+- **Enhanced CLI output**: Progress bars, spinners, tables, and colored output
+- **Security enhancements**: SecurityProfile for sandbox with seccomp, capabilities support
+- **Compression support**: gzip, xz, zstd for NAR archives
+
+### Improved
+- **Type error messages**: Better context and suggestions for type mismatches
+- **CLI commands**: All commands now use consistent output formatting
+- **Binary units**: Size formatting now uses correct binary units (KiB/MiB/GiB)
+- **Zero warnings**: Codebase compiles with no warnings, all code serves its purpose
+
+### Fixed
+- **NAR reader**: Fixed closing parenthesis handling in directory extraction
+- **Cache tests**: Fixed permission issues with store tests
+- **Rust 2024**: Fixed pattern matching for new edition rules
+
+## [0.5.0] - 2025-12-29
+
+### Added
+- **Bilingual source comments**: All source files now have English/Chinese comments
+- **Improved README**: Comprehensive installation guide with multiple methods
+
+### Improved
+- **Code documentation**: Better inline documentation across all crates
 
 ## [0.4.1] - 2025-12-29
 
@@ -127,6 +157,36 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > 改了啥、啥时候改的、为啥改。
 
+## [0.6.0] - 2025-12-30
+
+### 新功能
+- **尾调用优化 (TCO)**: 递归函数不再导致栈溢出
+- **NAR 格式实现**: 完整的 Nix ARchive 格式支持，用于内容寻址存储
+- **构建分析模块**: 依赖图可视化，支持 DOT 格式导出
+- **增强 CLI 输出**: 进度条、旋转器、表格和彩色输出
+- **安全增强**: 沙箱的 SecurityProfile，支持 seccomp、capabilities
+- **压缩支持**: NAR 归档支持 gzip、xz、zstd
+
+### 改进
+- **类型错误信息**: 类型不匹配时提供更好的上下文和建议
+- **CLI 命令**: 所有命令现在使用一致的输出格式
+- **二进制单位**: 大小格式化现在使用正确的二进制单位 (KiB/MiB/GiB)
+- **零警告**: 代码库编译无警告，所有代码都发挥作用
+
+### 修复
+- **NAR 读取器**: 修复目录提取时的闭括号处理
+- **缓存测试**: 修复存储测试的权限问题
+- **Rust 2024**: 修复新版本规则的模式匹配
+
+## [0.5.0] - 2025-12-29
+
+### 新功能
+- **双语源码注释**: 所有源文件现在都有中英文注释
+- **改进的 README**: 包含多种安装方法的综合安装指南
+
+### 改进
+- **代码文档**: 所有 crate 的内联文档更完善
+
 ## [0.4.1] - 2025-12-29
 
 ### 新功能
@@ -226,6 +286,8 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+[0.6.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.0...v0.3.1

@@ -26,6 +26,15 @@ use std::rc::Rc;
 // Re-import StringPart from syntax since we use it here
 use neve_syntax::StringPart;
 
+/// Result of evaluating an expression with tail call detection.
+/// 带有尾调用检测的表达式求值结果。
+enum TcoResult {
+    /// Normal value result / 正常值结果
+    Value(Value),
+    /// Tail call detected: (function, arguments) / 检测到尾调用：（函数，参数）
+    TailCall(Value, Vec<Value>),
+}
+
 /// A binding with visibility information.
 /// 带有可见性信息的绑定。
 #[derive(Clone)]
@@ -1098,130 +1107,294 @@ impl AstEvaluator {
         }
     }
 
+    /// Result of evaluating an expression with tail call detection.
+    /// 带有尾调用检测的表达式求值结果。
     fn apply(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
-        match func {
-            Value::Builtin(builtin) => {
-                // Special handling for builtins that need evaluator access
-                match builtin.name {
-                    "force" => {
-                        if args.len() != 1 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.force_value(&args[0]);
-                    }
-                    "map" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_map(&args[0], &args[1]);
-                    }
-                    "filter" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_filter(&args[0], &args[1]);
-                    }
-                    "all" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_all(&args[0], &args[1]);
-                    }
-                    "any" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_any(&args[0], &args[1]);
-                    }
-                    "foldl" => {
-                        if args.len() != 3 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_foldl(&args[0], &args[1], &args[2]);
-                    }
-                    "foldr" => {
-                        if args.len() != 3 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_foldr(&args[0], &args[1], &args[2]);
-                    }
-                    "genList" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_gen_list(&args[0], &args[1]);
-                    }
-                    "mapAttrs" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_map_attrs(&args[0], &args[1]);
-                    }
-                    "filterAttrs" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_filter_attrs(&args[0], &args[1]);
-                    }
-                    "concatMap" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_concat_map(&args[0], &args[1]);
-                    }
-                    "partition" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_partition(&args[0], &args[1]);
-                    }
-                    "groupBy" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_group_by(&args[0], &args[1]);
-                    }
-                    "sort" => {
-                        if args.len() != 2 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.builtin_sort(&args[0], &args[1]);
-                    }
-                    _ => {}
-                }
+        // Tail call optimization: use iteration instead of recursion
+        // 尾调用优化：使用迭代代替递归
+        let mut current_func = func;
+        let mut current_args = args;
 
-                if args.len() != builtin.arity {
-                    return Err(EvalError::WrongArity);
-                }
-                (builtin.func)(&args).map_err(EvalError::TypeError)
-            }
-            Value::BuiltinFn(name, func) => {
-                // Special handling for force
-                if name == "force" {
-                    if args.len() != 1 {
+        loop {
+            match current_func {
+                Value::Builtin(ref builtin) => {
+                    // Special handling for builtins that need evaluator access
+                    match builtin.name {
+                        "force" => {
+                            if current_args.len() != 1 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.force_value(&current_args[0]);
+                        }
+                        "map" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_map(&current_args[0], &current_args[1]);
+                        }
+                        "filter" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_filter(&current_args[0], &current_args[1]);
+                        }
+                        "all" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_all(&current_args[0], &current_args[1]);
+                        }
+                        "any" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_any(&current_args[0], &current_args[1]);
+                        }
+                        "foldl" => {
+                            if current_args.len() != 3 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_foldl(
+                                &current_args[0],
+                                &current_args[1],
+                                &current_args[2],
+                            );
+                        }
+                        "foldr" => {
+                            if current_args.len() != 3 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_foldr(
+                                &current_args[0],
+                                &current_args[1],
+                                &current_args[2],
+                            );
+                        }
+                        "genList" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_gen_list(&current_args[0], &current_args[1]);
+                        }
+                        "mapAttrs" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_map_attrs(&current_args[0], &current_args[1]);
+                        }
+                        "filterAttrs" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_filter_attrs(&current_args[0], &current_args[1]);
+                        }
+                        "concatMap" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_concat_map(&current_args[0], &current_args[1]);
+                        }
+                        "partition" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_partition(&current_args[0], &current_args[1]);
+                        }
+                        "groupBy" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_group_by(&current_args[0], &current_args[1]);
+                        }
+                        "sort" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_sort(&current_args[0], &current_args[1]);
+                        }
+                        _ => {}
+                    }
+
+                    if current_args.len() != builtin.arity {
                         return Err(EvalError::WrongArity);
                     }
-                    return self.force_value(&args[0]);
+                    return (builtin.func)(&current_args).map_err(EvalError::TypeError);
                 }
-                func(args).map_err(EvalError::TypeError)
-            }
-            Value::AstClosure(closure) => {
-                if args.len() != closure.params.len() {
-                    return Err(EvalError::WrongArity);
+                Value::BuiltinFn(ref name, ref func) => {
+                    // Special handling for force
+                    if *name == "force" {
+                        if current_args.len() != 1 {
+                            return Err(EvalError::WrongArity);
+                        }
+                        return self.force_value(&current_args[0]);
+                    }
+                    return func(current_args).map_err(EvalError::TypeError);
                 }
+                Value::AstClosure(ref closure) => {
+                    if current_args.len() != closure.params.len() {
+                        return Err(EvalError::WrongArity);
+                    }
 
-                // Use the current evaluator's environment as the parent,
-                // which allows recursive calls to find the function
+                    // Use the closure's captured environment as the parent,
+                    // which allows recursive calls to find the function
+                    // 使用闭包捕获的环境作为父环境，这允许递归调用找到函数
+                    let mut new_env = AstEnv::child(closure.env.clone());
+                    for (param, arg) in closure.params.iter().zip(current_args) {
+                        let name = pattern_name(&param.pattern);
+                        new_env.define(name, arg);
+                    }
+
+                    // Evaluate with tail call detection
+                    // 使用尾调用检测进行求值
+                    let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
+                    if let Some(ref base) = self.base_path {
+                        body_eval.base_path = Some(base.clone());
+                    }
+
+                    match body_eval.eval_expr_tco(&closure.body)? {
+                        TcoResult::Value(v) => return Ok(v),
+                        TcoResult::TailCall(func, args) => {
+                            // Tail call detected - loop instead of recursing
+                            // 检测到尾调用 - 循环而不是递归
+                            current_func = func;
+                            current_args = args;
+                            continue;
+                        }
+                    }
+                }
+                _ => return Err(EvalError::NotAFunction),
+            }
+        }
+    }
+
+    /// Evaluate an expression with tail call optimization detection.
+    /// 使用尾调用优化检测求值表达式。
+    ///
+    /// This is the core of tail call optimization for AST evaluation.
+    /// When a call is in tail position, we return a TailCall result
+    /// instead of recursing, allowing the outer loop in apply() to handle it.
+    /// 这是 AST 求值尾调用优化的核心。
+    /// 当调用处于尾位置时，我们返回 TailCall 结果而不是递归，
+    /// 从而允许 apply() 中的外层循环处理它。
+    fn eval_expr_tco(&mut self, expr: &Expr) -> Result<TcoResult, EvalError> {
+        match &expr.kind {
+            // Direct call in tail position - return as tail call
+            // 尾位置的直接调用 - 作为尾调用返回
+            ExprKind::Call { func, args } => {
+                let func_val = self.eval_expr(func)?;
+                let arg_vals: Result<Vec<_>, _> = args.iter().map(|e| self.eval_expr(e)).collect();
+                Ok(TcoResult::TailCall(func_val, arg_vals?))
+            }
+
+            // If-then-else: evaluate condition, then branch with TCO
+            // If-then-else: 求值条件，然后用 TCO 求值分支
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond = self.eval_expr(condition)?;
+                if cond.is_truthy() {
+                    self.eval_expr_tco(then_branch)
+                } else {
+                    self.eval_expr_tco(else_branch)
+                }
+            }
+
+            // Block: evaluate statements, then final expression with TCO
+            // Block: 求值语句，然后用 TCO 求值最终表达式
+            ExprKind::Block { stmts, expr: final_expr } => {
                 let mut new_env = AstEnv::child(self.env.clone());
-                for (param, arg) in closure.params.iter().zip(args) {
-                    let name = pattern_name(&param.pattern);
-                    new_env.define(name, arg);
+
+                for stmt in stmts {
+                    match &stmt.kind {
+                        StmtKind::Let { pattern, value, .. } => {
+                            let mut stmt_eval = AstEvaluator::with_env(Rc::new(new_env.clone()));
+                            if let Some(ref base) = self.base_path {
+                                stmt_eval.base_path = Some(base.clone());
+                            }
+                            let val = stmt_eval.eval_expr(value)?;
+                            self.bind_pattern_to_env(pattern, val, &mut new_env)?;
+                        }
+                        StmtKind::Expr(e) => {
+                            let mut stmt_eval = AstEvaluator::with_env(Rc::new(new_env.clone()));
+                            if let Some(ref base) = self.base_path {
+                                stmt_eval.base_path = Some(base.clone());
+                            }
+                            stmt_eval.eval_expr(e)?;
+                        }
+                    }
                 }
 
-                let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
-                body_eval.eval_expr(&closure.body)
+                if let Some(e) = final_expr {
+                    let mut final_eval = AstEvaluator::with_env(Rc::new(new_env));
+                    if let Some(ref base) = self.base_path {
+                        final_eval.base_path = Some(base.clone());
+                    }
+                    final_eval.eval_expr_tco(e)
+                } else {
+                    Ok(TcoResult::Value(Value::Unit))
+                }
             }
-            _ => Err(EvalError::NotAFunction),
+
+            // Match: evaluate scrutinee, match pattern, then evaluate arm with TCO
+            // Match: 求值被匹配值，匹配模式，然后用 TCO 求值分支
+            ExprKind::Match { scrutinee, arms } => {
+                let val = self.eval_expr(scrutinee)?;
+                for arm in arms {
+                    if let Some(bindings) = Self::match_pattern(&arm.pattern, &val) {
+                        // Create new scope with bindings
+                        let mut new_env = AstEnv::child(self.env.clone());
+                        for (name, value) in bindings {
+                            new_env.define(name, value);
+                        }
+
+                        // Check guard
+                        if let Some(guard) = &arm.guard {
+                            let mut guard_eval = AstEvaluator::with_env(Rc::new(new_env.clone()));
+                            if let Some(ref base) = self.base_path {
+                                guard_eval.base_path = Some(base.clone());
+                            }
+                            let guard_val = guard_eval.eval_expr(guard)?;
+                            if !guard_val.is_truthy() {
+                                continue;
+                            }
+                        }
+
+                        let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
+                        if let Some(ref base) = self.base_path {
+                            body_eval.base_path = Some(base.clone());
+                        }
+                        return body_eval.eval_expr_tco(&arm.body);
+                    }
+                }
+                Err(EvalError::PatternMatchFailed)
+            }
+
+            // Let expression: bind value, then evaluate body with TCO
+            // Let 表达式: 绑定值，然后用 TCO 求值 body
+            ExprKind::Let {
+                pattern,
+                value,
+                body,
+                ..
+            } => {
+                let val = self.eval_expr(value)?;
+                let mut new_env = AstEnv::child(self.env.clone());
+                self.bind_pattern_to_env(pattern, val, &mut new_env)?;
+                let mut body_eval = AstEvaluator::with_env(Rc::new(new_env));
+                if let Some(ref base) = self.base_path {
+                    body_eval.base_path = Some(base.clone());
+                }
+                body_eval.eval_expr_tco(body)
+            }
+
+            // All other expressions are not in tail position - evaluate normally
+            // 所有其他表达式不在尾位置 - 正常求值
+            _ => {
+                let val = self.eval_expr(expr)?;
+                Ok(TcoResult::Value(val))
+            }
         }
     }
 

@@ -161,6 +161,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "bytes"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,6 +274,21 @@ checksum = "980c2afde4af43d6a05c5be738f9eae595cff86dce1f38f88b95058a98c027f3"
 dependencies = [
  "crossterm",
 ]
+
+[[package]]
+name = "crc"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "crc32fast"
@@ -1086,6 +1107,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzma-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
+dependencies = [
+ "byteorder",
+ "crc",
+]
+
+[[package]]
 name = "lzma-sys"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1135,9 +1166,10 @@ dependencies = [
 
 [[package]]
 name = "neve"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
+ "libc",
  "neve-builder",
  "neve-common",
  "neve-config",
@@ -1159,8 +1191,9 @@ dependencies = [
 
 [[package]]
 name = "neve-builder"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "libc",
  "neve-derive",
  "neve-fetch",
  "neve-store",
@@ -1173,11 +1206,11 @@ dependencies = [
 
 [[package]]
 name = "neve-common"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "neve-config"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-builder",
  "neve-common",
@@ -1194,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "neve-derive"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "blake3",
  "neve-common",
@@ -1205,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "neve-diagnostic"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ariadne",
  "neve-common",
@@ -1214,7 +1247,7 @@ dependencies = [
 
 [[package]]
 name = "neve-eval"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-common",
  "neve-derive",
@@ -1227,7 +1260,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fetch"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "blake3",
  "flate2",
@@ -1242,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fmt"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-lexer",
  "neve-parser",
@@ -1251,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "neve-hir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1261,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lexer"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "logos",
  "neve-common",
@@ -1270,7 +1303,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lsp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "dashmap 6.1.0",
@@ -1290,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "neve-parser"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1300,7 +1333,7 @@ dependencies = [
 
 [[package]]
 name = "neve-std"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-common",
  "neve-eval",
@@ -1308,26 +1341,30 @@ dependencies = [
 
 [[package]]
 name = "neve-store"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "flate2",
+ "lzma-rs",
  "neve-common",
  "neve-derive",
  "neve-fetch",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.17",
+ "zstd",
 ]
 
 [[package]]
 name = "neve-syntax"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-common",
 ]
 
 [[package]]
 name = "neve-typeck"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1337,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "neve-workspace"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "neve-builder",
  "neve-common",
@@ -2807,3 +2844,31 @@ name = "zmij"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0095ecd462946aa3927d9297b63ef82fb9a5316d7a37d134eeb36e58228615a"
+
+[[package]]
+name = "zstd"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.0.16+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+dependencies = [
+ "cc",
+ "pkg-config",
+]

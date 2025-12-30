@@ -186,6 +186,8 @@ enum ConfigAction {
     Build,
     /// Switch to new configuration. / 切换到新配置。
     Switch,
+    /// Interactively switch to a specific generation. / 交互式切换到特定代。
+    SwitchTo,
     /// Rollback to previous configuration. / 回滚到上一个配置。
     Rollback,
     /// List configuration generations. / 列出配置代。
@@ -275,6 +277,7 @@ fn main() {
         Commands::Config { action } => match action {
             ConfigAction::Build => commands::config::build(),
             ConfigAction::Switch => commands::config::switch(),
+            ConfigAction::SwitchTo => commands::config::switch_interactive(),
             ConfigAction::Rollback => commands::config::rollback(),
             ConfigAction::List => commands::config::list_generations(),
         },
