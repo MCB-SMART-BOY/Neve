@@ -242,7 +242,9 @@ Built-in documentation is available via `neve doc`:
 | Quick Start | `neve doc quickstart` | 5-minute introduction |
 | Specification | `neve doc spec` | Complete language reference |
 | API Reference | `neve doc api` | Standard library docs |
-| Examples | `neve doc examples` | Code examples |
+| Diagnostics | `neve doc diagnostics` | Error code reference |
+| Architecture | `neve doc architecture` | Internal architecture |
+| Onboarding | `neve doc onboarding` | Contributor onboarding |
 
 ### Project Status
 
@@ -492,7 +494,8 @@ neve doc spec --zh     # 语言规范（中文）
 | 快速入门 | `neve doc quickstart` | 5 分钟入门教程 |
 | 语言规范 | `neve doc spec --zh` | 完整语言参考 |
 | API 参考 | `neve doc api --zh` | 标准库文档 |
-| 示例 | `neve doc examples` | 代码示例 |
+| 架构设计 | `neve doc architecture --zh` | 内部架构说明 |
+| 贡献者入门 | `neve doc onboarding --zh` | 贡献指南与模块地图 |
 
 ### 项目进度
 

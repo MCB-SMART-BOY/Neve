@@ -12,6 +12,7 @@ use neve_diagnostic::emit;
 use neve_eval::{AstEvaluator, Value};
 use neve_parser::parse;
 use neve_store::Store;
+use neve_std::std_module_overrides;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
@@ -99,11 +100,10 @@ pub fn run(package: Option<&str>, backend_arg: &str) -> Result<(), String> {
 
     // Evaluate the file
     // 求值文件
-    let mut evaluator = if let Some(parent) = path.parent() {
-        AstEvaluator::new().with_base_path(parent.to_path_buf())
-    } else {
-        AstEvaluator::new()
-    };
+    let mut evaluator = AstEvaluator::new().with_module_overrides(std_module_overrides());
+    if let Some(parent) = path.parent() {
+        evaluator = evaluator.with_base_path(parent.to_path_buf());
+    }
 
     let value = evaluator
         .eval_file(&ast)

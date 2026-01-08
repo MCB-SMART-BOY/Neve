@@ -37,6 +37,14 @@ pub fn emit(source: &str, filename: &str, diagnostic: &Diagnostic) {
         report = report.with_label(ariadne_label);
     }
 
+    if diagnostic.labels.is_empty() && !diagnostic.span.is_empty() {
+        let color = colors.next();
+        let ariadne_label = AriadneLabel::new((filename, diagnostic.span.range()))
+            .with_message("here")
+            .with_color(color);
+        report = report.with_label(ariadne_label);
+    }
+
     for note in &diagnostic.notes {
         report = report.with_note(note);
     }

@@ -102,6 +102,11 @@ impl Diagnostic {
 
     pub fn with_code(mut self, code: ErrorCode) -> Self {
         self.code = Some(code);
+        if self.help.is_none()
+            && let Some(suggestion) = code.suggestion()
+        {
+            self.help = Some(suggestion.to_string());
+        }
         self
     }
 

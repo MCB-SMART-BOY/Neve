@@ -292,6 +292,27 @@ impl SymbolIndex {
                         full_span: trait_item.span,
                     };
                     self.add_definition(method_symbol);
+                    self.add_reference(SymbolRef {
+                        name: trait_item.name.name.clone(),
+                        span: trait_item.name.span,
+                        is_write: true,
+                    });
+                }
+
+                // Index trait associated types / 索引 trait 关联类型
+                for assoc in &def.assoc_types {
+                    let assoc_symbol = Symbol {
+                        name: assoc.name.name.clone(),
+                        kind: SymbolKind::TypeAlias,
+                        def_span: assoc.name.span,
+                        full_span: assoc.span,
+                    };
+                    self.add_definition(assoc_symbol);
+                    self.add_reference(SymbolRef {
+                        name: assoc.name.name.clone(),
+                        span: assoc.name.span,
+                        is_write: true,
+                    });
                 }
             }
             ItemKind::Impl(def) => {
@@ -304,6 +325,11 @@ impl SymbolIndex {
                         full_span: impl_item.span,
                     };
                     self.add_definition(method_symbol);
+                    self.add_reference(SymbolRef {
+                        name: impl_item.name.name.clone(),
+                        span: impl_item.name.span,
+                        is_write: true,
+                    });
 
                     // Index method body / 索引方法体
                     self.push_scope();
@@ -312,6 +338,22 @@ impl SymbolIndex {
                     }
                     self.index_expr(&impl_item.body);
                     self.pop_scope();
+                }
+
+                // Index impl associated types / 索引 impl 关联类型
+                for assoc in &def.assoc_type_impls {
+                    let assoc_symbol = Symbol {
+                        name: assoc.name.name.clone(),
+                        kind: SymbolKind::TypeAlias,
+                        def_span: assoc.name.span,
+                        full_span: assoc.span,
+                    };
+                    self.add_definition(assoc_symbol);
+                    self.add_reference(SymbolRef {
+                        name: assoc.name.name.clone(),
+                        span: assoc.name.span,
+                        is_write: true,
+                    });
                 }
             }
             ItemKind::Import(_) => {

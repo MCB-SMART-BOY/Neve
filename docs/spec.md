@@ -76,13 +76,7 @@ true  false
 -- Interpolated strings
 `hello {name}`
 
--- Multi-line strings
-"""
-multi-line
-content
-"""
-
--- Paths
+-- Path literals (currently strings)
 ./relative  ../parent  /absolute
 ```
 
@@ -96,9 +90,10 @@ Float   -- 64-bit floating point
 Bool    -- boolean
 Char    -- Unicode character
 String  -- UTF-8 string
-Path    -- filesystem path
 Unit    -- empty type ()
 ```
+
+Note: Path literals currently evaluate to `String`. A dedicated `Path` type is planned.
 
 ### Compound Types
 
@@ -241,25 +236,26 @@ import std.list (map, filter);
 import std.list as L;
 import self.utils;
 import super.common;
+import crate.utils;
 ```
 
 ## 9. Lazy Evaluation
 
 ```neve
-lazy let expensive = compute();
-let result = force(lazy_expr);
+let expensive = lazy compute();
+let result = force(expensive);
 ```
 
 ## Appendix A: Keywords
 
 ```
 let fn type struct enum trait impl
-pub import as self super
+pub import as self super crate
 if then else match
 lazy true false
 ```
 
-**17 keywords total**
+**20 keywords total**
 
 ## Appendix B: Nix Comparison
 
@@ -337,13 +333,7 @@ true  false
 -- 插值字符串
 `你好 {name}`
 
--- 多行字符串
-"""
-多行
-内容
-"""
-
--- 路径
+-- 路径字面量（目前就是字符串）
 ./relative  ../parent  /absolute
 ```
 
@@ -357,9 +347,10 @@ Float   -- 64 位浮点
 Bool    -- 布尔
 Char    -- Unicode 字符
 String  -- UTF-8 字符串
-Path    -- 文件路径
 Unit    -- 空类型 ()
 ```
+
+注意：路径字面量目前会被当成 `String`，独立的 `Path` 类型计划中。
 
 ### 复合类型
 
@@ -502,25 +493,26 @@ import std.list (map, filter);
 import std.list as L;
 import self.utils;
 import super.common;
+import crate.utils;
 ```
 
 ## 9. 惰性求值
 
 ```neve
-lazy let expensive = compute();
-let result = force(lazy_expr);
+let expensive = lazy compute();
+let result = force(expensive);
 ```
 
 ## 附录 A: 关键字
 
 ```
 let fn type struct enum trait impl
-pub import as self super
+pub import as self super crate
 if then else match
 lazy true false
 ```
 
-**一共 17 个关键字**
+**一共 20 个关键字**
 
 ## 附录 B: 跟 Nix 对照
 

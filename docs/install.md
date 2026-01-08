@@ -67,7 +67,7 @@ yay -S neve-git
 ### Build from Source
 
 ```bash
-# Requires Rust 1.75+
+# Requires Rust 1.85+
 git clone https://github.com/MCB-SMART-BOY/neve.git
 cd neve
 cargo build --release
@@ -172,7 +172,7 @@ yay -S neve-git
 ### 从源码编译
 
 ```bash
-# 需要 Rust 1.75 以上
+# 需要 Rust 1.85 以上
 git clone https://github.com/MCB-SMART-BOY/neve.git
 cd neve
 cargo build --release

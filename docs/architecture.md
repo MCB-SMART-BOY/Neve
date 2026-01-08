@@ -8,9 +8,9 @@ This document describes the internal architecture of Neve for contributors and d
 
 ## Overview / 概述
 
-Neve is a pure functional language designed for system configuration and package management. The codebase is organized as a Cargo workspace with 16 modular crates.
+Neve is a pure functional language designed for system configuration and package management. The codebase is organized as a Cargo workspace with 17 modular crates.
 
-Neve 是一门为系统配置和包管理设计的纯函数式语言。代码库组织为包含 16 个模块化 crate 的 Cargo workspace。
+Neve 是一门为系统配置和包管理设计的纯函数式语言。代码库组织为包含 17 个模块化 crate 的 Cargo workspace。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -72,6 +72,7 @@ Neve 是一门为系统配置和包管理设计的纯函数式语言。代码库
 | `neve-parser` | Recursive descent parser (LL(1)) | 递归下降解析器 (LL(1)) |
 | `neve-hir` | High-level IR with name resolution | 高级中间表示与名称解析 |
 | `neve-typeck` | Hindley-Milner type inference | Hindley-Milner 类型推导 |
+| `neve-frontend` | Frontend pipeline (parse + lower + typeck) | 前端管线（解析 + 降级 + 类型检查） |
 | `neve-eval` | Tree-walking interpreter | 树遍历解释器 |
 | `neve-std` | Standard library modules | 标准库模块 |
 
@@ -137,6 +138,10 @@ Source Code (.neve)
 │ (tree-walk)  │
 └──────────────┘
 ```
+
+Tooling (LSP/CLI) should prefer `neve-frontend` to keep diagnostics aligned.
+
+工具链（LSP/CLI）应优先使用 `neve-frontend`，以保持诊断一致。
 
 ---
 
@@ -250,6 +255,7 @@ Neve/
 │   ├── neve-syntax/         # AST types
 │   ├── neve-hir/            # HIR & resolution
 │   ├── neve-typeck/         # Type checker
+│   ├── neve-frontend/       # Frontend pipeline
 │   ├── neve-eval/           # Interpreter
 │   ├── neve-std/            # Standard library
 │   ├── neve-store/          # Content store
@@ -262,8 +268,9 @@ Neve/
 │   ├── neve-common/         # Shared types
 │   └── neve-derive/         # Derivations
 ├── docs/                    # Documentation
-├── tests/                   # Integration tests
-└── examples/                # Example code
+├── scripts/                 # Helper scripts
+├── stage0/                  # Bootstrapping assets
+└── tests/                   # Integration tests
 ```
 
 ---

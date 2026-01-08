@@ -164,7 +164,7 @@ impl ErrorCode {
             ErrorCode::UnterminatedString => {
                 Some("add a closing quote `\"` to terminate the string")
             }
-            ErrorCode::UnterminatedComment => Some("add `*/` to close the comment"),
+            ErrorCode::UnterminatedComment => Some("add `-- --` to close the block comment"),
             ErrorCode::MissingSemicolon => Some("add `;` at the end of the statement"),
             ErrorCode::UnclosedDelimiter => Some("add the matching closing delimiter"),
             ErrorCode::UnboundVariable => {
@@ -193,5 +193,13 @@ impl ErrorCode {
             }
             _ => None,
         }
+    }
+
+    /// Get the documentation URL for this error code.
+    /// 获取此错误代码的文档链接。
+    pub fn doc_url(&self) -> String {
+        const BASE_URL: &str =
+            "https://github.com/MCB-SMART-BOY/Neve/blob/master/docs/diagnostics.md#";
+        format!("{BASE_URL}{}", self.as_str())
     }
 }

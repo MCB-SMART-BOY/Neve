@@ -76,6 +76,8 @@ pub struct AssocTypeResolution {
     pub name: String,
     /// The concrete type this is bound to. / 绑定的具体类型。
     pub ty: Ty,
+    /// Source location. / 源代码位置。
+    pub span: Span,
 }
 
 /// A trait bound (e.g., `T: Show`).
@@ -225,6 +227,7 @@ impl TraitResolver {
             .map(|ati| AssocTypeResolution {
                 name: ati.name.clone(),
                 ty: ati.ty.clone(),
+                span: ati.span,
             })
             .collect();
 
@@ -456,6 +459,21 @@ impl TraitResolver {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Get all impl IDs for a trait.
+    /// 获取特征的所有实现 ID。
+    pub fn impl_ids_for_trait(&self, trait_id: TraitId) -> Vec<ImplId> {
+        self.trait_impls
+            .get(&trait_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Get an impl info by ID.
+    /// 按 ID 获取实现信息。
+    pub fn impl_info(&self, impl_id: ImplId) -> Option<&ImplInfo> {
+        self.impls.get(&impl_id)
     }
 
     /// Resolve an associated type for a given type and trait.

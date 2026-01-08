@@ -10,11 +10,14 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
 use neve_lexer::Lexer;
+use neve_syntax::{ImplDef, Type, TypeKind};
 
 use crate::capabilities::server_capabilities;
-use crate::document::{DiagnosticSeverity as DocSeverity, Document};
+use crate::Document;
 use crate::semantic_tokens::generate_semantic_tokens_with_context;
 use crate::symbol_index::SymbolKind as IndexSymbolKind;
+use neve_common::Span;
+use neve_diagnostic::{DiagnosticKind, Severity as NeveSeverity};
 
 /// The LSP backend.
 /// LSP 后端。
@@ -41,28 +44,71 @@ impl Backend {
         let diagnostics: Vec<Diagnostic> = doc
             .diagnostics
             .iter()
-            .map(|d| {
-                let start: usize = d.span.start.into();
-                let end: usize = d.span.end.into();
-                let (start_line, start_col) = doc.position_at(start);
-                let (end_line, end_col) = doc.position_at(end);
+            .map(|diag| {
+                let severity = match diag.severity {
+                    NeveSeverity::Error => DiagnosticSeverity::ERROR,
+                    NeveSeverity::Warning => DiagnosticSeverity::WARNING,
+                    NeveSeverity::Note => DiagnosticSeverity::INFORMATION,
+                };
+
+                let primary_span = if diag.span.is_empty() {
+                    diag.labels
+                        .first()
+                        .map(|label| label.span)
+                        .unwrap_or(diag.span)
+                } else {
+                    diag.span
+                };
+
+                let mut message = diag.message.clone();
+                for note in &diag.notes {
+                    message.push_str("\n\nnote: ");
+                    message.push_str(note);
+                }
+                if let Some(help) = &diag.help {
+                    message.push_str("\n\nhelp: ");
+                    message.push_str(help);
+                }
+
+                let related_information = if diag.labels.is_empty() {
+                    None
+                } else {
+                    Some(
+                        diag.labels
+                            .iter()
+                            .map(|label| {
+                                DiagnosticRelatedInformation {
+                                    location: Location {
+                                        uri: uri.clone(),
+                                        range: range_for_span(doc, label.span),
+                                    },
+                                    message: label.message.clone(),
+                                }
+                            })
+                            .collect(),
+                    )
+                };
+
+                let source = match diag.kind {
+                    DiagnosticKind::Lexer => "neve.lexer",
+                    DiagnosticKind::Parser => "neve.parser",
+                    DiagnosticKind::Type => "neve.type",
+                    DiagnosticKind::Eval => "neve.eval",
+                    DiagnosticKind::Module => "neve.module",
+                };
+
+                let code_description = diag.code.and_then(|code| {
+                    Url::parse(&code.doc_url()).ok().map(|href| CodeDescription { href })
+                });
 
                 Diagnostic {
-                    range: Range {
-                        start: Position::new(start_line, start_col),
-                        end: Position::new(end_line, end_col),
-                    },
-                    severity: Some(match d.severity {
-                        DocSeverity::Error => DiagnosticSeverity::ERROR,
-                        DocSeverity::Warning => DiagnosticSeverity::WARNING,
-                        DocSeverity::Information => DiagnosticSeverity::INFORMATION,
-                        DocSeverity::Hint => DiagnosticSeverity::HINT,
-                    }),
-                    code: None,
-                    code_description: None,
-                    source: Some("neve".to_string()),
-                    message: d.message.clone(),
-                    related_information: None,
+                    range: range_for_span(doc, primary_span),
+                    severity: Some(severity),
+                    code: diag.code.map(|code| NumberOrString::String(code.as_str().to_string())),
+                    code_description,
+                    source: Some(source.to_string()),
+                    message,
+                    related_information,
                     tags: None,
                     data: None,
                 }
@@ -73,6 +119,47 @@ impl Backend {
             .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
     }
+}
+
+fn range_for_span(doc: &Document, span: Span) -> Range {
+    let content_len = doc.content.len();
+    let mut start: usize = span.start.into();
+    let mut end: usize = span.end.into();
+
+    if start > content_len {
+        start = content_len;
+    }
+    if end > content_len {
+        end = content_len;
+    }
+    if end < start {
+        end = start;
+    }
+
+    if start == end {
+        if let Some(next) = next_char_offset(&doc.content, start) {
+            end = next;
+        }
+    }
+
+    let (start_line, start_col) = doc.position_at(start);
+    let (end_line, end_col) = doc.position_at(end);
+
+    Range {
+        start: Position::new(start_line, start_col),
+        end: Position::new(end_line, end_col),
+    }
+}
+
+fn next_char_offset(content: &str, offset: usize) -> Option<usize> {
+    if offset >= content.len() {
+        return None;
+    }
+
+    content[offset..]
+        .chars()
+        .next()
+        .map(|ch| offset + ch.len_utf8())
 }
 
 #[tower_lsp::async_trait]
@@ -331,47 +418,178 @@ impl LanguageServer for Backend {
             && let Some(ref ast) = doc.ast
         {
             let mut symbols = Vec::new();
+            let span_range = |span: neve_common::Span| {
+                let start: usize = span.start.into();
+                let end: usize = span.end.into();
+                let (start_line, start_col) = doc.position_at(start);
+                let (end_line, end_col) = doc.position_at(end);
+                Range {
+                    start: Position::new(start_line, start_col),
+                    end: Position::new(end_line, end_col),
+                }
+            };
 
             for item in &ast.items {
                 use neve_syntax::ItemKind;
 
-                let (name, kind) = match &item.kind {
+                let symbol = match &item.kind {
                     ItemKind::Let(def) => {
-                        // Extract name from pattern / 从模式中提取名称
                         let name = format!("{:?}", def.pattern.kind);
-                        (name, SymbolKind::VARIABLE)
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name,
+                            detail: None,
+                            kind: SymbolKind::VARIABLE,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(def.pattern.span),
+                            children: None,
+                        }
                     }
-                    ItemKind::Fn(def) => (def.name.name.clone(), SymbolKind::FUNCTION),
-                    ItemKind::TypeAlias(def) => (def.name.name.clone(), SymbolKind::TYPE_PARAMETER),
-                    ItemKind::Struct(def) => (def.name.name.clone(), SymbolKind::STRUCT),
-                    ItemKind::Enum(def) => (def.name.name.clone(), SymbolKind::ENUM),
-                    ItemKind::Trait(def) => (def.name.name.clone(), SymbolKind::INTERFACE),
-                    ItemKind::Impl(_) => continue,
+                    ItemKind::Fn(def) => {
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name: def.name.name.clone(),
+                            detail: None,
+                            kind: SymbolKind::FUNCTION,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(def.name.span),
+                            children: None,
+                        }
+                    }
+                    ItemKind::TypeAlias(def) => {
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name: def.name.name.clone(),
+                            detail: None,
+                            kind: SymbolKind::TYPE_PARAMETER,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(def.name.span),
+                            children: None,
+                        }
+                    }
+                    ItemKind::Struct(def) => {
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name: def.name.name.clone(),
+                            detail: None,
+                            kind: SymbolKind::STRUCT,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(def.name.span),
+                            children: None,
+                        }
+                    }
+                    ItemKind::Enum(def) => {
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name: def.name.name.clone(),
+                            detail: None,
+                            kind: SymbolKind::ENUM,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(def.name.span),
+                            children: None,
+                        }
+                    }
+                    ItemKind::Trait(def) => {
+                        let mut children = Vec::new();
+
+                        for assoc in &def.assoc_types {
+                            #[allow(deprecated)]
+                            children.push(DocumentSymbol {
+                                name: assoc.name.name.clone(),
+                                detail: None,
+                                kind: SymbolKind::TYPE_PARAMETER,
+                                tags: None,
+                                deprecated: None,
+                                range: span_range(assoc.span),
+                                selection_range: span_range(assoc.name.span),
+                                children: None,
+                            });
+                        }
+
+                        for trait_item in &def.items {
+                            #[allow(deprecated)]
+                            children.push(DocumentSymbol {
+                                name: trait_item.name.name.clone(),
+                                detail: None,
+                                kind: SymbolKind::METHOD,
+                                tags: None,
+                                deprecated: None,
+                                range: span_range(trait_item.span),
+                                selection_range: span_range(trait_item.name.span),
+                                children: None,
+                            });
+                        }
+
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name: def.name.name.clone(),
+                            detail: None,
+                            kind: SymbolKind::INTERFACE,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(def.name.span),
+                            children: Some(children),
+                        }
+                    }
+                    ItemKind::Impl(def) => {
+                        let mut children = Vec::new();
+
+                        for assoc in &def.assoc_type_impls {
+                            #[allow(deprecated)]
+                            children.push(DocumentSymbol {
+                                name: assoc.name.name.clone(),
+                                detail: None,
+                                kind: SymbolKind::TYPE_PARAMETER,
+                                tags: None,
+                                deprecated: None,
+                                range: span_range(assoc.span),
+                                selection_range: span_range(assoc.name.span),
+                                children: None,
+                            });
+                        }
+
+                        for impl_item in &def.items {
+                            #[allow(deprecated)]
+                            children.push(DocumentSymbol {
+                                name: impl_item.name.name.clone(),
+                                detail: None,
+                                kind: SymbolKind::METHOD,
+                                tags: None,
+                                deprecated: None,
+                                range: span_range(impl_item.span),
+                                selection_range: span_range(impl_item.name.span),
+                                children: None,
+                            });
+                        }
+
+                        let impl_name = format_impl_name(def);
+                        #[allow(deprecated)]
+                        DocumentSymbol {
+                            name: impl_name,
+                            detail: None,
+                            kind: SymbolKind::CLASS,
+                            tags: None,
+                            deprecated: None,
+                            range: span_range(item.span),
+                            selection_range: span_range(item.span),
+                            children: Some(children),
+                        }
+                    }
                     ItemKind::Import(_) => continue,
                 };
 
-                let start: usize = item.span.start.into();
-                let end: usize = item.span.end.into();
-                let (start_line, start_col) = doc.position_at(start);
-                let (end_line, end_col) = doc.position_at(end);
-
-                #[allow(deprecated)]
-                symbols.push(DocumentSymbol {
-                    name,
-                    detail: None,
-                    kind,
-                    tags: None,
-                    deprecated: None,
-                    range: Range {
-                        start: Position::new(start_line, start_col),
-                        end: Position::new(end_line, end_col),
-                    },
-                    selection_range: Range {
-                        start: Position::new(start_line, start_col),
-                        end: Position::new(end_line, end_col),
-                    },
-                    children: None,
-                });
+                symbols.push(symbol);
             }
 
             return Ok(Some(DocumentSymbolResponse::Nested(symbols)));
@@ -1232,5 +1450,65 @@ fn convert_symbol_kind(kind: IndexSymbolKind) -> SymbolKind {
         IndexSymbolKind::Trait => SymbolKind::INTERFACE,
         IndexSymbolKind::Field => SymbolKind::FIELD,
         IndexSymbolKind::Method => SymbolKind::METHOD,
+    }
+}
+
+/// Format an impl header for symbol views.
+/// 为符号视图格式化 impl 标题。
+fn format_impl_name(def: &ImplDef) -> String {
+    let target = format_type_name(&def.target);
+    match &def.trait_ {
+        Some(trait_ty) => format!("impl {} for {}", format_type_name(trait_ty), target),
+        None => format!("impl {}", target),
+    }
+}
+
+/// Render a type into a compact name for display.
+/// 将类型渲染为紧凑的显示名称。
+fn format_type_name(ty: &Type) -> String {
+    match &ty.kind {
+        TypeKind::Named { path, args } => {
+            let name = path
+                .iter()
+                .map(|part| part.name.as_str())
+                .collect::<Vec<_>>()
+                .join(".");
+            if args.is_empty() {
+                name
+            } else {
+                let args_str = args
+                    .iter()
+                    .map(format_type_name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}<{}>", name, args_str)
+            }
+        }
+        TypeKind::Function { params, result } => {
+            let params_str = params
+                .iter()
+                .map(format_type_name)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({}) -> {}", params_str, format_type_name(result))
+        }
+        TypeKind::Tuple(elems) => {
+            let elems_str = elems
+                .iter()
+                .map(format_type_name)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({})", elems_str)
+        }
+        TypeKind::Record(fields) => {
+            let fields_str = fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name.name, format_type_name(&field.ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("#{{ {} }}", fields_str)
+        }
+        TypeKind::Unit => "()".to_string(),
+        TypeKind::Infer => "_".to_string(),
     }
 }

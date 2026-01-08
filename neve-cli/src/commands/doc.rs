@@ -13,8 +13,11 @@ const DOC_QUICKSTART: &str = include_str!("../../../docs/quickstart.md");
 const DOC_TUTORIAL: &str = include_str!("../../../docs/tutorial.md");
 const DOC_SPEC: &str = include_str!("../../../docs/spec.md");
 const DOC_API: &str = include_str!("../../../docs/api.md");
+const DOC_DIAGNOSTICS: &str = include_str!("../../../docs/diagnostics.md");
 const DOC_PHILOSOPHY: &str = include_str!("../../../docs/philosophy.md");
 const DOC_INSTALL: &str = include_str!("../../../docs/install.md");
+const DOC_ARCHITECTURE: &str = include_str!("../../../docs/architecture.md");
+const DOC_ONBOARDING: &str = include_str!("../../../docs/onboarding.md");
 const DOC_CHANGELOG: &str = include_str!("../../../docs/changelog.md");
 
 /// Available documentation topics.
@@ -24,8 +27,11 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ("tutorial", DOC_TUTORIAL, "Complete language tutorial"),
     ("spec", DOC_SPEC, "Language specification"),
     ("api", DOC_API, "Standard library API reference"),
+    ("diagnostics", DOC_DIAGNOSTICS, "Diagnostic code reference"),
     ("philosophy", DOC_PHILOSOPHY, "Design philosophy"),
     ("install", DOC_INSTALL, "Installation guide"),
+    ("architecture", DOC_ARCHITECTURE, "Internal architecture"),
+    ("onboarding", DOC_ONBOARDING, "Contributor onboarding"),
     ("changelog", DOC_CHANGELOG, "Version history"),
 ];
 
@@ -63,8 +69,11 @@ pub fn list() -> Result<(), String> {
 | tutorial | Complete language tutorial |
 | spec | Language specification |
 | api | Standard library API reference |
+| diagnostics | Diagnostic code reference |
 | philosophy | Design philosophy |
 | install | Installation guide |
+| architecture | Internal architecture |
+| onboarding | Contributor onboarding |
 | changelog | Version history |
 
 ## Usage:

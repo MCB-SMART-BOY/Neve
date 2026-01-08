@@ -48,6 +48,7 @@ neve-typeck = { path = "crates/neve-typeck" }
 neve-eval = { path = "crates/neve-eval" }
 neve-std = { path = "crates/neve-std" }
 neve-derive = { path = "crates/neve-derive" }
+neve-frontend = { path = "crates/neve-frontend" }
 neve-store = { path = "crates/neve-store" }
 neve-fetch = { path = "crates/neve-fetch" }
 neve-builder = { path = "crates/neve-builder" }
@@ -91,6 +92,7 @@ neve-typeck = { path = "crates/neve-typeck" }
 neve-eval = { path = "crates/neve-eval" }
 neve-std = { path = "crates/neve-std" }
 neve-derive = { path = "crates/neve-derive" }
+neve-frontend = { path = "crates/neve-frontend" }
 neve-store = { path = "crates/neve-store" }
 neve-fetch = { path = "crates/neve-fetch" }
 neve-builder = { path = "crates/neve-builder" }

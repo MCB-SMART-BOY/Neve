@@ -6,12 +6,15 @@
 //! 本模块实现 Neve 的主类型检查器。
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
-use crate::errors::{TypeMismatchError, unbound_variable, unused_variable};
+use crate::errors::{
+    TypeMismatchError, format_type, missing_assoc_type, missing_method, unbound_variable,
+    unused_variable,
+};
 use crate::infer::InferContext;
-use crate::traits::{TraitId, TraitResolver};
+use crate::traits::{ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
 use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify};
 use neve_common::Span;
-use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode};
+use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{
     BinOp, DefId, EnumDef, Expr, ExprKind, FnDef, ImplDef, Item, ItemKind, Literal, LocalId,
     MatchArm, Module, Pattern, PatternKind, Stmt, StmtKind, StructDef, TraitDef, Ty, TyKind,
@@ -47,6 +50,16 @@ struct StructInfo {
 struct EnumInfo {
     /// Variant constructors (name -> field types). / 变体构造函数（名称 -> 字段类型）。
     variants: HashMap<String, Vec<Ty>>,
+}
+
+/// Information about a variant constructor.
+/// 变体构造器的信息。
+#[derive(Clone)]
+struct VariantInfo {
+    /// Enum definition ID. / 枚举定义 ID。
+    enum_id: DefId,
+    /// Field types. / 字段类型。
+    fields: Vec<Ty>,
 }
 
 /// Information about a type alias.
@@ -85,6 +98,8 @@ pub struct TypeChecker {
     structs: HashMap<DefId, StructInfo>,
     /// Enum type definitions. / 枚举类型定义。
     enums: HashMap<DefId, EnumInfo>,
+    /// Variant constructors by DefId. / 按 DefId 存储的变体构造器。
+    variants: HashMap<DefId, VariantInfo>,
     /// Type alias definitions. / 类型别名定义。
     type_aliases: HashMap<DefId, TypeAliasInfo>,
     /// Collected diagnostics.
@@ -107,9 +122,23 @@ impl TypeChecker {
             trait_ids: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
+            variants: HashMap::new(),
             type_aliases: HashMap::new(),
             diagnostics: Vec::new(),
             check_unused: true,
+        }
+    }
+
+    /// Create a type checker with preloaded global signatures.
+    /// 使用预加载的全局签名创建类型检查器。
+    pub fn with_global_env(
+        globals: HashMap<DefId, Ty>,
+        global_spans: HashMap<DefId, Span>,
+    ) -> Self {
+        Self {
+            globals,
+            global_spans,
+            ..Self::new()
         }
     }
 
@@ -120,6 +149,18 @@ impl TypeChecker {
             check_unused: false,
             ..Self::new()
         }
+    }
+
+    /// Collect global signatures from a module without checking bodies.
+    /// 在不检查函数体的情况下收集模块的全局签名。
+    pub fn collect_signatures(
+        module: &Module,
+    ) -> (HashMap<DefId, Ty>, HashMap<DefId, Span>) {
+        let mut checker = TypeChecker::new();
+        for item in &module.items {
+            checker.collect_item(item);
+        }
+        (checker.globals, checker.global_spans)
     }
 
     /// Type check a module.
@@ -154,54 +195,43 @@ impl TypeChecker {
 
         // Check each trait's impls
         for (trait_id, trait_info) in trait_infos {
-            let impl_infos: Vec<_> = self
-                .trait_resolver
-                .impls_for_trait(trait_id)
-                .iter()
-                .map(|info| {
-                    (
-                        info.self_ty.clone(),
-                        info.methods
-                            .iter()
-                            .map(|m| m.name.clone())
-                            .collect::<Vec<_>>(),
-                    )
-                })
-                .collect();
+            let impl_ids = self.trait_resolver.impl_ids_for_trait(trait_id);
 
-            for (self_ty, impl_methods) in impl_infos {
-                let missing = self.check_impl_methods(&impl_methods, &trait_info);
-                for method_name in missing {
-                    self.diagnostics.push(
-                        Diagnostic::error(
-                            DiagnosticKind::Type,
-                            Span::DUMMY,
-                            format!(
-                                "missing required method '{}' in impl for {:?}",
-                                method_name, self_ty.kind
-                            ),
-                        )
-                        .with_code(ErrorCode::TypeMismatch),
-                    );
+            for impl_id in impl_ids {
+                let Some(impl_info) = self.trait_resolver.impl_info(impl_id).cloned() else {
+                    continue;
+                };
+
+                let completeness = self.trait_resolver.check_impl_full_completeness(impl_id);
+                if !completeness.is_complete() {
+                    let span = self
+                        .global_spans
+                        .get(&impl_info.def_id)
+                        .copied()
+                        .unwrap_or(Span::DUMMY);
+
+                    for method_name in completeness.missing_methods {
+                        self.diagnostics.push(missing_method(
+                            &method_name,
+                            &trait_info.name,
+                            &impl_info.self_ty,
+                            span,
+                        ));
+                    }
+
+                    for assoc_name in completeness.missing_assoc_types {
+                        self.diagnostics.push(missing_assoc_type(
+                            &assoc_name,
+                            &trait_info.name,
+                            &impl_info.self_ty,
+                            span,
+                        ));
+                    }
                 }
-            }
-        }
-    }
 
-    /// Check if an impl provides all required methods.
-    /// 检查实现是否提供了所有必需的方法。
-    fn check_impl_methods(
-        &self,
-        impl_methods: &[String],
-        trait_info: &crate::traits::TraitInfo,
-    ) -> Vec<String> {
-        let mut missing = Vec::new();
-        for method in &trait_info.methods {
-            if !method.has_default && !impl_methods.contains(&method.name) {
-                missing.push(method.name.clone());
+                self.check_assoc_type_bounds(&trait_info, &impl_info);
             }
         }
-        missing
     }
 
     /// Get the trait resolver (for external use).
@@ -260,6 +290,79 @@ impl TypeChecker {
     /// 获取收集的诊断信息。
     pub fn diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    fn format_trait_bound(&self, bound: &TraitBound) -> String {
+        let trait_name = self
+            .trait_resolver
+            .get_trait(bound.trait_id)
+            .map(|info| info.name.as_str())
+            .unwrap_or("<unknown>");
+
+        if bound.args.is_empty() {
+            trait_name.to_string()
+        } else {
+            let args = bound
+                .args
+                .iter()
+                .map(format_type)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}[{}]", trait_name, args)
+        }
+    }
+
+    fn check_assoc_type_bounds(&mut self, trait_info: &TraitInfo, impl_info: &ImplInfo) {
+        if trait_info.assoc_types.is_empty() {
+            return;
+        }
+
+        for assoc_def in &trait_info.assoc_types {
+            if assoc_def.bounds.is_empty() {
+                continue;
+            }
+
+            let assoc_impl = impl_info
+                .assoc_types
+                .iter()
+                .find(|assoc| assoc.name == assoc_def.name);
+
+            let Some(assoc_impl) = assoc_impl else {
+                continue;
+            };
+
+            let assoc_ty = &assoc_impl.ty;
+            let assoc_ty_str = format_type(assoc_ty);
+
+            for bound in &assoc_def.bounds {
+                if self
+                    .trait_resolver
+                    .find_trait_impl(bound.trait_id, assoc_ty)
+                    .is_some()
+                {
+                    continue;
+                }
+
+                let bound_name = self.format_trait_bound(bound);
+                let message = format!(
+                    "associated type '{}' in impl of trait '{}' must satisfy bound '{}'",
+                    assoc_def.name, trait_info.name, bound_name
+                );
+
+                self.diagnostics.push(
+                    Diagnostic::error(DiagnosticKind::Type, assoc_impl.span, message)
+                        .with_code(ErrorCode::TraitNotImplemented)
+                        .with_label(Label::new(
+                            assoc_impl.span,
+                            format!("this is `{}`", assoc_ty_str),
+                        ))
+                        .with_note(format!(
+                            "`{}` does not implement `{}`",
+                            assoc_ty_str, bound_name
+                        )),
+                );
+            }
+        }
     }
 
     fn error(&mut self, span: Span, message: impl Into<String>) {
@@ -366,8 +469,21 @@ impl TypeChecker {
 
         match &item.kind {
             ItemKind::Fn(fn_def) => {
-                let fn_ty = self.fn_signature(fn_def);
-                self.globals.insert(item.id, fn_ty);
+                if fn_def.params.is_empty() {
+                    let mut value_ty = self.resolve_type(&fn_def.return_ty);
+                    if !fn_def.generics.is_empty() {
+                        let params: Vec<String> =
+                            fn_def.generics.iter().map(|g| g.name.clone()).collect();
+                        value_ty = Ty {
+                            kind: TyKind::Forall(params, Box::new(value_ty)),
+                            span: Span::DUMMY,
+                        };
+                    }
+                    self.globals.insert(item.id, value_ty);
+                } else {
+                    let fn_ty = self.fn_signature(fn_def);
+                    self.globals.insert(item.id, fn_ty);
+                }
             }
             ItemKind::Trait(trait_def) => {
                 self.collect_trait(item.id, trait_def);
@@ -436,6 +552,28 @@ impl TypeChecker {
             span: Span::DUMMY,
         };
         self.globals.insert(def_id, enum_ty);
+
+        // Register variant constructors
+        // 注册变体构造器
+        for variant in &enum_def.variants {
+            let fields = variant.fields.clone();
+            self.variants.insert(
+                variant.id,
+                VariantInfo {
+                    enum_id: def_id,
+                    fields: fields.clone(),
+                },
+            );
+
+            let ctor_ty = Ty {
+                kind: TyKind::Fn(fields, Box::new(Ty {
+                    kind: TyKind::Named(def_id, Vec::new()),
+                    span: Span::DUMMY,
+                })),
+                span: Span::DUMMY,
+            };
+            self.globals.insert(variant.id, ctor_ty);
+        }
     }
 
     /// Collect type alias definition.
@@ -1009,25 +1147,33 @@ impl TypeChecker {
             }
 
             PatternKind::Constructor(def_id, patterns) => {
-                // Look up constructor signature from enum definitions
-                // 从枚举定义中查找构造函数签名
-                // Clone field types to avoid borrow conflict
-                // 克隆字段类型以避免借用冲突
-                let field_types: Option<Vec<Ty>> = self.enums.get(def_id).and_then(|enum_info| {
-                    enum_info
-                        .variants
-                        .iter()
-                        .find(|(_, fields)| fields.len() == patterns.len())
-                        .map(|(_, fields)| fields.clone())
-                });
+                if let Some(variant) = self.variants.get(def_id) {
+                    let enum_id = variant.enum_id;
+                    let fields = variant.fields.clone();
+                    let enum_ty = Ty {
+                        kind: TyKind::Named(enum_id, Vec::new()),
+                        span: pattern.span,
+                    };
+                    self.unify(&enum_ty, expected, pattern.span);
 
-                if let Some(types) = field_types {
-                    for (pat, ty) in patterns.iter().zip(types.iter()) {
+                    if fields.len() != patterns.len() {
+                        self.error(
+                            pattern.span,
+                            format!(
+                                "constructor expects {} field(s), got {}",
+                                fields.len(),
+                                patterns.len()
+                            ),
+                        );
+                        return;
+                    }
+
+                    for (pat, ty) in patterns.iter().zip(fields.iter()) {
                         self.check_pattern(pat, ty);
                     }
                 } else {
-                    // Unknown constructor or no matching variant, use fresh type variables
-                    // 未知构造函数或无匹配变体，使用新类型变量
+                    // Unknown constructor, use fresh type variables
+                    // 未知构造函数，使用新类型变量
                     for pat in patterns {
                         let arg_ty = self.fresh_var();
                         self.check_pattern(pat, &arg_ty);

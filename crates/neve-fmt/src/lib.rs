@@ -12,8 +12,8 @@ pub mod printer;
 pub use config::FormatConfig;
 pub use format::Formatter;
 
-use neve_lexer::Lexer;
-use neve_parser::Parser;
+use neve_diagnostic::Diagnostic;
+use neve_parser::parse;
 
 /// Format Neve source code.
 /// 格式化 Neve 源代码。
@@ -24,15 +24,10 @@ pub fn format(source: &str) -> Result<String, FormatError> {
 /// Format Neve source code with custom configuration.
 /// 使用自定义配置格式化 Neve 源代码。
 pub fn format_with_config(source: &str, config: &FormatConfig) -> Result<String, FormatError> {
-    let lexer = Lexer::new(source);
-    let (tokens, errors) = lexer.tokenize();
-
-    if !errors.is_empty() {
-        return Err(FormatError::Parse(format!("Lexer errors: {:?}", errors)));
+    let (ast, diagnostics) = parse(source);
+    if !diagnostics.is_empty() {
+        return Err(FormatError::Parse(diagnostics));
     }
-
-    let mut parser = Parser::new(tokens);
-    let ast = parser.parse_file();
 
     let formatter = Formatter::new(config.clone());
     Ok(formatter.format(&ast))
@@ -50,15 +45,33 @@ pub fn check(source: &str) -> Result<bool, FormatError> {
 #[derive(Debug, Clone)]
 pub enum FormatError {
     /// Parse error. / 解析错误。
-    Parse(String),
+    Parse(Vec<Diagnostic>),
     /// I/O error. / I/O 错误。
     Io(String),
+}
+
+impl FormatError {
+    /// Access diagnostics when formatting failed during parsing.
+    /// 获取解析失败时的诊断信息。
+    pub fn diagnostics(&self) -> Option<&[Diagnostic]> {
+        match self {
+            FormatError::Parse(diags) => Some(diags),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FormatError::Parse(msg) => write!(f, "parse error: {}", msg),
+            FormatError::Parse(diags) => {
+                let summary = diags
+                    .iter()
+                    .map(|diag| diag.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                write!(f, "parse error: {}", summary)
+            }
             FormatError::Io(msg) => write!(f, "I/O error: {}", msg),
         }
     }

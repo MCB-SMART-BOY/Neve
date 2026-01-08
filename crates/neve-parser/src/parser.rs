@@ -1888,6 +1888,24 @@ impl Parser {
                 );
             }
 
+            if ident
+                .name
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_uppercase())
+                .unwrap_or(false)
+            {
+                // Constructor pattern with no args: Name
+                // 构造器模式（无参数）：Name
+                return Pattern::new(
+                    PatternKind::Constructor {
+                        path: vec![ident],
+                        args: Vec::new(),
+                    },
+                    start,
+                );
+            }
+
             // Just a variable pattern
             // 只是一个变量模式
             return Pattern::new(PatternKind::Var(ident.clone()), ident.span);
@@ -1940,9 +1958,23 @@ impl Parser {
                     Pattern::new(
                         PatternKind::Constructor {
                             path: vec![ident],
-                            args,
+                        args,
+                    },
+                    span,
+                )
+                } else if ident
+                    .name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_uppercase())
+                    .unwrap_or(false)
+                {
+                    Pattern::new(
+                        PatternKind::Constructor {
+                            path: vec![ident],
+                            args: Vec::new(),
                         },
-                        span,
+                        start,
                     )
                 } else {
                     Pattern::new(PatternKind::Var(ident.clone()), ident.span)
