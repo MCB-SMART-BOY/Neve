@@ -19,12 +19,13 @@ pub mod semantic_tokens;
 pub mod symbol_index;
 
 pub use backend::Backend;
-pub use document::{Diagnostic, DiagnosticSeverity, Document};
+pub use document::Document;
 pub use semantic_tokens::{
     comment_token_type, generate_semantic_tokens, generate_semantic_tokens_with_context,
     parameter_token_type, token_modifiers, token_types,
 };
 pub use symbol_index::{Symbol, SymbolIndex, SymbolKind, SymbolRef};
+pub use neve_diagnostic::{Diagnostic, Severity as DiagnosticSeverity};
 
 use tower_lsp::{LspService, Server};
 

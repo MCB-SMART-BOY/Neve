@@ -7,11 +7,13 @@
 //! 它提供了一个带有尾调用优化的树遍历解释器。
 
 use crate::{Environment, Value};
+use neve_diagnostic::Diagnostic;
 use neve_hir::{
     BinOp, DefId, Expr, ExprKind, FnDef, Item, ItemKind, Literal, LocalId, Module, UnaryOp,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Evaluation errors.
@@ -45,6 +47,19 @@ pub enum EvalError {
     /// Wrong number of arguments error / 参数数量错误
     #[error("wrong number of arguments")]
     WrongArity,
+
+    /// Parse diagnostics for imported modules / 导入模块的解析诊断
+    #[error("parse error in module '{module}'")]
+    ParseDiagnostics {
+        /// Module name / 模块名称
+        module: String,
+        /// File path / 文件路径
+        path: PathBuf,
+        /// Source content / 源码内容
+        source_text: String,
+        /// Parser diagnostics / 解析诊断
+        diagnostics: Vec<Diagnostic>,
+    },
 }
 
 /// Result of evaluating an expression with tail call detection.
@@ -70,6 +85,8 @@ pub struct Evaluator {
     env: Environment,
     /// Global definitions (functions, etc.) / 全局定义（函数等）
     globals: HashMap<DefId, GlobalDef>,
+    /// Variant constructors by DefId. / 按 DefId 存储的变体构造器。
+    variant_ctors: HashMap<DefId, VariantCtor>,
 }
 
 /// A global definition.
@@ -82,6 +99,14 @@ enum GlobalDef {
     Value(Value),
 }
 
+/// A variant constructor definition.
+/// 变体构造器定义。
+#[derive(Clone)]
+struct VariantCtor {
+    name: String,
+    arity: usize,
+}
+
 impl Evaluator {
     /// Create a new evaluator.
     /// 创建一个新的求值器。
@@ -89,6 +114,7 @@ impl Evaluator {
         Self {
             env: Environment::new(),
             globals: HashMap::new(),
+            variant_ctors: HashMap::new(),
         }
     }
 
@@ -127,9 +153,23 @@ impl Evaluator {
     }
 
     fn collect_item(&mut self, item: &Item) {
-        if let ItemKind::Fn(fn_def) = &item.kind {
-            self.globals
-                .insert(item.id, GlobalDef::Function(fn_def.clone()));
+        match &item.kind {
+            ItemKind::Fn(fn_def) => {
+                self.globals
+                    .insert(item.id, GlobalDef::Function(fn_def.clone()));
+            }
+            ItemKind::Enum(enum_def) => {
+                for variant in &enum_def.variants {
+                    self.variant_ctors.insert(
+                        variant.id,
+                        VariantCtor {
+                            name: variant.name.clone(),
+                            arity: variant.fields.len(),
+                        },
+                    );
+                }
+            }
+            _ => {}
         }
     }
 
@@ -171,6 +211,13 @@ impl Evaluator {
                         })
                     }
                     None => {
+                        if let Some(ctor) = self.variant_ctors.get(def_id) {
+                            return Ok(Value::VariantCtor {
+                                name: ctor.name.clone(),
+                                arity: ctor.arity,
+                            });
+                        }
+
                         // Check if it's a builtin
                         self.get_builtin(*def_id).ok_or(EvalError::UnboundVariable)
                     }
@@ -508,6 +555,22 @@ impl Evaluator {
                     }
                     return (builtin.func)(&current_args).map_err(EvalError::TypeError);
                 }
+                Value::BuiltinFn(_, func) => {
+                    return func(current_args).map_err(EvalError::TypeError);
+                }
+                Value::VariantCtor { name, arity } => {
+                    if current_args.len() != arity {
+                        return Err(EvalError::WrongArity);
+                    }
+
+                    let payload = match current_args.len() {
+                        0 => Value::Unit,
+                        1 => current_args.into_iter().next().unwrap(),
+                        _ => Value::Tuple(Rc::new(current_args)),
+                    };
+
+                    return Ok(Value::Variant(name, Box::new(payload)));
+                }
                 Value::AstClosure(_) => {
                     // AstClosure not supported in HIR evaluator
                     return Err(EvalError::TypeError(
@@ -697,7 +760,39 @@ impl Evaluator {
                     None
                 }
             }
-            PatternKind::Constructor(_, patterns) => {
+            PatternKind::Constructor(def_id, patterns) => {
+                if let Some(ctor) = self.variant_ctors.get(def_id) {
+                    if let Value::Variant(tag, payload) = value
+                        && tag == &ctor.name
+                    {
+                        return match patterns.as_slice() {
+                            [] => {
+                                if matches!(**payload, Value::Unit) {
+                                    Some(Vec::new())
+                                } else {
+                                    None
+                                }
+                            }
+                            [p] => self.match_pattern(p, payload),
+                            _ => {
+                                if let Value::Tuple(values) = payload.as_ref() {
+                                    if values.len() != patterns.len() {
+                                        return None;
+                                    }
+                                    let capacity = patterns.iter().map(estimate_bindings).sum();
+                                    let mut bindings = Vec::with_capacity(capacity);
+                                    for (p, v) in patterns.iter().zip(values.iter()) {
+                                        bindings.extend(self.match_pattern(p, v)?);
+                                    }
+                                    Some(bindings)
+                                } else {
+                                    None
+                                }
+                            }
+                        };
+                    }
+                }
+
                 // Match Option/Result constructors
                 match (patterns.as_slice(), value) {
                     ([p], Value::Some(v)) => self.match_pattern(p, v),
@@ -763,6 +858,7 @@ impl Evaluator {
                     format!("{}({})", tag, Self::value_to_string(payload))
                 }
             }
+            Value::VariantCtor { name, arity } => format!("<variant:{}:{}>", name, arity),
             Value::Builtin(b) => format!("<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
             Value::AstClosure(_) => "<function>".to_string(),

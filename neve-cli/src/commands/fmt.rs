@@ -2,6 +2,7 @@
 //! `neve fmt` 命令。
 
 use crate::output;
+use neve_diagnostic::emit;
 use std::fs;
 use std::path::Path;
 
@@ -16,7 +17,18 @@ pub fn run(file: &str, write: bool) -> Result<(), String> {
 
     let source = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let formatted = neve_fmt::format(&source).map_err(|e| format!("Format error: {}", e))?;
+    let formatted = match neve_fmt::format(&source) {
+        Ok(formatted) => formatted,
+        Err(err) => {
+            if let Some(diags) = err.diagnostics() {
+                for diag in diags {
+                    emit(&source, &path.display().to_string(), diag);
+                }
+                return Err("format parse error".to_string());
+            }
+            return Err(format!("Format error: {}", err));
+        }
+    };
 
     if write {
         if formatted != source {
@@ -45,7 +57,18 @@ pub fn check(file: &str) -> Result<(), String> {
 
     let source = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let is_formatted = neve_fmt::check(&source).map_err(|e| format!("Format error: {}", e))?;
+    let is_formatted = match neve_fmt::check(&source) {
+        Ok(is_formatted) => is_formatted,
+        Err(err) => {
+            if let Some(diags) = err.diagnostics() {
+                for diag in diags {
+                    emit(&source, &path.display().to_string(), diag);
+                }
+                return Err("format parse error".to_string());
+            }
+            return Err(format!("Format error: {}", err));
+        }
+    };
 
     if is_formatted {
         output::success(&format!("OK: {file}"));

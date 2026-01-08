@@ -11,9 +11,7 @@ neve-common.workspace = true
 neve-diagnostic.workspace = true
 neve-lexer.workspace = true
 neve-syntax.workspace = true
-neve-parser.workspace = true
-neve-hir.workspace = true
-neve-typeck.workspace = true
+neve-frontend.workspace = true
 neve-fmt.workspace = true
 
 tower-lsp.workspace = true

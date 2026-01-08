@@ -7,8 +7,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  Core / List / String / Option / Result / I/O    │
-│  [中文]     #chinese   ──→  核心 / 列表 / 字符串 / Option / Result / I/O    │
+│  [English]  #english   ──→  Core / Modules / Math / I/O / Package          │
+│  [中文]     #chinese   ──→  核心 / 模块 / 数学 / I/O / 包管理              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -20,108 +20,172 @@
 
 > *Your toolkit. Everything you need, nothing you don't.*
 
-## Core Functions
+## Using the stdlib
+
+Neve's standard library is namespaced. Import modules to use `list.*`, `string.*`,
+`math.*`, `io.*`, `path.*`, `Map.*`, and `Set.*`. You can also bring selected
+names into scope.
 
 ```neve
-id<A>(x: A) -> A                              -- identity
-const<A, B>(x: A, y: B) -> A                  -- always return first
-compose<A, B, C>(f: B -> C, g: A -> B) -> A -> C  -- f . g
-flip<A, B, C>(f: A -> B -> C) -> B -> A -> C  -- swap arguments
+import std.list;
+import std.list (map, filter, fold);
+import std.string as Str;
+import std.Map;
+import std.Set;
 ```
 
-## List Operations
+## Core Builtins (global)
 
 ```neve
-map<A, B>(f: A -> B, xs: List<A>) -> List<B>
-filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
-fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
-foldRight<A, B>(init: B, f: A -> B -> B, xs: List<A>) -> B
-
-length<A>(xs: List<A>) -> Int
-head<A>(xs: List<A>) -> Option<A>
-tail<A>(xs: List<A>) -> Option<List<A>>
-reverse<A>(xs: List<A>) -> List<A>
-take<A>(n: Int, xs: List<A>) -> List<A>
-drop<A>(n: Int, xs: List<A>) -> List<A>
-zip<A, B>(xs: List<A>, ys: List<B>) -> List<(A, B)>
-concat<A>(xss: List<List<A>>) -> List<A>
+id<A>(x: A) -> A
+const<A, B>(x: A, y: B) -> A
+print(x: A) -> Unit
+len(x: A) -> Int
+typeOf(x: A) -> String
+toString(x: A) -> String
+toInt(x: A) -> Int
+toFloat(x: A) -> Float
+assert(cond: Bool) -> Unit
+assertEq<A>(a: A, b: A) -> Unit
+trace(label: A, value: B) -> B
+force(x: A) -> A
+isEvaluated(x: A) -> Bool
 ```
 
-## String Operations
+## List Module (std.list)
 
 ```neve
-length(s: String) -> Int
-concat(xs: List<String>) -> String
-split(sep: String, s: String) -> List<String>
-trim(s: String) -> String
-toUpper(s: String) -> String
-toLower(s: String) -> String
+list.len<A>(xs: List<A>) -> Int
+list.isEmpty<A>(xs: List<A>) -> Bool
+list.head<A>(xs: List<A>) -> Option<A>
+list.tail<A>(xs: List<A>) -> List<A>
+list.append<A>(xs: List<A>, ys: List<A>) -> List<A>
+list.map<A, B>(f: A -> B, xs: List<A>) -> List<B>
+list.filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
+list.fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
+list.range(start: Int, end: Int) -> List<Int>
 ```
 
-## Option Type
+## String Module (std.string)
+
+```neve
+string.len(s: String) -> Int
+string.split(s: String, sep: String) -> List<String>
+string.join(xs: List<String>, sep: String) -> String
+string.trim(s: String) -> String
+string.upper(s: String) -> String
+string.lower(s: String) -> String
+string.contains(s: String, needle: String) -> Bool
+```
+
+## Option Module (std.option)
 
 ```neve
 enum Option<T> { Some(T), None }
 
-map<A, B>(f: A -> B, opt: Option<A>) -> Option<B>
-flatMap<A, B>(f: A -> Option<B>, opt: Option<A>) -> Option<B>
-withDefault<A>(default: A, opt: Option<A>) -> A
-isSome<A>(opt: Option<A>) -> Bool
+option.some<A>(x: A) -> Option<A>
+option.none -> Option<A>
+option.is_some<A>(opt: Option<A>) -> Bool
+option.is_none<A>(opt: Option<A>) -> Bool
+option.unwrap<A>(opt: Option<A>) -> A
+option.unwrap_or<A>(opt: Option<A>, default: A) -> A
 ```
 
-## Result Type
+## Result Module (std.result)
 
 ```neve
 enum Result<T, E> { Ok(T), Err(E) }
 
-map<T, E, U>(f: T -> U, res: Result<T, E>) -> Result<U, E>
-mapErr<T, E, F>(f: E -> F, res: Result<T, E>) -> Result<T, F>
-withDefault<T, E>(default: T, res: Result<T, E>) -> T
+result.ok<T, E>(x: T) -> Result<T, E>
+result.err<T, E>(e: E) -> Result<T, E>
+result.is_ok<T, E>(res: Result<T, E>) -> Bool
+result.is_err<T, E>(res: Result<T, E>) -> Bool
+result.unwrap<T, E>(res: Result<T, E>) -> T
+result.unwrap_err<T, E>(res: Result<T, E>) -> E
 ```
 
-## Math Functions
+## Math Module (std.math)
+
+Math helpers accept Int or Float where it makes sense. In this doc, `Number`
+means Int or Float.
 
 ```neve
-abs(x: Int) -> Int
-min(x: Int, y: Int) -> Int
-max(x: Int, y: Int) -> Int
-pow(base: Int, exp: Int) -> Int
-sqrt(x: Float) -> Float
+math.abs(x: Number) -> Number
+math.floor(x: Number) -> Int
+math.ceil(x: Number) -> Int
+math.round(x: Number) -> Int
+math.sqrt(x: Number) -> Float
+math.pow(base: Number, exp: Number) -> Number
+math.max(x: Number, y: Number) -> Number
+math.min(x: Number, y: Number) -> Number
 ```
 
-## I/O Operations
+## I/O Module (std.io)
+
+I/O helpers are impure and raise runtime errors on failure.
 
 ```neve
-print(s: String) -> Unit
-println(s: String) -> Unit
-readLine() -> String
-readFile(path: String) -> Result<String, String>
-writeFile(path: String, content: String) -> Result<Unit, String>
+io.readFile(path: String) -> String
+io.readDir(path: String) -> List<String>
+io.pathExists(path: String) -> Bool
+io.isDir(path: String) -> Bool
+io.isFile(path: String) -> Bool
+io.getEnv(name: String) -> Option<String>
+io.currentDir() -> String
+io.homeDir() -> Option<String>
+io.hashFile(path: String) -> String
+io.hashString(content: String) -> String
+io.currentSystem() -> String
 ```
 
-## Source Fetching
+## Path Module (std.path)
 
 ```neve
-fetchurl #{ url: String, hash: String } -> Path
-fetchGit #{ url: String, rev: String, hash: String } -> Path
+path.join(a: String, b: String) -> String
+path.parent(path: String) -> Option<String>
+path.filename(path: String) -> Option<String>
+path.extension(path: String) -> Option<String>
+path.is_absolute(path: String) -> Bool
 ```
 
-## Derivation
+## Map / Set Namespaces (Map.*, Set.*)
 
 ```neve
-mkDerivation #{
+Map.empty -> Map<K, V>
+Map.singleton(key: K, value: V) -> Map<K, V>
+Map.fromList(items: List<(K, V)>) -> Map<K, V>
+Map.get(key: K, map: Map<K, V>) -> Option<V>
+Map.contains(key: K, map: Map<K, V>) -> Bool
+
+Set.empty -> Set<A>
+Set.singleton(value: A) -> Set<A>
+Set.fromList(items: List<A>) -> Set<A>
+Set.contains(value: A, set: Set<A>) -> Bool
+Set.size(set: Set<A>) -> Int
+```
+
+## Package System (in progress)
+
+```neve
+derivation #{
     name: String,
-    version: String,
-    src: Path,
-    buildInputs: List<Derivation>,
-    buildPhase: String,
-    installPhase: String,
+    system: String,
+    builder: String,
+    args: List<String>,      -- optional
+    version: String,         -- optional (defaults to 0.0.0)
+    ...                      -- other string fields become env vars
 } -> Derivation
 ```
+
+Note: Source fetching helpers are not exposed as language builtins yet. Tooling
+uses `neve-fetch` for now.
 
 ## Example
 
 ```neve
+import std.list (filter, map);
+import std.string;
+
 let users = [
     #{ name = "Alice", age = 30 },
     #{ name = "Bob", age = 25 },
@@ -129,8 +193,9 @@ let users = [
 
 let names = users
     |> filter(fn(u) u.age >= 18)
-    |> map(fn(u) u.name)
-    |> concat(", ");
+    |> map(fn(u) u.name);
+
+let joined = string.join(names, ", ");
 
 -- => "Alice, Bob"
 ```
@@ -143,108 +208,170 @@ let names = users
 
 > 你的工具箱。要啥有啥，绝不臃肿。
 
-## 核心函数
+## 标准库用法
+
+Neve 的标准库是命名空间形式。通过导入模块使用 `list.*`、`string.*`、
+`math.*`、`io.*`、`path.*`、`Map.*`、`Set.*`。也可以选择性导入需要的名字。
 
 ```neve
-id<A>(x: A) -> A                              -- 恒等函数，传啥返啥
-const<A, B>(x: A, y: B) -> A                  -- 永远返回第一个参数
-compose<A, B, C>(f: B -> C, g: A -> B) -> A -> C  -- 函数组合 f . g
-flip<A, B, C>(f: A -> B -> C) -> B -> A -> C  -- 交换参数顺序
+import std.list;
+import std.list (map, filter, fold);
+import std.string as Str;
+import std.Map;
+import std.Set;
 ```
 
-## 列表操作
+## 核心内置函数（全局）
 
 ```neve
-map<A, B>(f: A -> B, xs: List<A>) -> List<B>
-filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
-fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
-foldRight<A, B>(init: B, f: A -> B -> B, xs: List<A>) -> B
-
-length<A>(xs: List<A>) -> Int
-head<A>(xs: List<A>) -> Option<A>
-tail<A>(xs: List<A>) -> Option<List<A>>
-reverse<A>(xs: List<A>) -> List<A>
-take<A>(n: Int, xs: List<A>) -> List<A>
-drop<A>(n: Int, xs: List<A>) -> List<A>
-zip<A, B>(xs: List<A>, ys: List<B>) -> List<(A, B)>
-concat<A>(xss: List<List<A>>) -> List<A>
+id<A>(x: A) -> A
+const<A, B>(x: A, y: B) -> A
+print(x: A) -> Unit
+len(x: A) -> Int
+typeOf(x: A) -> String
+toString(x: A) -> String
+toInt(x: A) -> Int
+toFloat(x: A) -> Float
+assert(cond: Bool) -> Unit
+assertEq<A>(a: A, b: A) -> Unit
+trace(label: A, value: B) -> B
+force(x: A) -> A
+isEvaluated(x: A) -> Bool
 ```
 
-## 字符串操作
+## 列表模块（std.list）
 
 ```neve
-length(s: String) -> Int
-concat(xs: List<String>) -> String
-split(sep: String, s: String) -> List<String>
-trim(s: String) -> String
-toUpper(s: String) -> String
-toLower(s: String) -> String
+list.len<A>(xs: List<A>) -> Int
+list.isEmpty<A>(xs: List<A>) -> Bool
+list.head<A>(xs: List<A>) -> Option<A>
+list.tail<A>(xs: List<A>) -> List<A>
+list.append<A>(xs: List<A>, ys: List<A>) -> List<A>
+list.map<A, B>(f: A -> B, xs: List<A>) -> List<B>
+list.filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
+list.fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
+list.range(start: Int, end: Int) -> List<Int>
 ```
 
-## Option 类型
+## 字符串模块（std.string）
+
+```neve
+string.len(s: String) -> Int
+string.split(s: String, sep: String) -> List<String>
+string.join(xs: List<String>, sep: String) -> String
+string.trim(s: String) -> String
+string.upper(s: String) -> String
+string.lower(s: String) -> String
+string.contains(s: String, needle: String) -> Bool
+```
+
+## Option 模块（std.option）
 
 ```neve
 enum Option<T> { Some(T), None }
 
-map<A, B>(f: A -> B, opt: Option<A>) -> Option<B>
-flatMap<A, B>(f: A -> Option<B>, opt: Option<A>) -> Option<B>
-withDefault<A>(default: A, opt: Option<A>) -> A
-isSome<A>(opt: Option<A>) -> Bool
+option.some<A>(x: A) -> Option<A>
+option.none -> Option<A>
+option.is_some<A>(opt: Option<A>) -> Bool
+option.is_none<A>(opt: Option<A>) -> Bool
+option.unwrap<A>(opt: Option<A>) -> A
+option.unwrap_or<A>(opt: Option<A>, default: A) -> A
 ```
 
-## Result 类型
+## Result 模块（std.result）
 
 ```neve
 enum Result<T, E> { Ok(T), Err(E) }
 
-map<T, E, U>(f: T -> U, res: Result<T, E>) -> Result<U, E>
-mapErr<T, E, F>(f: E -> F, res: Result<T, E>) -> Result<T, F>
-withDefault<T, E>(default: T, res: Result<T, E>) -> T
+result.ok<T, E>(x: T) -> Result<T, E>
+result.err<T, E>(e: E) -> Result<T, E>
+result.is_ok<T, E>(res: Result<T, E>) -> Bool
+result.is_err<T, E>(res: Result<T, E>) -> Bool
+result.unwrap<T, E>(res: Result<T, E>) -> T
+result.unwrap_err<T, E>(res: Result<T, E>) -> E
 ```
 
-## 数学函数
+## 数学模块（std.math）
+
+数学函数在合适的情况下支持 Int 和 Float。这里的 `Number`
+表示 Int 或 Float。
 
 ```neve
-abs(x: Int) -> Int
-min(x: Int, y: Int) -> Int
-max(x: Int, y: Int) -> Int
-pow(base: Int, exp: Int) -> Int
-sqrt(x: Float) -> Float
+math.abs(x: Number) -> Number
+math.floor(x: Number) -> Int
+math.ceil(x: Number) -> Int
+math.round(x: Number) -> Int
+math.sqrt(x: Number) -> Float
+math.pow(base: Number, exp: Number) -> Number
+math.max(x: Number, y: Number) -> Number
+math.min(x: Number, y: Number) -> Number
 ```
 
-## I/O 操作
+## I/O 模块（std.io）
+
+I/O 函数是非纯的，失败会抛出运行时错误。
 
 ```neve
-print(s: String) -> Unit
-println(s: String) -> Unit
-readLine() -> String
-readFile(path: String) -> Result<String, String>
-writeFile(path: String, content: String) -> Result<Unit, String>
+io.readFile(path: String) -> String
+io.readDir(path: String) -> List<String>
+io.pathExists(path: String) -> Bool
+io.isDir(path: String) -> Bool
+io.isFile(path: String) -> Bool
+io.getEnv(name: String) -> Option<String>
+io.currentDir() -> String
+io.homeDir() -> Option<String>
+io.hashFile(path: String) -> String
+io.hashString(content: String) -> String
+io.currentSystem() -> String
 ```
 
-## 源码获取
+## 路径模块（std.path）
 
 ```neve
-fetchurl #{ url: String, hash: String } -> Path
-fetchGit #{ url: String, rev: String, hash: String } -> Path
+path.join(a: String, b: String) -> String
+path.parent(path: String) -> Option<String>
+path.filename(path: String) -> Option<String>
+path.extension(path: String) -> Option<String>
+path.is_absolute(path: String) -> Bool
 ```
 
-## Derivation 构建
+## Map / Set 命名空间（Map.*、Set.*）
 
 ```neve
-mkDerivation #{
+Map.empty -> Map<K, V>
+Map.singleton(key: K, value: V) -> Map<K, V>
+Map.fromList(items: List<(K, V)>) -> Map<K, V>
+Map.get(key: K, map: Map<K, V>) -> Option<V>
+Map.contains(key: K, map: Map<K, V>) -> Bool
+
+Set.empty -> Set<A>
+Set.singleton(value: A) -> Set<A>
+Set.fromList(items: List<A>) -> Set<A>
+Set.contains(value: A, set: Set<A>) -> Bool
+Set.size(set: Set<A>) -> Int
+```
+
+## 包管理（开发中）
+
+```neve
+derivation #{
     name: String,
-    version: String,
-    src: Path,
-    buildInputs: List<Derivation>,
-    buildPhase: String,
-    installPhase: String,
+    system: String,
+    builder: String,
+    args: List<String>,      -- 可选
+    version: String,         -- 可选（默认 0.0.0）
+    ...                      -- 其它字符串字段会变成环境变量
 } -> Derivation
 ```
+
+注意：源码获取能力暂时还没有作为语言内置暴露，工具链目前使用 `neve-fetch`。
 
 ## 示例
 
 ```neve
+import std.list (filter, map);
+import std.string;
+
 let users = [
     #{ name = "小明", age = 30 },
     #{ name = "小红", age = 25 },
@@ -252,8 +379,9 @@ let users = [
 
 let names = users
     |> filter(fn(u) u.age >= 18)
-    |> map(fn(u) u.name)
-    |> concat("、");
+    |> map(fn(u) u.name);
+
+let joined = string.join(names, "、");
 
 -- => "小明、小红"
 ```

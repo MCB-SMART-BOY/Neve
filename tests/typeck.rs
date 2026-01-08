@@ -163,6 +163,22 @@ fn test_typeck_bool_equality() {
 }
 
 // ============================================================================
+// 枚举构造器
+// ============================================================================
+
+#[test]
+fn test_typeck_enum_constructor() {
+    check_no_errors("enum Option { Some(Int), None }; let x = Some(1);");
+}
+
+#[test]
+fn test_typeck_enum_match() {
+    check_no_errors(
+        "enum Option { Some(Int), None }; let x = Some(1); let y = match x { Some(v) -> v, None -> 0 };",
+    );
+}
+
+// ============================================================================
 // 逻辑运算
 // ============================================================================
 
@@ -907,6 +923,35 @@ fn test_typeck_complex_match() {
             (_, (_, 0)) -> 2,
             (a, (b, c)) -> a + b + c
         };
+    ",
+    );
+}
+
+// ============================================================================
+// Trait 关联类型
+// ============================================================================
+
+#[test]
+fn test_typeck_assoc_type_bounds_satisfied() {
+    check_no_errors(
+        "
+        trait Show { };
+        trait Iterator { type Item: Show; };
+        struct Foo {};
+        impl Show for Int { };
+        impl Iterator for Foo { type Item = Int; };
+    ",
+    );
+}
+
+#[test]
+fn test_typeck_assoc_type_bounds_missing_impl() {
+    check_has_errors(
+        "
+        trait Show { };
+        trait Iterator { type Item: Show; };
+        struct Foo {};
+        impl Iterator for Foo { type Item = Int; };
     ",
     );
 }

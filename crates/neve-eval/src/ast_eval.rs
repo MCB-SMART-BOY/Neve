@@ -232,6 +232,9 @@ pub struct AstEvaluator {
     base_path: Option<PathBuf>,
     /// Cache of already-loaded modules / 已加载模块的缓存
     loaded_modules: HashMap<PathBuf, Rc<AstEnv>>,
+    /// Module overrides for non-file modules (e.g., stdlib).
+    /// 非文件模块覆盖（例如标准库）。
+    module_overrides: HashMap<Vec<String>, Rc<AstEnv>>,
     /// Current module path (for relative imports) / 当前模块路径（用于相对导入）
     current_module_path: Vec<String>,
     /// Module loader for advanced module resolution / 高级模块解析的模块加载器
@@ -244,6 +247,7 @@ impl AstEvaluator {
             env: Rc::new(AstEnv::with_builtins()),
             base_path: None,
             loaded_modules: HashMap::new(),
+            module_overrides: HashMap::new(),
             current_module_path: Vec::new(),
             module_loader: None,
         }
@@ -254,6 +258,7 @@ impl AstEvaluator {
             env,
             base_path: None,
             loaded_modules: HashMap::new(),
+            module_overrides: HashMap::new(),
             current_module_path: Vec::new(),
             module_loader: None,
         }
@@ -263,6 +268,16 @@ impl AstEvaluator {
         self.base_path = Some(path.clone());
         // Also initialize module loader with this path
         self.module_loader = Some(ModuleLoader::new(&path));
+        self
+    }
+
+    /// Set module overrides for non-file imports.
+    /// 设置非文件导入的模块覆盖。
+    pub fn with_module_overrides(
+        mut self,
+        overrides: HashMap<Vec<String>, Rc<AstEnv>>,
+    ) -> Self {
+        self.module_overrides = overrides;
         self
     }
 
@@ -276,6 +291,25 @@ impl AstEvaluator {
     pub fn with_module_path(mut self, path: Vec<String>) -> Self {
         self.current_module_path = path;
         self
+    }
+
+    /// Seed the module cache with already evaluated modules.
+    /// 使用已求值的模块预填充模块缓存。
+    pub fn with_loaded_modules(mut self, loaded_modules: HashMap<PathBuf, Rc<AstEnv>>) -> Self {
+        self.loaded_modules = loaded_modules;
+        self
+    }
+
+    /// Extract the module cache after evaluation.
+    /// 求值后取出模块缓存。
+    pub fn into_loaded_modules(self) -> HashMap<PathBuf, Rc<AstEnv>> {
+        self.loaded_modules
+    }
+
+    /// Get a clone of the current module environment.
+    /// 获取当前模块环境的克隆。
+    pub fn env(&self) -> Rc<AstEnv> {
+        self.env.clone()
     }
 
     /// Get the module loader.
@@ -330,10 +364,16 @@ impl AstEvaluator {
         let (file, diagnostics) = neve_parser::parse(&source);
 
         if !diagnostics.is_empty() {
-            return Err(EvalError::TypeError(format!(
-                "parse error in {}",
-                path.display()
-            )));
+            return Err(EvalError::ParseDiagnostics {
+                module: path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("<file>")
+                    .to_string(),
+                path: path.to_path_buf(),
+                source_text: source,
+                diagnostics,
+            });
         }
 
         self.eval_file(&file)
@@ -398,11 +438,39 @@ impl AstEvaluator {
                 self.eval_import(import_def)?;
                 Ok(Value::Unit)
             }
+            ItemKind::Enum(enum_def) => {
+                let is_pub = enum_def.visibility == Visibility::Public;
+                for variant in &enum_def.variants {
+                    let arity = match &variant.kind {
+                        VariantKind::Unit => 0,
+                        VariantKind::Tuple(types) => types.len(),
+                        VariantKind::Record(fields) => fields.len(),
+                    };
+                    Rc::make_mut(&mut self.env).define_with_visibility(
+                        variant.name.name.clone(),
+                        Value::VariantCtor {
+                            name: variant.name.name.clone(),
+                            arity,
+                        },
+                        is_pub,
+                    );
+                }
+                Ok(Value::Unit)
+            }
             _ => Ok(Value::Unit),
         }
     }
 
     fn eval_import(&mut self, import_def: &ImportDef) -> Result<(), EvalError> {
+        if import_def.prefix == PathPrefix::Absolute {
+            let path_segments: Vec<String> =
+                import_def.path.iter().map(|i| i.name.clone()).collect();
+            if let Some(module_env) = self.module_overrides.get(&path_segments).cloned() {
+                self.import_from_env(&module_env, import_def)?;
+                return Ok(());
+            }
+        }
+
         // Resolve the module path to a file path
         let module_path = self.resolve_module_path(import_def)?;
 
@@ -430,19 +498,23 @@ impl AstEvaluator {
         let (file, diagnostics) = neve_parser::parse(&source);
 
         if !diagnostics.is_empty() {
-            return Err(EvalError::TypeError(format!(
-                "parse error in module '{}'",
-                import_def
-                    .path
-                    .iter()
-                    .map(|i| i.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(".")
-            )));
+            let module_name = import_def
+                .path
+                .iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join(".");
+            return Err(EvalError::ParseDiagnostics {
+                module: module_name,
+                path: module_path,
+                source_text: source,
+                diagnostics,
+            });
         }
 
         // Create a new evaluator for the module with its own environment
-        let mut module_eval = AstEvaluator::new();
+        let mut module_eval =
+            AstEvaluator::new().with_module_overrides(self.module_overrides.clone());
         if let Some(parent) = module_path.parent() {
             module_eval.base_path = Some(parent.to_path_buf());
         }
@@ -539,6 +611,7 @@ impl AstEvaluator {
         module_env: &Rc<AstEnv>,
         import_def: &ImportDef,
     ) -> Result<(), EvalError> {
+        let is_public = import_def.visibility == Visibility::Public;
         match &import_def.items {
             ImportItems::Module => {
                 // Import the module as a namespace
@@ -556,7 +629,8 @@ impl AstEvaluator {
                 // Create a record with only public module bindings
                 let bindings = module_env.public_bindings();
                 let record = Value::Record(Rc::new(bindings));
-                Rc::make_mut(&mut self.env).define(module_name, record);
+                Rc::make_mut(&mut self.env)
+                    .define_with_visibility(module_name, record, is_public);
             }
             ImportItems::Items(items) => {
                 // Import specific items (must be public)
@@ -577,14 +651,15 @@ impl AstEvaluator {
                         }
                     }
                     if let Some(value) = module_env.get(name) {
-                        Rc::make_mut(&mut self.env).define(name.clone(), value);
+                        Rc::make_mut(&mut self.env)
+                            .define_with_visibility(name.clone(), value, is_public);
                     }
                 }
             }
             ImportItems::All => {
                 // Import all public bindings
                 for (name, value) in module_env.public_bindings() {
-                    Rc::make_mut(&mut self.env).define(name, value);
+                    Rc::make_mut(&mut self.env).define_with_visibility(name, value, is_public);
                 }
             }
         }
@@ -1279,6 +1354,19 @@ impl AstEvaluator {
                     }
                     return func(current_args).map_err(EvalError::TypeError);
                 }
+                Value::VariantCtor { name, arity } => {
+                    if current_args.len() != arity {
+                        return Err(EvalError::WrongArity);
+                    }
+
+                    let payload = match current_args.len() {
+                        0 => Value::Unit,
+                        1 => current_args.into_iter().next().unwrap(),
+                        _ => Value::Tuple(Rc::new(current_args)),
+                    };
+
+                    return Ok(Value::Variant(name, Box::new(payload)));
+                }
                 Value::AstClosure(ref closure) => {
                     if current_args.len() != closure.params.len() {
                         return Err(EvalError::WrongArity);
@@ -1874,7 +1962,36 @@ impl AstEvaluator {
                 }
             }
             PatternKind::Constructor { path, args } => {
-                let name = path.first().map(|i| i.name.as_str()).unwrap_or("");
+                let name = path.last().map(|i| i.name.as_str()).unwrap_or("");
+                if let Value::Variant(tag, payload) = value
+                    && tag == name
+                {
+                    return match args.as_slice() {
+                        [] => {
+                            if matches!(**payload, Value::Unit) {
+                                Some(Vec::new())
+                            } else {
+                                None
+                            }
+                        }
+                        [p] => Self::match_pattern(p, payload),
+                        _ => {
+                            if let Value::Tuple(values) = payload.as_ref() {
+                                if values.len() != args.len() {
+                                    return None;
+                                }
+                                let capacity = args.iter().map(estimate_bindings).sum();
+                                let mut bindings = Vec::with_capacity(capacity);
+                                for (p, v) in args.iter().zip(values.iter()) {
+                                    bindings.extend(Self::match_pattern(p, v)?);
+                                }
+                                Some(bindings)
+                            } else {
+                                None
+                            }
+                        }
+                    };
+                }
                 match (name, value, args.as_slice()) {
                     ("Some", Value::Some(v), [p]) => Self::match_pattern(p, v),
                     ("None", Value::None, []) => Some(Vec::new()),
@@ -1978,6 +2095,7 @@ impl AstEvaluator {
                     format!("{}({})", tag, Self::value_to_string(payload))
                 }
             }
+            Value::VariantCtor { name, arity } => format!("<variant:{}:{}>", name, arity),
             Value::Builtin(b) => format!("<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
             Value::AstClosure(_) => "<function>".to_string(),

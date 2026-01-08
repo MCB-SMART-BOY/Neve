@@ -8,11 +8,11 @@
 use crate::config::FormatConfig;
 use crate::printer::Printer;
 use neve_syntax::{
-    BinOp, EnumDef, Expr, ExprKind, FieldDef, FnDef, Generator, GenericParam, ImplDef, ImplItem,
-    ImportDef, ImportItems, Item, ItemKind, LambdaParam, LetDef, LiteralPattern, MatchArm, Param,
-    Pattern, PatternKind, RecordField, RecordPatternField, RecordTypeField, SourceFile, Stmt,
-    StmtKind, StringPart, StructDef, TraitDef, TraitItem, Type, TypeAlias, TypeKind, UnaryOp,
-    VariantKind, Visibility,
+    AssocTypeDef, AssocTypeImpl, BinOp, EnumDef, Expr, ExprKind, FieldDef, FnDef, Generator,
+    GenericParam, ImplDef, ImplItem, ImportDef, ImportItems, Item, ItemKind, LambdaParam, LetDef,
+    LiteralPattern, MatchArm, Param, Pattern, PatternKind, RecordField, RecordPatternField,
+    RecordTypeField, SourceFile, Stmt, StmtKind, StringPart, StructDef, TraitDef, TraitItem, Type,
+    TypeAlias, TypeKind, UnaryOp, VariantKind, Visibility,
 };
 
 /// Code formatter.
@@ -225,6 +225,14 @@ impl Formatter {
         p.newline();
         p.indent();
 
+        for assoc_type in &def.assoc_types {
+            self.format_assoc_type_def(p, assoc_type);
+        }
+
+        if !def.assoc_types.is_empty() && !def.items.is_empty() {
+            p.newline();
+        }
+
         for item in &def.items {
             self.format_trait_item(p, item);
         }
@@ -250,6 +258,14 @@ impl Formatter {
         p.write(" {");
         p.newline();
         p.indent();
+
+        for assoc_type in &def.assoc_type_impls {
+            self.format_assoc_type_impl(p, assoc_type);
+        }
+
+        if !def.assoc_type_impls.is_empty() && !def.items.is_empty() {
+            p.newline();
+        }
 
         for item in &def.items {
             self.format_impl_item(p, item);
@@ -373,6 +389,31 @@ impl Formatter {
         p.newline();
     }
 
+    /// Format an associated type definition.
+    /// 格式化关联类型定义。
+    fn format_assoc_type_def(&self, p: &mut Printer, assoc: &AssocTypeDef) {
+        p.write("type ");
+        p.write(&assoc.name.name);
+
+        if !assoc.bounds.is_empty() {
+            p.write(": ");
+            for (i, bound) in assoc.bounds.iter().enumerate() {
+                if i > 0 {
+                    p.write(" + ");
+                }
+                self.format_type(p, bound);
+            }
+        }
+
+        if let Some(ref default) = assoc.default {
+            p.write(" = ");
+            self.format_type(p, default);
+        }
+
+        p.write(";");
+        p.newline();
+    }
+
     /// Format an impl item.
     /// 格式化 impl 项。
     fn format_impl_item(&self, p: &mut Printer, item: &ImplItem) {
@@ -395,6 +436,17 @@ impl Formatter {
 
         p.write(" = ");
         self.format_expr(p, &item.body);
+        p.write(";");
+        p.newline();
+    }
+
+    /// Format an associated type implementation.
+    /// 格式化关联类型实现。
+    fn format_assoc_type_impl(&self, p: &mut Printer, assoc: &AssocTypeImpl) {
+        p.write("type ");
+        p.write(&assoc.name.name);
+        p.write(" = ");
+        self.format_type(p, &assoc.ty);
         p.write(";");
         p.newline();
     }

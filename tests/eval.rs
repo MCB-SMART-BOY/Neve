@@ -5,6 +5,7 @@
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_hir::lower;
 use neve_parser::parse;
+use neve_std::std_module_overrides;
 
 fn eval_source(source: &str) -> Result<Value, EvalError> {
     let (ast, _) = parse(source);
@@ -21,6 +22,38 @@ fn eval_with_builtins(source: &str) -> Result<Value, String> {
     }
     let mut eval = AstEvaluator::new();
     eval.eval_file(&ast).map_err(|e| e.to_string())
+}
+
+/// Evaluate source with stdlib module overrides.
+fn eval_with_std(source: &str) -> Result<Value, String> {
+    let (ast, errors) = parse(source);
+    if !errors.is_empty() {
+        return Err(format!("parse error: {:?}", errors));
+    }
+    let mut eval = AstEvaluator::new().with_module_overrides(std_module_overrides());
+    eval.eval_file(&ast).map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// 标准库模块导入
+// ============================================================================
+
+#[test]
+fn test_eval_import_std_list_module() {
+    let source = "import std.list; let xs = list.range(1, 4); let n = list.len(xs);";
+    match eval_with_std(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, 3),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_import_std_root() {
+    let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
+    match eval_with_std(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, 2),
+        other => panic!("expected int, got {:?}", other),
+    }
 }
 
 // ============================================================================
@@ -108,6 +141,20 @@ fn test_eval_float_subtraction() {
     match eval_source("let x = 5.5 - 2.5;") {
         Ok(Value::Float(f)) => assert!((f - 3.0).abs() < f64::EPSILON),
         other => panic!("expected float, got {:?}", other),
+    }
+}
+
+// ============================================================================
+// 枚举构造器与匹配
+// ============================================================================
+
+#[test]
+fn test_eval_enum_constructor_match() {
+    let source =
+        "enum Option { Some(Int), None }; let x = Some(1); let y = match x { Some(v) -> v, None -> 0 };";
+    match eval_source(source) {
+        Ok(Value::Int(v)) => assert_eq!(v, 1),
+        other => panic!("expected int, got {:?}", other),
     }
 }
 

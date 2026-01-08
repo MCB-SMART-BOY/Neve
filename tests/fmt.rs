@@ -49,14 +49,14 @@ fn test_custom_config() {
 
 #[test]
 fn test_format_simple() {
-    let source = "let x=1";
+    let source = "let x=1;";
     let formatted = format(source).unwrap();
     assert!(formatted.contains("let x = 1"));
 }
 
 #[test]
 fn test_check() {
-    let source = "let x = 1\n";
+    let source = "let x = 1;\n";
     let result = check(source);
     assert!(result.is_ok());
 }
@@ -89,6 +89,32 @@ fn test_format_list() {
 fn test_format_if() {
     let formatted = format_code("let x = if true then 1 else 2;");
     assert!(formatted.contains("if true then"));
+}
+
+#[test]
+fn test_format_trait_assoc_type() {
+    let formatted = format_code("trait Iterator { type Item: Show; fn next(self) -> Item; };");
+    assert!(formatted.contains("type Item: Show;"));
+}
+
+#[test]
+fn test_format_impl_assoc_type() {
+    let formatted = format_code("impl Iterator for Foo { type Item = Int; };");
+    assert!(formatted.contains("type Item = Int;"));
+}
+
+#[test]
+fn test_format_parse_error() {
+    let result = format("let x =");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_format_error_diagnostics() {
+    let err = format("let x =").unwrap_err();
+    let diags = err.diagnostics();
+    assert!(diags.is_some());
+    assert!(!diags.unwrap().is_empty());
 }
 
 // Printer tests

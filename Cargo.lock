@@ -1277,9 +1277,20 @@ dependencies = [
 name = "neve-fmt"
 version = "0.6.4"
 dependencies = [
- "neve-lexer",
+ "neve-diagnostic",
  "neve-parser",
  "neve-syntax",
+]
+
+[[package]]
+name = "neve-frontend"
+version = "0.6.4"
+dependencies = [
+ "neve-diagnostic",
+ "neve-hir",
+ "neve-parser",
+ "neve-syntax",
+ "neve-typeck",
 ]
 
 [[package]]
@@ -1310,11 +1321,9 @@ dependencies = [
  "neve-common",
  "neve-diagnostic",
  "neve-fmt",
- "neve-hir",
+ "neve-frontend",
  "neve-lexer",
- "neve-parser",
  "neve-syntax",
- "neve-typeck",
  "serde",
  "serde_json",
  "tokio",
@@ -1384,6 +1393,7 @@ dependencies = [
  "neve-eval",
  "neve-fetch",
  "neve-fmt",
+ "neve-frontend",
  "neve-hir",
  "neve-lexer",
  "neve-lsp",

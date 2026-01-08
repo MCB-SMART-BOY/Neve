@@ -5,6 +5,7 @@ use crate::output;
 use neve_diagnostic::emit;
 use neve_eval::{AstEnv, AstEvaluator, Value, builtins};
 use neve_parser::parse;
+use neve_std::std_module_overrides;
 use neve_syntax::PatternKind;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
@@ -25,6 +26,7 @@ pub fn run() -> Result<(), String> {
     // Using RefCell allows interior mutability while maintaining Rc sharing
     // 使用 RefCell 允许内部可变性，同时保持 Rc 共享
     let env = Rc::new(RefCell::new(AstEnv::with_builtins()));
+    let std_overrides = std_module_overrides();
 
     // Buffer for multi-line input
     // 多行输入缓冲区
@@ -157,8 +159,8 @@ pub fn run() -> Result<(), String> {
                                     // Evaluate the file in current environment
                                     // 在当前环境中求值文件
                                     let current_env = env.borrow().clone();
-                                    let mut evaluator =
-                                        AstEvaluator::with_env(Rc::new(current_env));
+                                    let mut evaluator = AstEvaluator::with_env(Rc::new(current_env))
+                                        .with_module_overrides(std_overrides.clone());
                                     match evaluator.eval_file(&ast) {
                                         Ok(_) => {
                                             // Extract and store new bindings
@@ -171,9 +173,11 @@ pub fn run() -> Result<(), String> {
                                                         &let_def.pattern.kind
                                                     {
                                                         let current_env = env.borrow().clone();
-                                                        let mut temp_eval = AstEvaluator::with_env(
-                                                            Rc::new(current_env),
-                                                        );
+                                                        let mut temp_eval =
+                                                            AstEvaluator::with_env(Rc::new(current_env))
+                                                                .with_module_overrides(
+                                                                    std_overrides.clone(),
+                                                                );
                                                         if let Ok(val) =
                                                             temp_eval.eval_expr(&let_def.value)
                                                         {
@@ -191,9 +195,11 @@ pub fn run() -> Result<(), String> {
                                                     &item.kind
                                                 {
                                                     let current_env = env.borrow().clone();
-                                                    let mut temp_eval = AstEvaluator::with_env(
-                                                        Rc::new(current_env),
-                                                    );
+                                                    let mut temp_eval =
+                                                        AstEvaluator::with_env(Rc::new(current_env))
+                                                            .with_module_overrides(
+                                                                std_overrides.clone(),
+                                                            );
                                                     if let Ok(fn_value) =
                                                         temp_eval.eval_fn_def(fn_def)
                                                     {
@@ -261,7 +267,8 @@ pub fn run() -> Result<(), String> {
                     // Clone the current environment for evaluation
                     // 克隆当前环境用于求值
                     let current_env = env.borrow().clone();
-                    let mut evaluator = AstEvaluator::with_env(Rc::new(current_env));
+                    let mut evaluator = AstEvaluator::with_env(Rc::new(current_env))
+                        .with_module_overrides(std_overrides.clone());
                     evaluator.eval_file(&ast)
                 };
 
@@ -278,7 +285,8 @@ pub fn run() -> Result<(), String> {
                                     // 仅在持久环境中重新求值此绑定
                                     let current_env = env.borrow().clone();
                                     let mut temp_eval =
-                                        AstEvaluator::with_env(Rc::new(current_env));
+                                        AstEvaluator::with_env(Rc::new(current_env))
+                                            .with_module_overrides(std_overrides.clone());
 
                                     if let Ok(val) = temp_eval.eval_expr(&let_def.value) {
                                         let is_pub =
@@ -294,7 +302,8 @@ pub fn run() -> Result<(), String> {
                                 // Store function definitions
                                 // 存储函数定义
                                 let current_env = env.borrow().clone();
-                                let mut temp_eval = AstEvaluator::with_env(Rc::new(current_env));
+                                let mut temp_eval = AstEvaluator::with_env(Rc::new(current_env))
+                                    .with_module_overrides(std_overrides.clone());
 
                                 // Create a closure value for the function
                                 // 为函数创建闭包值

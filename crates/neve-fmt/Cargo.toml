@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-neve-lexer.workspace = true
+neve-diagnostic.workspace = true
 neve-syntax.workspace = true
 neve-parser.workspace = true
 

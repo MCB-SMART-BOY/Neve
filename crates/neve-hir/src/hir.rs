@@ -462,6 +462,8 @@ pub struct EnumDef {
 /// 枚举变体定义。
 #[derive(Debug, Clone)]
 pub struct VariantDef {
+    /// Variant ID. / 变体 ID。
+    pub id: DefId,
     /// Variant name. / 变体名称。
     pub name: String,
     /// Variant fields (for tuple variants). / 变体字段（用于元组变体）。

@@ -3,8 +3,11 @@
 
 use crate::output;
 use neve_diagnostic::emit;
-use neve_eval::AstEvaluator;
+use neve_eval::{AstEvaluator, EvalError};
+use neve_hir::ModuleLoader;
 use neve_parser::parse;
+use neve_std::std_module_overrides;
+use std::path::PathBuf;
 
 /// Run the eval command.
 /// 运行 eval 命令。
@@ -81,9 +84,14 @@ fn eval_and_print(
         output::info(&format!("AST: {file:?}"));
     }
 
+    let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
     // Evaluate using the AST evaluator
     // 使用 AST 求值器进行求值
-    let mut evaluator = AstEvaluator::new();
+    let mut evaluator = AstEvaluator::new()
+        .with_module_overrides(std_module_overrides())
+        .with_base_path(root_dir.clone())
+        .with_module_loader(ModuleLoader::new(&root_dir));
 
     match evaluator.eval_file(file) {
         Ok(value) => {
@@ -92,6 +100,17 @@ fn eval_and_print(
             if !matches!(value, neve_eval::Value::Unit) || source.starts_with("let __result__") {
                 output::success(&format!("{value:?}"));
             }
+        }
+        Err(EvalError::ParseDiagnostics {
+            path,
+            source_text,
+            diagnostics,
+            ..
+        }) => {
+            for diag in diagnostics {
+                emit(&source_text, &path.display().to_string(), &diag);
+            }
+            return Err("parse error".to_string());
         }
         Err(e) => {
             output::error(&format!("{e:?}"));

@@ -40,6 +40,35 @@ fn test_position_at_end() {
     assert_eq!(doc.position_at(2), (0, 2));
 }
 
+#[test]
+fn test_position_at_utf16() {
+    let content = "a😀中";
+    let emoji_start = content.find('😀').unwrap();
+    let emoji_end = emoji_start + "😀".len();
+
+    let doc = Document::new("file:///test.neve".to_string(), content.to_string());
+
+    assert_eq!(doc.position_at(0), (0, 0));
+    assert_eq!(doc.position_at(1), (0, 1)); // after 'a'
+    assert_eq!(doc.position_at(emoji_end), (0, 3)); // 'a' + emoji (2 UTF-16 units)
+    assert_eq!(doc.position_at(content.len()), (0, 4)); // after '中'
+}
+
+#[test]
+fn test_offset_at_utf16() {
+    let content = "a😀中";
+    let emoji_start = content.find('😀').unwrap();
+    let emoji_end = emoji_start + "😀".len();
+
+    let doc = Document::new("file:///test.neve".to_string(), content.to_string());
+
+    assert_eq!(doc.offset_at(0, 0), 0);
+    assert_eq!(doc.offset_at(0, 1), 1); // after 'a'
+    assert_eq!(doc.offset_at(0, 2), emoji_start); // inside emoji -> clamp to start
+    assert_eq!(doc.offset_at(0, 3), emoji_end); // after emoji
+    assert_eq!(doc.offset_at(0, 4), content.len()); // after '中'
+}
+
 // Semantic tokens tests
 
 #[test]
@@ -75,6 +104,24 @@ fn test_function_definition() {
     assert!(index.definitions.contains_key("add"));
     assert!(index.definitions.contains_key("x"));
     assert!(index.definitions.contains_key("y"));
+}
+
+#[test]
+fn test_trait_assoc_type_definition() {
+    let source = "trait Iterator { type Item; fn next(self) -> Item; };";
+    let (ast, _) = parse(source);
+    let index = SymbolIndex::from_ast(&ast);
+
+    assert!(index.definitions.contains_key("Item"));
+}
+
+#[test]
+fn test_impl_assoc_type_definition() {
+    let source = "trait Iterator { type Item; }; struct Foo {}; impl Iterator for Foo { type Item = Int; };";
+    let (ast, _) = parse(source);
+    let index = SymbolIndex::from_ast(&ast);
+
+    assert!(index.definitions.contains_key("Item"));
 }
 
 #[test]

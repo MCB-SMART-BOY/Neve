@@ -152,6 +152,11 @@ pub enum Value {
         &'static str,
         Rc<dyn Fn(Vec<Value>) -> Result<Value, String>>,
     ),
+    /// Enum/variant constructor / 枚举变体构造器
+    VariantCtor {
+        name: String,
+        arity: usize,
+    },
 
     // ===== Algebraic data types 代数数据类型 =====
     /// Variant/enum value (tag, payload) / 变体/枚举值（标签，载荷）
@@ -245,6 +250,7 @@ impl fmt::Debug for Value {
             Value::AstClosure(_) => write!(f, "<function>"),
             Value::Builtin(b) => write!(f, "<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => write!(f, "<builtin:{}>", name),
+            Value::VariantCtor { name, arity } => write!(f, "<variant:{}:{}>", name, arity),
             Value::Variant(tag, payload) => {
                 if matches!(**payload, Value::Unit) {
                     write!(f, "{}", tag)

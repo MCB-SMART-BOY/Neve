@@ -65,11 +65,11 @@ No side effects. No mutable state. Same input → same output. Always.
 
 ### 5. Simplicity
 
-17 keywords total:
+20 keywords total:
 
 ```
-fn  let  if  then  else  match  import  type
-trait  impl  pub  self  true  false  struct  enum  lazy
+fn  let  if  then  else  match  import  as  self  super  crate  type
+trait  impl  pub  true  false  struct  enum  lazy
 ```
 
 ### 6. Unix Philosophy
@@ -90,25 +90,25 @@ Do one thing well. Compose. Text is universal.
 
 ```
 Language Core     [████████████████████░░]  95%
-Toolchain         [████████████████░░░░]    80%
-Package System    [████████████░░░░░░░░]    60%
-OS Integration    [████████░░░░░░░░░░░░]    40%
+Toolchain         [███████████████░░░░░]    75%
+Package System    [███████████░░░░░░░░░]    55%
+OS Integration    [██████░░░░░░░░░░░░░░]    25%
 ```
 
 ### Completed
 
 - Lexer, Parser, Type Checker, Evaluator
-- REPL, Formatter, LSP
-- Derivations, Store, Builder
-- System Config + Generations
+- REPL, Formatter, Diagnostics
+- Standard library baseline (list/string/math/etc.)
 
 ### In Progress
 
 - Module loader, Associated types, LSP enhancements, TCO
+- Package system integration (derivation/store/builder)
 
 ### Future
 
-- Macros, Binary cache, HKT, Neve OS
+- System configuration, Macros, Binary cache, HKT, Neve OS
 
 ## The Name
 
@@ -167,11 +167,11 @@ fn(x) x + 1      -- 肯定是 lambda
 
 ### 5. 简洁
 
-一共就 17 个关键字：
+一共就 20 个关键字：
 
 ```
-fn  let  if  then  else  match  import  type
-trait  impl  pub  self  true  false  struct  enum  lazy
+fn  let  if  then  else  match  import  as  self  super  crate  type
+trait  impl  pub  true  false  struct  enum  lazy
 ```
 
 ### 6. Unix 哲学
@@ -192,25 +192,25 @@ trait  impl  pub  self  true  false  struct  enum  lazy
 
 ```
 语言核心     [████████████████████░░]  95%
-工具链       [████████████████░░░░]    80%
-包管理       [████████████░░░░░░░░]    60%
-系统配置     [████████░░░░░░░░░░░░]    40%
+工具链       [███████████████░░░░░]    75%
+包管理       [███████████░░░░░░░░░]    55%
+系统配置     [██████░░░░░░░░░░░░░░]    25%
 ```
 
 ### 已完成
 
 - 词法分析、语法分析、类型检查、求值器
-- REPL、格式化、LSP
-- Derivation、Store、Builder
-- 系统配置 + 代际管理
+- REPL、格式化、诊断系统
+- 标准库基础模块（list/string/math 等）
 
 ### 进行中
 
 - 模块加载、关联类型、LSP 增强、尾调用优化
+- 包管理集成（derivation/store/builder）
 
 ### 未来
 
-- 宏系统、二进制缓存、高阶类型、Neve OS
+- 系统配置、宏系统、二进制缓存、高阶类型、Neve OS
 
 ## 名字由来
 

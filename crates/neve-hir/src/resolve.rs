@@ -81,6 +81,24 @@ impl Resolver {
         self.module_loader.as_mut()
     }
 
+    /// Set the global definition ID counter.
+    /// 设置全局定义 ID 计数器。
+    pub fn set_def_id_counter(&mut self, next: u32) {
+        self.next_def_id = next;
+    }
+
+    /// Get the next global definition ID.
+    /// 获取下一个全局定义 ID。
+    pub fn next_def_id(&self) -> u32 {
+        self.next_def_id
+    }
+
+    /// Get resolved global definitions for this module.
+    /// 获取当前模块解析到的全局定义。
+    pub fn global_defs(&self) -> &HashMap<String, DefId> {
+        &self.globals
+    }
+
     /// Set the current module path for relative import resolution.
     /// 设置当前模块路径以解析相对导入。
     pub fn set_current_module_path(&mut self, path: Vec<String>) {
@@ -126,7 +144,18 @@ impl Resolver {
         module_path: Vec<String>,
     ) -> Module {
         let module_id = self.fresh_module_id();
+        self.resolve_with_path_and_id(file, name, module_path, module_id)
+    }
 
+    /// Resolve an AST source file to HIR with an explicit module ID.
+    /// 使用显式模块 ID 将 AST 源文件解析为 HIR。
+    pub fn resolve_with_path_and_id(
+        &mut self,
+        file: &SourceFile,
+        name: String,
+        module_path: Vec<String>,
+        module_id: ModuleId,
+    ) -> Module {
         // Set current module path for relative import resolution
         // 设置当前模块路径以解析相对导入
         self.current_module_path = module_path;
@@ -502,6 +531,8 @@ impl Resolver {
                     .variants
                     .iter()
                     .map(|v| {
+                        let variant_id =
+                            self.lookup_global(&v.name.name).unwrap_or(DefId(u32::MAX));
                         let fields = match &v.kind {
                             ast::VariantKind::Unit => Vec::new(),
                             ast::VariantKind::Tuple(types) => {
@@ -512,6 +543,7 @@ impl Resolver {
                             }
                         };
                         VariantDef {
+                            id: variant_id,
                             name: v.name.name.clone(),
                             fields,
                             span: v.span,

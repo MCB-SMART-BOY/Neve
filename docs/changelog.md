@@ -22,6 +22,22 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 > *What changed, when, and why.*
 
+## [Unreleased]
+
+### Added
+- **Frontend pipeline**: New `neve-frontend` crate for parse → HIR → typecheck analysis
+- **Docs**: Onboarding + diagnostics references, new `neve doc` topics
+- **Tests**: Frontend diagnostics, module loader, formatter, and LSP symbol coverage
+- **Stdlib imports**: `std.*` module overrides for AST evaluation
+
+### Improved
+- **LSP**: Uses the frontend pipeline, fixes UTF-16 positions, adds diagnostic code links
+- **Formatter**: Surfaces parser diagnostics for better error reporting
+- **Eval/Run**: Emits parse diagnostics for imported modules
+- **CLI eval/run/build/repl**: `import std.*` now resolves to the Rust stdlib modules
+- **CLI check**: Reuses module loader parse diagnostics to avoid double parsing
+- **Docs accuracy**: Spec/API/philosophy updated to match current syntax and stdlib
+
 ## [0.6.4] - 2025-12-30
 
 ### Fixed
@@ -203,6 +219,26 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 # 中文
 
 > 改了啥、啥时候改的、为啥改。
+
+## [未发布]
+
+### 新功能
+- **前端流水线**: 新增 `neve-frontend`，统一 parse → HIR → typecheck 分析
+- **文档**: 新增入门文档与诊断手册，并扩展 `neve doc` 主题
+- **测试**: 增加 frontend 诊断、模块加载、格式化器、LSP 符号覆盖
+
+### 改进
+- **LSP**: 使用前端流水线，修正 UTF-16 位置，并附加错误码链接
+- **格式化器**: 直接输出解析诊断，错误信息更清晰
+- **Eval/Run**: 导入模块解析出错时输出诊断
+- **CLI check**: 复用模块加载的解析诊断，避免重复解析
+- **文档准确性**: 修正文法/标准库/哲学文档与现状一致
+
+## [0.6.4] - 2025-12-30
+
+### 修复
+- **CI**: 使用 `taiki-e/install-action` 修复交叉编译设置
+- **格式化**: 修复代码格式化问题
 
 ## [0.6.3] - 2025-12-30
 

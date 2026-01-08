@@ -250,6 +250,8 @@ let r = add(1, 2);
 5. **Match exhaustively** — handle all cases
 
 ```neve
+import std.list (filter, map, fold);
+
 -- Good: clear data flow
 let result = data
     |> filter(valid)
@@ -503,6 +505,8 @@ let r = add(1, 2);
 5. **匹配要穷尽**，别漏情况
 
 ```neve
+import std.list (filter, map, fold);
+
 -- 这样写清楚
 let result = data
     |> filter(valid)

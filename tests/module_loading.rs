@@ -224,6 +224,45 @@ fn test_self_import() {
 }
 
 #[test]
+fn test_parsed_source_access() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    // Basic module for parsed source access.
+    // 用于验证解析缓存访问的基础模块。
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            fn add(x, y) = x + y;
+        "#,
+    );
+
+    let mut loader = ModuleLoader::new(root);
+    let module_id = loader.load_module(&["main".into()]).unwrap();
+
+    let parsed = loader.parsed_source(module_id);
+    assert!(parsed.is_some());
+    assert_eq!(parsed.unwrap().items.len(), 1);
+}
+
+#[test]
+fn test_parsed_diagnostics_access() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    // Introduce a parse error to ensure diagnostics are cached.
+    // 制造一个解析错误，确保诊断被缓存。
+    create_test_module(root, &["main"], "let x =");
+
+    let mut loader = ModuleLoader::new(root);
+    let module_id = loader.load_module(&["main".into()]).unwrap();
+
+    let parse_diags = loader.parsed_diagnostics(module_id).unwrap_or(&[]);
+    assert!(!parse_diags.is_empty());
+}
+
+#[test]
 fn test_super_import() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();

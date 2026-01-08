@@ -11,10 +11,13 @@ Welcome to the Neve language documentation!
 | Document | Description | 描述 |
 |----------|-------------|------|
 | [quickstart.md](quickstart.md) | 5-minute quick start | 5分钟快速入门 |
+| [onboarding.md](onboarding.md) | Contributor onboarding | 贡献者入门 |
 | [tutorial.md](tutorial.md) | Complete tutorial | 完整教程 |
 | [spec.md](spec.md) | Language specification | 语言规范 |
 | [api.md](api.md) | Standard library reference | 标准库参考 |
+| [diagnostics.md](diagnostics.md) | Diagnostic codes | 诊断错误码 |
 | [philosophy.md](philosophy.md) | Design philosophy & roadmap | 设计哲学与路线图 |
+| [roadmap.md](roadmap.md) | Project roadmap | 项目路线图 |
 | [install.md](install.md) | Installation guide | 安装指南 |
 | [architecture.md](architecture.md) | Internal architecture | 内部架构 |
 | [changelog.md](changelog.md) | Version changelog | 版本更新日志 |
@@ -65,7 +68,10 @@ neve doc quickstart
 
 ```neve
 -- Primitive types / 原始类型
-Int, Float, Bool, Char, String, Unit, Path
+Int, Float, Bool, Char, String, Unit
+
+-- Path literals currently evaluate to String.
+-- 路径字面量目前会当成 String 处理。
 
 -- Compound types / 复合类型
 List<Int>                     -- List / 列表

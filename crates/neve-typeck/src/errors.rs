@@ -511,6 +511,29 @@ pub fn missing_method(method: &str, trait_name: &str, impl_ty: &Ty, span: Span) 
     .with_help(format!("implement the `{}` method", method))
 }
 
+/// Create an error for missing associated type.
+/// 创建缺失关联类型的错误。
+pub fn missing_assoc_type(
+    assoc_name: &str,
+    trait_name: &str,
+    impl_ty: &Ty,
+    span: Span,
+) -> Diagnostic {
+    let ty_str = format_type(impl_ty);
+
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!(
+            "missing associated type `{}` in impl of `{}` for `{}`",
+            assoc_name, trait_name, ty_str
+        ),
+    )
+    .with_code(ErrorCode::MissingAssocType)
+    .with_label(Label::new(span, format!("missing `{}`", assoc_name)))
+    .with_help(format!("specify `type {}` in the impl", assoc_name))
+}
+
 /// Create an error for infinite type.
 /// 创建无限类型的错误（类型变量出现在自身类型中）。
 pub fn infinite_type(var: u32, ty: &Ty, span: Span) -> Diagnostic {
