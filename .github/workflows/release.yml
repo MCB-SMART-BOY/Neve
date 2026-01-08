@@ -145,5 +145,46 @@ jobs:
             ### What's New
 
             See [CHANGELOG.md](docs/changelog.md) for details.
+
+            ---
+
+            ## Neve ${{ github.ref_name }}（中文）
+
+            ### 安装
+
+            下载适合你平台的二进制文件：
+
+            - **Linux (x86_64)**: `neve-x86_64-unknown-linux-gnu.tar.gz`
+            - **Linux (ARM64)**: `neve-aarch64-unknown-linux-gnu.tar.gz`
+            - **macOS (Intel)**: `neve-x86_64-apple-darwin.tar.gz`
+            - **macOS (Apple Silicon)**: `neve-aarch64-apple-darwin.tar.gz`
+            - **Windows (x86_64)**: `neve-x86_64-pc-windows-msvc.zip`
+
+            解压后加入 PATH：
+
+            ```bash
+            # Linux/macOS
+            tar xzf neve-*.tar.gz
+            sudo mv neve /usr/local/bin/
+
+            # 或加入用户目录
+            mkdir -p ~/.local/bin
+            mv neve ~/.local/bin/
+            ```
+
+            ```powershell
+            # Windows
+            Expand-Archive neve-x86_64-pc-windows-msvc.zip -DestinationPath .
+            # 将 neve.exe 加入 PATH
+            ```
+
+            ### 平台说明
+
+            - **全部平台**: 语言功能（eval/check/repl/fmt）完整可用
+            - **仅 Unix**: 包管理与系统配置功能需要 Linux/macOS
+
+            ### 更新内容
+
+            详见 [CHANGELOG.md](docs/changelog.md)。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
