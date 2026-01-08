@@ -25,6 +25,14 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- (nothing yet)
+
+### Improved
+- (nothing yet)
+
+## [0.7.0] - 2026-01-08
+
+### Added
 - **Frontend pipeline**: New `neve-frontend` crate for parse → HIR → typecheck analysis
 - **Docs**: Onboarding + diagnostics references, new `neve doc` topics
 - **Tests**: Frontend diagnostics, module loader, formatter, and LSP symbol coverage
@@ -223,14 +231,24 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [未发布]
 
 ### 新功能
+- (暂无)
+
+### 改进
+- (暂无)
+
+## [0.7.0] - 2026-01-08
+
+### 新功能
 - **前端流水线**: 新增 `neve-frontend`，统一 parse → HIR → typecheck 分析
 - **文档**: 新增入门文档与诊断手册，并扩展 `neve doc` 主题
 - **测试**: 增加 frontend 诊断、模块加载、格式化器、LSP 符号覆盖
+- **标准库导入**: AST 求值支持 `std.*` 模块覆盖
 
 ### 改进
 - **LSP**: 使用前端流水线，修正 UTF-16 位置，并附加错误码链接
 - **格式化器**: 直接输出解析诊断，错误信息更清晰
 - **Eval/Run**: 导入模块解析出错时输出诊断
+- **CLI eval/run/build/repl**: `import std.*` 直接映射到 Rust 标准库模块
 - **CLI check**: 复用模块加载的解析诊断，避免重复解析
 - **文档准确性**: 修正文法/标准库/哲学文档与现状一致
 
