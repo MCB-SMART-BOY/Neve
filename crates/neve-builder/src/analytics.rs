@@ -256,7 +256,7 @@ impl BuildAnalytics {
     /// 获取最慢的构建。
     pub fn slowest_builds(&self, n: usize) -> Vec<(&BuildId, &BuildStats)> {
         let mut builds: Vec<_> = self.builds.iter().filter(|(_, s)| !s.cache_hit).collect();
-        builds.sort_by(|a, b| b.1.total_duration.cmp(&a.1.total_duration));
+        builds.sort_by_key(|entry| std::cmp::Reverse(entry.1.total_duration));
         builds.into_iter().take(n).collect()
     }
 
