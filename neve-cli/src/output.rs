@@ -242,11 +242,11 @@ impl ProgressBar {
     /// Render the progress bar.
     /// 渲染进度条。
     fn render(&self) {
-        let percent = if self.total > 0 {
-            (self.current * 100) / self.total
-        } else {
-            0
-        };
+        let percent = self
+            .current
+            .saturating_mul(100)
+            .checked_div(self.total)
+            .unwrap_or(0);
         let filled = (self.current * self.width) / self.total.max(1);
         let empty = self.width - filled;
 
