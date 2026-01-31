@@ -59,14 +59,12 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
             continue;
         }
 
-        if verbose {
-            if let Some(ast) = loader.parsed_source(*module_id) {
-                output::info(&format!(
-                    "Parsed {} items in {}",
-                    ast.items.len(),
-                    file_path.display()
-                ));
-            }
+        if verbose && let Some(ast) = loader.parsed_source(*module_id) {
+            output::info(&format!(
+                "Parsed {} items in {}",
+                ast.items.len(),
+                file_path.display()
+            ));
         }
 
         if verbose {

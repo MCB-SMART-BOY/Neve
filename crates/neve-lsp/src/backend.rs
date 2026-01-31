@@ -138,10 +138,10 @@ fn range_for_span(doc: &Document, span: Span) -> Range {
         end = start;
     }
 
-    if start == end {
-        if let Some(next) = next_char_offset(&doc.content, start) {
-            end = next;
-        }
+    if start == end
+        && let Some(next) = next_char_offset(&doc.content, start)
+    {
+        end = next;
     }
 
     let (start_line, start_col) = doc.position_at(start);
