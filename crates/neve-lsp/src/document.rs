@@ -67,9 +67,8 @@ impl Document {
     /// 获取行列对应的偏移量。
     pub fn offset_at(&self, line: u32, column: u32) -> usize {
         let mut offset = 0usize;
-        let mut current_line = 0u32;
-
-        for line_content in self.content.split('\n') {
+        for (current_line, line_content) in self.content.split('\n').enumerate() {
+            let current_line = current_line as u32;
             if current_line == line {
                 let mut utf16_units = 0u32;
                 for (byte_index, ch) in line_content.char_indices() {
@@ -83,7 +82,6 @@ impl Document {
             }
 
             offset += line_content.len() + 1;
-            current_line += 1;
         }
 
         offset

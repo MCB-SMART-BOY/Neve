@@ -48,7 +48,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     }
                     match &args[0] {
                         Value::List(list) => {
-                            let set: HashSet<String> = list.iter().map(|v| stable_key(v)).collect();
+                            let set: HashSet<String> = list.iter().map(stable_key).collect();
                             Ok(Value::Set(Rc::new(set)))
                         }
                         _ => Err("Set.fromList expects a list".into()),

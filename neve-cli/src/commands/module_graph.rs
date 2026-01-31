@@ -42,12 +42,12 @@ pub fn resolve_module_path(path: &Path) -> Result<(PathBuf, Vec<String>), String
 
     let mut segments: Vec<String> = rel_path
         .components()
-        .filter_map(|c| {
+        .map(|c| {
             let part = c.as_os_str().to_string_lossy().to_string();
             if part.ends_with(".neve") {
-                Some(part.trim_end_matches(".neve").to_string())
+                part.trim_end_matches(".neve").to_string()
             } else {
-                Some(part)
+                part
             }
         })
         .collect();
