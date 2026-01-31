@@ -888,36 +888,35 @@ impl Evaluator {
                 }
             }
             PatternKind::Constructor(def_id, patterns) => {
-                if let Some(ctor) = self.variant_ctors.get(def_id) {
-                    if let Value::Variant(tag, payload) = value
-                        && tag == &ctor.name
-                    {
-                        return match patterns.as_slice() {
-                            [] => {
-                                if matches!(**payload, Value::Unit) {
-                                    Some(Vec::new())
-                                } else {
-                                    None
-                                }
+                if let Some(ctor) = self.variant_ctors.get(def_id)
+                    && let Value::Variant(tag, payload) = value
+                    && tag == &ctor.name
+                {
+                    return match patterns.as_slice() {
+                        [] => {
+                            if matches!(**payload, Value::Unit) {
+                                Some(Vec::new())
+                            } else {
+                                None
                             }
-                            [p] => self.match_pattern(p, payload),
-                            _ => {
-                                if let Value::Tuple(values) = payload.as_ref() {
-                                    if values.len() != patterns.len() {
-                                        return None;
-                                    }
-                                    let capacity = patterns.iter().map(estimate_bindings).sum();
-                                    let mut bindings = Vec::with_capacity(capacity);
-                                    for (p, v) in patterns.iter().zip(values.iter()) {
-                                        bindings.extend(self.match_pattern(p, v)?);
-                                    }
-                                    Some(bindings)
-                                } else {
-                                    None
+                        }
+                        [p] => self.match_pattern(p, payload),
+                        _ => {
+                            if let Value::Tuple(values) = payload.as_ref() {
+                                if values.len() != patterns.len() {
+                                    return None;
                                 }
+                                let capacity = patterns.iter().map(estimate_bindings).sum();
+                                let mut bindings = Vec::with_capacity(capacity);
+                                for (p, v) in patterns.iter().zip(values.iter()) {
+                                    bindings.extend(self.match_pattern(p, v)?);
+                                }
+                                Some(bindings)
+                            } else {
+                                None
                             }
-                        };
-                    }
+                        }
+                    };
                 }
 
                 // Match Option/Result constructors

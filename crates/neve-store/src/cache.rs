@@ -196,7 +196,8 @@ impl BinaryCache {
         self.caches.push(config);
         // Sort by priority (descending)
         // 按优先级排序（降序）
-        self.caches.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.caches
+            .sort_by_key(|entry| std::cmp::Reverse(entry.priority));
     }
 
     /// Query if a path is available in any cache.
