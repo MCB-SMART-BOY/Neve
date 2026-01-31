@@ -1,26 +1,24 @@
-```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                         5-MINUTE QUICK START                                  ║
-║                            5 分钟快速上手                                      ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-```
+<div align="center">
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  Installation / REPL / Files / Types / Patterns │
-│  [中文]     #chinese   ──→  安装 / 交互环境 / 写文件 / 类型 / 模式匹配     │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>5-Minute Quick Start</h1>
+
+<p><em>5 分钟快速上手</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong>
+</p>
+
+</div>
 
 ---
 
-<a name="english"></a>
+> *Life's too short for long tutorials. Let's get you hacking in 5 minutes.*  
+> 人生苦短，教程太长。5 分钟让你上手。
 
-# English
-
-> *Life's too short for long tutorials. Let's get you hacking in 5 minutes.*
-
-## Step 1: Install (30 sec)
+## Step 1: Install (30 sec) / 第一步：安装（30 秒）
 
 ```bash
 # Pre-built binary
@@ -35,7 +33,7 @@ git clone https://github.com/MCB-SMART-BOY/neve.git && cd neve
 cargo build --release
 ```
 
-## Step 2: Play with REPL (1 min)
+## Step 2: Play with REPL (1 min) / 第二步：玩玩 REPL（1 分钟）
 
 ```bash
 $ neve repl
@@ -51,11 +49,12 @@ neve> { let a = 10; let b = 20; a + b }
 neve> :quit
 ```
 
-**REPL Commands:** `:help` `:env` `:clear` `:load file.neve` `:quit`
+**REPL Commands / 常用命令:** `:help` `:env` `:clear` `:load file.neve` `:quit`
 
-## Step 3: Write a File (1 min)
+## Step 3: Write a File (1 min) / 第三步：写个文件（1 分钟）
 
 Create `hello.neve`:
+创建 `hello.neve`：
 
 ```neve
 fn greet(name) = `Hello, {name}!`;
@@ -72,6 +71,7 @@ fn factorial(n) = {
 ```
 
 Run it:
+运行：
 
 ```bash
 $ neve run hello.neve
@@ -80,7 +80,7 @@ $ neve run hello.neve
 $ neve check hello.neve   # Type check (no output = OK)
 ```
 
-## Step 4: Types (1 min)
+## Step 4: Types (1 min) / 第四步：类型系统（1 分钟）
 
 ```neve
 -- Inferred
@@ -94,7 +94,7 @@ fn add(a: Int, b: Int) -> Int = a + b;
 fn identity<T>(x: T) -> T = x;
 ```
 
-## Step 5: Pattern Matching (1 min)
+## Step 5: Pattern Matching (1 min) / 第五步：模式匹配（1 分钟）
 
 ```neve
 fn describe(opt) = match opt {
@@ -108,10 +108,10 @@ fn sum(list) = match list {
 };
 ```
 
-## Cheat Sheet
+## Cheat Sheet / 语法速查
 
-| What | Neve |
-|------|------|
+| What / 项目 | Neve |
+|------------|------|
 | Record | `#{ x = 1 }` |
 | Lambda | `fn(x) x + 1` |
 | Function | `fn add(a, b) = a + b;` |
@@ -122,136 +122,12 @@ fn sum(list) = match list {
 | Match | `match x { p -> e }` |
 | Comment | `-- text --` |
 
-## Next
+## Next / 接下来
 
-- [Tutorial](tutorial.md) — deeper dive
-- [Spec](spec.md) — language reference
-- [API](api.md) — standard library
-
----
-
-<a name="chinese"></a>
-
-# 中文
-
-> 人生苦短，教程太长。5 分钟让你上手。
-
-## 第一步：安装（30 秒）
-
-```bash
-# 下载预编译包
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
-
-# Arch 用户
-yay -S neve-git
-
-# 从源码编译
-git clone https://github.com/MCB-SMART-BOY/neve.git && cd neve
-cargo build --release
-```
-
-## 第二步：玩玩 REPL（1 分钟）
-
-```bash
-$ neve repl
-neve> 1 + 2 * 3
-7
-neve> let double = fn(x) x * 2
-neve> double(21)
-42
-neve> #{ name = "极客", power = 9001 }
-#{power = 9001, name = "极客"}
-neve> { let a = 10; let b = 20; a + b }
-30
-neve> :quit
-```
-
-**常用命令：** `:help` `:env` `:clear` `:load 文件.neve` `:quit`
-
-## 第三步：写个文件（1 分钟）
-
-创建 `hello.neve`：
-
-```neve
-fn greet(name) = `你好，{name}！`;
-
-fn factorial(n) = {
-    if n <= 1 then 1
-    else n * factorial(n - 1)
-};
-
-#{
-    greeting = greet("世界"),
-    magic = factorial(5),
-}
-```
-
-运行：
-
-```bash
-$ neve run hello.neve
-#{magic = 120, greeting = "你好，世界！"}
-
-$ neve check hello.neve   # 类型检查，没输出就是没问题
-```
-
-## 第四步：类型系统（1 分钟）
-
-```neve
--- 自动推导
-let x = 42;                -- x: Int
-let f = fn(n) n * 2;       -- f: Int -> Int
-
--- 显式标注
-fn add(a: Int, b: Int) -> Int = a + b;
-
--- 泛型
-fn identity<T>(x: T) -> T = x;
-```
-
-## 第五步：模式匹配（1 分钟）
-
-```neve
-fn describe(opt) = match opt {
-    Some(x) -> `拿到了：{x}`,
-    None    -> "啥也没有",
-};
-
-fn sum(list) = match list {
-    []       -> 0,
-    [h, ..t] -> h + sum(t),
-};
-```
-
-## 速查表
-
-| 语法 | 写法 |
-|------|------|
-| 记录 | `#{ x = 1 }` |
-| Lambda | `fn(x) x + 1` |
-| 函数 | `fn add(a, b) = a + b;` |
-| 代码块 | `{ let x = 1; x }` |
-| 列表 | `[1, 2, 3]` |
-| 管道 | `x \|> f \|> g` |
-| 插值 | `` `你好 {name}` `` |
-| 匹配 | `match x { p -> e }` |
-| 注释 | `-- 文字 --` |
-
-## 接下来
-
-- [完整教程](tutorial.md)
-- [语言规范](spec.md)
-- [标准库](api.md)
+- [Tutorial](tutorial.md) — deeper dive / 深入学习
+- [Spec](spec.md) — language reference / 语言规范
+- [API](api.md) — standard library / 标准库参考
 
 ---
 
-<div align="center">
-
-```
-═══════════════════════════════════════════════════════════════════════════════
-                         Now go build something cool! 🚀
-═══════════════════════════════════════════════════════════════════════════════
-```
-
-</div>
+> Now go build something cool! / 去构建点酷的东西吧！

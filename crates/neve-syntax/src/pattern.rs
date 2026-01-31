@@ -2,7 +2,7 @@
 //! 模式 AST 节点。
 
 use crate::Ident;
-use neve_common::Span;
+use neve_common::{Int, Span};
 
 /// A pattern for matching.
 /// 用于匹配的模式。
@@ -67,7 +67,7 @@ pub enum PatternKind {
 /// 模式中的字面量。
 #[derive(Debug, Clone)]
 pub enum LiteralPattern {
-    Int(i64),
+    Int(Int),
     Float(f64),
     String(String),
     Char(char),

@@ -1,33 +1,40 @@
-```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                       NEVE LANGUAGE SPECIFICATION                             ║
-║                             语言规范 v2.0                                      ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-```
+<div align="center">
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  Principles / Syntax / Types / Expressions       │
-│  [中文]     #chinese   ──→  设计原则 / 语法 / 类型 / 表达式                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Neve Language Specification</h1>
+
+<p><em>语言规范 v2.0</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong>
+</p>
+
+</div>
 
 ---
 
-<a name="english"></a>
+> *The formal spec. For when you need the precise truth.*  
+> 语言规范：当你需要严谨的定义时使用。
 
-# English
+## 1. Design Principles / 设计原则
 
-> *The formal spec. For when you need the precise truth.*
-
-## 1. Design Principles
 
 - **Zero Ambiguity**: Every construct parses exactly one way
 - **Syntactic Consistency**: Similar things look similar
 - **Indentation Independent**: Explicit delimiters, no significant whitespace
 - **Purely Functional**: No side effects, referential transparency
 
-## 2. Symbol Reference
+
+- **零二义性**: 每个语法结构只有一种解析方式
+- **语法一致**: 相似的东西长得相似
+- **不靠缩进**: 用显式分隔符,不玩空格游戏
+- **纯函数式**: 没有副作用,引用透明
+
+
+## 2. Symbol Reference / 符号速查
+
 
 | Symbol | Purpose | Example |
 |--------|---------|---------|
@@ -42,7 +49,23 @@
 | `:` | Type annotation | `x: Int` |
 | `=` | Value binding | `x = 1` |
 
-## 3. Lexical Elements
+
+| 符号 | 干啥的 | 例子 |
+|------|--------|------|
+| `( )` | 分组、元组、函数参数 | `(1, 2)`, `f(x)` |
+| `[ ]` | 列表 | `[1, 2, 3]` |
+| `#{ }` | 记录 | `#{ x = 1 }` |
+| `{ }` | 代码块 | `{ let x = 1; x }` |
+| `< >` | 泛型参数 | `List<Int>` |
+| `->` | 函数类型、匹配分支 | `Int -> Int` |
+| `,` | 分隔并列项 | `[1, 2, 3]` |
+| `;` | 语句结尾 | `let x = 1;` |
+| `:` | 类型声明 | `x: Int` |
+| `=` | 绑定值 | `x = 1` |
+
+
+## 3. Lexical Elements / 词法元素
+
 
 ### Comments
 
@@ -80,7 +103,46 @@ true  false
 ./relative  ../parent  /absolute
 ```
 
-## 4. Types
+
+### 注释
+
+```neve
+-- 单行注释 --
+
+--
+   多行注释
+   -- 可以嵌套 --
+--
+```
+
+### 字面量
+
+```neve
+-- 整数
+42  -17  0xFF  0o77  0b1010  1_000_000
+
+-- 浮点数
+3.14  -2.5  1.0e-5
+
+-- 布尔值
+true  false
+
+-- 字符
+'a'  '\n'  '\u{1F600}'
+
+-- 字符串
+"hello\nworld"
+
+-- 插值字符串
+`你好 {name}`
+
+-- 路径字面量（目前就是字符串）
+./relative  ../parent  /absolute
+```
+
+
+## 4. Types / 类型
+
 
 ### Primitive Types
 
@@ -106,7 +168,34 @@ Result<Int, String>             -- result with error
 #{ name: String, port: Int }    -- record type
 ```
 
-## 5. Definitions
+
+### 原始类型
+
+```neve
+Int     -- 任意精度整数
+Float   -- 64 位浮点
+Bool    -- 布尔
+Char    -- Unicode 字符
+String  -- UTF-8 字符串
+Unit    -- 空类型 ()
+```
+
+注意：路径字面量目前会被当成 `String`，独立的 `Path` 类型计划中。
+
+### 复合类型
+
+```neve
+List<Int>                       -- 列表
+Option<Int>                     -- 可选值
+Result<Int, String>             -- 带错误的结果
+(Int, String)                   -- 元组
+(Int, Int) -> Int               -- 函数
+#{ name: String, port: Int }    -- 记录类型
+```
+
+
+## 5. Definitions / 定义
+
 
 All top-level definitions end with `;`.
 
@@ -134,7 +223,36 @@ impl Show for Point {
 fn add(x: Int, y: Int) -> Int = x + y;
 ```
 
-## 6. Expressions
+
+所有顶层定义都以 `;` 结尾。
+
+```neve
+-- 类型别名
+type Port = Int;
+
+-- 结构体
+struct Point { x: Float, y: Float };
+
+-- 枚举
+enum Option<T> { Some(T), None };
+
+-- Trait
+trait Show {
+    fn show(self) -> String;
+};
+
+-- 实现
+impl Show for Point {
+    fn show(self) -> String = `({self.x}, {self.y})`;
+};
+
+-- 函数
+fn add(x: Int, y: Int) -> Int = x + y;
+```
+
+
+## 6. Expressions / 表达式
+
 
 ### Bindings
 
@@ -193,205 +311,6 @@ let x = maybe ?? default;   -- default value
 user?.profile?.name         -- safe access
 ```
 
-## 7. Operators
-
-| Operator | Meaning |
-|----------|---------|
-| `+ - * / %` | Arithmetic |
-| `^` | Power |
-| `== !=` | Equality |
-| `< <= > >=` | Comparison |
-| `&& \|\|` | Logical and/or |
-| `!` | Logical not |
-| `++` | Concatenation |
-| `//` | Record merge |
-| `??` | Default value |
-| `?.` | Safe access |
-| `\|>` | Pipe |
-| `?` | Error propagation |
-
-### Precedence (high to low)
-
-1. `.` `?.` `()` `[]`
-2. `?` (postfix)
-3. `!` `-` (prefix)
-4. `^`
-5. `* / %`
-6. `+ -`
-7. `++`
-8. `< <= > >= == !=`
-9. `&&`
-10. `||`
-11. `??`
-12. `|>`
-13. `//`
-
-## 8. Modules
-
-```neve
-pub fn add(x: Int, y: Int) -> Int = x + y;
-
-import std.list;
-import std.list (map, filter);
-import std.list as L;
-import self.utils;
-import super.common;
-import crate.utils;
-```
-
-## 9. Lazy Evaluation
-
-```neve
-let expensive = lazy compute();
-let result = force(expensive);
-```
-
-## Appendix A: Keywords
-
-```
-let fn type struct enum trait impl
-pub import as self super crate
-if then else match
-lazy true false
-```
-
-**20 keywords total**
-
-## Appendix B: Nix Comparison
-
-| Nix | Neve |
-|-----|------|
-| `{ a = 1; }` | `#{ a = 1 }` |
-| `[ 1 2 3 ]` | `[1, 2, 3]` |
-| `x: x + 1` | `fn(x) x + 1` |
-| `a // b` | `a // b` |
-| `"${x}"` | `` `{x}` `` |
-| `inherit x;` | `#{ x }` |
-| `rec { }` | Automatic recursion |
-
----
-
-<a name="chinese"></a>
-
-# 中文
-
-> 正式规范。当你需要精确答案的时候,来这里找。
-
-## 1. 设计原则
-
-- **零二义性**: 每个语法结构只有一种解析方式
-- **语法一致**: 相似的东西长得相似
-- **不靠缩进**: 用显式分隔符,不玩空格游戏
-- **纯函数式**: 没有副作用,引用透明
-
-## 2. 符号速查
-
-| 符号 | 干啥的 | 例子 |
-|------|--------|------|
-| `( )` | 分组、元组、函数参数 | `(1, 2)`, `f(x)` |
-| `[ ]` | 列表 | `[1, 2, 3]` |
-| `#{ }` | 记录 | `#{ x = 1 }` |
-| `{ }` | 代码块 | `{ let x = 1; x }` |
-| `< >` | 泛型参数 | `List<Int>` |
-| `->` | 函数类型、匹配分支 | `Int -> Int` |
-| `,` | 分隔并列项 | `[1, 2, 3]` |
-| `;` | 语句结尾 | `let x = 1;` |
-| `:` | 类型声明 | `x: Int` |
-| `=` | 绑定值 | `x = 1` |
-
-## 3. 词法元素
-
-### 注释
-
-```neve
--- 单行注释 --
-
---
-   多行注释
-   -- 可以嵌套 --
---
-```
-
-### 字面量
-
-```neve
--- 整数
-42  -17  0xFF  0o77  0b1010  1_000_000
-
--- 浮点数
-3.14  -2.5  1.0e-5
-
--- 布尔值
-true  false
-
--- 字符
-'a'  '\n'  '\u{1F600}'
-
--- 字符串
-"hello\nworld"
-
--- 插值字符串
-`你好 {name}`
-
--- 路径字面量（目前就是字符串）
-./relative  ../parent  /absolute
-```
-
-## 4. 类型
-
-### 原始类型
-
-```neve
-Int     -- 任意精度整数
-Float   -- 64 位浮点
-Bool    -- 布尔
-Char    -- Unicode 字符
-String  -- UTF-8 字符串
-Unit    -- 空类型 ()
-```
-
-注意：路径字面量目前会被当成 `String`，独立的 `Path` 类型计划中。
-
-### 复合类型
-
-```neve
-List<Int>                       -- 列表
-Option<Int>                     -- 可选值
-Result<Int, String>             -- 带错误的结果
-(Int, String)                   -- 元组
-(Int, Int) -> Int               -- 函数
-#{ name: String, port: Int }    -- 记录类型
-```
-
-## 5. 定义
-
-所有顶层定义都以 `;` 结尾。
-
-```neve
--- 类型别名
-type Port = Int;
-
--- 结构体
-struct Point { x: Float, y: Float };
-
--- 枚举
-enum Option<T> { Some(T), None };
-
--- Trait
-trait Show {
-    fn show(self) -> String;
-};
-
--- 实现
-impl Show for Point {
-    fn show(self) -> String = `({self.x}, {self.y})`;
-};
-
--- 函数
-fn add(x: Int, y: Int) -> Int = x + y;
-```
-
-## 6. 表达式
 
 ### 绑定
 
@@ -450,7 +369,41 @@ let x = maybe ?? default;   -- 默认值
 user?.profile?.name         -- 安全访问
 ```
 
-## 7. 操作符
+
+## 7. Operators / 操作符
+
+
+| Operator | Meaning |
+|----------|---------|
+| `+ - * / %` | Arithmetic |
+| `^` | Power |
+| `== !=` | Equality |
+| `< <= > >=` | Comparison |
+| `&& \|\|` | Logical and/or |
+| `!` | Logical not |
+| `++` | Concatenation |
+| `//` | Record merge |
+| `??` | Default value |
+| `?.` | Safe access |
+| `\|>` | Pipe |
+| `?` | Error propagation |
+
+### Precedence (high to low)
+
+1. `.` `?.` `()` `[]`
+2. `?` (postfix)
+3. `!` `-` (prefix)
+4. `^`
+5. `* / %`
+6. `+ -`
+7. `++`
+8. `< <= > >= == !=`
+9. `&&`
+10. `||`
+11. `??`
+12. `|>`
+13. `//`
+
 
 | 操作符 | 意思 |
 |--------|------|
@@ -483,7 +436,9 @@ user?.profile?.name         -- 安全访问
 12. `|>`
 13. `//`
 
-## 8. 模块
+
+## 8. Modules / 模块
+
 
 ```neve
 pub fn add(x: Int, y: Int) -> Int = x + y;
@@ -496,14 +451,46 @@ import super.common;
 import crate.utils;
 ```
 
-## 9. 惰性求值
+
+```neve
+pub fn add(x: Int, y: Int) -> Int = x + y;
+
+import std.list;
+import std.list (map, filter);
+import std.list as L;
+import self.utils;
+import super.common;
+import crate.utils;
+```
+
+
+## 9. Lazy Evaluation / 惰性求值
+
 
 ```neve
 let expensive = lazy compute();
 let result = force(expensive);
 ```
 
-## 附录 A: 关键字
+
+```neve
+let expensive = lazy compute();
+let result = force(expensive);
+```
+
+
+## Appendix A: Keywords / 附录 A: 关键字
+
+
+```
+let fn type struct enum trait impl
+pub import as self super crate
+if then else match
+lazy true false
+```
+
+**20 keywords total**
+
 
 ```
 let fn type struct enum trait impl
@@ -514,7 +501,22 @@ lazy true false
 
 **一共 20 个关键字**
 
-## 附录 B: 跟 Nix 对照
+
+## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照
+
+
+| Nix | Neve |
+|-----|------|
+| `{ a = 1; }` | `#{ a = 1 }` |
+| `[ 1 2 3 ]` | `[1, 2, 3]` |
+| `x: x + 1` | `fn(x) x + 1` |
+| `a // b` | `a // b` |
+| `"${x}"` | `` `{x}` `` |
+| `inherit x;` | `#{ x }` |
+| `rec { }` | Automatic recursion |
+
+---
+
 
 | Nix | Neve |
 |-----|------|

@@ -2,7 +2,7 @@
 //! 表达式 AST 节点。
 
 use crate::{Ident, Pattern, Type};
-use neve_common::Span;
+use neve_common::{Int, Span};
 
 /// An expression.
 /// 表达式。
@@ -23,7 +23,7 @@ impl Expr {
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     /// Integer literal / 整数字面量
-    Int(i64),
+    Int(Int),
     /// Float literal / 浮点数字面量
     Float(f64),
     /// String literal / 字符串字面量

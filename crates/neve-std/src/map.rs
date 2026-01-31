@@ -4,7 +4,7 @@
 //! Provides immutable hash map operations.
 //! 提供不可变哈希映射操作。
 
-use neve_eval::Value;
+use neve_eval::{Value, stable_key};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -29,7 +29,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Map.singleton requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     let mut map = HashMap::new();
                     map.insert(key, args[1].clone());
                     Ok(Value::Map(Rc::new(map)))
@@ -52,14 +52,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             for pair in pairs.iter() {
                                 match pair {
                                     Value::Tuple(elements) if elements.len() == 2 => {
-                                        let key = format!("{:?}", elements[0]);
+                                        let key = stable_key(&elements[0]);
                                         map.insert(key, elements[1].clone());
                                     }
                                     Value::Record(fields) => {
                                         if let (Some(k), Some(v)) =
                                             (fields.get("key"), fields.get("value"))
                                         {
-                                            let key = format!("{:?}", k);
+                                            let key = stable_key(k);
                                             map.insert(key, v.clone());
                                         }
                                     }
@@ -91,11 +91,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Map.get requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[1] {
                         Value::Map(map) => match map.get(&key) {
-                            Some(v) => Ok(Value::Variant("Some".into(), Box::new(v.clone()))),
-                            None => Ok(Value::Variant("None".into(), Box::new(Value::Unit))),
+                            Some(v) => Ok(Value::Some(Box::new(v.clone()))),
+                            None => Ok(Value::None),
                         },
                         _ => Err("Map.get expects a map as second argument".into()),
                     }
@@ -112,7 +112,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 3 {
                         return Err("Map.getWithDefault requires 3 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[2] {
                         Value::Map(map) => {
                             Ok(map.get(&key).cloned().unwrap_or_else(|| args[1].clone()))
@@ -132,7 +132,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Map.contains requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[1] {
                         Value::Map(map) => Ok(Value::Bool(map.contains_key(&key))),
                         _ => Err("Map.contains expects a map as second argument".into()),
@@ -151,7 +151,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         return Err("Map.size requires 1 argument".into());
                     }
                     match &args[0] {
-                        Value::Map(map) => Ok(Value::Int(map.len() as i64)),
+                        Value::Map(map) => Ok(Value::Int(map.len().into())),
                         _ => Err("Map.size expects a map".into()),
                     }
                 }),
@@ -188,7 +188,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 3 {
                         return Err("Map.insert requires 3 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[2] {
                         Value::Map(map) => {
                             let mut new_map = (**map).clone();
@@ -210,7 +210,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Map.remove requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[1] {
                         Value::Map(map) => {
                             let mut new_map = (**map).clone();
@@ -332,8 +332,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     }
                     match &args[0] {
                         Value::Map(map) => {
-                            // Keys are stored as debug strings, return as strings
-                            // 键存储为调试字符串，作为字符串返回
+                            // Keys are stored as stable canonical strings
+                            // 键存储为稳定的规范字符串
                             let keys: Vec<Value> = map
                                 .keys()
                                 .map(|k| Value::String(Rc::new(k.clone())))

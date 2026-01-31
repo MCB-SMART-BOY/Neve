@@ -36,4 +36,4 @@ pub use builtin::builtins;
 pub use env::Environment;
 pub use eval::{EvalError, Evaluator};
 pub use pattern::{MatchHints, Specificity, analyze_match, is_irrefutable, pattern_specificity};
-pub use value::{AstClosure, BuiltinFn, Value};
+pub use value::{AstClosure, BuiltinFn, Value, stable_key};

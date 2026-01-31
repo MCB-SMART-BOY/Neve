@@ -1,6 +1,22 @@
-# Neve Stage 0 Bootstrap Packages
+<div align="center">
+
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Stage 0 Bootstrap Packages</h1>
+
+<p><em>Stage 0 启动包</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="../docs/">Docs</a></strong>
+</p>
+
+</div>
+
+---
 
 This directory contains the foundational packages (Stage 0) needed to bootstrap the Neve package ecosystem from scratch.
+本目录包含从零启动 Neve 包生态所需的基础包集合（Stage 0）。
 
 ## 什么是 Stage 0? / What is Stage 0?
 

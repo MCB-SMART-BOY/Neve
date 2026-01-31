@@ -1,6 +1,7 @@
 //! List operations for the standard library.
 //! 标准库的列表操作。
 
+use neve_common::{int_is_negative, int_to_i64, int_to_usize, Int};
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
@@ -31,7 +32,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "list.len",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::List(items) => Ok(Value::Int(items.len() as i64)),
+                    Value::List(items) => Ok(Value::Int(items.len().into())),
                     _ => Err("list.len expects a list".to_string()),
                 },
             }),
@@ -119,10 +120,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(idx), Value::List(items)) => {
-                        let idx = *idx as usize;
-                        Ok(items
-                            .get(idx)
-                            .cloned()
+                        let idx = index_to_usize(idx);
+                        Ok(idx
+                            .and_then(|i| items.get(i).cloned())
                             .map(|v| Value::Some(Box::new(v)))
                             .unwrap_or(Value::None))
                     }
@@ -183,7 +183,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(n), Value::List(items)) => {
-                        let n = (*n as usize).min(items.len());
+                        let n = clamp_len(n, items.len());
                         Ok(Value::List(Rc::new(items[..n].to_vec())))
                     }
                     _ => Err("list.take expects (n, list)".to_string()),
@@ -197,7 +197,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(n), Value::List(items)) => {
-                        let n = (*n as usize).min(items.len());
+                        let n = clamp_len(n, items.len());
                         Ok(Value::List(Rc::new(items[n..].to_vec())))
                     }
                     _ => Err("list.drop expects (n, list)".to_string()),
@@ -250,10 +250,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::List(items) => {
-                        let mut sum = 0i64;
+                        let mut sum = Int::from(0);
                         for item in items.iter() {
                             match item {
-                                Value::Int(n) => sum += n,
+                                Value::Int(n) => sum += n.clone(),
                                 _ => return Err("list.sum expects a list of integers".to_string()),
                             }
                         }
@@ -270,10 +270,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::List(items) => {
-                        let mut product = 1i64;
+                        let mut product = Int::from(1);
                         for item in items.iter() {
                             match item {
-                                Value::Int(n) => product *= n,
+                                Value::Int(n) => product *= n.clone(),
                                 _ => {
                                     return Err(
                                         "list.product expects a list of integers".to_string()
@@ -294,11 +294,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::List(items) => {
-                        let mut max: Option<i64> = None;
+                        let mut max: Option<Int> = None;
                         for item in items.iter() {
                             match item {
                                 Value::Int(n) => {
-                                    max = Some(max.map_or(*n, |m| m.max(*n)));
+                                    max = Some(match max {
+                                        Some(ref m) if m >= n => m.clone(),
+                                        _ => n.clone(),
+                                    });
                                 }
                                 _ => return Err("list.max expects a list of integers".to_string()),
                             }
@@ -318,11 +321,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::List(items) => {
-                        let mut min: Option<i64> = None;
+                        let mut min: Option<Int> = None;
                         for item in items.iter() {
                             match item {
                                 Value::Int(n) => {
-                                    min = Some(min.map_or(*n, |m| m.min(*n)));
+                                    min = Some(match min {
+                                        Some(ref m) if m <= n => m.clone(),
+                                        _ => n.clone(),
+                                    });
                                 }
                                 _ => return Err("list.min expects a list of integers".to_string()),
                             }
@@ -359,7 +365,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::List(items) => {
                         for (i, item) in items.iter().enumerate() {
                             if values_equal(item, &args[0]) {
-                                return Ok(Value::Some(Box::new(Value::Int(i as i64))));
+                                return Ok(Value::Some(Box::new(Value::Int(i.into()))));
                             }
                         }
                         Ok(Value::None)
@@ -400,7 +406,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(start), Value::Int(end)) => {
-                        let items: Vec<Value> = (*start..*end).map(Value::Int).collect();
+                        let start = require_i64(start, "list.range start")?;
+                        let end = require_i64(end, "list.range end")?;
+                        let items: Vec<Value> =
+                            (start..end).map(|n| Value::Int(n.into())).collect();
                         Ok(Value::List(Rc::new(items)))
                     }
                     _ => Err("list.range expects (start, end)".to_string()),
@@ -414,7 +423,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match &args[0] {
                     Value::Int(n) => {
-                        let items: Vec<Value> = (0..*n as usize).map(|_| args[1].clone()).collect();
+                        let count = clamp_non_negative_usize(n, "list.replicate count")?;
+                        let items: Vec<Value> =
+                            (0..count).map(|_| args[1].clone()).collect();
                         Ok(Value::List(Rc::new(items)))
                     }
                     _ => Err("list.replicate expects (n, value)".to_string()),
@@ -468,6 +479,33 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
     ]
+}
+
+fn index_to_usize(value: &Int) -> Option<usize> {
+    if int_is_negative(value) {
+        None
+    } else {
+        int_to_usize(value)
+    }
+}
+
+fn clamp_len(value: &Int, len: usize) -> usize {
+    if int_is_negative(value) {
+        0
+    } else {
+        int_to_usize(value).unwrap_or(len).min(len)
+    }
+}
+
+fn clamp_non_negative_usize(value: &Int, context: &str) -> Result<usize, String> {
+    if int_is_negative(value) {
+        return Ok(0);
+    }
+    int_to_usize(value).ok_or_else(|| format!("{context} is too large"))
+}
+
+fn require_i64(value: &Int, context: &str) -> Result<i64, String> {
+    int_to_i64(value).ok_or_else(|| format!("{context} is out of range"))
 }
 
 /// Check if two values are equal (simplified comparison).

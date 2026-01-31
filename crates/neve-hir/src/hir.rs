@@ -1,7 +1,7 @@
 //! HIR node definitions.
 //! HIR 节点定义。
 
-use neve_common::Span;
+use neve_common::{Int, Span};
 use std::collections::HashMap;
 
 /// A unique identifier for a definition.
@@ -610,6 +610,8 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     /// Field access. / 字段访问。
     Field(Box<Expr>, String),
+    /// Safe field access `x?.field`. / 安全字段访问 `x?.field`。
+    SafeField { base: Box<Expr>, field: String },
     /// Tuple index access. / 元组索引访问。
     TupleIndex(Box<Expr>, u32),
     /// Binary operation. / 二元运算。
@@ -622,8 +624,25 @@ pub enum ExprKind {
     Match(Box<Expr>, Vec<MatchArm>),
     /// Block expression. / 块表达式。
     Block(Vec<Stmt>, Option<Box<Expr>>),
+    /// Let expression. / Let 表达式。
+    Let {
+        pattern: Pattern,
+        ty: Option<Ty>,
+        value: Box<Expr>,
+        body: Box<Expr>,
+    },
+    /// Lazy expression. / 惰性表达式。
+    Lazy(Box<Expr>),
+    /// List comprehension. / 列表推导。
+    ListComp {
+        body: Box<Expr>,
+        generators: Vec<Generator>,
+    },
     /// Interpolated string `` `hello {name}` ``. / 插值字符串 `` `hello {name}` ``。
     Interpolated(Vec<StringPart>),
+    /// Error placeholder for unsupported expressions.
+    /// 不支持表达式的错误占位符。
+    Error(String),
 }
 
 /// A part of an interpolated string.
@@ -641,7 +660,7 @@ pub enum StringPart {
 #[derive(Debug, Clone)]
 pub enum Literal {
     /// Integer. / 整数。
-    Int(i64),
+    Int(Int),
     /// Float. / 浮点数。
     Float(f64),
     /// String. / 字符串。
@@ -714,6 +733,20 @@ pub struct MatchArm {
     pub guard: Option<Expr>,
     /// Arm body. / 分支主体。
     pub body: Expr,
+    /// Source location. / 源代码位置。
+    pub span: Span,
+}
+
+/// A generator in a list comprehension.
+/// 列表推导中的生成器。
+#[derive(Debug, Clone)]
+pub struct Generator {
+    /// Pattern to bind. / 绑定模式。
+    pub pattern: Pattern,
+    /// Iterable expression. / 可迭代表达式。
+    pub iter: Expr,
+    /// Optional guard condition. / 可选守卫条件。
+    pub condition: Option<Expr>,
     /// Source location. / 源代码位置。
     pub span: Span,
 }

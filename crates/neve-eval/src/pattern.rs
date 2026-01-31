@@ -8,6 +8,7 @@
 //! - Fast-path detection for common patterns / 常见模式的快速路径检测
 //! - Match arm ordering hints / 匹配分支排序提示
 
+use neve_common::Int;
 use neve_syntax::{LiteralPattern, Pattern, PatternKind};
 
 /// Pattern specificity score - higher means more specific.
@@ -225,7 +226,7 @@ pub fn get_discriminant(pattern: &Pattern) -> Discriminant {
 /// 从字面量模式中提取字面量值以进行直接比较。
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
-    Int(i64),
+    Int(Int),
     Float(f64),
     String(String),
     Char(char),
@@ -237,7 +238,7 @@ pub enum LiteralValue {
 pub fn extract_literal(pattern: &Pattern) -> Option<LiteralValue> {
     match &pattern.kind {
         PatternKind::Literal(lit) => match lit {
-            LiteralPattern::Int(n) => Some(LiteralValue::Int(*n)),
+            LiteralPattern::Int(n) => Some(LiteralValue::Int(n.clone())),
             LiteralPattern::Float(f) => Some(LiteralValue::Float(*f)),
             LiteralPattern::String(s) => Some(LiteralValue::String(s.clone())),
             LiteralPattern::Char(c) => Some(LiteralValue::Char(*c)),
@@ -337,7 +338,7 @@ mod tests {
 
     fn int_lit(n: i64) -> Pattern {
         Pattern {
-            kind: PatternKind::Literal(LiteralPattern::Int(n)),
+            kind: PatternKind::Literal(LiteralPattern::Int(n.into())),
             span: make_span(),
         }
     }

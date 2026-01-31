@@ -1,8 +1,22 @@
-# Neve Documentation Hub / 文档中心
+<div align="center">
 
-Welcome to the Neve language documentation!
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
 
-欢迎来到 Neve 语言的文档中心！
+<h1>Neve Documentation Hub</h1>
+
+<p><em>文档中心</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong> ·
+  <strong><a href="quickstart.md">Quickstart</a></strong> ·
+  <strong><a href="spec.md">Spec</a></strong> ·
+  <strong><a href="api.md">API</a></strong>
+</p>
+
+</div>
+
+Welcome to the Neve language documentation. 欢迎来到 Neve 语言的文档中心！
 
 ---
 

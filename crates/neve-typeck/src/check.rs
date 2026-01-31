@@ -765,17 +765,15 @@ impl TypeChecker {
             }
 
             ExprKind::Global(def_id) => {
-                self.globals
-                    .get(def_id)
-                    .cloned()
-                    .map(|ty| {
-                        // Instantiate polymorphic types with fresh type variables
-                        instantiate(&ty, &mut || self.fresh_var())
-                    })
-                    .unwrap_or_else(|| {
-                        self.error(span, "undefined global");
-                        self.fresh_var()
-                    })
+                if let Some(ty) = self.globals.get(def_id).cloned() {
+                    // Instantiate polymorphic types with fresh type variables
+                    instantiate(&ty, &mut || self.fresh_var())
+                } else if def_id.0 == u32::MAX {
+                    self.error(span, "undefined global");
+                    self.fresh_var()
+                } else {
+                    self.fresh_var()
+                }
             }
 
             ExprKind::List(items) => {
@@ -878,6 +876,11 @@ impl TypeChecker {
                 }
             }
 
+            ExprKind::SafeField { base, .. } => {
+                let _ = self.infer_expr(base);
+                self.fresh_var()
+            }
+
             ExprKind::TupleIndex(base, index) => {
                 let base_ty = self.infer_expr(base);
                 let base_ty = self.apply(&base_ty);
@@ -960,6 +963,58 @@ impl TypeChecker {
                     kind: TyKind::String,
                     span,
                 }
+            }
+
+            ExprKind::Let {
+                pattern,
+                ty,
+                value,
+                body,
+            } => {
+                let value_ty = self.infer_expr(value);
+                let declared_ty = ty
+                    .as_ref()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or_else(|| value_ty.clone());
+                self.unify(&value_ty, &declared_ty, value.span);
+                self.check_pattern(pattern, &declared_ty);
+                self.infer_expr(body)
+            }
+
+            ExprKind::Lazy(inner) => self.infer_expr(inner),
+
+            ExprKind::ListComp { body, generators } => {
+                for generator in generators {
+                    let iter_ty = self.infer_expr(&generator.iter);
+                    let elem_ty = self.fresh_var();
+                    let list_ty = Ty {
+                        kind: TyKind::Named(DefId(u32::MAX), vec![elem_ty.clone()]),
+                        span: generator.span,
+                    };
+                    self.unify(&iter_ty, &list_ty, generator.iter.span);
+                    self.check_pattern(&generator.pattern, &elem_ty);
+                    if let Some(condition) = &generator.condition {
+                        let cond_ty = self.infer_expr(condition);
+                        self.unify(
+                            &cond_ty,
+                            &Ty {
+                                kind: TyKind::Bool,
+                                span: condition.span,
+                            },
+                            condition.span,
+                        );
+                    }
+                }
+                let body_ty = self.infer_expr(body);
+                Ty {
+                    kind: TyKind::Named(DefId(u32::MAX), vec![self.apply(&body_ty)]),
+                    span,
+                }
+            }
+
+            ExprKind::Error(message) => {
+                self.error(span, message.clone());
+                self.fresh_var()
             }
         }
     }

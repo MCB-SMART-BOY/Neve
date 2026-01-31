@@ -2,6 +2,7 @@
 
 use neve_eval::Value;
 use neve_std::stdlib;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 fn get_builtin(name: &str) -> Option<Value> {
@@ -37,7 +38,7 @@ fn test_map_singleton() {
 
     let result = call_builtin_fn(
         &singleton.unwrap(),
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42)],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
     )
     .unwrap();
 
@@ -64,7 +65,7 @@ fn test_set_singleton() {
     let singleton = get_builtin("Set.singleton");
     assert!(singleton.is_some(), "Set.singleton not found");
 
-    let result = call_builtin_fn(&singleton.unwrap(), vec![Value::Int(42)]).unwrap();
+    let result = call_builtin_fn(&singleton.unwrap(), vec![Value::Int(42.into())]).unwrap();
 
     match result {
         Value::Set(s) => assert_eq!(s.len(), 1),
@@ -98,11 +99,11 @@ fn test_list_singleton() {
 
     match singleton.unwrap() {
         Value::Builtin(builtin) => {
-            let result = (builtin.func)(&[Value::Int(42)]).unwrap();
+            let result = (builtin.func)(&[Value::Int(42.into())]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 1);
-                    assert_eq!(l[0], Value::Int(42));
+                    assert_eq!(l[0], Value::Int(42.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -113,14 +114,14 @@ fn test_list_singleton() {
 
 #[test]
 fn test_list_len() {
-    let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
+    let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
     let len_fn = get_builtin("list.len");
     assert!(len_fn.is_some(), "list.len not found");
 
     match len_fn.unwrap() {
         Value::Builtin(builtin) => {
             let result = (builtin.func)(&[list]).unwrap();
-            assert_eq!(result, Value::Int(3));
+            assert_eq!(result, Value::Int(3.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -194,15 +195,15 @@ fn test_list_len_various_sizes() {
         Value::Builtin(builtin) => {
             // Empty list
             let empty = Value::List(Rc::new(vec![]));
-            assert_eq!((builtin.func)(&[empty]).unwrap(), Value::Int(0));
+            assert_eq!((builtin.func)(&[empty]).unwrap(), Value::Int(0.into()));
 
             // Single element
-            let single = Value::List(Rc::new(vec![Value::Int(1)]));
-            assert_eq!((builtin.func)(&[single]).unwrap(), Value::Int(1));
+            let single = Value::List(Rc::new(vec![Value::Int(1.into())]));
+            assert_eq!((builtin.func)(&[single]).unwrap(), Value::Int(1.into()));
 
             // Many elements
-            let many = Value::List(Rc::new(vec![Value::Int(1); 100]));
-            assert_eq!((builtin.func)(&[many]).unwrap(), Value::Int(100));
+            let many = Value::List(Rc::new(vec![Value::Int(1.into()); 100]));
+            assert_eq!((builtin.func)(&[many]).unwrap(), Value::Int(100.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -219,7 +220,7 @@ fn test_list_is_empty_edge_cases() {
             assert_eq!((builtin.func)(&[empty]).unwrap(), Value::Bool(true));
 
             // Non-empty list
-            let non_empty = Value::List(Rc::new(vec![Value::Int(1)]));
+            let non_empty = Value::List(Rc::new(vec![Value::Int(1.into())]));
             assert_eq!((builtin.func)(&[non_empty]).unwrap(), Value::Bool(false));
         }
         _ => panic!("Expected Builtin"),
@@ -246,10 +247,10 @@ fn test_list_head_single_element() {
 
     match head_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(42)]));
+            let single = Value::List(Rc::new(vec![Value::Int(42.into())]));
             let result = (builtin.func)(&[single]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(42)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(42.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -280,7 +281,7 @@ fn test_list_tail_single_element_returns_empty() {
 
     match tail_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(1)]));
+            let single = Value::List(Rc::new(vec![Value::Int(1.into())]));
             let result = (builtin.func)(&[single]).unwrap();
             match result {
                 Value::List(l) => assert!(l.is_empty()),
@@ -297,13 +298,13 @@ fn test_list_tail_multiple_elements() {
 
     match tail_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 2);
-                    assert_eq!(l[0], Value::Int(2));
-                    assert_eq!(l[1], Value::Int(3));
+                    assert_eq!(l[0], Value::Int(2.into()));
+                    assert_eq!(l[1], Value::Int(3.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -332,10 +333,10 @@ fn test_list_last_single_element() {
 
     match last_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(99)]));
+            let single = Value::List(Rc::new(vec![Value::Int(99.into())]));
             let result = (builtin.func)(&[single]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(99)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(99.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -366,13 +367,13 @@ fn test_list_init_removes_last() {
 
     match init_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 2);
-                    assert_eq!(l[0], Value::Int(1));
-                    assert_eq!(l[1], Value::Int(2));
+                    assert_eq!(l[0], Value::Int(1.into()));
+                    assert_eq!(l[1], Value::Int(2.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -388,13 +389,13 @@ fn test_list_get_valid_index() {
     match get_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(10),
-                Value::Int(20),
-                Value::Int(30),
+                Value::Int(10.into()),
+                Value::Int(20.into()),
+                Value::Int(30.into()),
             ]));
-            let result = (builtin.func)(&[Value::Int(1), list]).unwrap();
+            let result = (builtin.func)(&[Value::Int(1.into()), list]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(20)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(20.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -408,8 +409,8 @@ fn test_list_get_out_of_bounds() {
 
     match get_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1)]));
-            let result = (builtin.func)(&[Value::Int(10), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into())]));
+            let result = (builtin.func)(&[Value::Int(10.into()), list]).unwrap();
             assert!(matches!(result, Value::None));
         }
         _ => panic!("Expected Builtin"),
@@ -422,12 +423,12 @@ fn test_list_get_negative_index_as_zero() {
 
     match get_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(42)]));
+            let list = Value::List(Rc::new(vec![Value::Int(42.into())]));
             // Negative index becomes 0 when cast to usize (wraps around)
             // This tests edge case behavior
-            let result = (builtin.func)(&[Value::Int(0), list]).unwrap();
+            let result = (builtin.func)(&[Value::Int(0.into()), list]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(42)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(42.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -442,11 +443,11 @@ fn test_list_cons_to_empty() {
     match cons_fn {
         Value::Builtin(builtin) => {
             let empty = Value::List(Rc::new(vec![]));
-            let result = (builtin.func)(&[Value::Int(1), empty]).unwrap();
+            let result = (builtin.func)(&[Value::Int(1.into()), empty]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 1);
-                    assert_eq!(l[0], Value::Int(1));
+                    assert_eq!(l[0], Value::Int(1.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -461,14 +462,14 @@ fn test_list_cons_to_non_empty() {
 
     match cons_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(2), Value::Int(3)]));
-            let result = (builtin.func)(&[Value::Int(1), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(2.into()), Value::Int(3.into())]));
+            let result = (builtin.func)(&[Value::Int(1.into()), list]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 3);
-                    assert_eq!(l[0], Value::Int(1));
-                    assert_eq!(l[1], Value::Int(2));
-                    assert_eq!(l[2], Value::Int(3));
+                    assert_eq!(l[0], Value::Int(1.into()));
+                    assert_eq!(l[1], Value::Int(2.into()));
+                    assert_eq!(l[2], Value::Int(3.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -502,7 +503,7 @@ fn test_list_append_left_empty() {
     match append_fn {
         Value::Builtin(builtin) => {
             let empty = Value::List(Rc::new(vec![]));
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2)]));
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into())]));
             let result = (builtin.func)(&[empty, list]).unwrap();
             match result {
                 Value::List(l) => assert_eq!(l.len(), 2),
@@ -519,7 +520,7 @@ fn test_list_append_right_empty() {
 
     match append_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2)]));
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into())]));
             let empty = Value::List(Rc::new(vec![]));
             let result = (builtin.func)(&[list, empty]).unwrap();
             match result {
@@ -554,12 +555,12 @@ fn test_list_reverse_single() {
 
     match reverse_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(42)]));
+            let single = Value::List(Rc::new(vec![Value::Int(42.into())]));
             let result = (builtin.func)(&[single]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 1);
-                    assert_eq!(l[0], Value::Int(42));
+                    assert_eq!(l[0], Value::Int(42.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -574,13 +575,13 @@ fn test_list_reverse_multiple() {
 
     match reverse_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
-                    assert_eq!(l[0], Value::Int(3));
-                    assert_eq!(l[1], Value::Int(2));
-                    assert_eq!(l[2], Value::Int(1));
+                    assert_eq!(l[0], Value::Int(3.into()));
+                    assert_eq!(l[1], Value::Int(2.into()));
+                    assert_eq!(l[2], Value::Int(1.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -595,8 +596,8 @@ fn test_list_take_zero() {
 
     match take_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
-            let result = (builtin.func)(&[Value::Int(0), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let result = (builtin.func)(&[Value::Int(0.into()), list]).unwrap();
             match result {
                 Value::List(l) => assert!(l.is_empty()),
                 _ => panic!("Expected List"),
@@ -612,8 +613,8 @@ fn test_list_take_more_than_length() {
 
     match take_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2)]));
-            let result = (builtin.func)(&[Value::Int(100), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into())]));
+            let result = (builtin.func)(&[Value::Int(100.into()), list]).unwrap();
             match result {
                 Value::List(l) => assert_eq!(l.len(), 2),
                 _ => panic!("Expected List"),
@@ -629,8 +630,8 @@ fn test_list_drop_zero() {
 
     match drop_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
-            let result = (builtin.func)(&[Value::Int(0), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let result = (builtin.func)(&[Value::Int(0.into()), list]).unwrap();
             match result {
                 Value::List(l) => assert_eq!(l.len(), 3),
                 _ => panic!("Expected List"),
@@ -646,8 +647,8 @@ fn test_list_drop_more_than_length() {
 
     match drop_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2)]));
-            let result = (builtin.func)(&[Value::Int(100), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into())]));
+            let result = (builtin.func)(&[Value::Int(100.into()), list]).unwrap();
             match result {
                 Value::List(l) => assert!(l.is_empty()),
                 _ => panic!("Expected List"),
@@ -665,7 +666,7 @@ fn test_list_sum_empty() {
         Value::Builtin(builtin) => {
             let empty = Value::List(Rc::new(vec![]));
             let result = (builtin.func)(&[empty]).unwrap();
-            assert_eq!(result, Value::Int(0));
+            assert_eq!(result, Value::Int(0.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -677,9 +678,9 @@ fn test_list_sum_single() {
 
     match sum_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(42)]));
+            let single = Value::List(Rc::new(vec![Value::Int(42.into())]));
             let result = (builtin.func)(&[single]).unwrap();
-            assert_eq!(result, Value::Int(42));
+            assert_eq!(result, Value::Int(42.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -692,13 +693,13 @@ fn test_list_sum_multiple() {
     match sum_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(1),
-                Value::Int(2),
-                Value::Int(3),
-                Value::Int(4),
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+                Value::Int(4.into()),
             ]));
             let result = (builtin.func)(&[list]).unwrap();
-            assert_eq!(result, Value::Int(10));
+            assert_eq!(result, Value::Int(10.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -711,12 +712,12 @@ fn test_list_sum_with_negatives() {
     match sum_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(10),
-                Value::Int(-5),
-                Value::Int(-3),
+                Value::Int(10.into()),
+                Value::Int((-5).into()),
+                Value::Int((-3).into()),
             ]));
             let result = (builtin.func)(&[list]).unwrap();
-            assert_eq!(result, Value::Int(2));
+            assert_eq!(result, Value::Int(2.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -730,7 +731,7 @@ fn test_list_product_empty() {
         Value::Builtin(builtin) => {
             let empty = Value::List(Rc::new(vec![]));
             let result = (builtin.func)(&[empty]).unwrap();
-            assert_eq!(result, Value::Int(1));
+            assert_eq!(result, Value::Int(1.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -742,9 +743,9 @@ fn test_list_product_with_zero() {
 
     match product_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(5), Value::Int(0), Value::Int(10)]));
+            let list = Value::List(Rc::new(vec![Value::Int(5.into()), Value::Int(0.into()), Value::Int(10.into())]));
             let result = (builtin.func)(&[list]).unwrap();
-            assert_eq!(result, Value::Int(0));
+            assert_eq!(result, Value::Int(0.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -756,9 +757,9 @@ fn test_list_product_multiple() {
 
     match product_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(2), Value::Int(3), Value::Int(4)]));
+            let list = Value::List(Rc::new(vec![Value::Int(2.into()), Value::Int(3.into()), Value::Int(4.into())]));
             let result = (builtin.func)(&[list]).unwrap();
-            assert_eq!(result, Value::Int(24));
+            assert_eq!(result, Value::Int(24.into()));
         }
         _ => panic!("Expected Builtin"),
     }
@@ -784,10 +785,10 @@ fn test_list_max_single() {
 
     match max_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(42)]));
+            let single = Value::List(Rc::new(vec![Value::Int(42.into())]));
             let result = (builtin.func)(&[single]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(42)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(42.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -802,13 +803,13 @@ fn test_list_max_with_negatives() {
     match max_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(-5),
-                Value::Int(-1),
-                Value::Int(-10),
+                Value::Int((-5).into()),
+                Value::Int((-1).into()),
+                Value::Int((-10).into()),
             ]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(-1)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int((-1).into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -836,10 +837,10 @@ fn test_list_min_with_positives() {
 
     match min_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(5), Value::Int(1), Value::Int(10)]));
+            let list = Value::List(Rc::new(vec![Value::Int(5.into()), Value::Int(1.into()), Value::Int(10.into())]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -853,8 +854,8 @@ fn test_list_contains_found() {
 
     match contains_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
-            let result = (builtin.func)(&[Value::Int(2), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let result = (builtin.func)(&[Value::Int(2.into()), list]).unwrap();
             assert_eq!(result, Value::Bool(true));
         }
         _ => panic!("Expected Builtin"),
@@ -867,8 +868,8 @@ fn test_list_contains_not_found() {
 
     match contains_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
-            let result = (builtin.func)(&[Value::Int(99), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let result = (builtin.func)(&[Value::Int(99.into()), list]).unwrap();
             assert_eq!(result, Value::Bool(false));
         }
         _ => panic!("Expected Builtin"),
@@ -882,7 +883,7 @@ fn test_list_contains_in_empty() {
     match contains_fn {
         Value::Builtin(builtin) => {
             let empty = Value::List(Rc::new(vec![]));
-            let result = (builtin.func)(&[Value::Int(1), empty]).unwrap();
+            let result = (builtin.func)(&[Value::Int(1.into()), empty]).unwrap();
             assert_eq!(result, Value::Bool(false));
         }
         _ => panic!("Expected Builtin"),
@@ -896,13 +897,13 @@ fn test_list_index_of_found() {
     match index_of_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(10),
-                Value::Int(20),
-                Value::Int(30),
+                Value::Int(10.into()),
+                Value::Int(20.into()),
+                Value::Int(30.into()),
             ]));
-            let result = (builtin.func)(&[Value::Int(20), list]).unwrap();
+            let result = (builtin.func)(&[Value::Int(20.into()), list]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1)),
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1.into())),
                 _ => panic!("Expected Some"),
             }
         }
@@ -916,8 +917,8 @@ fn test_list_index_of_not_found() {
 
     match index_of_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
-            let result = (builtin.func)(&[Value::Int(99), list]).unwrap();
+            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let result = (builtin.func)(&[Value::Int(99.into()), list]).unwrap();
             assert!(matches!(result, Value::None));
         }
         _ => panic!("Expected Builtin"),
@@ -931,14 +932,14 @@ fn test_list_index_of_first_occurrence() {
     match index_of_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(1),
-                Value::Int(2),
-                Value::Int(1),
-                Value::Int(2),
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(1.into()),
+                Value::Int(2.into()),
             ]));
-            let result = (builtin.func)(&[Value::Int(2), list]).unwrap();
+            let result = (builtin.func)(&[Value::Int(2.into()), list]).unwrap();
             match result {
-                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1)), // First occurrence at index 1
+                Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1.into())), // First occurrence at index 1
                 _ => panic!("Expected Some"),
             }
         }
@@ -969,12 +970,12 @@ fn test_list_sort_single() {
 
     match sort_fn {
         Value::Builtin(builtin) => {
-            let single = Value::List(Rc::new(vec![Value::Int(42)]));
+            let single = Value::List(Rc::new(vec![Value::Int(42.into())]));
             let result = (builtin.func)(&[single]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 1);
-                    assert_eq!(l[0], Value::Int(42));
+                    assert_eq!(l[0], Value::Int(42.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -989,13 +990,13 @@ fn test_list_sort_already_sorted() {
 
     match sort_fn {
         Value::Builtin(builtin) => {
-            let sorted = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
+            let sorted = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
             let result = (builtin.func)(&[sorted]).unwrap();
             match result {
                 Value::List(l) => {
-                    assert_eq!(l[0], Value::Int(1));
-                    assert_eq!(l[1], Value::Int(2));
-                    assert_eq!(l[2], Value::Int(3));
+                    assert_eq!(l[0], Value::Int(1.into()));
+                    assert_eq!(l[1], Value::Int(2.into()));
+                    assert_eq!(l[2], Value::Int(3.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -1010,13 +1011,13 @@ fn test_list_sort_reverse_sorted() {
 
     match sort_fn {
         Value::Builtin(builtin) => {
-            let reversed = Value::List(Rc::new(vec![Value::Int(3), Value::Int(2), Value::Int(1)]));
+            let reversed = Value::List(Rc::new(vec![Value::Int(3.into()), Value::Int(2.into()), Value::Int(1.into())]));
             let result = (builtin.func)(&[reversed]).unwrap();
             match result {
                 Value::List(l) => {
-                    assert_eq!(l[0], Value::Int(1));
-                    assert_eq!(l[1], Value::Int(2));
-                    assert_eq!(l[2], Value::Int(3));
+                    assert_eq!(l[0], Value::Int(1.into()));
+                    assert_eq!(l[1], Value::Int(2.into()));
+                    assert_eq!(l[2], Value::Int(3.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -1032,18 +1033,18 @@ fn test_list_sort_with_duplicates() {
     match sort_fn {
         Value::Builtin(builtin) => {
             let list = Value::List(Rc::new(vec![
-                Value::Int(3),
-                Value::Int(1),
-                Value::Int(2),
-                Value::Int(1),
+                Value::Int(3.into()),
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(1.into()),
             ]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
-                    assert_eq!(l[0], Value::Int(1));
-                    assert_eq!(l[1], Value::Int(1));
-                    assert_eq!(l[2], Value::Int(2));
-                    assert_eq!(l[3], Value::Int(3));
+                    assert_eq!(l[0], Value::Int(1.into()));
+                    assert_eq!(l[1], Value::Int(1.into()));
+                    assert_eq!(l[2], Value::Int(2.into()));
+                    assert_eq!(l[3], Value::Int(3.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -1086,7 +1087,7 @@ fn test_list_range_empty() {
 
     match range_fn {
         Value::Builtin(builtin) => {
-            let result = (builtin.func)(&[Value::Int(5), Value::Int(5)]).unwrap();
+            let result = (builtin.func)(&[Value::Int(5.into()), Value::Int(5.into())]).unwrap();
             match result {
                 Value::List(l) => assert!(l.is_empty()),
                 _ => panic!("Expected List"),
@@ -1102,11 +1103,11 @@ fn test_list_range_single() {
 
     match range_fn {
         Value::Builtin(builtin) => {
-            let result = (builtin.func)(&[Value::Int(0), Value::Int(1)]).unwrap();
+            let result = (builtin.func)(&[Value::Int(0.into()), Value::Int(1.into())]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 1);
-                    assert_eq!(l[0], Value::Int(0));
+                    assert_eq!(l[0], Value::Int(0.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -1121,14 +1122,14 @@ fn test_list_range_multiple() {
 
     match range_fn {
         Value::Builtin(builtin) => {
-            let result = (builtin.func)(&[Value::Int(1), Value::Int(5)]).unwrap();
+            let result = (builtin.func)(&[Value::Int(1.into()), Value::Int(5.into())]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 4);
-                    assert_eq!(l[0], Value::Int(1));
-                    assert_eq!(l[1], Value::Int(2));
-                    assert_eq!(l[2], Value::Int(3));
-                    assert_eq!(l[3], Value::Int(4));
+                    assert_eq!(l[0], Value::Int(1.into()));
+                    assert_eq!(l[1], Value::Int(2.into()));
+                    assert_eq!(l[2], Value::Int(3.into()));
+                    assert_eq!(l[3], Value::Int(4.into()));
                 }
                 _ => panic!("Expected List"),
             }
@@ -1143,7 +1144,7 @@ fn test_list_replicate_zero() {
 
     match replicate_fn {
         Value::Builtin(builtin) => {
-            let result = (builtin.func)(&[Value::Int(0), Value::Int(42)]).unwrap();
+            let result = (builtin.func)(&[Value::Int(0.into()), Value::Int(42.into())]).unwrap();
             match result {
                 Value::List(l) => assert!(l.is_empty()),
                 _ => panic!("Expected List"),
@@ -1160,7 +1161,7 @@ fn test_list_replicate_multiple() {
     match replicate_fn {
         Value::Builtin(builtin) => {
             let result =
-                (builtin.func)(&[Value::Int(3), Value::String(Rc::new("x".to_string()))]).unwrap();
+                (builtin.func)(&[Value::Int(3.into()), Value::String(Rc::new("x".to_string()))]).unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 3);
@@ -1202,11 +1203,11 @@ fn test_list_zip_different_lengths() {
 
     match zip_fn {
         Value::Builtin(builtin) => {
-            let short = Value::List(Rc::new(vec![Value::Int(1)]));
+            let short = Value::List(Rc::new(vec![Value::Int(1.into())]));
             let long = Value::List(Rc::new(vec![
-                Value::Int(10),
-                Value::Int(20),
-                Value::Int(30),
+                Value::Int(10.into()),
+                Value::Int(20.into()),
+                Value::Int(30.into()),
             ]));
             let result = (builtin.func)(&[short, long]).unwrap();
             match result {
@@ -1227,7 +1228,7 @@ fn test_list_zip_same_length() {
 
     match zip_fn {
         Value::Builtin(builtin) => {
-            let list1 = Value::List(Rc::new(vec![Value::Int(1), Value::Int(2)]));
+            let list1 = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into())]));
             let list2 = Value::List(Rc::new(vec![
                 Value::String(Rc::new("a".to_string())),
                 Value::String(Rc::new("b".to_string())),
@@ -1238,7 +1239,7 @@ fn test_list_zip_same_length() {
                     assert_eq!(l.len(), 2);
                     match &l[0] {
                         Value::Tuple(t) => {
-                            assert_eq!(t[0], Value::Int(1));
+                            assert_eq!(t[0], Value::Int(1.into()));
                             match &t[1] {
                                 Value::String(s) => assert_eq!(s.as_str(), "a"),
                                 _ => panic!("Expected String"),
@@ -1288,11 +1289,11 @@ fn test_list_unzip_pairs() {
         Value::Builtin(builtin) => {
             let pairs = Value::List(Rc::new(vec![
                 Value::Tuple(Rc::new(vec![
-                    Value::Int(1),
+                    Value::Int(1.into()),
                     Value::String(Rc::new("a".to_string())),
                 ])),
                 Value::Tuple(Rc::new(vec![
-                    Value::Int(2),
+                    Value::Int(2.into()),
                     Value::String(Rc::new("b".to_string())),
                 ])),
             ]));
@@ -1302,8 +1303,8 @@ fn test_list_unzip_pairs() {
                     (Value::List(l1), Value::List(l2)) => {
                         assert_eq!(l1.len(), 2);
                         assert_eq!(l2.len(), 2);
-                        assert_eq!(l1[0], Value::Int(1));
-                        assert_eq!(l1[1], Value::Int(2));
+                        assert_eq!(l1[0], Value::Int(1.into()));
+                        assert_eq!(l1[1], Value::Int(2.into()));
                     }
                     _ => panic!("Expected Lists"),
                 },
@@ -1338,7 +1339,7 @@ fn test_map_singleton_creates_single_entry() {
 
     let result = call_builtin_fn(
         &singleton.unwrap(),
-        vec![Value::String(Rc::new("mykey".to_string())), Value::Int(999)],
+        vec![Value::String(Rc::new("mykey".to_string())), Value::Int(999.into())],
     )
     .unwrap();
 
@@ -1356,7 +1357,7 @@ fn test_map_size_empty() {
     let size = get_builtin("Map.size").unwrap();
 
     let result = call_builtin_fn(&size, vec![empty]).unwrap();
-    assert_eq!(result, Value::Int(0));
+    assert_eq!(result, Value::Int(0.into()));
 }
 
 #[test]
@@ -1375,7 +1376,7 @@ fn test_map_is_empty_on_non_empty() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("k".to_string())), Value::Int(1)],
+        vec![Value::String(Rc::new("k".to_string())), Value::Int(1.into())],
     )
     .unwrap();
 
@@ -1390,7 +1391,7 @@ fn test_map_contains_existing_key() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42)],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
     )
     .unwrap();
 
@@ -1427,14 +1428,14 @@ fn test_map_insert_to_empty() {
         &insert,
         vec![
             Value::String(Rc::new("a".to_string())),
-            Value::Int(1),
+            Value::Int(1.into()),
             empty,
         ],
     )
     .unwrap();
 
     let result = call_builtin_fn(&size, vec![m]).unwrap();
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1445,7 +1446,7 @@ fn test_map_insert_overwrite() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(100)],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(100.into())],
     )
     .unwrap();
 
@@ -1453,7 +1454,7 @@ fn test_map_insert_overwrite() {
         &insert,
         vec![
             Value::String(Rc::new("key".to_string())),
-            Value::Int(200),
+            Value::Int(200.into()),
             m,
         ],
     )
@@ -1464,11 +1465,48 @@ fn test_map_insert_overwrite() {
 
     // Should be Some(200)
     match result {
-        Value::Variant(tag, value) => {
-            assert_eq!(tag, "Some");
-            assert_eq!(*value, Value::Int(200));
+        Value::Some(value) => {
+            assert_eq!(*value, Value::Int(200.into()));
         }
-        _ => panic!("Expected Some variant"),
+        _ => panic!("Expected Some"),
+    }
+}
+
+#[test]
+fn test_map_key_record_order_independent() {
+    let singleton = get_builtin("Map.singleton").unwrap();
+    let get = get_builtin("Map.get").unwrap();
+
+    let mut record_a = HashMap::new();
+    record_a.insert("a".to_string(), Value::Int(1.into()));
+    record_a.insert("b".to_string(), Value::Int(2.into()));
+    let key_a = Value::Record(Rc::new(record_a));
+
+    let mut record_b = HashMap::new();
+    record_b.insert("b".to_string(), Value::Int(2.into()));
+    record_b.insert("a".to_string(), Value::Int(1.into()));
+    let key_b = Value::Record(Rc::new(record_b));
+
+    let map = call_builtin_fn(&singleton, vec![key_a, Value::Int(42.into())]).unwrap();
+    let result = call_builtin_fn(&get, vec![key_b, map]).unwrap();
+
+    match result {
+        Value::Some(value) => assert_eq!(*value, Value::Int(42.into())),
+        _ => panic!("Expected Some"),
+    }
+}
+
+#[test]
+fn test_map_float_zero_key_normalized() {
+    let singleton = get_builtin("Map.singleton").unwrap();
+    let get = get_builtin("Map.get").unwrap();
+
+    let map = call_builtin_fn(&singleton, vec![Value::Float(-0.0), Value::Int(7.into())]).unwrap();
+    let result = call_builtin_fn(&get, vec![Value::Float(0.0), map]).unwrap();
+
+    match result {
+        Value::Some(value) => assert_eq!(*value, Value::Int(7.into())),
+        _ => panic!("Expected Some"),
     }
 }
 
@@ -1480,7 +1518,7 @@ fn test_map_remove_existing() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42)],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
     )
     .unwrap();
 
@@ -1498,7 +1536,7 @@ fn test_map_remove_nonexistent() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42)],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
     )
     .unwrap();
 
@@ -1509,7 +1547,7 @@ fn test_map_remove_nonexistent() {
     .unwrap();
 
     let result = call_builtin_fn(&size, vec![m2]).unwrap();
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1520,20 +1558,20 @@ fn test_map_union_disjoint() {
 
     let m1 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("a".to_string())), Value::Int(1)],
+        vec![Value::String(Rc::new("a".to_string())), Value::Int(1.into())],
     )
     .unwrap();
 
     let m2 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(2)],
+        vec![Value::String(Rc::new("b".to_string())), Value::Int(2.into())],
     )
     .unwrap();
 
     let combined = call_builtin_fn(&union, vec![m1, m2]).unwrap();
     let result = call_builtin_fn(&size, vec![combined]).unwrap();
 
-    assert_eq!(result, Value::Int(2));
+    assert_eq!(result, Value::Int(2.into()));
 }
 
 #[test]
@@ -1544,13 +1582,13 @@ fn test_map_intersection_empty() {
 
     let m1 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("a".to_string())), Value::Int(1)],
+        vec![Value::String(Rc::new("a".to_string())), Value::Int(1.into())],
     )
     .unwrap();
 
     let m2 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(2)],
+        vec![Value::String(Rc::new("b".to_string())), Value::Int(2.into())],
     )
     .unwrap();
 
@@ -1570,19 +1608,19 @@ fn test_map_difference() {
     // m1 = {a: 1, b: 2}
     let m1 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("a".to_string())), Value::Int(1)],
+        vec![Value::String(Rc::new("a".to_string())), Value::Int(1.into())],
     )
     .unwrap();
     let m1 = call_builtin_fn(
         &insert,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(2), m1],
+        vec![Value::String(Rc::new("b".to_string())), Value::Int(2.into()), m1],
     )
     .unwrap();
 
     // m2 = {b: 99}
     let m2 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(99)],
+        vec![Value::String(Rc::new("b".to_string())), Value::Int(99.into())],
     )
     .unwrap();
 
@@ -1590,7 +1628,7 @@ fn test_map_difference() {
     let diff = call_builtin_fn(&difference, vec![m1, m2]).unwrap();
     let result = call_builtin_fn(&size, vec![diff]).unwrap();
 
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1636,17 +1674,17 @@ fn test_map_get_with_default_found() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42)],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
     )
     .unwrap();
 
     let result = call_builtin_fn(
         &get_with_default,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(0), m],
+        vec![Value::String(Rc::new("key".to_string())), Value::Int(0.into()), m],
     )
     .unwrap();
 
-    assert_eq!(result, Value::Int(42));
+    assert_eq!(result, Value::Int(42.into()));
 }
 
 #[test]
@@ -1658,13 +1696,13 @@ fn test_map_get_with_default_not_found() {
         &get_with_default,
         vec![
             Value::String(Rc::new("missing".to_string())),
-            Value::Int(999),
+            Value::Int(999.into()),
             empty,
         ],
     )
     .unwrap();
 
-    assert_eq!(result, Value::Int(999));
+    assert_eq!(result, Value::Int(999.into()));
 }
 
 // ============================================================================
@@ -1689,7 +1727,7 @@ fn test_set_singleton_creates_single_element() {
     let singleton = get_builtin("Set.singleton");
     assert!(singleton.is_some());
 
-    let result = call_builtin_fn(&singleton.unwrap(), vec![Value::Int(42)]).unwrap();
+    let result = call_builtin_fn(&singleton.unwrap(), vec![Value::Int(42.into())]).unwrap();
 
     match result {
         Value::Set(s) => {
@@ -1705,7 +1743,7 @@ fn test_set_size_empty() {
     let size = get_builtin("Set.size").unwrap();
 
     let result = call_builtin_fn(&size, vec![empty]).unwrap();
-    assert_eq!(result, Value::Int(0));
+    assert_eq!(result, Value::Int(0.into()));
 }
 
 #[test]
@@ -1722,7 +1760,7 @@ fn test_set_is_empty_false() {
     let singleton = get_builtin("Set.singleton").unwrap();
     let is_empty = get_builtin("Set.isEmpty").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
     let result = call_builtin_fn(&is_empty, vec![s]).unwrap();
 
     assert_eq!(result, Value::Bool(false));
@@ -1733,8 +1771,8 @@ fn test_set_contains_found() {
     let singleton = get_builtin("Set.singleton").unwrap();
     let contains = get_builtin("Set.contains").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(42)]).unwrap();
-    let result = call_builtin_fn(&contains, vec![Value::Int(42), s]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(42.into())]).unwrap();
+    let result = call_builtin_fn(&contains, vec![Value::Int(42.into()), s]).unwrap();
 
     assert_eq!(result, Value::Bool(true));
 }
@@ -1744,8 +1782,8 @@ fn test_set_contains_not_found() {
     let singleton = get_builtin("Set.singleton").unwrap();
     let contains = get_builtin("Set.contains").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(42)]).unwrap();
-    let result = call_builtin_fn(&contains, vec![Value::Int(99), s]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(42.into())]).unwrap();
+    let result = call_builtin_fn(&contains, vec![Value::Int(99.into()), s]).unwrap();
 
     assert_eq!(result, Value::Bool(false));
 }
@@ -1756,10 +1794,10 @@ fn test_set_insert_new_element() {
     let insert = get_builtin("Set.insert").unwrap();
     let size = get_builtin("Set.size").unwrap();
 
-    let s = call_builtin_fn(&insert, vec![Value::Int(1), empty]).unwrap();
+    let s = call_builtin_fn(&insert, vec![Value::Int(1.into()), empty]).unwrap();
     let result = call_builtin_fn(&size, vec![s]).unwrap();
 
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1768,12 +1806,12 @@ fn test_set_insert_duplicate() {
     let insert = get_builtin("Set.insert").unwrap();
     let size = get_builtin("Set.size").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(42)]).unwrap();
-    let s2 = call_builtin_fn(&insert, vec![Value::Int(42), s]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(42.into())]).unwrap();
+    let s2 = call_builtin_fn(&insert, vec![Value::Int(42.into()), s]).unwrap();
     let result = call_builtin_fn(&size, vec![s2]).unwrap();
 
     // Duplicate shouldn't increase size
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1782,8 +1820,8 @@ fn test_set_remove_existing() {
     let remove = get_builtin("Set.remove").unwrap();
     let is_empty = get_builtin("Set.isEmpty").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(42)]).unwrap();
-    let s2 = call_builtin_fn(&remove, vec![Value::Int(42), s]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(42.into())]).unwrap();
+    let s2 = call_builtin_fn(&remove, vec![Value::Int(42.into()), s]).unwrap();
     let result = call_builtin_fn(&is_empty, vec![s2]).unwrap();
 
     assert_eq!(result, Value::Bool(true));
@@ -1795,11 +1833,11 @@ fn test_set_remove_nonexistent() {
     let remove = get_builtin("Set.remove").unwrap();
     let size = get_builtin("Set.size").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(42)]).unwrap();
-    let s2 = call_builtin_fn(&remove, vec![Value::Int(99), s]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(42.into())]).unwrap();
+    let s2 = call_builtin_fn(&remove, vec![Value::Int(99.into()), s]).unwrap();
     let result = call_builtin_fn(&size, vec![s2]).unwrap();
 
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1808,13 +1846,13 @@ fn test_set_union_disjoint() {
     let union = get_builtin("Set.union").unwrap();
     let size = get_builtin("Set.size").unwrap();
 
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2)]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2.into())]).unwrap();
 
     let combined = call_builtin_fn(&union, vec![s1, s2]).unwrap();
     let result = call_builtin_fn(&size, vec![combined]).unwrap();
 
-    assert_eq!(result, Value::Int(2));
+    assert_eq!(result, Value::Int(2.into()));
 }
 
 #[test]
@@ -1823,14 +1861,14 @@ fn test_set_union_overlapping() {
     let union = get_builtin("Set.union").unwrap();
     let size = get_builtin("Set.size").unwrap();
 
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
 
     let combined = call_builtin_fn(&union, vec![s1, s2]).unwrap();
     let result = call_builtin_fn(&size, vec![combined]).unwrap();
 
     // Same element, should still be 1
-    assert_eq!(result, Value::Int(1));
+    assert_eq!(result, Value::Int(1.into()));
 }
 
 #[test]
@@ -1841,18 +1879,18 @@ fn test_set_intersection_common() {
     let size = get_builtin("Set.size").unwrap();
 
     // s1 = {1, 2}
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s1 = call_builtin_fn(&insert, vec![Value::Int(2), s1]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s1 = call_builtin_fn(&insert, vec![Value::Int(2.into()), s1]).unwrap();
 
     // s2 = {2, 3}
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2)]).unwrap();
-    let s2 = call_builtin_fn(&insert, vec![Value::Int(3), s2]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2.into())]).unwrap();
+    let s2 = call_builtin_fn(&insert, vec![Value::Int(3.into()), s2]).unwrap();
 
     let result = call_builtin_fn(&intersection, vec![s1, s2]).unwrap();
     let len = call_builtin_fn(&size, vec![result]).unwrap();
 
     // Common element is 2
-    assert_eq!(len, Value::Int(1));
+    assert_eq!(len, Value::Int(1.into()));
 }
 
 #[test]
@@ -1861,8 +1899,8 @@ fn test_set_intersection_none() {
     let intersection = get_builtin("Set.intersection").unwrap();
     let is_empty = get_builtin("Set.isEmpty").unwrap();
 
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2)]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2.into())]).unwrap();
 
     let result = call_builtin_fn(&intersection, vec![s1, s2]).unwrap();
     let empty = call_builtin_fn(&is_empty, vec![result]).unwrap();
@@ -1878,17 +1916,17 @@ fn test_set_difference_some() {
     let size = get_builtin("Set.size").unwrap();
 
     // s1 = {1, 2}
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s1 = call_builtin_fn(&insert, vec![Value::Int(2), s1]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s1 = call_builtin_fn(&insert, vec![Value::Int(2.into()), s1]).unwrap();
 
     // s2 = {2}
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2)]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2.into())]).unwrap();
 
     let result = call_builtin_fn(&difference, vec![s1, s2]).unwrap();
     let len = call_builtin_fn(&size, vec![result]).unwrap();
 
     // Difference is {1}
-    assert_eq!(len, Value::Int(1));
+    assert_eq!(len, Value::Int(1.into()));
 }
 
 #[test]
@@ -1899,18 +1937,18 @@ fn test_set_symmetric_difference() {
     let size = get_builtin("Set.size").unwrap();
 
     // s1 = {1, 2}
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s1 = call_builtin_fn(&insert, vec![Value::Int(2), s1]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s1 = call_builtin_fn(&insert, vec![Value::Int(2.into()), s1]).unwrap();
 
     // s2 = {2, 3}
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2)]).unwrap();
-    let s2 = call_builtin_fn(&insert, vec![Value::Int(3), s2]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2.into())]).unwrap();
+    let s2 = call_builtin_fn(&insert, vec![Value::Int(3.into()), s2]).unwrap();
 
     let result = call_builtin_fn(&sym_diff, vec![s1, s2]).unwrap();
     let len = call_builtin_fn(&size, vec![result]).unwrap();
 
     // Symmetric difference is {1, 3}
-    assert_eq!(len, Value::Int(2));
+    assert_eq!(len, Value::Int(2.into()));
 }
 
 #[test]
@@ -1920,11 +1958,11 @@ fn test_set_is_subset_true() {
     let is_subset = get_builtin("Set.isSubset").unwrap();
 
     // small = {1}
-    let small = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
+    let small = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
 
     // big = {1, 2}
-    let big = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let big = call_builtin_fn(&insert, vec![Value::Int(2), big]).unwrap();
+    let big = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let big = call_builtin_fn(&insert, vec![Value::Int(2.into()), big]).unwrap();
 
     let result = call_builtin_fn(&is_subset, vec![small, big]).unwrap();
     assert_eq!(result, Value::Bool(true));
@@ -1937,11 +1975,11 @@ fn test_set_is_subset_false() {
     let is_subset = get_builtin("Set.isSubset").unwrap();
 
     // big = {1, 2}
-    let big = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let big = call_builtin_fn(&insert, vec![Value::Int(2), big]).unwrap();
+    let big = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let big = call_builtin_fn(&insert, vec![Value::Int(2.into()), big]).unwrap();
 
     // small = {1}
-    let small = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
+    let small = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
 
     let result = call_builtin_fn(&is_subset, vec![big, small]).unwrap();
     assert_eq!(result, Value::Bool(false));
@@ -1954,11 +1992,11 @@ fn test_set_is_superset() {
     let is_superset = get_builtin("Set.isSuperset").unwrap();
 
     // big = {1, 2}
-    let big = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let big = call_builtin_fn(&insert, vec![Value::Int(2), big]).unwrap();
+    let big = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let big = call_builtin_fn(&insert, vec![Value::Int(2.into()), big]).unwrap();
 
     // small = {1}
-    let small = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
+    let small = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
 
     let result = call_builtin_fn(&is_superset, vec![big, small]).unwrap();
     assert_eq!(result, Value::Bool(true));
@@ -1969,8 +2007,8 @@ fn test_set_is_disjoint_true() {
     let singleton = get_builtin("Set.singleton").unwrap();
     let is_disjoint = get_builtin("Set.isDisjoint").unwrap();
 
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2)]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(2.into())]).unwrap();
 
     let result = call_builtin_fn(&is_disjoint, vec![s1, s2]).unwrap();
     assert_eq!(result, Value::Bool(true));
@@ -1981,8 +2019,8 @@ fn test_set_is_disjoint_false() {
     let singleton = get_builtin("Set.singleton").unwrap();
     let is_disjoint = get_builtin("Set.isDisjoint").unwrap();
 
-    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s2 = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
+    let s1 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s2 = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
 
     let result = call_builtin_fn(&is_disjoint, vec![s1, s2]).unwrap();
     assert_eq!(result, Value::Bool(false));
@@ -1994,18 +2032,18 @@ fn test_set_from_list_with_duplicates() {
     let size = get_builtin("Set.size").unwrap();
 
     let list = Value::List(Rc::new(vec![
-        Value::Int(1),
-        Value::Int(2),
-        Value::Int(2),
-        Value::Int(3),
-        Value::Int(1),
+        Value::Int(1.into()),
+        Value::Int(2.into()),
+        Value::Int(2.into()),
+        Value::Int(3.into()),
+        Value::Int(1.into()),
     ]));
 
     let set = call_builtin_fn(&from_list, vec![list]).unwrap();
     let len = call_builtin_fn(&size, vec![set]).unwrap();
 
     // Duplicates removed
-    assert_eq!(len, Value::Int(3));
+    assert_eq!(len, Value::Int(3.into()));
 }
 
 #[test]
@@ -2014,8 +2052,8 @@ fn test_set_to_list() {
     let insert = get_builtin("Set.insert").unwrap();
     let to_list = get_builtin("Set.toList").unwrap();
 
-    let s = call_builtin_fn(&singleton, vec![Value::Int(1)]).unwrap();
-    let s = call_builtin_fn(&insert, vec![Value::Int(2), s]).unwrap();
+    let s = call_builtin_fn(&singleton, vec![Value::Int(1.into())]).unwrap();
+    let s = call_builtin_fn(&insert, vec![Value::Int(2.into()), s]).unwrap();
 
     let list = call_builtin_fn(&to_list, vec![s]).unwrap();
 
@@ -2035,7 +2073,7 @@ fn test_list_len_wrong_type() {
 
     match len_fn {
         Value::Builtin(builtin) => {
-            let result = (builtin.func)(&[Value::Int(42)]);
+            let result = (builtin.func)(&[Value::Int(42.into())]);
             assert!(result.is_err());
         }
         _ => panic!("Expected Builtin"),
@@ -2075,27 +2113,27 @@ fn test_list_sum_non_int_list() {
 #[test]
 fn test_map_size_wrong_type() {
     let size = get_builtin("Map.size").unwrap();
-    let result = call_builtin_fn(&size, vec![Value::Int(42)]);
+    let result = call_builtin_fn(&size, vec![Value::Int(42.into())]);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_set_size_wrong_type() {
     let size = get_builtin("Set.size").unwrap();
-    let result = call_builtin_fn(&size, vec![Value::Int(42)]);
+    let result = call_builtin_fn(&size, vec![Value::Int(42.into())]);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_map_insert_wrong_arity() {
     let insert = get_builtin("Map.insert").unwrap();
-    let result = call_builtin_fn(&insert, vec![Value::Int(1)]);
+    let result = call_builtin_fn(&insert, vec![Value::Int(1.into())]);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_set_insert_wrong_arity() {
     let insert = get_builtin("Set.insert").unwrap();
-    let result = call_builtin_fn(&insert, vec![Value::Int(1)]);
+    let result = call_builtin_fn(&insert, vec![Value::Int(1.into())]);
     assert!(result.is_err());
 }

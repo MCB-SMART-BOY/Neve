@@ -5,6 +5,8 @@
 //! 本模块定义了 Neve 程序执行过程中可能存在的所有值类型。
 
 use crate::Environment;
+use crate::ast_eval::AstEnv;
+use neve_common::{Int, int_to_f64};
 use neve_hir::{Expr, Param};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -112,7 +114,7 @@ impl fmt::Debug for Thunk {
 pub enum Value {
     // ===== Primitive types 基本类型 =====
     /// Integer value / 整数值
-    Int(i64),
+    Int(Int),
     /// Float value / 浮点数值
     Float(f64),
     /// Boolean value / 布尔值
@@ -319,9 +321,9 @@ impl Value {
 
     /// Try to get as integer.
     /// 尝试获取整数值。
-    pub fn as_int(&self) -> Option<i64> {
+    pub fn as_int(&self) -> Option<&Int> {
         match self {
-            Value::Int(n) => Some(*n),
+            Value::Int(n) => Some(n),
             _ => None,
         }
     }
@@ -331,7 +333,7 @@ impl Value {
     pub fn as_float(&self) -> Option<f64> {
         match self {
             Value::Float(f) => Some(*f),
-            Value::Int(n) => Some(*n as f64),
+            Value::Int(n) => int_to_f64(n),
             _ => None,
         }
     }
@@ -353,4 +355,297 @@ impl Value {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+enum KeyState {
+    InProgress(usize),
+    Done(String),
+}
+
+#[derive(Debug, Default)]
+struct KeyCtx {
+    next_id: usize,
+    nodes: HashMap<usize, KeyState>,
+}
+
+impl KeyCtx {
+    fn new() -> Self {
+        Self {
+            next_id: 0,
+            nodes: HashMap::new(),
+        }
+    }
+
+    fn key_for_ptr<F>(&mut self, ptr: usize, build: F) -> String
+    where
+        F: FnOnce(&mut Self) -> String,
+    {
+        if let Some(state) = self.nodes.get(&ptr) {
+            return match state {
+                KeyState::InProgress(id) => format!("<cycle#{id}>"),
+                KeyState::Done(value) => value.clone(),
+            };
+        }
+
+        let id = self.next_id;
+        self.next_id += 1;
+        self.nodes.insert(ptr, KeyState::InProgress(id));
+        let value = build(self);
+        self.nodes.insert(ptr, KeyState::Done(value.clone()));
+        value
+    }
+
+    fn value_key(&mut self, value: &Value) -> String {
+        match value {
+            Value::Int(n) => format!("Int({n})"),
+            Value::Float(f) => format!("Float({})", canonical_float(*f)),
+            Value::Bool(b) => format!("Bool({b})"),
+            Value::Char(c) => format!("Char('{}')", escape_char(*c)),
+            Value::String(s) => format!("String(\"{}\")", escape_string(s)),
+            Value::Unit => "Unit".to_string(),
+            Value::List(items) => {
+                let ptr = Rc::as_ptr(items) as usize;
+                self.key_for_ptr(ptr, |ctx| {
+                    let parts: Vec<String> = items.iter().map(|v| ctx.value_key(v)).collect();
+                    format!("List[{}]", parts.join(","))
+                })
+            }
+            Value::Tuple(items) => {
+                let ptr = Rc::as_ptr(items) as usize;
+                self.key_for_ptr(ptr, |ctx| {
+                    let parts: Vec<String> = items.iter().map(|v| ctx.value_key(v)).collect();
+                    format!("Tuple({})", parts.join(","))
+                })
+            }
+            Value::Record(fields) => {
+                let ptr = Rc::as_ptr(fields) as usize;
+                self.key_for_ptr(ptr, |ctx| {
+                    let mut keys: Vec<&String> = fields.keys().collect();
+                    keys.sort();
+                    let parts: Vec<String> = keys
+                        .into_iter()
+                        .map(|k| {
+                            let v = fields.get(k).expect("record key exists");
+                            format!("{}={}", escape_string(k), ctx.value_key(v))
+                        })
+                        .collect();
+                    format!("Record{{{}}}", parts.join(","))
+                })
+            }
+            Value::Map(map) => {
+                let ptr = Rc::as_ptr(map) as usize;
+                self.key_for_ptr(ptr, |ctx| {
+                    let mut keys: Vec<&String> = map.keys().collect();
+                    keys.sort();
+                    let parts: Vec<String> = keys
+                        .into_iter()
+                        .map(|k| {
+                            let v = map.get(k).expect("map key exists");
+                            format!("{}=>{}", escape_string(k), ctx.value_key(v))
+                        })
+                        .collect();
+                    format!("Map{{{}}}", parts.join(","))
+                })
+            }
+            Value::Set(set) => {
+                let ptr = Rc::as_ptr(set) as usize;
+                self.key_for_ptr(ptr, |_ctx| {
+                    let mut items: Vec<&String> = set.iter().collect();
+                    items.sort();
+                    let parts: Vec<String> =
+                        items.into_iter().map(|k| escape_string(k)).collect();
+                    format!("Set{{{}}}", parts.join(","))
+                })
+            }
+            Value::Closure { params, body, env } => {
+                let mut param_parts = Vec::new();
+                for param in params {
+                    param_parts.push(format!(
+                        "{}:{}",
+                        escape_string(&param.name),
+                        self.ty_key(&param.ty)
+                    ));
+                }
+                let body_key = format!("HirExpr({})", escape_string(&format!("{:?}", body)));
+                let env_key = self.env_key(env);
+                format!(
+                    "Closure{{params=[{}],body={},env={}}}",
+                    param_parts.join(","),
+                    body_key,
+                    env_key
+                )
+            }
+            Value::AstClosure(closure) => {
+                let ptr = Rc::as_ptr(closure) as usize;
+                self.key_for_ptr(ptr, |ctx| {
+                    let params_key = format!(
+                        "AstParams({})",
+                        escape_string(&format!("{:?}", closure.params))
+                    );
+                    let body_key = format!(
+                        "AstExpr({})",
+                        escape_string(&format!("{:?}", closure.body))
+                    );
+                    let env_key = ctx.ast_env_key(&closure.env);
+                    format!(
+                        "AstClosure{{params={},body={},env={}}}",
+                        params_key, body_key, env_key
+                    )
+                })
+            }
+            Value::Builtin(b) => format!("Builtin({})", escape_string(b.name)),
+            Value::BuiltinFn(name, _) => format!("BuiltinFn({})", escape_string(name)),
+            Value::VariantCtor { name, arity } => {
+                format!("VariantCtor({},{arity})", escape_string(name))
+            }
+            Value::Variant(tag, payload) => {
+                format!(
+                    "Variant({},{})",
+                    escape_string(tag),
+                    self.value_key(payload)
+                )
+            }
+            Value::Some(v) => format!("Some({})", self.value_key(v)),
+            Value::None => "None".to_string(),
+            Value::Ok(v) => format!("Ok({})", self.value_key(v)),
+            Value::Err(v) => format!("Err({})", self.value_key(v)),
+            Value::Thunk(thunk) => {
+                let ptr = Rc::as_ptr(&thunk.inner) as usize;
+                self.key_for_ptr(ptr, |ctx| match &*thunk.state() {
+                    ThunkState::Evaluated(v) => format!("Thunk(Evaluated,{})", ctx.value_key(v)),
+                    ThunkState::Evaluating => "Thunk(Evaluating)".to_string(),
+                    ThunkState::Unevaluated { expr, env } => {
+                        let expr_key =
+                            format!("AstExpr({})", escape_string(&format!("{:?}", expr)));
+                        let env_key = ctx.ast_env_key(env);
+                        format!("Thunk(Unevaluated,{expr_key},{env_key})")
+                    }
+                })
+            }
+        }
+    }
+
+    fn env_key(&mut self, env: &Environment) -> String {
+        let ptr = env.bindings_ptr();
+        self.key_for_ptr(ptr, |ctx| {
+            let mut bindings = env.bindings_snapshot();
+            bindings.sort_by_key(|(id, _)| id.0);
+            let parts: Vec<String> = bindings
+                .into_iter()
+                .map(|(id, value)| format!("{}={}", id.0, ctx.value_key(&value)))
+                .collect();
+            let parent_key = env.parent_ref().map(|parent| ctx.env_key(parent));
+            if let Some(parent) = parent_key {
+                format!("Env{{{}}}|Parent({parent})", parts.join(","))
+            } else {
+                format!("Env{{{}}}", parts.join(","))
+            }
+        })
+    }
+
+    fn ast_env_key(&mut self, env: &Rc<AstEnv>) -> String {
+        let ptr = Rc::as_ptr(env) as usize;
+        self.key_for_ptr(ptr, |ctx| {
+            let mut bindings = env.bindings_snapshot();
+            bindings.sort_by(|a, b| a.0.cmp(&b.0));
+            let parts: Vec<String> = bindings
+                .into_iter()
+                .map(|(name, value, is_public)| {
+                    let vis = if is_public { "pub" } else { "priv" };
+                    format!("{}:{vis}={}", escape_string(&name), ctx.value_key(&value))
+                })
+                .collect();
+            let parent_key = env
+                .parent_rc()
+                .as_ref()
+                .map(|parent| ctx.ast_env_key(parent));
+            if let Some(parent) = parent_key {
+                format!("AstEnv{{{}}}|Parent({parent})", parts.join(","))
+            } else {
+                format!("AstEnv{{{}}}", parts.join(","))
+            }
+        })
+    }
+
+    fn ty_key(&mut self, ty: &neve_hir::Ty) -> String {
+        use neve_hir::TyKind;
+        match &ty.kind {
+            TyKind::Int => "Int".to_string(),
+            TyKind::Float => "Float".to_string(),
+            TyKind::Bool => "Bool".to_string(),
+            TyKind::Char => "Char".to_string(),
+            TyKind::String => "String".to_string(),
+            TyKind::Unit => "Unit".to_string(),
+            TyKind::Var(id) => format!("Var({id})"),
+            TyKind::Param(id, name) => format!("Param({id},{})", escape_string(name)),
+            TyKind::Named(def, args) => {
+                let args_key: Vec<String> = args.iter().map(|t| self.ty_key(t)).collect();
+                format!("Named({:?},[{}])", def, args_key.join(","))
+            }
+            TyKind::Fn(params, ret) => {
+                let params_key: Vec<String> =
+                    params.iter().map(|t| self.ty_key(t)).collect();
+                format!("Fn([{}],{})", params_key.join(","), self.ty_key(ret))
+            }
+            TyKind::Tuple(elems) => {
+                let elems_key: Vec<String> =
+                    elems.iter().map(|t| self.ty_key(t)).collect();
+                format!("Tuple([{}])", elems_key.join(","))
+            }
+            TyKind::Record(fields) => {
+                let mut entries: Vec<(String, String)> = fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.ty_key(ty)))
+                    .collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let parts: Vec<String> = entries
+                    .into_iter()
+                    .map(|(name, key)| format!("{}={}", escape_string(&name), key))
+                    .collect();
+                format!("Record{{{}}}", parts.join(","))
+            }
+            TyKind::Forall(params, ty) => {
+                let params_key = params
+                    .iter()
+                    .map(|p| escape_string(p))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("Forall([{}],{})", params_key, self.ty_key(ty))
+            }
+            TyKind::Unknown => "Unknown".to_string(),
+        }
+    }
+}
+
+fn escape_string(value: &str) -> String {
+    value.chars().flat_map(|c| c.escape_default()).collect()
+}
+
+fn escape_char(value: char) -> String {
+    value.escape_default().to_string()
+}
+
+fn canonical_float(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".to_string();
+    }
+    if value.is_infinite() {
+        return if value.is_sign_positive() {
+            "Inf".to_string()
+        } else {
+            "-Inf".to_string()
+        };
+    }
+    if value == 0.0 {
+        return "0.0".to_string();
+    }
+    value.to_string()
+}
+
+/// Generate a stable, deterministic key for any runtime value.
+/// 为任意运行时值生成稳定、确定性的键。
+pub fn stable_key(value: &Value) -> String {
+    let mut ctx = KeyCtx::new();
+    ctx.value_key(value)
 }

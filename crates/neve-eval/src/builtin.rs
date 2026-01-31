@@ -22,6 +22,10 @@
 //! - **Bitwise operations**: bitAnd, bitOr, bitXor, etc. / 位运算
 
 use crate::value::{BuiltinFn, Value};
+use neve_common::{
+    int_abs, int_from_f64, int_is_negative, int_to_f64, int_to_i64, int_to_u32, int_to_usize,
+    parse_int, Int,
+};
 use neve_derive::Derivation;
 use std::rc::Rc;
 
@@ -56,13 +60,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "toInt",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Int(n) => Ok(Value::Int(*n)),
-                    Value::Float(f) => Ok(Value::Int(*f as i64)),
-                    Value::String(s) => s
-                        .parse::<i64>()
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
+                    Value::Float(f) => int_from_f64(*f)
                         .map(Value::Int)
-                        .map_err(|_| format!("cannot convert '{s}' to Int")),
-                    Value::Bool(b) => Ok(Value::Int(if *b { 1 } else { 0 })),
+                        .ok_or_else(|| "cannot convert Float to Int".to_string()),
+                    Value::String(s) => parse_int(s)
+                        .map(Value::Int)
+                        .ok_or_else(|| format!("cannot convert '{s}' to Int")),
+                    Value::Bool(b) => Ok(Value::Int(if *b { 1 } else { 0 }.into())),
                     _ => Err("toInt expects Int, Float, String, or Bool".to_string()),
                 },
             }),
@@ -73,7 +78,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "toFloat",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Int(n) => Ok(Value::Float(*n as f64)),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(Value::Float)
+                        .ok_or_else(|| "integer too large for Float".to_string()),
                     Value::Float(f) => Ok(Value::Float(*f)),
                     Value::String(s) => s
                         .parse::<f64>()
@@ -90,9 +97,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "len",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::List(items) => Ok(Value::Int(items.len() as i64)),
-                    Value::String(s) => Ok(Value::Int(s.chars().count() as i64)),
-                    Value::Record(fields) => Ok(Value::Int(fields.len() as i64)),
+                    Value::List(items) => Ok(Value::Int(items.len().into())),
+                    Value::String(s) => Ok(Value::Int(s.chars().count().into())),
+                    Value::Record(fields) => Ok(Value::Int(fields.len().into())),
                     _ => Err("len expects a list, string, or record".to_string()),
                 },
             }),
@@ -210,7 +217,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(n), Value::List(items)) => {
-                        let n = (*n).max(0) as usize;
+                        let n = clamp_non_negative_usize(n, "take count")?;
                         Ok(Value::List(Rc::new(
                             items.iter().take(n).cloned().collect(),
                         )))
@@ -226,7 +233,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(n), Value::List(items)) => {
-                        let n = (*n).max(0) as usize;
+                        let n = clamp_non_negative_usize(n, "drop count")?;
                         Ok(Value::List(Rc::new(
                             items.iter().skip(n).cloned().collect(),
                         )))
@@ -242,7 +249,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(start), Value::Int(end)) => {
-                        let items: Vec<Value> = (*start..*end).map(Value::Int).collect();
+                        let start = require_i64(start, "range start")?;
+                        let end = require_i64(end, "range end")?;
+                        let items: Vec<Value> =
+                            (start..end).map(|n| Value::Int(n.into())).collect();
                         Ok(Value::List(Rc::new(items)))
                     }
                     _ => Err("range expects (Int, Int)".to_string()),
@@ -256,7 +266,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match &args[0] {
                     Value::Int(n) => {
-                        let n = (*n).max(0) as usize;
+                        let n = clamp_non_negative_usize(n, "replicate count")?;
                         let items: Vec<Value> = std::iter::repeat_n(args[1].clone(), n).collect();
                         Ok(Value::List(Rc::new(items)))
                     }
@@ -491,7 +501,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "abs",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Int(n) => Ok(Value::Int(n.abs())),
+                    Value::Int(n) => Ok(Value::Int(int_abs(n))),
                     Value::Float(f) => Ok(Value::Float(f.abs())),
                     _ => Err("abs expects Int or Float".to_string()),
                 },
@@ -503,7 +513,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "min",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(*a.min(b))),
+                    (Value::Int(a), Value::Int(b)) => {
+                        Ok(Value::Int(if a <= b { a.clone() } else { b.clone() }))
+                    }
                     (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.min(*b))),
                     _ => Err("min expects two Ints or two Floats".to_string()),
                 },
@@ -515,7 +527,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "max",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(*a.max(b))),
+                    (Value::Int(a), Value::Int(b)) => {
+                        Ok(Value::Int(if a >= b { a.clone() } else { b.clone() }))
+                    }
                     (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.max(*b))),
                     _ => Err("max expects two Ints or two Floats".to_string()),
                 },
@@ -527,8 +541,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "floor",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Float(f) => Ok(Value::Int(f.floor() as i64)),
-                    Value::Int(n) => Ok(Value::Int(*n)),
+                    Value::Float(f) => int_from_f64(f.floor())
+                        .map(Value::Int)
+                        .ok_or_else(|| "cannot convert Float to Int".to_string()),
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
                     _ => Err("floor expects Float or Int".to_string()),
                 },
             }),
@@ -539,8 +555,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "ceil",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Float(f) => Ok(Value::Int(f.ceil() as i64)),
-                    Value::Int(n) => Ok(Value::Int(*n)),
+                    Value::Float(f) => int_from_f64(f.ceil())
+                        .map(Value::Int)
+                        .ok_or_else(|| "cannot convert Float to Int".to_string()),
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
                     _ => Err("ceil expects Float or Int".to_string()),
                 },
             }),
@@ -551,8 +569,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "round",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Float(f) => Ok(Value::Int(f.round() as i64)),
-                    Value::Int(n) => Ok(Value::Int(*n)),
+                    Value::Float(f) => int_from_f64(f.round())
+                        .map(Value::Int)
+                        .ok_or_else(|| "cannot convert Float to Int".to_string()),
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
                     _ => Err("round expects Float or Int".to_string()),
                 },
             }),
@@ -564,7 +584,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(f) => Ok(Value::Float(f.sqrt())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).sqrt())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.sqrt()))
+                        .ok_or_else(|| "integer too large for Float".to_string()),
                     _ => Err("sqrt expects Float or Int".to_string()),
                 },
             }),
@@ -576,18 +598,26 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(base), Value::Int(exp)) => {
-                        if *exp >= 0 {
-                            Ok(Value::Int(base.pow(*exp as u32)))
+                        if int_is_negative(exp) {
+                            let base_f = int_to_f64(base)
+                                .ok_or_else(|| "base too large for Float".to_string())?;
+                            let exp_i32 = int_to_i32(exp, "exponent")?;
+                            Ok(Value::Float(base_f.powi(exp_i32)))
                         } else {
-                            Ok(Value::Float((*base as f64).powi(*exp as i32)))
+                            let exp_u32 = int_to_u32(exp)
+                                .ok_or_else(|| "exponent too large".to_string())?;
+                            Ok(Value::Int(base.pow(exp_u32)))
                         }
                     }
                     (Value::Float(base), Value::Float(exp)) => Ok(Value::Float(base.powf(*exp))),
                     (Value::Int(base), Value::Float(exp)) => {
-                        Ok(Value::Float((*base as f64).powf(*exp)))
+                        let base_f = int_to_f64(base)
+                            .ok_or_else(|| "base too large for Float".to_string())?;
+                        Ok(Value::Float(base_f.powf(*exp)))
                     }
                     (Value::Float(base), Value::Int(exp)) => {
-                        Ok(Value::Float(base.powi(*exp as i32)))
+                        let exp_i32 = int_to_i32(exp, "exponent")?;
+                        Ok(Value::Float(base.powi(exp_i32)))
                     }
                     _ => Err("pow expects numeric arguments".to_string()),
                 },
@@ -1364,7 +1394,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "bitShiftLeft",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a << b)),
+                    (Value::Int(a), Value::Int(b)) => {
+                        let shift = non_negative_u32(b, "bitShiftLeft shift")? as usize;
+                        Ok(Value::Int(a << shift))
+                    }
                     _ => Err("bitShiftLeft expects two integers".to_string()),
                 },
             }),
@@ -1375,7 +1408,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "bitShiftRight",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a >> b)),
+                    (Value::Int(a), Value::Int(b)) => {
+                        let shift = non_negative_u32(b, "bitShiftRight shift")? as usize;
+                        Ok(Value::Int(a >> shift))
+                    }
                     _ => Err("bitShiftRight expects two integers".to_string()),
                 },
             }),
@@ -1388,7 +1424,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 3,
                 func: |args| match (&args[0], &args[1], &args[2]) {
                     (Value::Int(width), Value::String(pad), Value::String(s)) => {
-                        let width = *width as usize;
+                        let width = non_negative_usize(width, "padLeft width")?;
                         if s.len() >= width {
                             Ok(Value::String(s.clone()))
                         } else {
@@ -1409,7 +1445,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 3,
                 func: |args| match (&args[0], &args[1], &args[2]) {
                     (Value::Int(width), Value::String(pad), Value::String(s)) => {
-                        let width = *width as usize;
+                        let width = non_negative_usize(width, "padRight width")?;
                         if s.len() >= width {
                             Ok(Value::String(s.clone()))
                         } else {
@@ -1431,21 +1467,21 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(a), Value::Int(b)) => Ok(Value::Int(match a.cmp(b) {
-                        std::cmp::Ordering::Less => -1,
-                        std::cmp::Ordering::Equal => 0,
-                        std::cmp::Ordering::Greater => 1,
+                        std::cmp::Ordering::Less => Int::from(-1),
+                        std::cmp::Ordering::Equal => Int::from(0),
+                        std::cmp::Ordering::Greater => Int::from(1),
                     })),
                     (Value::Float(a), Value::Float(b)) => Ok(Value::Int(if a < b {
-                        -1
+                        Int::from(-1)
                     } else if a > b {
-                        1
+                        Int::from(1)
                     } else {
-                        0
+                        Int::from(0)
                     })),
                     (Value::String(a), Value::String(b)) => Ok(Value::Int(match a.cmp(b) {
-                        std::cmp::Ordering::Less => -1,
-                        std::cmp::Ordering::Equal => 0,
-                        std::cmp::Ordering::Greater => 1,
+                        std::cmp::Ordering::Less => Int::from(-1),
+                        std::cmp::Ordering::Equal => Int::from(0),
+                        std::cmp::Ordering::Greater => Int::from(1),
                     })),
                     _ => Err("compare expects two comparable values of same type".to_string()),
                 },
@@ -1502,6 +1538,36 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
     ]
+}
+
+fn require_i64(value: &Int, context: &str) -> Result<i64, String> {
+    int_to_i64(value).ok_or_else(|| format!("{context} is out of range"))
+}
+
+fn int_to_i32(value: &Int, context: &str) -> Result<i32, String> {
+    let as_i64 = int_to_i64(value).ok_or_else(|| format!("{context} is out of range"))?;
+    i32::try_from(as_i64).map_err(|_| format!("{context} is out of range"))
+}
+
+fn clamp_non_negative_usize(value: &Int, context: &str) -> Result<usize, String> {
+    if int_is_negative(value) {
+        return Ok(0);
+    }
+    int_to_usize(value).ok_or_else(|| format!("{context} is too large"))
+}
+
+fn non_negative_usize(value: &Int, context: &str) -> Result<usize, String> {
+    if int_is_negative(value) {
+        return Err(format!("{context} must be non-negative"));
+    }
+    int_to_usize(value).ok_or_else(|| format!("{context} is too large"))
+}
+
+fn non_negative_u32(value: &Int, context: &str) -> Result<u32, String> {
+    if int_is_negative(value) {
+        return Err(format!("{context} must be non-negative"));
+    }
+    int_to_u32(value).ok_or_else(|| format!("{context} is too large"))
 }
 
 /// Parse JSON string to value.
@@ -1606,9 +1672,9 @@ fn json_to_value(s: &str) -> Result<Value, String> {
                     .map(Value::Float)
                     .map_err(|_| "invalid JSON number".to_string())
             } else {
-                s.parse::<i64>()
+                parse_int(s)
                     .map(Value::Int)
-                    .map_err(|_| "invalid JSON number".to_string())
+                    .ok_or_else(|| "invalid JSON number".to_string())
             }
         }
         _ => Err(format!("unexpected JSON token: {}", s)),

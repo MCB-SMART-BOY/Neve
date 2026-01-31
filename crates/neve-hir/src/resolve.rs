@@ -2,13 +2,13 @@
 //! 名称解析和 AST 到 HIR 的降级转换。
 
 use crate::{
-    AssocTypeDef, AssocTypeImpl, BinOp, DefId, EnumDef, Expr, ExprKind, FieldDef, FnDef,
+    AssocTypeDef, AssocTypeImpl, BinOp, DefId, EnumDef, Expr, ExprKind, FieldDef, FnDef, Generator,
     GenericParam, ImplDef, ImplItem, Import, ImportKind, ImportPathPrefix, Item, ItemKind, Literal,
     LocalId, MatchArm, Module, ModuleId, ModuleLoader, Param, Pattern, PatternKind, Stmt, StmtKind,
     StringPart, StructDef, TraitDef, TraitItem, Ty, TyKind, TypeAlias, UnaryOp, VariantDef,
 };
 use neve_syntax::{self as ast, SourceFile};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 /// Name resolver that builds HIR from AST.
@@ -26,6 +26,8 @@ pub struct Resolver {
     scopes: Vec<HashMap<String, LocalId>>,
     /// Imported names from other modules. / 从其他模块导入的名称。
     imported: HashMap<String, DefId>,
+    /// Imported module aliases (namespace roots). / 导入的模块别名（命名空间根）。
+    imported_modules: HashSet<String>,
     /// Current module path (for relative imports). / 当前模块路径（用于相对导入）。
     current_module_path: Vec<String>,
     /// Module loader for resolving imports. / 用于解析导入的模块加载器。
@@ -43,6 +45,7 @@ impl Resolver {
             globals: HashMap::new(),
             scopes: Vec::new(),
             imported: HashMap::new(),
+            imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: None,
         }
@@ -58,6 +61,7 @@ impl Resolver {
             globals: HashMap::new(),
             scopes: Vec::new(),
             imported: HashMap::new(),
+            imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: Some(ModuleLoader::new(root_dir)),
         }
@@ -199,6 +203,7 @@ impl Resolver {
     /// 处理导入以将名称引入作用域。
     fn process_imports(&mut self, imports: &[Import]) {
         for import in imports {
+            self.record_import_alias(import);
             if let Some(ref loader) = self.module_loader {
                 // Use the module loader to resolve the import
                 // 使用模块加载器解析导入
@@ -212,6 +217,34 @@ impl Resolver {
                         // Import resolution failed - will be reported during type checking
                         // 导入解析失败 - 将在类型检查期间报告
                     }
+                }
+            }
+            self.register_import_item_placeholders(import);
+        }
+    }
+
+    /// Record module import aliases for namespace path resolution.
+    /// 记录模块导入别名，用于命名空间路径解析。
+    fn record_import_alias(&mut self, import: &Import) {
+        if let ImportKind::Module = import.kind {
+            let alias = import
+                .alias
+                .clone()
+                .or_else(|| import.path.last().cloned());
+            if let Some(alias) = alias {
+                self.imported_modules.insert(alias);
+            }
+        }
+    }
+
+    /// Register placeholder defs for explicit item imports when unresolved.
+    /// 为未解析的显式项导入注册占位定义。
+    fn register_import_item_placeholders(&mut self, import: &Import) {
+        if let ImportKind::Items(names) = &import.kind {
+            for name in names {
+                if !self.imported.contains_key(name) {
+                    let def_id = self.fresh_def_id();
+                    self.imported.insert(name.clone(), def_id);
                 }
             }
         }
@@ -760,7 +793,7 @@ impl Resolver {
     fn lower_expr(&mut self, expr: &ast::Expr) -> Expr {
         let span = expr.span;
         let kind = match &expr.kind {
-            ast::ExprKind::Int(n) => ExprKind::Literal(Literal::Int(*n)),
+            ast::ExprKind::Int(n) => ExprKind::Literal(Literal::Int(n.clone())),
             ast::ExprKind::Float(f) => ExprKind::Literal(Literal::Float(*f)),
             ast::ExprKind::String(s) => ExprKind::Literal(Literal::String(s.clone())),
             ast::ExprKind::Char(c) => ExprKind::Literal(Literal::Char(*c)),
@@ -785,29 +818,61 @@ impl Resolver {
                 if parts.is_empty() {
                     ExprKind::Literal(Literal::Unit)
                 } else {
-                    // Start with the first part as base
-                    // 以第一部分作为基础
                     let first = &parts[0];
-                    let mut result_kind = if let Some(local_id) = self.lookup_local(&first.name) {
-                        ExprKind::Var(local_id)
+
+                    let base_kind = if let Some(local_id) = self.lookup_local(&first.name) {
+                        Some(ExprKind::Var(local_id))
                     } else if let Some(def_id) = self.lookup_global(&first.name) {
-                        ExprKind::Global(def_id)
+                        Some(ExprKind::Global(def_id))
                     } else {
-                        ExprKind::Global(DefId(u32::MAX))
+                        None
                     };
 
-                    // Chain field accesses for remaining parts
-                    // 为剩余部分链接字段访问
-                    for part in &parts[1..] {
-                        let base_expr = Expr {
-                            kind: result_kind,
-                            ty: Self::unknown_ty(span),
-                            span,
-                        };
-                        result_kind = ExprKind::Field(Box::new(base_expr), part.name.clone());
-                    }
+                    if let Some(mut result_kind) = base_kind {
+                        // Chain field accesses for remaining parts
+                        // 为剩余部分链接字段访问
+                        for part in &parts[1..] {
+                            let base_expr = Expr {
+                                kind: result_kind,
+                                ty: Self::unknown_ty(span),
+                                span,
+                            };
+                            result_kind = ExprKind::Field(Box::new(base_expr), part.name.clone());
+                        }
+                        result_kind
+                    } else {
+                        let full_name = parts
+                            .iter()
+                            .map(|part| part.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(".");
 
-                    result_kind
+                        if let Some(def_id) = self.lookup_global(&full_name) {
+                            ExprKind::Global(def_id)
+                        } else if self.imported_modules.contains(&first.name) {
+                            let def_id = match self.imported.get(&full_name).copied() {
+                                Some(def_id) => def_id,
+                                None => {
+                                    let def_id = self.fresh_def_id();
+                                    self.imported.insert(full_name, def_id);
+                                    def_id
+                                }
+                            };
+                            ExprKind::Global(def_id)
+                        } else {
+                            let mut result_kind = ExprKind::Global(DefId(u32::MAX));
+                            for part in &parts[1..] {
+                                let base_expr = Expr {
+                                    kind: result_kind,
+                                    ty: Self::unknown_ty(span),
+                                    span,
+                                };
+                                result_kind =
+                                    ExprKind::Field(Box::new(base_expr), part.name.clone());
+                            }
+                            result_kind
+                        }
+                    }
                 }
             }
 
@@ -860,10 +925,8 @@ impl Resolver {
             }
 
             ast::ExprKind::RecordUpdate { base, fields } => {
-                // Desugar #{ base | field = value } to a record literal
-                // 将 #{ base | field = value } 解糖为记录字面量
-                // This is a simplification; real implementation would merge
-                // 这是简化；实际实现会合并
+                // Desugar #{ base | field = value } to base // #{ field = value }
+                // 将 #{ base | field = value } 解糖为 base // #{ field = value }
                 let base_expr = self.lower_expr(base);
                 let update_fields: Vec<(String, Expr)> = fields
                     .iter()
@@ -872,11 +935,39 @@ impl Resolver {
                             .value
                             .as_ref()
                             .map(|e| self.lower_expr(e))
-                            .unwrap_or_else(|| base_expr.clone());
+                            .unwrap_or_else(|| {
+                                // Shorthand: #{ base | x } means use variable x
+                                // 简写：#{ base | x } 表示使用变量 x
+                                let name = &f.name.name;
+                                if let Some(local_id) = self.lookup_local(name) {
+                                    Expr {
+                                        kind: ExprKind::Var(local_id),
+                                        ty: Self::unknown_ty(span),
+                                        span,
+                                    }
+                                } else if let Some(def_id) = self.lookup_global(name) {
+                                    Expr {
+                                        kind: ExprKind::Global(def_id),
+                                        ty: Self::unknown_ty(span),
+                                        span,
+                                    }
+                                } else {
+                                    Expr {
+                                        kind: ExprKind::Global(DefId(u32::MAX)),
+                                        ty: Self::unknown_ty(span),
+                                        span,
+                                    }
+                                }
+                            });
                         (f.name.name.clone(), value)
                     })
                     .collect();
-                ExprKind::Record(update_fields)
+                let update_expr = Expr {
+                    kind: ExprKind::Record(update_fields),
+                    ty: Self::unknown_ty(span),
+                    span,
+                };
+                ExprKind::Binary(BinOp::Merge, Box::new(base_expr), Box::new(update_expr))
             }
 
             ast::ExprKind::Lambda { params, body } => {
@@ -945,6 +1036,14 @@ impl Resolver {
                 ExprKind::TupleIndex(Box::new(base), *index)
             }
 
+            ast::ExprKind::SafeField { base, field } => {
+                let base = self.lower_expr(base);
+                ExprKind::SafeField {
+                    base: Box::new(base),
+                    field: field.name.clone(),
+                }
+            }
+
             ast::ExprKind::Index { base, index } => {
                 // Desugar index to a function call: base[index] -> index(base, index)
                 // 将索引解糖为函数调用：base[index] -> index(base, index)
@@ -990,12 +1089,67 @@ impl Resolver {
                 ExprKind::Match(Box::new(scrutinee), arms)
             }
 
+            ast::ExprKind::Let {
+                pattern,
+                ty,
+                value,
+                body,
+            } => {
+                let value = Box::new(self.lower_expr(value));
+                self.push_scope();
+                let pattern = self.lower_pattern(pattern);
+                let ty = ty.as_ref().map(|t| self.lower_type(t));
+                let body = Box::new(self.lower_expr(body));
+                self.pop_scope();
+                ExprKind::Let {
+                    pattern,
+                    ty,
+                    value,
+                    body,
+                }
+            }
+
             ast::ExprKind::Block { stmts, expr } => {
                 self.push_scope();
                 let stmts = stmts.iter().map(|s| self.lower_stmt(s)).collect();
                 let expr = expr.as_ref().map(|e| Box::new(self.lower_expr(e)));
                 self.pop_scope();
                 ExprKind::Block(stmts, expr)
+            }
+
+            ast::ExprKind::Lazy(inner) => ExprKind::Lazy(Box::new(self.lower_expr(inner))),
+
+            ast::ExprKind::ListComp { body, generators } => {
+                let mut lowered_generators = Vec::with_capacity(generators.len());
+                let mut pushed_scopes = 0usize;
+
+                for generator in generators {
+                    let iter = self.lower_expr(&generator.iter);
+                    self.push_scope();
+                    pushed_scopes += 1;
+                    let pattern = self.lower_pattern(&generator.pattern);
+                    let condition = generator
+                        .condition
+                        .as_ref()
+                        .map(|e| self.lower_expr(e));
+                    lowered_generators.push(Generator {
+                        pattern,
+                        iter,
+                        condition,
+                        span: generator.span,
+                    });
+                }
+
+                let body = Box::new(self.lower_expr(body));
+
+                for _ in 0..pushed_scopes {
+                    self.pop_scope();
+                }
+
+                ExprKind::ListComp {
+                    body,
+                    generators: lowered_generators,
+                }
             }
 
             ast::ExprKind::Coalesce { value, default } => {
@@ -1080,7 +1234,7 @@ impl Resolver {
                 ExprKind::Interpolated(parts)
             }
 
-            _ => ExprKind::Literal(Literal::Unit),
+            ast::ExprKind::PathLit(path) => ExprKind::Literal(Literal::String(path.clone())),
         };
 
         Expr {
@@ -1089,6 +1243,8 @@ impl Resolver {
             span,
         }
     }
+
+    // List comprehension generators are lowered inline to preserve scope ordering.
 
     /// Lower a statement to HIR.
     /// 将语句降级为 HIR。
@@ -1151,7 +1307,7 @@ impl Resolver {
 
             ast::PatternKind::Literal(lit) => {
                 let literal = match lit {
-                    ast::LiteralPattern::Int(n) => Literal::Int(*n),
+                    ast::LiteralPattern::Int(n) => Literal::Int(n.clone()),
                     ast::LiteralPattern::Float(f) => Literal::Float(*f),
                     ast::LiteralPattern::String(s) => Literal::String(s.clone()),
                     ast::LiteralPattern::Char(c) => Literal::Char(*c),
