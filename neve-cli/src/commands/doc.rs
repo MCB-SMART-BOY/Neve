@@ -23,15 +23,27 @@ const DOC_CHANGELOG: &str = include_str!("../../../docs/changelog.md");
 /// Available documentation topics.
 /// 可用的文档主题。
 const TOPICS: &[(&str, &str, &str)] = &[
-    ("quickstart", DOC_QUICKSTART, "5-minute quick start / 5 分钟快速上手"),
+    (
+        "quickstart",
+        DOC_QUICKSTART,
+        "5-minute quick start / 5 分钟快速上手",
+    ),
     ("tutorial", DOC_TUTORIAL, "Complete tutorial / 完整教程"),
     ("spec", DOC_SPEC, "Language spec / 语言规范"),
     ("api", DOC_API, "Standard library API / 标准库 API"),
-    ("diagnostics", DOC_DIAGNOSTICS, "Diagnostic codes / 诊断错误码"),
+    (
+        "diagnostics",
+        DOC_DIAGNOSTICS,
+        "Diagnostic codes / 诊断错误码",
+    ),
     ("philosophy", DOC_PHILOSOPHY, "Design philosophy / 设计哲学"),
     ("install", DOC_INSTALL, "Installation guide / 安装指南"),
     ("architecture", DOC_ARCHITECTURE, "Architecture / 内部架构"),
-    ("onboarding", DOC_ONBOARDING, "Contributor onboarding / 贡献者入门"),
+    (
+        "onboarding",
+        DOC_ONBOARDING,
+        "Contributor onboarding / 贡献者入门",
+    ),
     ("changelog", DOC_CHANGELOG, "Changelog / 更新日志"),
 ];
 

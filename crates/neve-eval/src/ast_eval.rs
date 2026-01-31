@@ -285,10 +285,7 @@ impl AstEvaluator {
 
     /// Set module overrides for non-file imports.
     /// 设置非文件导入的模块覆盖。
-    pub fn with_module_overrides(
-        mut self,
-        overrides: HashMap<Vec<String>, Rc<AstEnv>>,
-    ) -> Self {
+    pub fn with_module_overrides(mut self, overrides: HashMap<Vec<String>, Rc<AstEnv>>) -> Self {
         self.module_overrides = overrides;
         self
     }
@@ -641,8 +638,7 @@ impl AstEvaluator {
                 // Create a record with only public module bindings
                 let bindings = module_env.public_bindings();
                 let record = Value::Record(Rc::new(bindings));
-                Rc::make_mut(&mut self.env)
-                    .define_with_visibility(module_name, record, is_public);
+                Rc::make_mut(&mut self.env).define_with_visibility(module_name, record, is_public);
             }
             ImportItems::Items(items) => {
                 // Import specific items (must be public)
@@ -663,8 +659,11 @@ impl AstEvaluator {
                         }
                     }
                     if let Some(value) = module_env.get(name) {
-                        Rc::make_mut(&mut self.env)
-                            .define_with_visibility(name.clone(), value, is_public);
+                        Rc::make_mut(&mut self.env).define_with_visibility(
+                            name.clone(),
+                            value,
+                            is_public,
+                        );
                     }
                 }
             }
@@ -1167,13 +1166,15 @@ impl AstEvaluator {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
                 (Value::Int(a), Value::Float(b)) => {
-                    let af = int_to_f64(a)
-                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    let af = int_to_f64(a).ok_or_else(|| {
+                        EvalError::TypeError("integer too large for float".to_string())
+                    })?;
                     Ok(Value::Float(af + b))
                 }
                 (Value::Float(a), Value::Int(b)) => {
-                    let bf = int_to_f64(b)
-                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    let bf = int_to_f64(b).ok_or_else(|| {
+                        EvalError::TypeError("integer too large for float".to_string())
+                    })?;
                     Ok(Value::Float(a + bf))
                 }
                 _ => Err(EvalError::TypeError("cannot add".to_string())),
@@ -1712,9 +1713,8 @@ impl AstEvaluator {
             ));
         }
 
-        let n_usize = int_to_usize(n).ok_or_else(|| {
-            EvalError::TypeError("genList count is too large".to_string())
-        })?;
+        let n_usize = int_to_usize(n)
+            .ok_or_else(|| EvalError::TypeError("genList count is too large".to_string()))?;
 
         let mut results = Vec::with_capacity(n_usize);
         for i in 0..n_usize {

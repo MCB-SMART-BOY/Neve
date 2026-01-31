@@ -1,7 +1,7 @@
 //! List operations for the standard library.
 //! 标准库的列表操作。
 
-use neve_common::{int_is_negative, int_to_i64, int_to_usize, Int};
+use neve_common::{Int, int_is_negative, int_to_i64, int_to_usize};
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
@@ -424,8 +424,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |args| match &args[0] {
                     Value::Int(n) => {
                         let count = clamp_non_negative_usize(n, "list.replicate count")?;
-                        let items: Vec<Value> =
-                            (0..count).map(|_| args[1].clone()).collect();
+                        let items: Vec<Value> = (0..count).map(|_| args[1].clone()).collect();
                         Ok(Value::List(Rc::new(items)))
                     }
                     _ => Err("list.replicate expects (n, value)".to_string()),

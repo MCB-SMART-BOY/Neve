@@ -7,15 +7,15 @@
 //! 它提供了一个带有尾调用优化的树遍历解释器。
 
 use crate::{Environment, Value};
-use neve_diagnostic::Diagnostic;
 use neve_common::{int_is_negative, int_is_zero, int_to_f64, int_to_u32};
+use neve_diagnostic::Diagnostic;
 use neve_hir::{
     BinOp, DefId, Expr, ExprKind, FnDef, Generator, Item, ItemKind, Literal, LocalId, Module,
     UnaryOp,
 };
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::path::PathBuf;
+use std::rc::Rc;
 use thiserror::Error;
 
 /// Evaluation errors.
@@ -497,13 +497,15 @@ impl Evaluator {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
                 (Value::Int(a), Value::Float(b)) => {
-                    let af = int_to_f64(a)
-                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    let af = int_to_f64(a).ok_or_else(|| {
+                        EvalError::TypeError("integer too large for float".to_string())
+                    })?;
                     Ok(Value::Float(af + b))
                 }
                 (Value::Float(a), Value::Int(b)) => {
-                    let bf = int_to_f64(b)
-                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    let bf = int_to_f64(b).ok_or_else(|| {
+                        EvalError::TypeError("integer too large for float".to_string())
+                    })?;
                     Ok(Value::Float(a + bf))
                 }
                 _ => Err(EvalError::TypeError("cannot add".to_string())),

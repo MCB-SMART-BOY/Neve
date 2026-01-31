@@ -41,13 +41,8 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
             continue;
         };
 
-        let source = fs::read_to_string(&info.file_path).map_err(|e| {
-            format!(
-                "cannot read file '{}': {}",
-                info.file_path.display(),
-                e
-            )
-        })?;
+        let source = fs::read_to_string(&info.file_path)
+            .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
 
         // Reuse cached parse diagnostics from the module loader.
         // 复用模块加载器缓存的解析诊断。
@@ -91,11 +86,7 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let mut root_value = Value::Unit;
 
     for parsed in parsed_modules {
-        let base_dir = parsed
-            .file_path
-            .parent()
-            .unwrap_or(&root_dir)
-            .to_path_buf();
+        let base_dir = parsed.file_path.parent().unwrap_or(&root_dir).to_path_buf();
 
         let mut evaluator = AstEvaluator::new()
             .with_module_overrides(std_overrides.clone())

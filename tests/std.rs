@@ -38,7 +38,10 @@ fn test_map_singleton() {
 
     let result = call_builtin_fn(
         &singleton.unwrap(),
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(42.into()),
+        ],
     )
     .unwrap();
 
@@ -114,7 +117,11 @@ fn test_list_singleton() {
 
 #[test]
 fn test_list_len() {
-    let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+    let list = Value::List(Rc::new(vec![
+        Value::Int(1.into()),
+        Value::Int(2.into()),
+        Value::Int(3.into()),
+    ]));
     let len_fn = get_builtin("list.len");
     assert!(len_fn.is_some(), "list.len not found");
 
@@ -298,7 +305,11 @@ fn test_list_tail_multiple_elements() {
 
     match tail_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
@@ -367,7 +378,11 @@ fn test_list_init_removes_last() {
 
     match init_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
@@ -575,7 +590,11 @@ fn test_list_reverse_multiple() {
 
     match reverse_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::List(l) => {
@@ -596,7 +615,11 @@ fn test_list_take_zero() {
 
     match take_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[Value::Int(0.into()), list]).unwrap();
             match result {
                 Value::List(l) => assert!(l.is_empty()),
@@ -630,7 +653,11 @@ fn test_list_drop_zero() {
 
     match drop_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[Value::Int(0.into()), list]).unwrap();
             match result {
                 Value::List(l) => assert_eq!(l.len(), 3),
@@ -743,7 +770,11 @@ fn test_list_product_with_zero() {
 
     match product_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(5.into()), Value::Int(0.into()), Value::Int(10.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(5.into()),
+                Value::Int(0.into()),
+                Value::Int(10.into()),
+            ]));
             let result = (builtin.func)(&[list]).unwrap();
             assert_eq!(result, Value::Int(0.into()));
         }
@@ -757,7 +788,11 @@ fn test_list_product_multiple() {
 
     match product_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(2.into()), Value::Int(3.into()), Value::Int(4.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+                Value::Int(4.into()),
+            ]));
             let result = (builtin.func)(&[list]).unwrap();
             assert_eq!(result, Value::Int(24.into()));
         }
@@ -837,7 +872,11 @@ fn test_list_min_with_positives() {
 
     match min_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(5.into()), Value::Int(1.into()), Value::Int(10.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(5.into()),
+                Value::Int(1.into()),
+                Value::Int(10.into()),
+            ]));
             let result = (builtin.func)(&[list]).unwrap();
             match result {
                 Value::Some(boxed) => assert_eq!(*boxed, Value::Int(1.into())),
@@ -854,7 +893,11 @@ fn test_list_contains_found() {
 
     match contains_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[Value::Int(2.into()), list]).unwrap();
             assert_eq!(result, Value::Bool(true));
         }
@@ -868,7 +911,11 @@ fn test_list_contains_not_found() {
 
     match contains_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[Value::Int(99.into()), list]).unwrap();
             assert_eq!(result, Value::Bool(false));
         }
@@ -917,7 +964,11 @@ fn test_list_index_of_not_found() {
 
     match index_of_fn {
         Value::Builtin(builtin) => {
-            let list = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let list = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[Value::Int(99.into()), list]).unwrap();
             assert!(matches!(result, Value::None));
         }
@@ -990,7 +1041,11 @@ fn test_list_sort_already_sorted() {
 
     match sort_fn {
         Value::Builtin(builtin) => {
-            let sorted = Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())]));
+            let sorted = Value::List(Rc::new(vec![
+                Value::Int(1.into()),
+                Value::Int(2.into()),
+                Value::Int(3.into()),
+            ]));
             let result = (builtin.func)(&[sorted]).unwrap();
             match result {
                 Value::List(l) => {
@@ -1011,7 +1066,11 @@ fn test_list_sort_reverse_sorted() {
 
     match sort_fn {
         Value::Builtin(builtin) => {
-            let reversed = Value::List(Rc::new(vec![Value::Int(3.into()), Value::Int(2.into()), Value::Int(1.into())]));
+            let reversed = Value::List(Rc::new(vec![
+                Value::Int(3.into()),
+                Value::Int(2.into()),
+                Value::Int(1.into()),
+            ]));
             let result = (builtin.func)(&[reversed]).unwrap();
             match result {
                 Value::List(l) => {
@@ -1160,8 +1219,11 @@ fn test_list_replicate_multiple() {
 
     match replicate_fn {
         Value::Builtin(builtin) => {
-            let result =
-                (builtin.func)(&[Value::Int(3.into()), Value::String(Rc::new("x".to_string()))]).unwrap();
+            let result = (builtin.func)(&[
+                Value::Int(3.into()),
+                Value::String(Rc::new("x".to_string())),
+            ])
+            .unwrap();
             match result {
                 Value::List(l) => {
                     assert_eq!(l.len(), 3);
@@ -1339,7 +1401,10 @@ fn test_map_singleton_creates_single_entry() {
 
     let result = call_builtin_fn(
         &singleton.unwrap(),
-        vec![Value::String(Rc::new("mykey".to_string())), Value::Int(999.into())],
+        vec![
+            Value::String(Rc::new("mykey".to_string())),
+            Value::Int(999.into()),
+        ],
     )
     .unwrap();
 
@@ -1376,7 +1441,10 @@ fn test_map_is_empty_on_non_empty() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("k".to_string())), Value::Int(1.into())],
+        vec![
+            Value::String(Rc::new("k".to_string())),
+            Value::Int(1.into()),
+        ],
     )
     .unwrap();
 
@@ -1391,7 +1459,10 @@ fn test_map_contains_existing_key() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(42.into()),
+        ],
     )
     .unwrap();
 
@@ -1446,7 +1517,10 @@ fn test_map_insert_overwrite() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(100.into())],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(100.into()),
+        ],
     )
     .unwrap();
 
@@ -1518,7 +1592,10 @@ fn test_map_remove_existing() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(42.into()),
+        ],
     )
     .unwrap();
 
@@ -1536,7 +1613,10 @@ fn test_map_remove_nonexistent() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(42.into()),
+        ],
     )
     .unwrap();
 
@@ -1558,13 +1638,19 @@ fn test_map_union_disjoint() {
 
     let m1 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("a".to_string())), Value::Int(1.into())],
+        vec![
+            Value::String(Rc::new("a".to_string())),
+            Value::Int(1.into()),
+        ],
     )
     .unwrap();
 
     let m2 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(2.into())],
+        vec![
+            Value::String(Rc::new("b".to_string())),
+            Value::Int(2.into()),
+        ],
     )
     .unwrap();
 
@@ -1582,13 +1668,19 @@ fn test_map_intersection_empty() {
 
     let m1 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("a".to_string())), Value::Int(1.into())],
+        vec![
+            Value::String(Rc::new("a".to_string())),
+            Value::Int(1.into()),
+        ],
     )
     .unwrap();
 
     let m2 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(2.into())],
+        vec![
+            Value::String(Rc::new("b".to_string())),
+            Value::Int(2.into()),
+        ],
     )
     .unwrap();
 
@@ -1608,19 +1700,29 @@ fn test_map_difference() {
     // m1 = {a: 1, b: 2}
     let m1 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("a".to_string())), Value::Int(1.into())],
+        vec![
+            Value::String(Rc::new("a".to_string())),
+            Value::Int(1.into()),
+        ],
     )
     .unwrap();
     let m1 = call_builtin_fn(
         &insert,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(2.into()), m1],
+        vec![
+            Value::String(Rc::new("b".to_string())),
+            Value::Int(2.into()),
+            m1,
+        ],
     )
     .unwrap();
 
     // m2 = {b: 99}
     let m2 = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("b".to_string())), Value::Int(99.into())],
+        vec![
+            Value::String(Rc::new("b".to_string())),
+            Value::Int(99.into()),
+        ],
     )
     .unwrap();
 
@@ -1674,13 +1776,20 @@ fn test_map_get_with_default_found() {
 
     let m = call_builtin_fn(
         &singleton,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(42.into())],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(42.into()),
+        ],
     )
     .unwrap();
 
     let result = call_builtin_fn(
         &get_with_default,
-        vec![Value::String(Rc::new("key".to_string())), Value::Int(0.into()), m],
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(0.into()),
+            m,
+        ],
     )
     .unwrap();
 

@@ -12,8 +12,8 @@ use tower_lsp::{Client, LanguageServer};
 use neve_lexer::Lexer;
 use neve_syntax::{ImplDef, Type, TypeKind};
 
-use crate::capabilities::server_capabilities;
 use crate::Document;
+use crate::capabilities::server_capabilities;
 use crate::semantic_tokens::generate_semantic_tokens_with_context;
 use crate::symbol_index::SymbolKind as IndexSymbolKind;
 use neve_common::Span;
@@ -76,14 +76,12 @@ impl Backend {
                     Some(
                         diag.labels
                             .iter()
-                            .map(|label| {
-                                DiagnosticRelatedInformation {
-                                    location: Location {
-                                        uri: uri.clone(),
-                                        range: range_for_span(doc, label.span),
-                                    },
-                                    message: label.message.clone(),
-                                }
+                            .map(|label| DiagnosticRelatedInformation {
+                                location: Location {
+                                    uri: uri.clone(),
+                                    range: range_for_span(doc, label.span),
+                                },
+                                message: label.message.clone(),
                             })
                             .collect(),
                     )
@@ -98,13 +96,17 @@ impl Backend {
                 };
 
                 let code_description = diag.code.and_then(|code| {
-                    Url::parse(&code.doc_url()).ok().map(|href| CodeDescription { href })
+                    Url::parse(&code.doc_url())
+                        .ok()
+                        .map(|href| CodeDescription { href })
                 });
 
                 Diagnostic {
                     range: range_for_span(doc, primary_span),
                     severity: Some(severity),
-                    code: diag.code.map(|code| NumberOrString::String(code.as_str().to_string())),
+                    code: diag
+                        .code
+                        .map(|code| NumberOrString::String(code.as_str().to_string())),
                     code_description,
                     source: Some(source.to_string()),
                     message,
@@ -447,7 +449,8 @@ impl LanguageServer for Backend {
                             children: None,
                         }
                     }
-                    ItemKind::Fn(def) => {
+                    ItemKind::Fn(def) =>
+                    {
                         #[allow(deprecated)]
                         DocumentSymbol {
                             name: def.name.name.clone(),
@@ -460,7 +463,8 @@ impl LanguageServer for Backend {
                             children: None,
                         }
                     }
-                    ItemKind::TypeAlias(def) => {
+                    ItemKind::TypeAlias(def) =>
+                    {
                         #[allow(deprecated)]
                         DocumentSymbol {
                             name: def.name.name.clone(),
@@ -473,7 +477,8 @@ impl LanguageServer for Backend {
                             children: None,
                         }
                     }
-                    ItemKind::Struct(def) => {
+                    ItemKind::Struct(def) =>
+                    {
                         #[allow(deprecated)]
                         DocumentSymbol {
                             name: def.name.name.clone(),
@@ -486,7 +491,8 @@ impl LanguageServer for Backend {
                             children: None,
                         }
                     }
-                    ItemKind::Enum(def) => {
+                    ItemKind::Enum(def) =>
+                    {
                         #[allow(deprecated)]
                         DocumentSymbol {
                             name: def.name.name.clone(),
