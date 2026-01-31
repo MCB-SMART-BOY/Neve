@@ -227,10 +227,7 @@ impl Resolver {
     /// 记录模块导入别名，用于命名空间路径解析。
     fn record_import_alias(&mut self, import: &Import) {
         if let ImportKind::Module = import.kind {
-            let alias = import
-                .alias
-                .clone()
-                .or_else(|| import.path.last().cloned());
+            let alias = import.alias.clone().or_else(|| import.path.last().cloned());
             if let Some(alias) = alias {
                 self.imported_modules.insert(alias);
             }
@@ -931,34 +928,34 @@ impl Resolver {
                 let update_fields: Vec<(String, Expr)> = fields
                     .iter()
                     .map(|f| {
-                        let value = f
-                            .value
-                            .as_ref()
-                            .map(|e| self.lower_expr(e))
-                            .unwrap_or_else(|| {
-                                // Shorthand: #{ base | x } means use variable x
-                                // 简写：#{ base | x } 表示使用变量 x
-                                let name = &f.name.name;
-                                if let Some(local_id) = self.lookup_local(name) {
-                                    Expr {
-                                        kind: ExprKind::Var(local_id),
-                                        ty: Self::unknown_ty(span),
-                                        span,
+                        let value =
+                            f.value
+                                .as_ref()
+                                .map(|e| self.lower_expr(e))
+                                .unwrap_or_else(|| {
+                                    // Shorthand: #{ base | x } means use variable x
+                                    // 简写：#{ base | x } 表示使用变量 x
+                                    let name = &f.name.name;
+                                    if let Some(local_id) = self.lookup_local(name) {
+                                        Expr {
+                                            kind: ExprKind::Var(local_id),
+                                            ty: Self::unknown_ty(span),
+                                            span,
+                                        }
+                                    } else if let Some(def_id) = self.lookup_global(name) {
+                                        Expr {
+                                            kind: ExprKind::Global(def_id),
+                                            ty: Self::unknown_ty(span),
+                                            span,
+                                        }
+                                    } else {
+                                        Expr {
+                                            kind: ExprKind::Global(DefId(u32::MAX)),
+                                            ty: Self::unknown_ty(span),
+                                            span,
+                                        }
                                     }
-                                } else if let Some(def_id) = self.lookup_global(name) {
-                                    Expr {
-                                        kind: ExprKind::Global(def_id),
-                                        ty: Self::unknown_ty(span),
-                                        span,
-                                    }
-                                } else {
-                                    Expr {
-                                        kind: ExprKind::Global(DefId(u32::MAX)),
-                                        ty: Self::unknown_ty(span),
-                                        span,
-                                    }
-                                }
-                            });
+                                });
                         (f.name.name.clone(), value)
                     })
                     .collect();
@@ -1128,10 +1125,7 @@ impl Resolver {
                     self.push_scope();
                     pushed_scopes += 1;
                     let pattern = self.lower_pattern(&generator.pattern);
-                    let condition = generator
-                        .condition
-                        .as_ref()
-                        .map(|e| self.lower_expr(e));
+                    let condition = generator.condition.as_ref().map(|e| self.lower_expr(e));
                     lowered_generators.push(Generator {
                         pattern,
                         iter,

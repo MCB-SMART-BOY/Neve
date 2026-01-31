@@ -2,7 +2,7 @@
 //! 标准库的数学操作。
 
 use neve_common::{
-    int_abs, int_from_f64, int_is_negative, int_to_f64, int_to_i64, int_to_u32, parse_int, Int,
+    Int, int_abs, int_from_f64, int_is_negative, int_to_f64, int_to_i64, int_to_u32, parse_int,
 };
 use neve_eval::value::{BuiltinFn, Value};
 

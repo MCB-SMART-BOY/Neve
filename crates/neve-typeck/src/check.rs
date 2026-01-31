@@ -153,9 +153,7 @@ impl TypeChecker {
 
     /// Collect global signatures from a module without checking bodies.
     /// 在不检查函数体的情况下收集模块的全局签名。
-    pub fn collect_signatures(
-        module: &Module,
-    ) -> (HashMap<DefId, Ty>, HashMap<DefId, Span>) {
+    pub fn collect_signatures(module: &Module) -> (HashMap<DefId, Ty>, HashMap<DefId, Span>) {
         let mut checker = TypeChecker::new();
         for item in &module.items {
             checker.collect_item(item);
@@ -566,10 +564,13 @@ impl TypeChecker {
             );
 
             let ctor_ty = Ty {
-                kind: TyKind::Fn(fields, Box::new(Ty {
-                    kind: TyKind::Named(def_id, Vec::new()),
-                    span: Span::DUMMY,
-                })),
+                kind: TyKind::Fn(
+                    fields,
+                    Box::new(Ty {
+                        kind: TyKind::Named(def_id, Vec::new()),
+                        span: Span::DUMMY,
+                    }),
+                ),
                 span: Span::DUMMY,
             };
             self.globals.insert(variant.id, ctor_ty);

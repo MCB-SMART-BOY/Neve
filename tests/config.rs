@@ -426,7 +426,11 @@ fn test_module_set_bool_value() {
 fn test_module_set_list_value() {
     let module = Module::new("test").set(
         "items",
-        Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())])),
+        Value::List(Rc::new(vec![
+            Value::Int(1.into()),
+            Value::Int(2.into()),
+            Value::Int(3.into()),
+        ])),
     );
 
     assert!(module.config.contains_key("items"));

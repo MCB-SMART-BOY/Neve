@@ -1,7 +1,7 @@
 //! String operations for the standard library.
 //! 标准库的字符串操作。
 
-use neve_common::{int_is_negative, int_to_usize, Int};
+use neve_common::{Int, int_is_negative, int_to_usize};
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 

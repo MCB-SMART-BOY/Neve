@@ -1961,10 +1961,10 @@ impl Parser {
                     Pattern::new(
                         PatternKind::Constructor {
                             path: vec![ident],
-                        args,
-                    },
-                    span,
-                )
+                            args,
+                        },
+                        span,
+                    )
                 } else if ident
                     .name
                     .chars()

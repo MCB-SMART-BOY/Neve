@@ -375,7 +375,9 @@ impl ModuleLoader {
     /// 获取已加载模块的解析源文件。
     pub fn parsed_source(&self, module_id: ModuleId) -> Option<&neve_syntax::SourceFile> {
         let info = self.modules.get(&module_id)?;
-        self.parsed_sources.get(&info.file_path).map(|parsed| &parsed.file)
+        self.parsed_sources
+            .get(&info.file_path)
+            .map(|parsed| &parsed.file)
     }
 
     /// Get parse diagnostics for a loaded module.
@@ -851,18 +853,18 @@ impl ModuleLoader {
         }
 
         let module_name = Self::module_name(path);
-        let module = resolver.resolve_with_path_and_id(
-            &source_file,
-            module_name,
-            path.to_vec(),
-            module_id,
-        );
+        let module =
+            resolver.resolve_with_path_and_id(&source_file, module_name, path.to_vec(), module_id);
         self.next_def_id = resolver.next_def_id();
 
         // Build export tables from resolver globals and module exports
         // 根据解析器全局定义与模块导出表构建导出信息
-        let export_names: HashSet<String> =
-            module.exports.clone().unwrap_or_default().into_iter().collect();
+        let export_names: HashSet<String> = module
+            .exports
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         let mut items = HashMap::new();
         let mut exports = HashMap::new();
 
@@ -915,10 +917,7 @@ impl ModuleLoader {
         self.load_order.push(module_id);
 
         for dep in dependencies {
-            self.dependents
-                .entry(dep)
-                .or_default()
-                .insert(module_id);
+            self.dependents.entry(dep).or_default().insert(module_id);
         }
 
         // Update parent's children list
@@ -1008,9 +1007,7 @@ impl ModuleLoader {
     /// Resolve the module name from its path.
     /// 从模块路径解析模块名称。
     fn module_name(path: &[String]) -> String {
-        path.last()
-            .cloned()
-            .unwrap_or_else(|| "main".to_string())
+        path.last().cloned().unwrap_or_else(|| "main".to_string())
     }
 
     /// Check if a module path points to the std namespace.

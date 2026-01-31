@@ -159,8 +159,9 @@ pub fn run() -> Result<(), String> {
                                     // Evaluate the file in current environment
                                     // 在当前环境中求值文件
                                     let current_env = env.borrow().clone();
-                                    let mut evaluator = AstEvaluator::with_env(Rc::new(current_env))
-                                        .with_module_overrides(std_overrides.clone());
+                                    let mut evaluator =
+                                        AstEvaluator::with_env(Rc::new(current_env))
+                                            .with_module_overrides(std_overrides.clone());
                                     match evaluator.eval_file(&ast) {
                                         Ok(_) => {
                                             // Extract and store new bindings
@@ -173,11 +174,12 @@ pub fn run() -> Result<(), String> {
                                                         &let_def.pattern.kind
                                                     {
                                                         let current_env = env.borrow().clone();
-                                                        let mut temp_eval =
-                                                            AstEvaluator::with_env(Rc::new(current_env))
-                                                                .with_module_overrides(
-                                                                    std_overrides.clone(),
-                                                                );
+                                                        let mut temp_eval = AstEvaluator::with_env(
+                                                            Rc::new(current_env),
+                                                        )
+                                                        .with_module_overrides(
+                                                            std_overrides.clone(),
+                                                        );
                                                         if let Ok(val) =
                                                             temp_eval.eval_expr(&let_def.value)
                                                         {
@@ -195,11 +197,10 @@ pub fn run() -> Result<(), String> {
                                                     &item.kind
                                                 {
                                                     let current_env = env.borrow().clone();
-                                                    let mut temp_eval =
-                                                        AstEvaluator::with_env(Rc::new(current_env))
-                                                            .with_module_overrides(
-                                                                std_overrides.clone(),
-                                                            );
+                                                    let mut temp_eval = AstEvaluator::with_env(
+                                                        Rc::new(current_env),
+                                                    )
+                                                    .with_module_overrides(std_overrides.clone());
                                                     if let Ok(fn_value) =
                                                         temp_eval.eval_fn_def(fn_def)
                                                     {

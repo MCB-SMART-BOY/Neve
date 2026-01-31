@@ -23,8 +23,8 @@
 
 use crate::value::{BuiltinFn, Value};
 use neve_common::{
-    int_abs, int_from_f64, int_is_negative, int_to_f64, int_to_i64, int_to_u32, int_to_usize,
-    parse_int, Int,
+    Int, int_abs, int_from_f64, int_is_negative, int_to_f64, int_to_i64, int_to_u32, int_to_usize,
+    parse_int,
 };
 use neve_derive::Derivation;
 use std::rc::Rc;
@@ -604,8 +604,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             let exp_i32 = int_to_i32(exp, "exponent")?;
                             Ok(Value::Float(base_f.powi(exp_i32)))
                         } else {
-                            let exp_u32 = int_to_u32(exp)
-                                .ok_or_else(|| "exponent too large".to_string())?;
+                            let exp_u32 =
+                                int_to_u32(exp).ok_or_else(|| "exponent too large".to_string())?;
                             Ok(Value::Int(base.pow(exp_u32)))
                         }
                     }

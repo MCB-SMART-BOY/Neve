@@ -155,8 +155,7 @@ fn test_eval_float_subtraction() {
 
 #[test]
 fn test_eval_enum_constructor_match() {
-    let source =
-        "enum Option { Some(Int), None }; let x = Some(1); let y = match x { Some(v) -> v, None -> 0 };";
+    let source = "enum Option { Some(Int), None }; let x = Some(1); let y = match x { Some(v) -> v, None -> 0 };";
     match eval_source(source) {
         Ok(Value::Int(v)) => assert_eq!(v, int(1)),
         other => panic!("expected int, got {:?}", other),

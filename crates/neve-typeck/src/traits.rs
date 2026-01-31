@@ -464,10 +464,7 @@ impl TraitResolver {
     /// Get all impl IDs for a trait.
     /// 获取特征的所有实现 ID。
     pub fn impl_ids_for_trait(&self, trait_id: TraitId) -> Vec<ImplId> {
-        self.trait_impls
-            .get(&trait_id)
-            .cloned()
-            .unwrap_or_default()
+        self.trait_impls.get(&trait_id).cloned().unwrap_or_default()
     }
 
     /// Get an impl info by ID.

@@ -117,7 +117,8 @@ fn test_trait_assoc_type_definition() {
 
 #[test]
 fn test_impl_assoc_type_definition() {
-    let source = "trait Iterator { type Item; }; struct Foo {}; impl Iterator for Foo { type Item = Int; };";
+    let source =
+        "trait Iterator { type Item; }; struct Foo {}; impl Iterator for Foo { type Item = Int; };";
     let (ast, _) = parse(source);
     let index = SymbolIndex::from_ast(&ast);
 

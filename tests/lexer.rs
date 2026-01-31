@@ -109,7 +109,11 @@ fn test_record_literal() {
 fn test_comments() {
     assert_eq!(
         lex("1 -- comment\n2"),
-        vec![TokenKind::Int(1.into()), TokenKind::Int(2.into()), TokenKind::Eof,]
+        vec![
+            TokenKind::Int(1.into()),
+            TokenKind::Int(2.into()),
+            TokenKind::Eof,
+        ]
     );
 }
 
@@ -205,13 +209,13 @@ fn test_binary_number() {
     assert_eq!(lex("0b11111111")[0], TokenKind::Int(255.into()));
 }
 
-    #[test]
-    fn test_octal_number() {
-        let tokens = lex("0o777");
-        if let TokenKind::Int(n) = &tokens[0] {
-            assert_eq!(n, &0o777.into());
-        }
+#[test]
+fn test_octal_number() {
+    let tokens = lex("0o777");
+    if let TokenKind::Int(n) = &tokens[0] {
+        assert_eq!(n, &0o777.into());
     }
+}
 
 // ============================================================================
 // Edge Cases - Strings

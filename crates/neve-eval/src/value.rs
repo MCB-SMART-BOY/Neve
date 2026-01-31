@@ -155,10 +155,7 @@ pub enum Value {
         Rc<dyn Fn(Vec<Value>) -> Result<Value, String>>,
     ),
     /// Enum/variant constructor / 枚举变体构造器
-    VariantCtor {
-        name: String,
-        arity: usize,
-    },
+    VariantCtor { name: String, arity: usize },
 
     // ===== Algebraic data types 代数数据类型 =====
     /// Variant/enum value (tag, payload) / 变体/枚举值（标签，载荷）
@@ -453,8 +450,7 @@ impl KeyCtx {
                 self.key_for_ptr(ptr, |_ctx| {
                     let mut items: Vec<&String> = set.iter().collect();
                     items.sort();
-                    let parts: Vec<String> =
-                        items.into_iter().map(|k| escape_string(k)).collect();
+                    let parts: Vec<String> = items.into_iter().map(|k| escape_string(k)).collect();
                     format!("Set{{{}}}", parts.join(","))
                 })
             }
@@ -483,10 +479,8 @@ impl KeyCtx {
                         "AstParams({})",
                         escape_string(&format!("{:?}", closure.params))
                     );
-                    let body_key = format!(
-                        "AstExpr({})",
-                        escape_string(&format!("{:?}", closure.body))
-                    );
+                    let body_key =
+                        format!("AstExpr({})", escape_string(&format!("{:?}", closure.body)));
                     let env_key = ctx.ast_env_key(&closure.env);
                     format!(
                         "AstClosure{{params={},body={},env={}}}",
@@ -584,13 +578,11 @@ impl KeyCtx {
                 format!("Named({:?},[{}])", def, args_key.join(","))
             }
             TyKind::Fn(params, ret) => {
-                let params_key: Vec<String> =
-                    params.iter().map(|t| self.ty_key(t)).collect();
+                let params_key: Vec<String> = params.iter().map(|t| self.ty_key(t)).collect();
                 format!("Fn([{}],{})", params_key.join(","), self.ty_key(ret))
             }
             TyKind::Tuple(elems) => {
-                let elems_key: Vec<String> =
-                    elems.iter().map(|t| self.ty_key(t)).collect();
+                let elems_key: Vec<String> = elems.iter().map(|t| self.ty_key(t)).collect();
                 format!("Tuple([{}])", elems_key.join(","))
             }
             TyKind::Record(fields) => {
