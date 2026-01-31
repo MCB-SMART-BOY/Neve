@@ -817,13 +817,10 @@ impl Resolver {
                 } else {
                     let first = &parts[0];
 
-                    let base_kind = if let Some(local_id) = self.lookup_local(&first.name) {
-                        Some(ExprKind::Var(local_id))
-                    } else if let Some(def_id) = self.lookup_global(&first.name) {
-                        Some(ExprKind::Global(def_id))
-                    } else {
-                        None
-                    };
+                    let base_kind = self
+                        .lookup_local(&first.name)
+                        .map(ExprKind::Var)
+                        .or_else(|| self.lookup_global(&first.name).map(ExprKind::Global));
 
                     if let Some(mut result_kind) = base_kind {
                         // Chain field accesses for remaining parts
