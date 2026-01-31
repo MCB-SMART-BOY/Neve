@@ -1,451 +1,174 @@
-```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                              NEVE CHANGELOG                                   ║
-║                                更新日志                                        ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-```
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  v0.6.2 / v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x      │
-│  [中文]     #chinese   ──→  v0.6.2 / v0.6.1 / v0.6.0 / v0.5.0 / v0.4.x      │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
----
-
-<a name="english"></a>
-
-# English
-
-> *What changed, when, and why.*
-
-## [Unreleased]
-
-### Added
-- (nothing yet)
-
-### Improved
-- (nothing yet)
-
-## [0.7.0] - 2026-01-08
-
-### Added
-- **Frontend pipeline**: New `neve-frontend` crate for parse → HIR → typecheck analysis
-- **Docs**: Onboarding + diagnostics references, new `neve doc` topics
-- **Tests**: Frontend diagnostics, module loader, formatter, and LSP symbol coverage
-- **Stdlib imports**: `std.*` module overrides for AST evaluation
-
-### Improved
-- **LSP**: Uses the frontend pipeline, fixes UTF-16 positions, adds diagnostic code links
-- **Formatter**: Surfaces parser diagnostics for better error reporting
-- **Eval/Run**: Emits parse diagnostics for imported modules
-- **CLI eval/run/build/repl**: `import std.*` now resolves to the Rust stdlib modules
-- **CLI check**: Reuses module loader parse diagnostics to avoid double parsing
-- **Docs accuracy**: Spec/API/philosophy updated to match current syntax and stdlib
-
-## [0.6.4] - 2025-12-30
-
-### Fixed
-- **CI**: Fixed cross-compilation setup using `taiki-e/install-action`
-- **Formatting**: Fixed code formatting issues
-
----
-
-## [0.6.3] - 2025-12-30
-
-### Improved
-- **Documentation overhaul**: Updated docs/README.md as comprehensive documentation hub
-- **Architecture docs**: Added incremental compilation design section
-- **Changelog**: Synchronized with all v0.6.2 changes
-
----
-
-## [0.6.2] - 2025-12-30
-
-### Added
-- **Architecture documentation**: Comprehensive guide for contributors (`docs/architecture.md`)
-- **CONTRIBUTING.md**: Bilingual contribution guidelines with setup instructions
-- **Security audit in CI**: Added `cargo audit` for dependency vulnerability scanning
-- **Incremental compilation cache**: ModuleCache with content-hash validation and dirty tracking
-- **Cache query methods**: `has_content_changed()`, `get_cached_mtime()`, `get_cached_hash()` for fine-grained cache control
-
-### Improved
-- **Release profile optimization**: LTO, strip, single codegen-unit for smaller binaries
-- **CI enhancement**: Clippy now checks all workspace crates, not just the main package
-- **Stack safety**: Converted recursive directory operations to iterative (prevents stack overflow on deep directories)
-- **Memory optimization**: Pre-allocated capacity for `partition()`, `filter()`, `map_attrs()`, `filter_attrs()` operations
-- **Zero warnings**: Fixed all clippy warnings including unused fields and manual `div_ceil` implementations
-
-### Fixed
-- **Super path resolution**: Fixed `super` import to correctly navigate module hierarchy (was skipping two levels instead of one in unit test)
-- **Type checker simplification**: Removed unused `name` and `generic_count` fields from StructInfo/EnumInfo/TypeAliasInfo
-
-### Developer Experience
-- **MSRV declaration**: Added `rust-version = "1.85"` for Rust 2024 edition
-- **Dev profile optimization**: Faster development builds with opt-level tuning
-
-## [0.6.1] - 2025-12-30
-
-### Fixed
-- **CI compatibility**: Resolved all clippy warnings for stable CI builds
-- **Code quality**: Fixed needless borrows, loop indexing patterns, and struct initialization
-
-## [0.6.0] - 2025-12-30
-
-### Added
-- **Tail Call Optimization (TCO)**: Recursive functions no longer cause stack overflow
-- **NAR format implementation**: Complete Nix ARchive format support for content-addressed storage
-- **Build analytics module**: Dependency graph visualization with DOT format export
-- **Enhanced CLI output**: Progress bars, spinners, tables, and colored output
-- **Security enhancements**: SecurityProfile for sandbox with seccomp, capabilities support
-- **Compression support**: gzip, xz, zstd for NAR archives
-
-### Improved
-- **Type error messages**: Better context and suggestions for type mismatches
-- **CLI commands**: All commands now use consistent output formatting
-- **Binary units**: Size formatting now uses correct binary units (KiB/MiB/GiB)
-- **Zero warnings**: Codebase compiles with no warnings, all code serves its purpose
-
-### Fixed
-- **NAR reader**: Fixed closing parenthesis handling in directory extraction
-- **Cache tests**: Fixed permission issues with store tests
-- **Rust 2024**: Fixed pattern matching for new edition rules
-
-## [0.5.0] - 2025-12-29
-
-### Added
-- **Bilingual source comments**: All source files now have English/Chinese comments
-- **Improved README**: Comprehensive installation guide with multiple methods
-
-### Improved
-- **Code documentation**: Better inline documentation across all crates
-
-## [0.4.1] - 2025-12-29
-
-### Added
-- **Terminal Markdown rendering**: `neve doc` now renders with colors and styling
-- **Windows one-line installer**: `irm .../install.ps1 | iex`
-
-### Improved
-- Cross-platform install documentation with collapsible sections
-- Better code block and table rendering in docs
-
-## [0.4.0] - 2025-12-29
-
-### Added
-- **`neve doc` command**: Man-like documentation viewer with embedded docs
-  - View any topic: `neve doc quickstart`, `neve doc api`, etc.
-  - Language filter: `--en` for English only, `--zh` for Chinese only
-  - Uses pager (less/more) for comfortable reading
-  - Available topics: quickstart, tutorial, spec, api, philosophy, install, changelog
-
-### Improved
-- **README redesign**: Cleaner layout with working anchor links for language switching
-- **Documentation overhaul**: All docs restructured with English first, Chinese second
-
-## [0.3.1] - 2025-12-29
-
-### Fixed
-- **REPL interactivity**: Bare expressions now evaluate correctly (like Python)
-- **Eval command**: Block expressions `{ let x = 1; x }` now work properly
-- **CI pipeline**: Fixed rustfmt/clippy component installation
-- **Cross-compilation**: aarch64-linux builds now use `cross` tool correctly
-
-### Improved
-- Expression handling in REPL with `prepare_repl_input()` preprocessing
-- CI workflow reliability across all platforms
-
-## [0.3.0] - 2025-12-29
-
-### Cross-Platform Support
-- **Windows/macOS**: Full language support (eval, repl, check, fmt, lsp)
-- **Docker build backend**: `--backend docker` option for sandbox builds on non-Linux
-- **Platform-aware CLI**: `neve info --platform` shows platform capabilities
-
-### Platform Matrix
-
-| Feature | Linux | macOS | Windows |
-|---------|-------|-------|---------|
-| Language Core | ✅ | ✅ | ✅ |
-| Native Sandbox Build | ✅ | ❌ | ❌ |
-| Docker Build | ✅ | ✅ | ✅ |
-| System Config | ✅ | ❌ | ❌ |
-
-## [0.2.0] - 2025-12-28
-
-### Major Features
-- **REPL environment persistence**: Variables and functions persist across inputs
-- **Module re-export fix**: Fixed infinite loop bug in `pub import`
-
-### REPL Enhancements
-- `:env` - Display current bindings
-- `:load <file>` - Load external file
-- `:clear` - Clear environment
-- Multi-line input support (trailing `\`)
-
-### Bug Fixes
-- Module re-export infinite loop
-- Import conflict resolution
-
-## [0.1.0] - 2024
-
-### Initial Release
-
-#### Language Core (95%)
-- Complete lexer (logos)
-- Recursive descent parser (LL(1)) + error recovery
-- Hindley-Milner type inference + Trait support
-- Tree-walking interpreter + lazy evaluation
-- Module system
-
-#### Standard Library
-- 9 modules: io, list, map, math, option, path, result, set, string
-
-#### Toolchain (80%)
-- LSP server
-- Code formatter
-- Interactive REPL
-- Diagnostic system
-
-#### Package Manager (60%)
-- Derivation model + hash verification
-- Content-addressed storage (BLAKE3)
-- Sandbox builder (Linux namespaces)
-- Source fetching (URL, Git, local)
-
-#### System Configuration (40%)
-- Configuration framework
-- Generation management
-
----
-
-<a name="chinese"></a>
-
-# 中文
-
-> 改了啥、啥时候改的、为啥改。
-
-## [未发布]
-
-### 新功能
-- (暂无)
-
-### 改进
-- (暂无)
-
-## [0.7.0] - 2026-01-08
-
-### 新功能
-- **前端流水线**: 新增 `neve-frontend`，统一 parse → HIR → typecheck 分析
-- **文档**: 新增入门文档与诊断手册，并扩展 `neve doc` 主题
-- **测试**: 增加 frontend 诊断、模块加载、格式化器、LSP 符号覆盖
-- **标准库导入**: AST 求值支持 `std.*` 模块覆盖
-
-### 改进
-- **LSP**: 使用前端流水线，修正 UTF-16 位置，并附加错误码链接
-- **格式化器**: 直接输出解析诊断，错误信息更清晰
-- **Eval/Run**: 导入模块解析出错时输出诊断
-- **CLI eval/run/build/repl**: `import std.*` 直接映射到 Rust 标准库模块
-- **CLI check**: 复用模块加载的解析诊断，避免重复解析
-- **文档准确性**: 修正文法/标准库/哲学文档与现状一致
-
-## [0.6.4] - 2025-12-30
-
-### 修复
-- **CI**: 使用 `taiki-e/install-action` 修复交叉编译设置
-- **格式化**: 修复代码格式化问题
-
-## [0.6.3] - 2025-12-30
-
-### 改进
-- **文档大改版**: 更新 docs/README.md 为综合文档中心
-- **架构文档**: 添加增量编译设计章节
-- **更新日志**: 同步所有 v0.6.2 变更
-
----
-
-## [0.6.2] - 2025-12-30
-
-### 新功能
-- **架构文档**: 为贡献者提供的全面指南 (`docs/architecture.md`)
-- **CONTRIBUTING.md**: 中英双语贡献指南，包含环境配置说明
-- **CI 安全审计**: 添加 `cargo audit` 检测依赖漏洞
-- **增量编译缓存**: ModuleCache 支持内容哈希验证和脏标记跟踪
-- **缓存查询方法**: `has_content_changed()`、`get_cached_mtime()`、`get_cached_hash()` 提供细粒度缓存控制
-
-### 改进
-- **Release 配置优化**: LTO、符号剥离、单代码生成单元，生成更小的二进制文件
-- **CI 增强**: Clippy 现在检查所有 workspace crate，而不仅是主包
-- **栈安全**: 将递归目录操作转换为迭代（防止深层目录栈溢出）
-- **内存优化**: 为 `partition()`、`filter()`、`map_attrs()`、`filter_attrs()` 操作预分配容量
-- **零警告**: 修复所有 clippy 警告，包括未使用字段和手动 `div_ceil` 实现
-
-### 修复
-- **Super 路径解析**: 修复 `super` 导入以正确导航模块层级（单元测试中原本跳过了两级而非一级）
-- **类型检查器简化**: 移除 StructInfo/EnumInfo/TypeAliasInfo 中未使用的 `name` 和 `generic_count` 字段
-
-### 开发体验
-- **MSRV 声明**: 添加 `rust-version = "1.85"` 支持 Rust 2024 edition
-- **开发配置优化**: 调整 opt-level 加快开发构建速度
-
-## [0.6.1] - 2025-12-30
-
-### 修复
-- **CI 兼容性**: 解决所有 clippy 警告，确保 CI 构建稳定
-- **代码质量**: 修复多余借用、循环索引模式和结构体初始化问题
-
-## [0.6.0] - 2025-12-30
-
-### 新功能
-- **尾调用优化 (TCO)**: 递归函数不再导致栈溢出
-- **NAR 格式实现**: 完整的 Nix ARchive 格式支持，用于内容寻址存储
-- **构建分析模块**: 依赖图可视化，支持 DOT 格式导出
-- **增强 CLI 输出**: 进度条、旋转器、表格和彩色输出
-- **安全增强**: 沙箱的 SecurityProfile，支持 seccomp、capabilities
-- **压缩支持**: NAR 归档支持 gzip、xz、zstd
-
-### 改进
-- **类型错误信息**: 类型不匹配时提供更好的上下文和建议
-- **CLI 命令**: 所有命令现在使用一致的输出格式
-- **二进制单位**: 大小格式化现在使用正确的二进制单位 (KiB/MiB/GiB)
-- **零警告**: 代码库编译无警告，所有代码都发挥作用
-
-### 修复
-- **NAR 读取器**: 修复目录提取时的闭括号处理
-- **缓存测试**: 修复存储测试的权限问题
-- **Rust 2024**: 修复新版本规则的模式匹配
-
-## [0.5.0] - 2025-12-29
-
-### 新功能
-- **双语源码注释**: 所有源文件现在都有中英文注释
-- **改进的 README**: 包含多种安装方法的综合安装指南
-
-### 改进
-- **代码文档**: 所有 crate 的内联文档更完善
-
-## [0.4.1] - 2025-12-29
-
-### 新功能
-- **终端 Markdown 渲染**: `neve doc` 现在有颜色和样式了
-- **Windows 一键安装**: `irm .../install.ps1 | iex`
-
-### 改进
-- 跨平台安装文档，用折叠面板分类
-- 代码块和表格渲染效果更好
-
-## [0.4.0] - 2025-12-29
-
-### 新功能
-- **`neve doc` 命令**: 类似 man 的文档查看器，文档直接嵌入二进制
-  - 查看任意主题: `neve doc quickstart`、`neve doc api` 等
-  - 语言过滤: `--en` 只看英文，`--zh` 只看中文
-  - 自动用分页器 (less/more) 显示，看着舒服
-  - 支持主题: quickstart、tutorial、spec、api、philosophy、install、changelog
-
-### 改进
-- **README 重新设计**: 更简洁的布局，中英文跳转链接真正可用了
-- **文档大改版**: 所有文档重新组织，英文在上中文在下
-
-## [0.3.1] - 2025-12-29
-
-### 修复
-- **REPL 交互**: 直接输表达式现在能正常算了（跟 Python 一样）
-- **Eval 命令**: 块表达式 `{ let x = 1; x }` 现在能跑了
-- **CI 流水线**: 修好了 rustfmt/clippy 组件安装问题
-- **交叉编译**: aarch64-linux 构建现在用 `cross` 工具能正常跑了
-
-### 改进
-- REPL 里加了 `prepare_repl_input()` 预处理表达式
-- CI 工作流在所有平台上都更稳定了
-
-## [0.3.0] - 2025-12-29
-
-### 跨平台支持
-- **Windows/macOS**: 语言功能全都能用（eval、repl、check、fmt、lsp）
-- **Docker 构建后端**: 加了 `--backend docker` 选项，非 Linux 平台也能沙箱构建
-- **平台感知 CLI**: `neve info --platform` 能显示当前平台支持啥
-
-### 平台功能表
-
-| 功能 | Linux | macOS | Windows |
-|------|-------|-------|---------|
-| 语言核心 | ✅ | ✅ | ✅ |
-| 原生沙箱构建 | ✅ | ❌ | ❌ |
-| Docker 构建 | ✅ | ✅ | ✅ |
-| 系统配置 | ✅ | ❌ | ❌ |
-
-## [0.2.0] - 2025-12-28
-
-### 主要功能
-- **REPL 环境持久化**: 变量和函数在会话里一直保持
-- **模块重导出修复**: 修好了 `pub import` 的死循环 bug
-
-### REPL 增强
-- `:env` - 显示当前绑定的东西
-- `:load <file>` - 加载外部文件
-- `:clear` - 清空环境
-- 支持多行输入（行尾加 `\`）
-
-### Bug 修复
-- 模块重导出死循环
-- Import 冲突解析
-
-## [0.1.0] - 2024
-
-### 初始版本
-
-#### 语言核心 (95%)
-- 完整的词法分析器 (logos)
-- 递归下降解析器 (LL(1)) + 错误恢复
-- Hindley-Milner 类型推导 + Trait 支持
-- 树遍历解释器 + 惰性求值
-- 模块系统
-
-#### 标准库
-- 9 个模块: io、list、map、math、option、path、result、set、string
-
-#### 工具链 (80%)
-- LSP 服务器
-- 代码格式化器
-- 交互式 REPL
-- 诊断系统
-
-#### 包管理 (60%)
-- Derivation 模型 + 哈希校验
-- 内容寻址存储 (BLAKE3)
-- 沙箱构建器 (Linux 命名空间)
-- 源码获取 (URL、Git、本地)
-
-#### 系统配置 (40%)
-- 配置框架
-- 代际管理
-
----
-
-[0.6.3]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.2...v0.6.3
-[0.6.2]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.1...v0.6.2
-[0.6.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.1...v0.5.0
-[0.4.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.1...v0.4.0
-[0.3.1]: https://github.com/MCB-SMART-BOY/neve/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/MCB-SMART-BOY/neve/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/MCB-SMART-BOY/neve/releases/tag/v0.1.0
-
----
-
 <div align="center">
 
-```
-═══════════════════════════════════════════════════════════════════════════════
-                     Every version tells a story.
-═══════════════════════════════════════════════════════════════════════════════
-```
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Changelog</h1>
+
+<p><em>更新日志</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong>
+</p>
 
 </div>
+
+Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)。
+
+---
+
+> *What changed, when, and why.*  
+> 更新日志：记录改变、时间和原因。
+
+## [Unreleased] / 未发布
+
+### Added / 新增
+- (nothing yet)
+
+### Improved / 改进
+- (nothing yet)
+
+## [1.0.0] - 2026-01-31
+
+### Added / 新增
+- **Arbitrary-precision integers**: `Int` is now BigInt across lexer/parser/eval/typeck/stdlib. / `Int` 升级为任意精度 BigInt，覆盖词法/解析/求值/类型检查/标准库。
+- **Logo assets**: SVG variants (glow/transparent), PNG sizes, and ICO exports. / Logo 资源包含 SVG（含光晕/透明）、多尺寸 PNG 与 ICO。
+- **Documentation topics**: diagnostics, architecture, onboarding now available via `neve doc`. / `neve doc` 新增 diagnostics、architecture、onboarding 等主题。
+
+### Improved / 改进
+- **Docs overhaul**: All docs unified as bilingual (EN/中文) with consistent headers. / 文档整体统一为中英双语结构并统一视觉头部。
+- **`neve doc` UX**: smarter topic matching, alias support, cleaner terminal rendering. / `neve doc` 支持别名与前缀匹配，渲染更干净。
+- **Runtime safety**: conversions and indexing guard against overflow and negative indices. / 运行时更安全，转换与索引处理更稳健。
+- **Release pipeline**: cross-platform artifacts produced by GitHub Actions. / Release 流水线使用 GitHub Actions 跨平台构建。
+
+### Fixed / 修复
+- **Numeric parsing**: integer parsing handles large values reliably. / 大整数解析更稳定。
+- **Stdlib consistency**: map/set/list utilities align with BigInt semantics. / 标准库与 BigInt 语义一致。
+
+## [0.7.0] - 2026-01-08
+
+### Added / 新增
+- **Frontend pipeline**: New `neve-frontend` crate for parse → HIR → typecheck analysis / **前端流水线**: 新增 `neve-frontend`，统一 parse → HIR → typecheck 分析
+- **Docs**: Onboarding + diagnostics references, new `neve doc` topics / **文档**: 新增入门文档与诊断手册，并扩展 `neve doc` 主题
+- **Tests**: Frontend diagnostics, module loader, formatter, and LSP symbol coverage / **测试**: 增加 frontend 诊断、模块加载、格式化器、LSP 符号覆盖
+- **Stdlib imports**: `std.*` module overrides for AST evaluation / **标准库导入**: AST 求值支持 `std.*` 模块覆盖
+
+### Improved / 改进
+- **LSP**: Uses the frontend pipeline, fixes UTF-16 positions, adds diagnostic code links / **LSP**: 使用前端流水线，修正 UTF-16 位置，并附加错误码链接
+- **Formatter**: Surfaces parser diagnostics for better error reporting / **格式化器**: 直接输出解析诊断，错误信息更清晰
+- **Eval/Run**: Emits parse diagnostics for imported modules / **Eval/Run**: 导入模块解析出错时输出诊断
+- **CLI eval/run/build/repl**: `import std.*` now resolves to the Rust stdlib modules / **CLI eval/run/build/repl**: `import std.*` 直接映射到 Rust 标准库模块
+- **CLI check**: Reuses module loader parse diagnostics to avoid double parsing / **CLI check**: 复用模块加载的解析诊断，避免重复解析
+- **Docs accuracy**: Spec/API/philosophy updated to match current syntax and stdlib / **文档准确性**: 修正文法/标准库/哲学文档与现状一致
+
+## [0.6.4] - 2025-12-30
+
+### Fixed / 修复
+- **CI**: Fixed cross-compilation setup using `taiki-e/install-action` / **CI**: 使用 `taiki-e/install-action` 修复交叉编译设置
+- **Formatting**: Fixed code formatting issues / **格式化**: 修复代码格式化问题
+
+## [0.6.3] - 2025-12-30
+
+### Improved / 改进
+- **Documentation overhaul**: Updated docs/README.md as comprehensive documentation hub / **文档大改版**: 更新 docs/README.md 为综合文档中心
+- **Architecture docs**: Added incremental compilation design section / **架构文档**: 添加增量编译设计章节
+- **Changelog**: Synchronized with all v0.6.2 changes / **更新日志**: 同步所有 v0.6.2 变更
+
+## [0.6.2] - 2025-12-30
+
+### Added / 新增
+- **Architecture documentation**: Comprehensive guide for contributors (`docs/architecture.md`) / **架构文档**: 为贡献者提供的全面指南 (`docs/architecture.md`)
+- **CONTRIBUTING.md**: Bilingual contribution guidelines with setup instructions / **CONTRIBUTING.md**: 中英双语贡献指南，包含环境配置说明
+- **Security audit in CI**: Added `cargo audit` for dependency vulnerability scanning / **CI 安全审计**: 添加 `cargo audit` 检测依赖漏洞
+- **Incremental compilation cache**: ModuleCache with content-hash validation and dirty tracking / **增量编译缓存**: ModuleCache 支持内容哈希验证和脏标记跟踪
+- **Cache query methods**: `has_content_changed()`, `get_cached_mtime()`, `get_cached_hash()` for fine-grained cache control / **缓存查询方法**: `has_content_changed()`、`get_cached_mtime()`、`get_cached_hash()` 提供细粒度缓存控制
+
+### Improved / 改进
+- **Release profile optimization**: LTO, strip, single codegen-unit for smaller binaries / **Release 配置优化**: LTO、符号剥离、单代码生成单元，生成更小的二进制文件
+- **CI enhancement**: Clippy now checks all workspace crates, not just the main package / **CI 增强**: Clippy 现在检查所有 workspace crate，而不仅是主包
+- **Stack safety**: Converted recursive directory operations to iterative (prevents stack overflow on deep directories) / **栈安全**: 将递归目录操作转换为迭代（防止深层目录栈溢出）
+- **Memory optimization**: Pre-allocated capacity for `partition()`, `filter()`, `map_attrs()`, `filter_attrs()` operations / **内存优化**: 为 `partition()`、`filter()`、`map_attrs()`、`filter_attrs()` 操作预分配容量
+- **Zero warnings**: Fixed all clippy warnings including unused fields and manual `div_ceil` implementations / **零警告**: 修复所有 clippy 警告，包括未使用字段和手动 `div_ceil` 实现
+
+### Fixed / 修复
+- **Super path resolution**: Fixed `super` import to correctly navigate module hierarchy (was skipping two levels instead of one in unit test) / **Super 路径解析**: 修复 `super` 导入以正确导航模块层级（单元测试中原本跳过了两级而非一级）
+- **Type checker simplification**: Removed unused `name` and `generic_count` fields from StructInfo/EnumInfo/TypeAliasInfo / **类型检查器简化**: 移除 StructInfo/EnumInfo/TypeAliasInfo 中未使用的 `name` 和 `generic_count` 字段
+- **MSRV declaration**: Added `rust-version = "1.85"` for Rust 2024 edition / **MSRV 声明**: 添加 `rust-version = "1.85"` 支持 Rust 2024 edition
+- **Dev profile optimization**: Faster development builds with opt-level tuning / **开发配置优化**: 调整 opt-level 加快开发构建速度
+
+## [0.6.1] - 2025-12-30
+
+### Fixed / 修复
+- **CI compatibility**: Resolved all clippy warnings for stable CI builds / **CI 兼容性**: 解决所有 clippy 警告，确保 CI 构建稳定
+- **Code quality**: Fixed needless borrows, loop indexing patterns, and struct initialization / **代码质量**: 修复多余借用、循环索引模式和结构体初始化问题
+
+## [0.6.0] - 2025-12-30
+
+### Added / 新增
+- **Tail Call Optimization (TCO)**: Recursive functions no longer cause stack overflow / **尾调用优化 (TCO)**: 递归函数不再导致栈溢出
+- **NAR format implementation**: Complete Nix ARchive format support for content-addressed storage / **NAR 格式实现**: 完整的 Nix ARchive 格式支持，用于内容寻址存储
+- **Build analytics module**: Dependency graph visualization with DOT format export / **构建分析模块**: 依赖图可视化，支持 DOT 格式导出
+- **Enhanced CLI output**: Progress bars, spinners, tables, and colored output / **增强 CLI 输出**: 进度条、旋转器、表格和彩色输出
+- **Security enhancements**: SecurityProfile for sandbox with seccomp, capabilities support / **安全增强**: 沙箱的 SecurityProfile，支持 seccomp、capabilities
+- **Compression support**: gzip, xz, zstd for NAR archives / **压缩支持**: NAR 归档支持 gzip、xz、zstd
+
+### Improved / 改进
+- **Type error messages**: Better context and suggestions for type mismatches / **类型错误信息**: 类型不匹配时提供更好的上下文和建议
+- **CLI commands**: All commands now use consistent output formatting / **CLI 命令**: 所有命令现在使用一致的输出格式
+- **Binary units**: Size formatting now uses correct binary units (KiB/MiB/GiB) / **二进制单位**: 大小格式化现在使用正确的二进制单位 (KiB/MiB/GiB)
+- **Zero warnings**: Codebase compiles with no warnings, all code serves its purpose / **零警告**: 代码库编译无警告，所有代码都发挥作用
+
+### Fixed / 修复
+- **NAR reader**: Fixed closing parenthesis handling in directory extraction / **NAR 读取器**: 修复目录提取时的闭括号处理
+- **Cache tests**: Fixed permission issues with store tests / **缓存测试**: 修复存储测试的权限问题
+- **Rust 2024**: Fixed pattern matching for new edition rules / **Rust 2024**: 修复新版本规则的模式匹配
+
+## [0.5.0] - 2025-12-29
+
+### Added / 新增
+- **Bilingual source comments**: All source files now have English/Chinese comments / **双语源码注释**: 所有源文件现在都有中英文注释
+- **Improved README**: Comprehensive installation guide with multiple methods / **改进的 README**: 包含多种安装方法的综合安装指南
+
+### Improved / 改进
+- **Code documentation**: Better inline documentation across all crates / **代码文档**: 所有 crate 的内联文档更完善
+
+## [0.4.1] - 2025-12-29
+
+### Added / 新增
+- **Terminal Markdown rendering**: `neve doc` now renders with colors and styling / **终端 Markdown 渲染**: `neve doc` 现在有颜色和样式了
+- **Windows one-line installer**: `irm .../install.ps1 | iex` / **Windows 一键安装**: `irm .../install.ps1 | iex`
+
+### Improved / 改进
+- Cross-platform install documentation with collapsible sections / 跨平台安装文档，用折叠面板分类
+- Better code block and table rendering in docs / 代码块和表格渲染效果更好
+
+## [0.4.0] - 2025-12-29
+
+### Added / 新增
+- **`neve doc` command**: Man-like documentation viewer with embedded docs / **`neve doc` 命令**: 类似 man 的文档查看器，文档直接嵌入二进制
+- View any topic: `neve doc quickstart`, `neve doc api`, etc. / 查看任意主题: `neve doc quickstart`、`neve doc api` 等
+- Uses pager (less/more) for comfortable reading / 自动用分页器 (less/more) 显示，看着舒服
+- Available topics: quickstart, tutorial, spec, api, philosophy, install, changelog / 支持主题: quickstart、tutorial、spec、api、philosophy、install、changelog
+
+### Improved / 改进
+- **README redesign**: Cleaner layout and improved structure / **README 重新设计**: 更简洁的布局与结构优化
+- **Documentation overhaul**: All docs restructured for clarity / **文档大改版**: 文档结构更清晰
+
+## [0.3.1] - 2025-12-29
+
+### Fixed / 修复
+- **REPL interactivity**: Bare expressions now evaluate correctly (like Python) / **REPL 交互**: 直接输表达式现在能正常算了（跟 Python 一样）
+- **Eval command**: Block expressions `{ let x = 1; x }` now work properly / **Eval 命令**: 块表达式 `{ let x = 1; x }` 现在能跑了
+- **CI pipeline**: Fixed rustfmt/clippy component installation / **CI 流水线**: 修好了 rustfmt/clippy 组件安装问题
+- **Cross-compilation**: aarch64-linux builds now use `cross` tool correctly / **交叉编译**: aarch64-linux 构建现在用 `cross` 工具能正常跑了
+
+### Improved / 改进
+- Expression handling in REPL with `prepare_repl_input()` preprocessing / REPL 里加了 `prepare_repl_input()` 预处理表达式
+- CI workflow reliability across all platforms / CI 工作流在所有平台上都更稳定了
+
+## [0.3.0] - 2025-12-29
+
+## [0.2.0] - 2025-12-28
+
+## [0.1.0] - 2024

@@ -58,17 +58,9 @@ enum Commands {
 
     /// View documentation (like man pages). / 查看文档（类似 man 手册）。
     Doc {
-        /// Topic to view (quickstart, tutorial, spec, api, philosophy, install, changelog).
-        /// 要查看的主题（quickstart, tutorial, spec, api, philosophy, install, changelog）。
+        /// Topic to view (quickstart, tutorial, spec, api, diagnostics, philosophy, install, architecture, onboarding, changelog).
+        /// 要查看的主题（quickstart, tutorial, spec, api, diagnostics, philosophy, install, architecture, onboarding, changelog）。
         topic: Option<String>,
-
-        /// Show only English section. / 仅显示英文部分。
-        #[arg(long)]
-        en: bool,
-
-        /// Show only Chinese section. / 仅显示中文部分。
-        #[arg(long)]
-        zh: bool,
 
         /// List all available topics. / 列出所有可用主题。
         #[arg(long, short)]
@@ -222,23 +214,11 @@ fn main() {
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
         Commands::Repl => commands::repl::run(),
-        Commands::Doc {
-            topic,
-            en,
-            zh,
-            list,
-        } => {
+        Commands::Doc { topic, list } => {
             if list || topic.is_none() {
                 commands::doc::list()
             } else {
-                let lang = if en {
-                    Some("en")
-                } else if zh {
-                    Some("zh")
-                } else {
-                    None
-                };
-                commands::doc::view(topic.as_deref().unwrap(), lang)
+                commands::doc::view(topic.as_deref().unwrap())
             }
         }
         Commands::Info { package, platform } => {

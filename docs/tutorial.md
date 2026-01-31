@@ -1,24 +1,24 @@
-```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                            COMPLETE TUTORIAL                                  ║
-║                               完整教程                                         ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-```
+<div align="center">
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  [English]  #english   ──→  Basics / Types / Patterns / Traits / Modules   │
-│  [中文]     #chinese   ──→  基础 / 类型 / 匹配 / Trait / 模块              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Complete Tutorial</h1>
+
+<p><em>完整教程</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong>
+</p>
+
+</div>
 
 ---
 
-<a name="english"></a>
+> Learn the language from basics to modules. / 从基础到模块的完整教程。
 
-# English
+## 1. Basics / 基础
 
-## 1. Basics
 
 ### Values and Bindings
 
@@ -87,193 +87,6 @@ let result = {
 
 ---
 
-## 2. Type System
-
-### Basic Types
-
-```neve
-Int, Float, Bool, Char, String, Unit
-```
-
-### Compound Types
-
-```neve
--- Tuple
-type Point = (Int, Int);
-
--- List
-type Numbers = List<Int>;
-
--- Record type
-type User = #{ name: String, age: Int };
-```
-
-### Generics
-
-```neve
-fn first<T>(xs: List<T>) -> Option<T> = match xs {
-    [] -> None,
-    [h, ..] -> Some(h),
-};
-
-fn identity<T>(x: T) -> T = x;
-```
-
-### Type Inference
-
-Neve uses Hindley-Milner:
-
-```neve
-let double = fn(x) x * 2;     -- inferred: Int -> Int
-let id = fn(x) x;             -- inferred: forall a. a -> a
-```
-
----
-
-## 3. Pattern Matching
-
-### Basics
-
-```neve
-fn describe(x) = match x {
-    0 -> "zero",
-    1 -> "one",
-    n -> `other: {n}`,
-};
-```
-
-### Lists
-
-```neve
-fn sum(xs) = match xs {
-    [] -> 0,
-    [h, ..t] -> h + sum(t),
-};
-```
-
-### Records
-
-```neve
-fn getName(user) = match user {
-    #{ name, .. } -> name,
-};
-
-fn isAdult(user) = match user {
-    #{ age } if age >= 18 -> true,
-    _ -> false,
-};
-```
-
-### Option and Result
-
-```neve
-fn divide(a, b) = {
-    if b == 0 then Err("div by zero")
-    else Ok(a / b)
-};
-
-match divide(10, 2) {
-    Ok(n) -> `Got: {n}`,
-    Err(e) -> `Error: {e}`,
-}
-```
-
----
-
-## 4. Traits
-
-### Define
-
-```neve
-trait Show {
-    fn show(self) -> String;
-};
-
-trait Eq {
-    fn eq(self, other: Self) -> Bool;
-};
-```
-
-### Implement
-
-```neve
-struct Point { x: Int, y: Int };
-
-impl Show for Point {
-    fn show(self) = `Point({self.x}, {self.y})`;
-};
-
-impl Eq for Point {
-    fn eq(self, other) = self.x == other.x && self.y == other.y;
-};
-```
-
-### Bounds
-
-```neve
-fn print_all<T: Show>(items: List<T>) = {
-    -- T must implement Show
-};
-```
-
----
-
-## 5. Modules
-
-### Define
-
-```neve
--- utils.neve
-pub fn add(x, y) = x + y;
-fn helper() = 42;  -- private
-```
-
-### Import
-
-```neve
-import utils;
-let r = utils.add(1, 2);
-
--- Or selective
-import utils (add);
-let r = add(1, 2);
-```
-
----
-
-## 6. Best Practices
-
-1. **Use type annotations** for public APIs
-2. **Prefer immutable data** (it's the only option anyway)
-3. **Use tail recursion** for large iterations
-4. **Use pipes** for data transformation chains
-5. **Match exhaustively** — handle all cases
-
-```neve
-import std.list (filter, map, fold);
-
--- Good: clear data flow
-let result = data
-    |> filter(valid)
-    |> map(transform)
-    |> fold(0, add);
-```
-
----
-
-## Next
-
-- [Spec](spec.md) — full language reference
-- [API](api.md) — standard library
-- [Philosophy](philosophy.md) — why these design choices
-
----
-
-<a name="chinese"></a>
-
-# 中文
-
-## 1. 基础
 
 ### 值和绑定
 
@@ -342,7 +155,51 @@ let result = {
 
 ---
 
-## 2. 类型系统
+
+## 2. Type System / 类型系统
+
+
+### Basic Types
+
+```neve
+Int, Float, Bool, Char, String, Unit
+```
+
+### Compound Types
+
+```neve
+-- Tuple
+type Point = (Int, Int);
+
+-- List
+type Numbers = List<Int>;
+
+-- Record type
+type User = #{ name: String, age: Int };
+```
+
+### Generics
+
+```neve
+fn first<T>(xs: List<T>) -> Option<T> = match xs {
+    [] -> None,
+    [h, ..] -> Some(h),
+};
+
+fn identity<T>(x: T) -> T = x;
+```
+
+### Type Inference
+
+Neve uses Hindley-Milner:
+
+```neve
+let double = fn(x) x * 2;     -- inferred: Int -> Int
+let id = fn(x) x;             -- inferred: forall a. a -> a
+```
+
+---
+
 
 ### 基本类型
 
@@ -385,7 +242,58 @@ let id = fn(x) x;             -- 推导出：forall a. a -> a
 
 ---
 
-## 3. 模式匹配
+
+## 3. Pattern Matching / 模式匹配
+
+
+### Basics
+
+```neve
+fn describe(x) = match x {
+    0 -> "zero",
+    1 -> "one",
+    n -> `other: {n}`,
+};
+```
+
+### Lists
+
+```neve
+fn sum(xs) = match xs {
+    [] -> 0,
+    [h, ..t] -> h + sum(t),
+};
+```
+
+### Records
+
+```neve
+fn getName(user) = match user {
+    #{ name, .. } -> name,
+};
+
+fn isAdult(user) = match user {
+    #{ age } if age >= 18 -> true,
+    _ -> false,
+};
+```
+
+### Option and Result
+
+```neve
+fn divide(a, b) = {
+    if b == 0 then Err("div by zero")
+    else Ok(a / b)
+};
+
+match divide(10, 2) {
+    Ok(n) -> `Got: {n}`,
+    Err(e) -> `Error: {e}`,
+}
+```
+
+---
+
 
 ### 基础
 
@@ -435,7 +343,46 @@ match divide(10, 2) {
 
 ---
 
-## 4. Trait
+
+## 4. Traits / Trait
+
+
+### Define
+
+```neve
+trait Show {
+    fn show(self) -> String;
+};
+
+trait Eq {
+    fn eq(self, other: Self) -> Bool;
+};
+```
+
+### Implement
+
+```neve
+struct Point { x: Int, y: Int };
+
+impl Show for Point {
+    fn show(self) = `Point({self.x}, {self.y})`;
+};
+
+impl Eq for Point {
+    fn eq(self, other) = self.x == other.x && self.y == other.y;
+};
+```
+
+### Bounds
+
+```neve
+fn print_all<T: Show>(items: List<T>) = {
+    -- T must implement Show
+};
+```
+
+---
+
 
 ### 定义
 
@@ -473,7 +420,31 @@ fn print_all<T: Show>(items: List<T>) = {
 
 ---
 
-## 5. 模块
+
+## 5. Modules / 模块
+
+
+### Define
+
+```neve
+-- utils.neve
+pub fn add(x, y) = x + y;
+fn helper() = 42;  -- private
+```
+
+### Import
+
+```neve
+import utils;
+let r = utils.add(1, 2);
+
+-- Or selective
+import utils (add);
+let r = add(1, 2);
+```
+
+---
+
 
 ### 定义
 
@@ -496,7 +467,28 @@ let r = add(1, 2);
 
 ---
 
-## 6. 写代码的建议
+
+## 6. Best Practices / 写代码的建议
+
+
+1. **Use type annotations** for public APIs
+2. **Prefer immutable data** (it's the only option anyway)
+3. **Use tail recursion** for large iterations
+4. **Use pipes** for data transformation chains
+5. **Match exhaustively** — handle all cases
+
+```neve
+import std.list (filter, map, fold);
+
+-- Good: clear data flow
+let result = data
+    |> filter(valid)
+    |> map(transform)
+    |> fold(0, add);
+```
+
+---
+
 
 1. **公开 API 加上类型注解**，方便别人用
 2. **数据都是不可变的**，习惯就好
@@ -516,7 +508,16 @@ let result = data
 
 ---
 
-## 接下来
+
+## Next / 接下来
+
+
+- [Spec](spec.md) — full language reference
+- [API](api.md) — standard library
+- [Philosophy](philosophy.md) — why these design choices
+
+---
+
 
 - [语言规范](spec.md) — 完整语法参考
 - [标准库](api.md) — API 文档

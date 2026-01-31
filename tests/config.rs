@@ -410,7 +410,7 @@ fn test_module_set_string_value() {
 
 #[test]
 fn test_module_set_int_value() {
-    let module = Module::new("test").set("count", Value::Int(42));
+    let module = Module::new("test").set("count", Value::Int(42.into()));
 
     assert!(module.config.contains_key("count"));
 }
@@ -426,7 +426,7 @@ fn test_module_set_bool_value() {
 fn test_module_set_list_value() {
     let module = Module::new("test").set(
         "items",
-        Value::List(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+        Value::List(Rc::new(vec![Value::Int(1.into()), Value::Int(2.into()), Value::Int(3.into())])),
     );
 
     assert!(module.config.contains_key("items"));
@@ -435,11 +435,11 @@ fn test_module_set_list_value() {
 #[test]
 fn test_module_overwrite_value() {
     let module = Module::new("test")
-        .set("key", Value::Int(1))
-        .set("key", Value::Int(2));
+        .set("key", Value::Int(1.into()))
+        .set("key", Value::Int(2.into()));
 
     match module.config.get("key") {
-        Some(Value::Int(n)) => assert_eq!(*n, 2),
+        Some(Value::Int(n)) => assert_eq!(n, &2.into()),
         _ => panic!("Expected Int(2)"),
     }
 }

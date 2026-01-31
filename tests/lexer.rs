@@ -52,10 +52,10 @@ fn test_numbers() {
     assert_eq!(
         lex("42 3.25 0xFF 0b1010"),
         vec![
-            TokenKind::Int(42),
+            TokenKind::Int(42.into()),
             TokenKind::Float(3.25),
-            TokenKind::Int(255),
-            TokenKind::Int(10),
+            TokenKind::Int(255.into()),
+            TokenKind::Int(10.into()),
             TokenKind::Eof,
         ]
     );
@@ -98,7 +98,7 @@ fn test_record_literal() {
             TokenKind::HashLBrace,
             TokenKind::Ident("x".to_string()),
             TokenKind::Eq,
-            TokenKind::Int(1),
+            TokenKind::Int(1.into()),
             TokenKind::RBrace,
             TokenKind::Eof,
         ]
@@ -109,7 +109,7 @@ fn test_record_literal() {
 fn test_comments() {
     assert_eq!(
         lex("1 -- comment\n2"),
-        vec![TokenKind::Int(1), TokenKind::Int(2), TokenKind::Eof,]
+        vec![TokenKind::Int(1.into()), TokenKind::Int(2.into()), TokenKind::Eof,]
     );
 }
 
@@ -148,7 +148,7 @@ fn test_brackets() {
 
 #[test]
 fn test_number_zero() {
-    assert_eq!(lex("0")[0], TokenKind::Int(0));
+    assert_eq!(lex("0")[0], TokenKind::Int(0.into()));
 }
 
 #[test]
@@ -156,12 +156,12 @@ fn test_number_negative() {
     // Negative numbers are parsed as unary minus + number
     let tokens = lex("-42");
     assert!(tokens.contains(&TokenKind::Minus));
-    assert!(tokens.contains(&TokenKind::Int(42)));
+    assert!(tokens.contains(&TokenKind::Int(42.into())));
 }
 
 #[test]
 fn test_number_large() {
-    assert_eq!(lex("9999999999")[0], TokenKind::Int(9999999999));
+    assert_eq!(lex("9999999999")[0], TokenKind::Int(9999999999_i64.into()));
 }
 
 #[test]
@@ -187,31 +187,31 @@ fn test_float_scientific_notation() {
 
 #[test]
 fn test_hex_lowercase() {
-    assert_eq!(lex("0xff")[0], TokenKind::Int(255));
+    assert_eq!(lex("0xff")[0], TokenKind::Int(255.into()));
 }
 
 #[test]
 fn test_hex_uppercase() {
-    assert_eq!(lex("0XFF")[0], TokenKind::Int(255));
+    assert_eq!(lex("0XFF")[0], TokenKind::Int(255.into()));
 }
 
 #[test]
 fn test_hex_mixed_case() {
-    assert_eq!(lex("0xAbCdEf")[0], TokenKind::Int(0xABCDEF));
+    assert_eq!(lex("0xAbCdEf")[0], TokenKind::Int(0xABCDEF.into()));
 }
 
 #[test]
 fn test_binary_number() {
-    assert_eq!(lex("0b11111111")[0], TokenKind::Int(255));
+    assert_eq!(lex("0b11111111")[0], TokenKind::Int(255.into()));
 }
 
-#[test]
-fn test_octal_number() {
-    let tokens = lex("0o777");
-    if let TokenKind::Int(n) = tokens[0] {
-        assert_eq!(n, 0o777);
+    #[test]
+    fn test_octal_number() {
+        let tokens = lex("0o777");
+        if let TokenKind::Int(n) = &tokens[0] {
+            assert_eq!(n, &0o777.into());
+        }
     }
-}
 
 // ============================================================================
 // Edge Cases - Strings
@@ -388,33 +388,33 @@ fn test_operator_no_space() {
 
 #[test]
 fn test_comment_at_start() {
-    assert_eq!(lex("-- comment\n42")[0], TokenKind::Int(42));
+    assert_eq!(lex("-- comment\n42")[0], TokenKind::Int(42.into()));
 }
 
 #[test]
 fn test_comment_at_end() {
     let tokens = lex("42 -- comment");
-    assert_eq!(tokens[0], TokenKind::Int(42));
+    assert_eq!(tokens[0], TokenKind::Int(42.into()));
     assert_eq!(tokens[1], TokenKind::Eof);
 }
 
 #[test]
 fn test_multiple_comments() {
     let tokens = lex("-- first\n1 -- second\n2 -- third");
-    assert!(tokens.contains(&TokenKind::Int(1)));
-    assert!(tokens.contains(&TokenKind::Int(2)));
+    assert!(tokens.contains(&TokenKind::Int(1.into())));
+    assert!(tokens.contains(&TokenKind::Int(2.into())));
 }
 
 #[test]
 fn test_empty_comment() {
     let tokens = lex("--\n42");
-    assert_eq!(tokens[0], TokenKind::Int(42));
+    assert_eq!(tokens[0], TokenKind::Int(42.into()));
 }
 
 #[test]
 fn test_comment_with_code_like_content() {
     let tokens = lex("-- let x = 42\n1");
-    assert_eq!(tokens[0], TokenKind::Int(1));
+    assert_eq!(tokens[0], TokenKind::Int(1.into()));
 }
 
 // ============================================================================
@@ -423,29 +423,29 @@ fn test_comment_with_code_like_content() {
 
 #[test]
 fn test_multiple_spaces() {
-    assert_eq!(lex("1    2")[0], TokenKind::Int(1));
-    assert_eq!(lex("1    2")[1], TokenKind::Int(2));
+    assert_eq!(lex("1    2")[0], TokenKind::Int(1.into()));
+    assert_eq!(lex("1    2")[1], TokenKind::Int(2.into()));
 }
 
 #[test]
 fn test_tabs() {
-    assert_eq!(lex("1\t2")[0], TokenKind::Int(1));
-    assert_eq!(lex("1\t2")[1], TokenKind::Int(2));
+    assert_eq!(lex("1\t2")[0], TokenKind::Int(1.into()));
+    assert_eq!(lex("1\t2")[1], TokenKind::Int(2.into()));
 }
 
 #[test]
 fn test_newlines() {
     let tokens = lex("1\n2\n3");
-    assert!(tokens.contains(&TokenKind::Int(1)));
-    assert!(tokens.contains(&TokenKind::Int(2)));
-    assert!(tokens.contains(&TokenKind::Int(3)));
+    assert!(tokens.contains(&TokenKind::Int(1.into())));
+    assert!(tokens.contains(&TokenKind::Int(2.into())));
+    assert!(tokens.contains(&TokenKind::Int(3.into())));
 }
 
 #[test]
 fn test_crlf() {
     let tokens = lex("1\r\n2");
-    assert!(tokens.contains(&TokenKind::Int(1)));
-    assert!(tokens.contains(&TokenKind::Int(2)));
+    assert!(tokens.contains(&TokenKind::Int(1.into())));
+    assert!(tokens.contains(&TokenKind::Int(2.into())));
 }
 
 #[test]
@@ -695,8 +695,8 @@ fn test_float_very_large() {
 fn test_consecutive_numbers() {
     // Should not merge
     let tokens = lex("123 456");
-    assert_eq!(tokens[0], TokenKind::Int(123));
-    assert_eq!(tokens[1], TokenKind::Int(456));
+    assert_eq!(tokens[0], TokenKind::Int(123.into()));
+    assert_eq!(tokens[1], TokenKind::Int(456.into()));
 }
 
 #[test]
@@ -883,25 +883,25 @@ fn test_mixed_comparison() {
 #[test]
 fn test_nested_block_comment() {
     let tokens = lex("-- outer -- inner -- still outer --\n42");
-    assert!(tokens.contains(&TokenKind::Int(42)));
+    assert!(tokens.contains(&TokenKind::Int(42.into())));
 }
 
 #[test]
 fn test_comment_with_special_chars() {
     let tokens = lex("-- 你好 🎉 @#$%^& --\n1");
-    assert!(tokens.contains(&TokenKind::Int(1)));
+    assert!(tokens.contains(&TokenKind::Int(1.into())));
 }
 
 #[test]
 fn test_comment_immediately_after_token() {
     let tokens = lex("42-- comment");
-    assert!(tokens.contains(&TokenKind::Int(42)));
+    assert!(tokens.contains(&TokenKind::Int(42.into())));
 }
 
 #[test]
 fn test_multiple_line_comments() {
     let tokens = lex("-- line 1\n-- line 2\n-- line 3\n42");
-    assert!(tokens.contains(&TokenKind::Int(42)));
+    assert!(tokens.contains(&TokenKind::Int(42.into())));
 }
 
 // ============================================================================
@@ -942,8 +942,8 @@ fn test_slash_is_division() {
     // Standalone slash in arithmetic context is division
     let tokens = lex("10 / 2");
     assert!(tokens.contains(&TokenKind::Slash));
-    assert!(tokens.contains(&TokenKind::Int(10)));
-    assert!(tokens.contains(&TokenKind::Int(2)));
+    assert!(tokens.contains(&TokenKind::Int(10.into())));
+    assert!(tokens.contains(&TokenKind::Int(2.into())));
 }
 
 #[test]
@@ -956,9 +956,9 @@ fn test_dot_chain() {
 #[test]
 fn test_dotdot_range() {
     let tokens = lex("0..100");
-    assert!(tokens.contains(&TokenKind::Int(0)));
+    assert!(tokens.contains(&TokenKind::Int(0.into())));
     assert!(tokens.contains(&TokenKind::DotDot));
-    assert!(tokens.contains(&TokenKind::Int(100)));
+    assert!(tokens.contains(&TokenKind::Int(100.into())));
 }
 
 // ============================================================================
@@ -968,20 +968,20 @@ fn test_dotdot_range() {
 #[test]
 fn test_mixed_whitespace() {
     let tokens = lex("1 \t \n \r\n 2");
-    assert!(tokens.contains(&TokenKind::Int(1)));
-    assert!(tokens.contains(&TokenKind::Int(2)));
+    assert!(tokens.contains(&TokenKind::Int(1.into())));
+    assert!(tokens.contains(&TokenKind::Int(2.into())));
 }
 
 #[test]
 fn test_trailing_whitespace() {
     let tokens = lex("42   ");
-    assert_eq!(tokens[0], TokenKind::Int(42));
+    assert_eq!(tokens[0], TokenKind::Int(42.into()));
 }
 
 #[test]
 fn test_leading_whitespace() {
     let tokens = lex("   42");
-    assert_eq!(tokens[0], TokenKind::Int(42));
+    assert_eq!(tokens[0], TokenKind::Int(42.into()));
 }
 
 #[test]
@@ -993,8 +993,8 @@ fn test_only_newlines() {
 #[test]
 fn test_blank_lines_between_tokens() {
     let tokens = lex("1\n\n\n2");
-    assert!(tokens.contains(&TokenKind::Int(1)));
-    assert!(tokens.contains(&TokenKind::Int(2)));
+    assert!(tokens.contains(&TokenKind::Int(1.into())));
+    assert!(tokens.contains(&TokenKind::Int(2.into())));
 }
 
 // ============================================================================
@@ -1134,5 +1134,5 @@ fn test_zero_width_chars() {
 fn test_bom_at_start() {
     let tokens = lex("\u{FEFF}42");
     // BOM should be ignored
-    assert!(tokens.contains(&TokenKind::Int(42)));
+    assert!(tokens.contains(&TokenKind::Int(42.into())));
 }

@@ -1,6 +1,7 @@
 //! String operations for the standard library.
 //! 标准库的字符串操作。
 
+use neve_common::{int_is_negative, int_to_usize, Int};
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
@@ -16,7 +17,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "string.len",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::String(s) => Ok(Value::Int(s.len() as i64)),
+                    Value::String(s) => Ok(Value::Int(s.len().into())),
                     _ => Err("string.len expects a string".to_string()),
                 },
             }),
@@ -188,8 +189,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 3,
                 func: |args| match (&args[0], &args[1], &args[2]) {
                     (Value::String(s), Value::Int(start), Value::Int(end)) => {
-                        let start = (*start as usize).min(s.len());
-                        let end = (*end as usize).min(s.len());
+                        let start = clamp_index(start, s.len())?;
+                        let end = clamp_index(end, s.len())?;
                         if start <= end {
                             Ok(Value::String(Rc::new(s[start..end].to_string())))
                         } else {
@@ -222,7 +223,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::String(s), Value::Int(n)) => {
-                        Ok(Value::String(Rc::new(s.repeat(*n as usize))))
+                        let count = non_negative_usize(n, "string.repeat count")?;
+                        Ok(Value::String(Rc::new(s.repeat(count))))
                     }
                     _ => Err("string.repeat expects (string, count)".to_string()),
                 },
@@ -248,4 +250,18 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
     ]
+}
+
+fn clamp_index(value: &Int, len: usize) -> Result<usize, String> {
+    if int_is_negative(value) {
+        return Ok(0);
+    }
+    Ok(int_to_usize(value).unwrap_or(len).min(len))
+}
+
+fn non_negative_usize(value: &Int, context: &str) -> Result<usize, String> {
+    if int_is_negative(value) {
+        return Err(format!("{context} must be non-negative"));
+    }
+    int_to_usize(value).ok_or_else(|| format!("{context} is too large"))
 }

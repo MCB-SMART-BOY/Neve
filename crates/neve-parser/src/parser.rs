@@ -5,7 +5,7 @@
 //! a token stream into an abstract syntax tree (AST).
 //! 本模块实现了一个递归下降解析器，将 token 流转换为抽象语法树（AST）。
 
-use neve_common::Span;
+use neve_common::{Span, int_to_u32};
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_lexer::{Token, TokenKind};
 use neve_syntax::*;
@@ -1092,7 +1092,10 @@ impl Parser {
                 if let TokenKind::Int(n) = self.current_kind() {
                     // Tuple index: expr.0
                     // 元组索引：expr.0
-                    let n = *n as u32;
+                    let n = int_to_u32(n).unwrap_or_else(|| {
+                        self.error("tuple index out of range");
+                        0
+                    });
                     self.advance();
                     let span = expr.span.merge(self.previous_span());
                     expr = Expr::new(

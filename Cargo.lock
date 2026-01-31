@@ -118,6 +118,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "autocfg"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1166,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "neve"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "libc",
@@ -1191,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "neve-builder"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "libc",
  "neve-derive",
@@ -1206,11 +1212,15 @@ dependencies = [
 
 [[package]]
 name = "neve-common"
-version = "0.7.0"
+version = "1.0.0"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+]
 
 [[package]]
 name = "neve-config"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-builder",
  "neve-common",
@@ -1227,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "neve-derive"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "neve-common",
@@ -1238,7 +1248,7 @@ dependencies = [
 
 [[package]]
 name = "neve-diagnostic"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "ariadne",
  "neve-common",
@@ -1247,7 +1257,7 @@ dependencies = [
 
 [[package]]
 name = "neve-eval"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-common",
  "neve-derive",
@@ -1260,7 +1270,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fetch"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "flate2",
@@ -1275,7 +1285,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fmt"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-diagnostic",
  "neve-parser",
@@ -1284,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "neve-frontend"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-diagnostic",
  "neve-hir",
@@ -1295,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "neve-hir"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1305,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lexer"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "logos",
  "neve-common",
@@ -1314,7 +1324,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lsp"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "dashmap 6.1.0",
@@ -1332,7 +1342,7 @@ dependencies = [
 
 [[package]]
 name = "neve-parser"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1342,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "neve-std"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-common",
  "neve-eval",
@@ -1350,7 +1360,7 @@ dependencies = [
 
 [[package]]
 name = "neve-store"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "lzma-rs",
@@ -1366,14 +1376,14 @@ dependencies = [
 
 [[package]]
 name = "neve-syntax"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-common",
 ]
 
 [[package]]
 name = "neve-typeck"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1383,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "neve-workspace"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "neve-builder",
  "neve-common",
@@ -1424,6 +1434,34 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+dependencies = [
+ "autocfg",
 ]
 
 [[package]]

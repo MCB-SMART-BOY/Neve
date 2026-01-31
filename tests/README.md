@@ -1,8 +1,22 @@
-# Neve 集成测试 / Integration Tests
+<div align="center">
 
-本目录包含 Neve 语言的集成测试,验证从词法分析到执行的完整管道。
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Integration Tests</h1>
+
+<p><em>集成测试</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="../docs/">Docs</a></strong>
+</p>
+
+</div>
+
+---
 
 This directory contains integration tests for the Neve language, verifying the complete pipeline from lexing to execution.
+本目录包含 Neve 语言的集成测试，验证从词法分析到执行的完整管道。
 
 ## 测试结构 / Test Structure
 

@@ -17,6 +17,7 @@
 use crate::EvalError;
 use crate::builtin::builtins;
 use crate::value::{Thunk, ThunkState, Value};
+use neve_common::{int_is_negative, int_is_zero, int_to_f64, int_to_u32, int_to_usize};
 use neve_hir::{ModuleLoader, ModulePath};
 use neve_syntax::*;
 use std::collections::HashMap;
@@ -215,6 +216,17 @@ impl AstEnv {
         for (name, value, is_public) in bindings {
             self.bindings.insert(name, Binding { value, is_public });
         }
+    }
+
+    pub(crate) fn bindings_snapshot(&self) -> Vec<(String, Value, bool)> {
+        self.bindings
+            .iter()
+            .map(|(name, binding)| (name.clone(), binding.value.clone(), binding.is_public))
+            .collect()
+    }
+
+    pub(crate) fn parent_rc(&self) -> Option<Rc<AstEnv>> {
+        self.parent.clone()
     }
 }
 
@@ -669,7 +681,7 @@ impl AstEvaluator {
     /// Evaluate an expression.
     pub fn eval_expr(&mut self, expr: &Expr) -> Result<Value, EvalError> {
         match &expr.kind {
-            ExprKind::Int(n) => Ok(Value::Int(*n)),
+            ExprKind::Int(n) => Ok(Value::Int(n.clone())),
             ExprKind::Float(f) => Ok(Value::Float(*f)),
             ExprKind::String(s) => Ok(Value::String(Rc::new(s.clone()))),
             ExprKind::Char(c) => Ok(Value::Char(*c)),
@@ -810,12 +822,22 @@ impl AstEvaluator {
                 let index_val = self.eval_expr(index)?;
                 match (&base_val, &index_val) {
                     (Value::List(items), Value::Int(i)) => {
-                        items.get(*i as usize).cloned().ok_or_else(|| {
+                        let idx = int_to_usize(i).ok_or_else(|| {
+                            EvalError::TypeError(
+                                "list index must be a non-negative integer".to_string(),
+                            )
+                        })?;
+                        items.get(idx).cloned().ok_or_else(|| {
                             EvalError::TypeError("list index out of bounds".to_string())
                         })
                     }
                     (Value::String(s), Value::Int(i)) => {
-                        s.chars().nth(*i as usize).map(Value::Char).ok_or_else(|| {
+                        let idx = int_to_usize(i).ok_or_else(|| {
+                            EvalError::TypeError(
+                                "string index must be a non-negative integer".to_string(),
+                            )
+                        })?;
+                        s.chars().nth(idx).map(Value::Char).ok_or_else(|| {
                             EvalError::TypeError("string index out of bounds".to_string())
                         })
                     }
@@ -1144,8 +1166,16 @@ impl AstEvaluator {
             BinOp::Add => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
-                (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
-                (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a + *b as f64)),
+                (Value::Int(a), Value::Float(b)) => {
+                    let af = int_to_f64(a)
+                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    Ok(Value::Float(af + b))
+                }
+                (Value::Float(a), Value::Int(b)) => {
+                    let bf = int_to_f64(b)
+                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    Ok(Value::Float(a + bf))
+                }
                 _ => Err(EvalError::TypeError("cannot add".to_string())),
             },
             BinOp::Sub => match (&left, &right) {
@@ -1160,7 +1190,7 @@ impl AstEvaluator {
             },
             BinOp::Div => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
-                    if *b == 0 {
+                    if int_is_zero(b) {
                         Err(EvalError::DivisionByZero)
                     } else {
                         Ok(Value::Int(a / b))
@@ -1171,7 +1201,7 @@ impl AstEvaluator {
             },
             BinOp::Mod => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
-                    if *b == 0 {
+                    if int_is_zero(b) {
                         Err(EvalError::DivisionByZero)
                     } else {
                         Ok(Value::Int(a % b))
@@ -1180,7 +1210,17 @@ impl AstEvaluator {
                 _ => Err(EvalError::TypeError("cannot modulo".to_string())),
             },
             BinOp::Pow => match (&left, &right) {
-                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a.pow(*b as u32))),
+                (Value::Int(a), Value::Int(b)) => {
+                    if int_is_negative(b) {
+                        return Err(EvalError::TypeError(
+                            "negative exponent for integer power".to_string(),
+                        ));
+                    }
+                    let exp = int_to_u32(b).ok_or_else(|| {
+                        EvalError::TypeError("integer exponent too large".to_string())
+                    })?;
+                    Ok(Value::Int(a.pow(exp)))
+                }
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.powf(*b))),
                 _ => Err(EvalError::TypeError("cannot power".to_string())),
             },
@@ -1658,7 +1698,7 @@ impl AstEvaluator {
     /// genList(f, n) - Generate list [f(0), f(1), ..., f(n-1)]
     fn builtin_gen_list(&mut self, func: &Value, count: &Value) -> Result<Value, EvalError> {
         let n = match count {
-            Value::Int(n) => *n,
+            Value::Int(n) => n,
             _ => {
                 return Err(EvalError::TypeError(
                     "genList expects an integer count".to_string(),
@@ -1666,15 +1706,19 @@ impl AstEvaluator {
             }
         };
 
-        if n < 0 {
+        if int_is_negative(n) {
             return Err(EvalError::TypeError(
                 "genList count must be non-negative".to_string(),
             ));
         }
 
-        let mut results = Vec::with_capacity(n as usize);
-        for i in 0..n {
-            let result = self.apply(func.clone(), vec![Value::Int(i)])?;
+        let n_usize = int_to_usize(n).ok_or_else(|| {
+            EvalError::TypeError("genList count is too large".to_string())
+        })?;
+
+        let mut results = Vec::with_capacity(n_usize);
+        for i in 0..n_usize {
+            let result = self.apply(func.clone(), vec![Value::Int(i.into())])?;
             results.push(result);
         }
         Ok(Value::List(Rc::new(results)))

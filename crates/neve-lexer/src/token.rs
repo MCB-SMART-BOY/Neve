@@ -1,7 +1,7 @@
 //! Token definitions for Neve.
 //! Neve 的 Token 定义。
 
-use neve_common::Span;
+use neve_common::{Int, Span};
 
 /// A token with its kind and span.
 /// 带有类型和位置信息的 Token。
@@ -27,7 +27,7 @@ impl Token {
 pub enum TokenKind {
     // ===== Literals 字面量 =====
     /// Integer literal - 整数字面量
-    Int(i64),
+    Int(Int),
     /// Float literal - 浮点数字面量
     Float(f64),
     /// String literal - 字符串字面量

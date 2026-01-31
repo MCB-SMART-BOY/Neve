@@ -23,17 +23,65 @@ const DOC_CHANGELOG: &str = include_str!("../../../docs/changelog.md");
 /// Available documentation topics.
 /// 可用的文档主题。
 const TOPICS: &[(&str, &str, &str)] = &[
-    ("quickstart", DOC_QUICKSTART, "5-minute quick start guide"),
-    ("tutorial", DOC_TUTORIAL, "Complete language tutorial"),
-    ("spec", DOC_SPEC, "Language specification"),
-    ("api", DOC_API, "Standard library API reference"),
-    ("diagnostics", DOC_DIAGNOSTICS, "Diagnostic code reference"),
-    ("philosophy", DOC_PHILOSOPHY, "Design philosophy"),
-    ("install", DOC_INSTALL, "Installation guide"),
-    ("architecture", DOC_ARCHITECTURE, "Internal architecture"),
-    ("onboarding", DOC_ONBOARDING, "Contributor onboarding"),
-    ("changelog", DOC_CHANGELOG, "Version history"),
+    ("quickstart", DOC_QUICKSTART, "5-minute quick start / 5 分钟快速上手"),
+    ("tutorial", DOC_TUTORIAL, "Complete tutorial / 完整教程"),
+    ("spec", DOC_SPEC, "Language spec / 语言规范"),
+    ("api", DOC_API, "Standard library API / 标准库 API"),
+    ("diagnostics", DOC_DIAGNOSTICS, "Diagnostic codes / 诊断错误码"),
+    ("philosophy", DOC_PHILOSOPHY, "Design philosophy / 设计哲学"),
+    ("install", DOC_INSTALL, "Installation guide / 安装指南"),
+    ("architecture", DOC_ARCHITECTURE, "Architecture / 内部架构"),
+    ("onboarding", DOC_ONBOARDING, "Contributor onboarding / 贡献者入门"),
+    ("changelog", DOC_CHANGELOG, "Changelog / 更新日志"),
 ];
+
+/// Resolve topic name with aliases and prefix matching.
+/// 解析主题名称（支持别名与前缀匹配）。
+fn resolve_topic(input: &str) -> Option<&'static str> {
+    let mut topic = input.trim().to_lowercase();
+    topic = topic.replace('_', "-");
+
+    let aliases: &[(&str, &str)] = &[
+        ("qs", "quickstart"),
+        ("quick", "quickstart"),
+        ("getting-started", "quickstart"),
+        ("intro", "quickstart"),
+        ("ref", "spec"),
+        ("reference", "spec"),
+        ("stdlib", "api"),
+        ("errors", "diagnostics"),
+        ("diag", "diagnostics"),
+        ("design", "philosophy"),
+        ("guide", "tutorial"),
+        ("arch", "architecture"),
+        ("onboard", "onboarding"),
+        ("change", "changelog"),
+        ("changes", "changelog"),
+        ("install", "install"),
+    ];
+
+    for (alias, name) in aliases {
+        if topic == *alias {
+            return Some(*name);
+        }
+    }
+
+    if let Some((name, _, _)) = TOPICS.iter().find(|(name, _, _)| *name == topic) {
+        return Some(*name);
+    }
+
+    let matches: Vec<&str> = TOPICS
+        .iter()
+        .map(|(name, _, _)| *name)
+        .filter(|name| name.starts_with(&topic))
+        .collect();
+
+    if matches.len() == 1 {
+        return Some(matches[0]);
+    }
+
+    None
+}
 
 /// Create a styled skin for terminal rendering.
 /// 为终端渲染创建样式化的皮肤。
@@ -57,63 +105,49 @@ fn create_skin() -> MadSkin {
 /// 列出可用的文档主题。
 pub fn list() -> Result<(), String> {
     let skin = create_skin();
+    let mut content = String::new();
+    content.push_str("# NEVE DOCUMENTATION / 文档导航\n\n");
+    content.push_str("## Available topics / 可用主题:\n\n");
+    content.push_str("| Topic | Description |\n|-------|-------------|\n");
+    for (name, _, desc) in TOPICS {
+        content.push_str(&format!("| {} | {} |\n", name, desc));
+    }
+    content.push_str("\n## Usage / 用法:\n\n");
+    content.push_str("```\n");
+    content.push_str("neve doc <topic>          View a topic / 查看主题\n");
+    content.push_str("neve doc --list           List all topics / 列出主题\n");
+    content.push_str("neve doc                 List topics (same as --list) / 同上\n");
+    content.push_str("```\n\n");
+    content.push_str("## Examples / 示例:\n\n");
+    content.push_str("```\n");
+    content.push_str("neve doc quickstart       Full quickstart guide / 完整快速入门\n");
+    content.push_str("neve doc api              API reference / 标准库 API\n");
+    content.push_str("neve doc spec             Language spec / 语言规范\n");
+    content.push_str("```\n");
 
-    let content = r#"
-# NEVE DOCUMENTATION
-
-## Available topics:
-
-| Topic | Description |
-|-------|-------------|
-| quickstart | 5-minute quick start guide |
-| tutorial | Complete language tutorial |
-| spec | Language specification |
-| api | Standard library API reference |
-| diagnostics | Diagnostic code reference |
-| philosophy | Design philosophy |
-| install | Installation guide |
-| architecture | Internal architecture |
-| onboarding | Contributor onboarding |
-| changelog | Version history |
-
-## Usage:
-
-```
-neve doc <topic>          View a topic
-neve doc <topic> --en     View English section only
-neve doc <topic> --zh     View Chinese section only
-neve doc --list           List all topics
-```
-
-## Examples:
-
-```
-neve doc quickstart       Full quickstart guide
-neve doc api --en         API reference (English)
-neve doc spec --zh        Language spec (Chinese)
-```
-"#;
-
-    println!("{}", skin.term_text(content));
+    println!("{}", skin.term_text(&content));
     Ok(())
 }
 
 /// View a documentation topic.
 /// 查看文档主题。
-pub fn view(topic: &str, lang: Option<&str>) -> Result<(), String> {
-    // Find the topic
-    // 查找主题
-    let content = TOPICS
-        .iter()
-        .find(|(name, _, _)| *name == topic)
+pub fn view(topic: &str) -> Result<(), String> {
+    if matches!(topic, "list" | "help" | "topics") {
+        return list();
+    }
+
+    let resolved = resolve_topic(topic);
+    let content = resolved
+        .and_then(|name| TOPICS.iter().find(|(n, _, _)| *n == name))
         .map(|(_, content, _)| *content);
 
     let content = match content {
         Some(c) => c,
         None => {
             eprintln!("Unknown topic: {}", topic);
+            eprintln!("未知主题：{}", topic);
             eprintln!();
-            eprintln!("Available topics:");
+            eprintln!("Available topics / 可用主题:");
             for (name, _, desc) in TOPICS {
                 eprintln!("  {:12} - {}", name, desc);
             }
@@ -121,17 +155,7 @@ pub fn view(topic: &str, lang: Option<&str>) -> Result<(), String> {
         }
     };
 
-    // Filter by language if requested
-    // 如果请求，按语言过滤
-    let output = match lang {
-        Some("en") => extract_section(content, "english"),
-        Some("zh") => extract_section(content, "chinese"),
-        _ => content.to_string(),
-    };
-
-    // Clean up HTML anchors and render
-    // 清理 HTML 锚点并渲染
-    let cleaned = clean_markdown(&output);
+    let cleaned = clean_markdown(content);
 
     // Render with termimad
     // 使用 termimad 渲染
@@ -152,65 +176,42 @@ pub fn view(topic: &str, lang: Option<&str>) -> Result<(), String> {
 /// Clean up markdown for better terminal rendering.
 /// 清理 markdown 以获得更好的终端渲染效果。
 fn clean_markdown(content: &str) -> String {
-    content
-        .lines()
-        .filter(|line| {
-            // Remove HTML anchor tags
-            // 移除 HTML 锚点标签
-            !line.contains("<a name=")
-                && !line.contains("</a>")
-                && !line.contains("<div")
-                && !line.contains("</div>")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+    let mut out = Vec::new();
+    let mut in_code_block = false;
+    let mut last_was_hr = false;
 
-/// Extract a specific language section from the document.
-/// 从文档中提取特定语言的部分。
-fn extract_section(content: &str, section: &str) -> String {
-    let lines: Vec<&str> = content.lines().collect();
-    let mut result = Vec::new();
-    let mut in_section = false;
-
-    // Find the anchor for this section
-    // 查找此部分的锚点
-    let anchor = format!("<a name=\"{}\"></a>", section);
-    let other_anchor = if section == "english" {
-        "<a name=\"chinese\"></a>"
-    } else {
-        "<a name=\"english\"></a>"
-    };
-
-    // First, include the header (everything before the first anchor)
-    // 首先，包含标题（第一个锚点之前的所有内容）
-    for line in &lines {
-        if line.contains("<a name=") {
-            break;
-        }
-        result.push(*line);
-    }
-
-    // Then extract the requested section
-    // 然后提取请求的部分
-    for line in &lines {
-        if line.contains(&anchor) {
-            in_section = true;
+    for raw in content.lines() {
+        let line = raw.trim_end();
+        if line.starts_with("```") {
+            in_code_block = !in_code_block;
+            out.push(line.to_string());
+            last_was_hr = false;
             continue;
         }
 
-        if in_section && line.contains(other_anchor) {
-            // Stop at the other section
-            // 在另一个部分停止
-            break;
+        if !in_code_block {
+            let trimmed = line.trim();
+            if trimmed.starts_with('<') {
+                continue;
+            }
+            if trimmed == "---" {
+                if out.is_empty() || last_was_hr {
+                    continue;
+                }
+                last_was_hr = true;
+                out.push("---".to_string());
+                continue;
+            }
+            if trimmed.is_empty() && out.is_empty() {
+                continue;
+            }
+            last_was_hr = false;
         }
 
-        if in_section {
-            result.push(*line);
-        }
+        out.push(line.to_string());
     }
 
-    result.join("\n")
+    out.join("\n")
 }
 
 /// Try to display content using a pager (less, more, etc.).

@@ -1,10 +1,22 @@
-# Contributing to Neve / 贡献指南
+<div align="center">
 
-Thank you for your interest in contributing to Neve! This document provides guidelines and instructions for contributing.
+<img src="assets/logo.svg" width="120" alt="Neve logo">
 
-感谢您对 Neve 项目的关注！本文档提供贡献指南和说明。
+<h1>Contributing to Neve</h1>
+
+<p><em>贡献指南</em></p>
+
+<p>
+  <strong><a href="README.md">Home</a></strong> ·
+  <strong><a href="docs/">Docs</a></strong>
+</p>
+
+</div>
 
 ---
+
+Thank you for your interest in contributing to Neve! This document provides guidelines and instructions for contributing.
+感谢您对 Neve 项目的关注！本文档提供贡献指南和说明。
 
 ## Table of Contents / 目录
 

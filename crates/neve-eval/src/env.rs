@@ -106,6 +106,22 @@ impl Environment {
             map.insert(id, value);
         }
     }
+
+    pub(crate) fn bindings_snapshot(&self) -> Vec<(LocalId, Value)> {
+        self.bindings
+            .borrow()
+            .iter()
+            .map(|(id, value)| (*id, value.clone()))
+            .collect()
+    }
+
+    pub(crate) fn bindings_ptr(&self) -> usize {
+        Rc::as_ptr(&self.bindings) as usize
+    }
+
+    pub(crate) fn parent_ref(&self) -> Option<&Environment> {
+        self.parent.as_deref()
+    }
 }
 
 impl Default for Environment {

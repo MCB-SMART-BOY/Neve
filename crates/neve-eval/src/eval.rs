@@ -8,8 +8,10 @@
 
 use crate::{Environment, Value};
 use neve_diagnostic::Diagnostic;
+use neve_common::{int_is_negative, int_is_zero, int_to_f64, int_to_u32};
 use neve_hir::{
-    BinOp, DefId, Expr, ExprKind, FnDef, Item, ItemKind, Literal, LocalId, Module, UnaryOp,
+    BinOp, DefId, Expr, ExprKind, FnDef, Generator, Item, ItemKind, Literal, LocalId, Module,
+    UnaryOp,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -265,6 +267,29 @@ impl Evaluator {
                 }
             }
 
+            ExprKind::SafeField { base, field } => {
+                let base_val = self.eval(base)?;
+                match base_val {
+                    Value::None => Ok(Value::None),
+                    Value::Some(inner) => match *inner {
+                        Value::Record(fields) => match fields.get(field) {
+                            Some(v) => Ok(Value::Some(Box::new(v.clone()))),
+                            None => Ok(Value::None),
+                        },
+                        _ => Err(EvalError::TypeError(
+                            "safe field access requires a record".to_string(),
+                        )),
+                    },
+                    Value::Record(fields) => match fields.get(field) {
+                        Some(v) => Ok(Value::Some(Box::new(v.clone()))),
+                        None => Ok(Value::None),
+                    },
+                    _ => Err(EvalError::TypeError(
+                        "safe field access requires an option or record".to_string(),
+                    )),
+                }
+            }
+
             ExprKind::TupleIndex(base, index) => {
                 let base_val = self.eval(base)?;
                 match base_val {
@@ -362,7 +387,89 @@ impl Evaluator {
                 }
                 Ok(Value::String(Rc::new(result)))
             }
+
+            ExprKind::Let {
+                pattern,
+                value,
+                body,
+                ..
+            } => {
+                let val = self.eval(value)?;
+                let bindings = self
+                    .match_pattern(pattern, &val)
+                    .ok_or(EvalError::PatternMatchFailed)?;
+
+                let old_env = self.env.clone();
+                let new_env = self.env.child();
+                new_env.define_many(bindings);
+                self.env = new_env;
+
+                let result = self.eval(body);
+                self.env = old_env;
+                result
+            }
+
+            ExprKind::Lazy(_) => Err(EvalError::TypeError(
+                "lazy is not supported in HIR evaluator".to_string(),
+            )),
+
+            ExprKind::ListComp { body, generators } => {
+                let mut results = Vec::new();
+                self.eval_generators(body, generators, 0, &mut results)?;
+                Ok(Value::List(Rc::new(results)))
+            }
+
+            ExprKind::Error(message) => Err(EvalError::TypeError(message.clone())),
         }
+    }
+
+    fn eval_generators(
+        &mut self,
+        body: &Expr,
+        generators: &[Generator],
+        index: usize,
+        results: &mut Vec<Value>,
+    ) -> Result<(), EvalError> {
+        if index >= generators.len() {
+            let value = self.eval(body)?;
+            results.push(value);
+            return Ok(());
+        }
+
+        let generator = &generators[index];
+        let iter_val = self.eval(&generator.iter)?;
+        let items = match iter_val {
+            Value::List(items) => items,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "generator requires a list".to_string(),
+                ));
+            }
+        };
+
+        for item in items.iter() {
+            let bindings = self
+                .match_pattern(&generator.pattern, item)
+                .ok_or(EvalError::PatternMatchFailed)?;
+
+            let old_env = self.env.clone();
+            let new_env = self.env.child();
+            new_env.define_many(bindings);
+            self.env = new_env;
+
+            if let Some(condition) = &generator.condition {
+                let cond_val = self.eval(condition)?;
+                if !cond_val.is_truthy() {
+                    self.env = old_env;
+                    continue;
+                }
+            }
+
+            self.eval_generators(body, generators, index + 1, results)?;
+            self.env = old_env;
+        }
+
+        Ok(())
     }
 
     fn get_builtin(&self, _def_id: DefId) -> Option<Value> {
@@ -375,7 +482,7 @@ impl Evaluator {
 
     fn eval_literal(&self, lit: &Literal) -> Value {
         match lit {
-            Literal::Int(n) => Value::Int(*n),
+            Literal::Int(n) => Value::Int(n.clone()),
             Literal::Float(f) => Value::Float(*f),
             Literal::String(s) => Value::String(Rc::new(s.clone())),
             Literal::Char(c) => Value::Char(*c),
@@ -389,8 +496,16 @@ impl Evaluator {
             BinOp::Add => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
-                (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
-                (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a + *b as f64)),
+                (Value::Int(a), Value::Float(b)) => {
+                    let af = int_to_f64(a)
+                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    Ok(Value::Float(af + b))
+                }
+                (Value::Float(a), Value::Int(b)) => {
+                    let bf = int_to_f64(b)
+                        .ok_or_else(|| EvalError::TypeError("integer too large for float".to_string()))?;
+                    Ok(Value::Float(a + bf))
+                }
                 _ => Err(EvalError::TypeError("cannot add".to_string())),
             },
             BinOp::Sub => match (&left, &right) {
@@ -405,7 +520,7 @@ impl Evaluator {
             },
             BinOp::Div => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
-                    if *b == 0 {
+                    if int_is_zero(b) {
                         Err(EvalError::DivisionByZero)
                     } else {
                         Ok(Value::Int(a / b))
@@ -416,7 +531,7 @@ impl Evaluator {
             },
             BinOp::Mod => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
-                    if *b == 0 {
+                    if int_is_zero(b) {
                         Err(EvalError::DivisionByZero)
                     } else {
                         Ok(Value::Int(a % b))
@@ -425,7 +540,17 @@ impl Evaluator {
                 _ => Err(EvalError::TypeError("cannot modulo".to_string())),
             },
             BinOp::Pow => match (&left, &right) {
-                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a.pow(*b as u32))),
+                (Value::Int(a), Value::Int(b)) => {
+                    if int_is_negative(b) {
+                        return Err(EvalError::TypeError(
+                            "negative exponent for integer power".to_string(),
+                        ));
+                    }
+                    let exp = int_to_u32(b).ok_or_else(|| {
+                        EvalError::TypeError("integer exponent too large".to_string())
+                    })?;
+                    Ok(Value::Int(a.pow(exp)))
+                }
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.powf(*b))),
                 _ => Err(EvalError::TypeError("cannot power".to_string())),
             },
@@ -915,7 +1040,7 @@ mod tests {
                     span,
                 }),
                 Box::new(Expr {
-                    kind: ExprKind::Literal(Literal::Int(0)),
+                    kind: ExprKind::Literal(Literal::Int(0.into())),
                     ty: Ty {
                         kind: TyKind::Int,
                         span,
@@ -963,7 +1088,7 @@ mod tests {
                                 span,
                             }),
                             Box::new(Expr {
-                                kind: ExprKind::Literal(Literal::Int(1)),
+                                kind: ExprKind::Literal(Literal::Int(1.into())),
                                 ty: Ty {
                                     kind: TyKind::Int,
                                     span,
@@ -1066,9 +1191,9 @@ mod tests {
             env: Environment::new(),
         };
 
-        let result = evaluator.apply(closure, vec![Value::Int(100), Value::Int(0)]);
+        let result = evaluator.apply(closure, vec![Value::Int(100.into()), Value::Int(0.into())]);
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Value::Int(5050));
+        assert_eq!(result.unwrap(), Value::Int(5050.into()));
     }
 }

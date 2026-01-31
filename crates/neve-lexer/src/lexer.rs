@@ -2,7 +2,7 @@
 //! Neve 词法分析器。
 
 use crate::token::{Token, TokenKind};
-use neve_common::Span;
+use neve_common::{Span, parse_int_radix};
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 
 /// Mode for lexer state machine.
@@ -693,9 +693,9 @@ impl<'src> Lexer<'src> {
                 Err(_) => TokenKind::Error,
             }
         } else {
-            match value.parse::<i64>() {
-                Ok(i) => TokenKind::Int(i),
-                Err(_) => TokenKind::Error,
+            match parse_int_radix(&value, 10) {
+                Some(i) => TokenKind::Int(i),
+                None => TokenKind::Error,
             }
         }
     }
@@ -716,9 +716,9 @@ impl<'src> Lexer<'src> {
             }
         }
 
-        match i64::from_str_radix(&value, 16) {
-            Ok(i) => TokenKind::Int(i),
-            Err(_) => TokenKind::Error,
+        match parse_int_radix(&value, 16) {
+            Some(i) => TokenKind::Int(i),
+            None => TokenKind::Error,
         }
     }
 
@@ -738,9 +738,9 @@ impl<'src> Lexer<'src> {
             }
         }
 
-        match i64::from_str_radix(&value, 8) {
-            Ok(i) => TokenKind::Int(i),
-            Err(_) => TokenKind::Error,
+        match parse_int_radix(&value, 8) {
+            Some(i) => TokenKind::Int(i),
+            None => TokenKind::Error,
         }
     }
 
@@ -760,9 +760,9 @@ impl<'src> Lexer<'src> {
             }
         }
 
-        match i64::from_str_radix(&value, 2) {
-            Ok(i) => TokenKind::Int(i),
-            Err(_) => TokenKind::Error,
+        match parse_int_radix(&value, 2) {
+            Some(i) => TokenKind::Int(i),
+            None => TokenKind::Error,
         }
     }
 

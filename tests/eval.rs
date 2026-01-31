@@ -2,6 +2,7 @@
 //!
 //! This file contains extensive edge case tests for the evaluator.
 
+use neve_common::Int;
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_hir::lower;
 use neve_parser::parse;
@@ -34,6 +35,10 @@ fn eval_with_std(source: &str) -> Result<Value, String> {
     eval.eval_file(&ast).map_err(|e| e.to_string())
 }
 
+fn int(value: i64) -> Int {
+    value.into()
+}
+
 // ============================================================================
 // 标准库模块导入
 // ============================================================================
@@ -42,7 +47,7 @@ fn eval_with_std(source: &str) -> Result<Value, String> {
 fn test_eval_import_std_list_module() {
     let source = "import std.list; let xs = list.range(1, 4); let n = list.len(xs);";
     match eval_with_std(source) {
-        Ok(Value::Int(n)) => assert_eq!(n, 3),
+        Ok(Value::Int(n)) => assert_eq!(n, int(3)),
         other => panic!("expected int, got {:?}", other),
     }
 }
@@ -51,7 +56,7 @@ fn test_eval_import_std_list_module() {
 fn test_eval_import_std_root() {
     let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {
-        Ok(Value::Int(n)) => assert_eq!(n, 2),
+        Ok(Value::Int(n)) => assert_eq!(n, int(2)),
         other => panic!("expected int, got {:?}", other),
     }
 }
@@ -62,24 +67,24 @@ fn test_eval_import_std_root() {
 
 #[test]
 fn test_eval_integer_zero() {
-    assert!(matches!(eval_source("let x = 0;"), Ok(Value::Int(0))));
+    assert!(matches!(eval_source("let x = 0;"), Ok(Value::Int(n)) if n == int(0)));
 }
 
 #[test]
 fn test_eval_integer_positive() {
-    assert!(matches!(eval_source("let x = 42;"), Ok(Value::Int(42))));
+    assert!(matches!(eval_source("let x = 42;"), Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
 fn test_eval_integer_negative() {
-    assert!(matches!(eval_source("let x = -42;"), Ok(Value::Int(-42))));
+    assert!(matches!(eval_source("let x = -42;"), Ok(Value::Int(n)) if n == int(-42)));
 }
 
 #[test]
 fn test_eval_integer_large() {
     assert!(matches!(
         eval_source("let x = 9223372036854775807;"),
-        Ok(Value::Int(9223372036854775807))
+        Ok(Value::Int(n)) if n == int(9223372036854775807)
     ));
 }
 
@@ -88,7 +93,7 @@ fn test_eval_integer_min() {
     // Note: Parser might handle this differently
     let result = eval_source("let x = -9223372036854775807;");
     if let Ok(Value::Int(n)) = result {
-        assert_eq!(n, -9223372036854775807);
+        assert_eq!(n, int(-9223372036854775807));
     }
 }
 
@@ -153,7 +158,7 @@ fn test_eval_enum_constructor_match() {
     let source =
         "enum Option { Some(Int), None }; let x = Some(1); let y = match x { Some(v) -> v, None -> 0 };";
     match eval_source(source) {
-        Ok(Value::Int(v)) => assert_eq!(v, 1),
+        Ok(Value::Int(v)) => assert_eq!(v, int(1)),
         other => panic!("expected int, got {:?}", other),
     }
 }
@@ -348,27 +353,27 @@ fn test_eval_string_concat_empty() {
 
 #[test]
 fn test_eval_addition() {
-    assert!(matches!(eval_source("let x = 1 + 2;"), Ok(Value::Int(3))));
+    assert!(matches!(eval_source("let x = 1 + 2;"), Ok(Value::Int(n)) if n == int(3)));
 }
 
 #[test]
 fn test_eval_subtraction() {
-    assert!(matches!(eval_source("let x = 10 - 3;"), Ok(Value::Int(7))));
+    assert!(matches!(eval_source("let x = 10 - 3;"), Ok(Value::Int(n)) if n == int(7)));
 }
 
 #[test]
 fn test_eval_multiplication() {
-    assert!(matches!(eval_source("let x = 6 * 7;"), Ok(Value::Int(42))));
+    assert!(matches!(eval_source("let x = 6 * 7;"), Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
 fn test_eval_division() {
-    assert!(matches!(eval_source("let x = 20 / 4;"), Ok(Value::Int(5))));
+    assert!(matches!(eval_source("let x = 20 / 4;"), Ok(Value::Int(n)) if n == int(5)));
 }
 
 #[test]
 fn test_eval_modulo() {
-    assert!(matches!(eval_source("let x = 17 % 5;"), Ok(Value::Int(2))));
+    assert!(matches!(eval_source("let x = 17 % 5;"), Ok(Value::Int(n)) if n == int(2)));
 }
 
 #[test]
@@ -391,7 +396,7 @@ fn test_eval_modulo_by_zero() {
 fn test_eval_negative_division() {
     assert!(matches!(
         eval_source("let x = -10 / 2;"),
-        Ok(Value::Int(-5))
+        Ok(Value::Int(n)) if n == int(-5)
     ));
 }
 
@@ -399,7 +404,7 @@ fn test_eval_negative_division() {
 fn test_eval_negative_modulo() {
     let result = eval_source("let x = -17 % 5;");
     if let Ok(Value::Int(n)) = result {
-        assert_eq!(n, -17 % 5);
+        assert_eq!(n, int(-17 % 5));
     }
 }
 
@@ -407,11 +412,11 @@ fn test_eval_negative_modulo() {
 fn test_eval_operator_precedence() {
     assert!(matches!(
         eval_source("let x = 1 + 2 * 3;"),
-        Ok(Value::Int(7))
+        Ok(Value::Int(n)) if n == int(7)
     ));
     assert!(matches!(
         eval_source("let x = (1 + 2) * 3;"),
-        Ok(Value::Int(9))
+        Ok(Value::Int(n)) if n == int(9)
     ));
 }
 
@@ -419,7 +424,7 @@ fn test_eval_operator_precedence() {
 fn test_eval_complex_arithmetic() {
     assert!(matches!(
         eval_source("let x = 1 + 2 * 3 - 4 / 2;"),
-        Ok(Value::Int(5))
+        Ok(Value::Int(n)) if n == int(5)
     ));
 }
 
@@ -427,7 +432,7 @@ fn test_eval_complex_arithmetic() {
 fn test_eval_nested_parentheses() {
     assert!(matches!(
         eval_source("let x = ((1 + 2) * (3 + 4));"),
-        Ok(Value::Int(21))
+        Ok(Value::Int(n)) if n == int(21)
     ));
 }
 
@@ -571,7 +576,7 @@ fn test_eval_equality_string() {
 fn test_eval_if_true_branch() {
     assert!(matches!(
         eval_source("let x = if true then 1 else 0;"),
-        Ok(Value::Int(1))
+        Ok(Value::Int(n)) if n == int(1)
     ));
 }
 
@@ -579,7 +584,7 @@ fn test_eval_if_true_branch() {
 fn test_eval_if_false_branch() {
     assert!(matches!(
         eval_source("let x = if false then 1 else 0;"),
-        Ok(Value::Int(0))
+        Ok(Value::Int(n)) if n == int(0)
     ));
 }
 
@@ -587,7 +592,7 @@ fn test_eval_if_false_branch() {
 fn test_eval_if_with_expression_condition() {
     assert!(matches!(
         eval_source("let x = if 1 < 2 then 10 else 20;"),
-        Ok(Value::Int(10))
+        Ok(Value::Int(n)) if n == int(10)
     ));
 }
 
@@ -595,7 +600,7 @@ fn test_eval_if_with_expression_condition() {
 fn test_eval_if_nested() {
     assert!(matches!(
         eval_source("let x = if true then if false then 1 else 2 else 3;"),
-        Ok(Value::Int(2))
+        Ok(Value::Int(n)) if n == int(2)
     ));
 }
 
@@ -603,7 +608,7 @@ fn test_eval_if_nested() {
 fn test_eval_if_deeply_nested() {
     assert!(matches!(
         eval_source("let x = if true then if true then if false then 1 else 2 else 3 else 4;"),
-        Ok(Value::Int(2))
+        Ok(Value::Int(n)) if n == int(2)
     ));
 }
 
@@ -611,7 +616,7 @@ fn test_eval_if_deeply_nested() {
 fn test_eval_if_with_arithmetic() {
     assert!(matches!(
         eval_source("let x = if 2 + 2 == 4 then 100 else 0;"),
-        Ok(Value::Int(100))
+        Ok(Value::Int(n)) if n == int(100)
     ));
 }
 
@@ -641,7 +646,7 @@ fn test_eval_list_single_element() {
     match eval_source("let x = [42];") {
         Ok(Value::List(items)) => {
             assert_eq!(items.len(), 1);
-            assert!(matches!(items[0], Value::Int(42)));
+            assert!(matches!(&items[0], Value::Int(n) if n == &int(42)));
         }
         other => panic!("expected list, got {:?}", other),
     }
@@ -660,9 +665,9 @@ fn test_eval_list_with_expressions() {
     match eval_source("let x = [1 + 1, 2 * 2, 3 - 1];") {
         Ok(Value::List(items)) => {
             assert_eq!(items.len(), 3);
-            assert!(matches!(items[0], Value::Int(2)));
-            assert!(matches!(items[1], Value::Int(4)));
-            assert!(matches!(items[2], Value::Int(2)));
+            assert!(matches!(&items[0], Value::Int(n) if n == &int(2)));
+            assert!(matches!(&items[1], Value::Int(n) if n == &int(4)));
+            assert!(matches!(&items[2], Value::Int(n) if n == &int(2)));
         }
         other => panic!("expected list, got {:?}", other),
     }
@@ -721,8 +726,8 @@ fn test_eval_tuple_pair() {
     match eval_source("let x = (1, 2);") {
         Ok(Value::Tuple(items)) => {
             assert_eq!(items.len(), 2);
-            assert!(matches!(items[0], Value::Int(1)));
-            assert!(matches!(items[1], Value::Int(2)));
+            assert!(matches!(&items[0], Value::Int(n) if n == &int(1)));
+            assert!(matches!(&items[1], Value::Int(n) if n == &int(2)));
         }
         other => panic!("expected tuple, got {:?}", other),
     }
@@ -756,8 +761,8 @@ fn test_eval_tuple_nested() {
 fn test_eval_tuple_with_expressions() {
     match eval_source("let x = (1 + 1, 2 * 2);") {
         Ok(Value::Tuple(items)) => {
-            assert!(matches!(items[0], Value::Int(2)));
-            assert!(matches!(items[1], Value::Int(4)));
+            assert!(matches!(&items[0], Value::Int(n) if n == &int(2)));
+            assert!(matches!(&items[1], Value::Int(n) if n == &int(4)));
         }
         other => panic!("expected tuple, got {:?}", other),
     }
@@ -772,7 +777,7 @@ fn test_eval_record_single_field() {
     match eval_source("let x = #{ a = 1 };") {
         Ok(Value::Record(fields)) => {
             assert_eq!(fields.len(), 1);
-            assert!(matches!(fields.get("a"), Some(Value::Int(1))));
+            assert!(matches!(fields.get("a"), Some(Value::Int(n)) if n == &int(1)));
         }
         other => panic!("expected record, got {:?}", other),
     }
@@ -791,7 +796,7 @@ fn test_eval_lazy_basic() {
         let x = force(thunk);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(42))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
@@ -837,7 +842,7 @@ fn test_eval_lazy_force_non_thunk() {
         let x = force(42);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(42))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
@@ -850,7 +855,7 @@ fn test_eval_lazy_expression() {
         let x = force(thunk);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(15))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(15)));
 }
 
 #[test]
@@ -863,7 +868,7 @@ fn test_eval_lazy_function_call() {
         let x = force(thunk);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(42))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
@@ -885,7 +890,7 @@ fn test_eval_record_mixed_types() {
                 Some(Value::String(s)) => assert_eq!(&**s, "alice"),
                 _ => panic!("expected string field"),
             }
-            assert!(matches!(fields.get("age"), Some(Value::Int(30))));
+            assert!(matches!(fields.get("age"), Some(Value::Int(n)) if n == &int(30)));
             assert!(matches!(fields.get("active"), Some(Value::Bool(true))));
         }
         other => panic!("expected record, got {:?}", other),
@@ -897,7 +902,7 @@ fn test_eval_record_nested() {
     match eval_source("let x = #{ inner = #{ a = 1 } };") {
         Ok(Value::Record(fields)) => match fields.get("inner") {
             Some(Value::Record(inner)) => {
-                assert!(matches!(inner.get("a"), Some(Value::Int(1))));
+                assert!(matches!(inner.get("a"), Some(Value::Int(n)) if n == &int(1)));
             }
             _ => panic!("expected nested record"),
         },
@@ -908,7 +913,7 @@ fn test_eval_record_nested() {
 #[test]
 fn test_eval_record_field_access() {
     match eval_source("let r = #{ a = 42, b = 100 }; let x = r.a;") {
-        Ok(Value::Int(42)) => {}
+        Ok(Value::Int(n)) if n == int(42) => {}
         other => panic!("expected 42, got {:?}", other),
     }
 }
@@ -918,8 +923,8 @@ fn test_eval_record_merge() {
     match eval_source("let x = #{ a = 1 } // #{ b = 2 };") {
         Ok(Value::Record(fields)) => {
             assert_eq!(fields.len(), 2);
-            assert!(matches!(fields.get("a"), Some(Value::Int(1))));
-            assert!(matches!(fields.get("b"), Some(Value::Int(2))));
+            assert!(matches!(fields.get("a"), Some(Value::Int(n)) if n == &int(1)));
+            assert!(matches!(fields.get("b"), Some(Value::Int(n)) if n == &int(2)));
         }
         other => panic!("expected record, got {:?}", other),
     }
@@ -929,7 +934,7 @@ fn test_eval_record_merge() {
 fn test_eval_record_merge_override() {
     match eval_source("let x = #{ a = 1 } // #{ a = 2 };") {
         Ok(Value::Record(fields)) => {
-            assert!(matches!(fields.get("a"), Some(Value::Int(2))));
+            assert!(matches!(fields.get("a"), Some(Value::Int(n)) if n == &int(2)));
         }
         other => panic!("expected record, got {:?}", other),
     }
@@ -947,7 +952,7 @@ fn test_eval_function_simple() {
         let y = add_one(5);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(6))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(6)));
 }
 
 #[test]
@@ -958,7 +963,7 @@ fn test_eval_function_two_params() {
         let y = add(3, 4);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(7))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(7)));
 }
 
 #[test]
@@ -969,7 +974,7 @@ fn test_eval_function_three_params() {
         let y = sum3(1, 2, 3);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(6))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(6)));
 }
 
 #[test]
@@ -1004,7 +1009,7 @@ fn test_eval_function_with_if() {
         let y = abs(-5);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(5))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(5)));
 }
 
 #[test]
@@ -1018,7 +1023,7 @@ fn test_eval_function_multiple_calls() {
         let y = a + b + c;
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(12))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(12)));
 }
 
 #[test]
@@ -1030,7 +1035,7 @@ fn test_eval_function_composition() {
         let y = add_one(double(5));
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(11))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(11)));
 }
 
 // ============================================================================
@@ -1045,7 +1050,7 @@ fn test_eval_recursive_factorial() {
         let x = fact(5);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(120))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(120)));
 }
 
 #[test]
@@ -1056,7 +1061,7 @@ fn test_eval_recursive_factorial_zero() {
         let x = fact(0);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(1))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(1)));
 }
 
 #[test]
@@ -1067,7 +1072,7 @@ fn test_eval_recursive_factorial_one() {
         let x = fact(1);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(1))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(1)));
 }
 
 #[test]
@@ -1078,7 +1083,7 @@ fn test_eval_recursive_fibonacci() {
         let x = fib(10);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(55))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(55)));
 }
 
 #[test]
@@ -1089,7 +1094,7 @@ fn test_eval_recursive_fibonacci_zero() {
         let x = fib(0);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(0))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(0)));
 }
 
 #[test]
@@ -1100,7 +1105,7 @@ fn test_eval_recursive_sum() {
         let x = sum_to(10);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(55))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(55)));
 }
 
 #[test]
@@ -1111,7 +1116,7 @@ fn test_eval_recursive_gcd() {
         let x = gcd(48, 18);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(6))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(6)));
 }
 
 // ============================================================================
@@ -1126,7 +1131,7 @@ fn test_eval_pipe_simple() {
         let x = 5 |> double;
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(10))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(10)));
 }
 
 #[test]
@@ -1138,7 +1143,7 @@ fn test_eval_pipe_chain() {
         let x = 5 |> double |> add_one;
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(11))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(11)));
 }
 
 #[test]
@@ -1151,7 +1156,7 @@ fn test_eval_pipe_long_chain() {
     ",
     );
     // 1 -> 2 -> 3 -> 6 -> 7
-    assert!(matches!(result, Ok(Value::Int(7))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(7)));
 }
 
 #[test]
@@ -1162,7 +1167,7 @@ fn test_eval_pipe_with_expression() {
         let x = (1 + 2) |> double;
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(6))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(6)));
 }
 
 // ============================================================================
@@ -1173,7 +1178,7 @@ fn test_eval_pipe_with_expression() {
 fn test_eval_match_literal() {
     assert!(matches!(
         eval_source("let x = match 1 { 0 -> 100, 1 -> 200, _ -> 300 };"),
-        Ok(Value::Int(200))
+        Ok(Value::Int(n)) if n == int(200)
     ));
 }
 
@@ -1181,7 +1186,7 @@ fn test_eval_match_literal() {
 fn test_eval_match_wildcard() {
     assert!(matches!(
         eval_source("let x = match 5 { 0 -> 100, 1 -> 200, _ -> 300 };"),
-        Ok(Value::Int(300))
+        Ok(Value::Int(n)) if n == int(300)
     ));
 }
 
@@ -1189,7 +1194,7 @@ fn test_eval_match_wildcard() {
 fn test_eval_match_first_arm() {
     assert!(matches!(
         eval_source("let x = match 0 { 0 -> 100, 1 -> 200, _ -> 300 };"),
-        Ok(Value::Int(100))
+        Ok(Value::Int(n)) if n == int(100)
     ));
 }
 
@@ -1197,7 +1202,7 @@ fn test_eval_match_first_arm() {
 fn test_eval_match_with_binding() {
     assert!(matches!(
         eval_source("let x = match 42 { n -> n + 1 };"),
-        Ok(Value::Int(43))
+        Ok(Value::Int(n)) if n == int(43)
     ));
 }
 
@@ -1205,7 +1210,7 @@ fn test_eval_match_with_binding() {
 fn test_eval_match_tuple() {
     assert!(matches!(
         eval_source("let x = match (1, 2) { (a, b) -> a + b };"),
-        Ok(Value::Int(3))
+        Ok(Value::Int(n)) if n == int(3)
     ));
 }
 
@@ -1213,7 +1218,7 @@ fn test_eval_match_tuple() {
 fn test_eval_match_tuple_nested() {
     assert!(matches!(
         eval_source("let x = match ((1, 2), 3) { ((a, b), c) -> a + b + c };"),
-        Ok(Value::Int(6))
+        Ok(Value::Int(n)) if n == int(6)
     ));
 }
 
@@ -1222,7 +1227,7 @@ fn test_eval_match_list_pattern() {
     // Match a specific list
     let result = eval_source("let x = match [1, 2] { [a, b] -> a + b, _ -> 0 };");
     if let Ok(Value::Int(n)) = result {
-        assert_eq!(n, 3);
+        assert_eq!(n, int(3));
     }
 }
 
@@ -1230,7 +1235,7 @@ fn test_eval_match_list_pattern() {
 fn test_eval_match_multiple_arms_first() {
     assert!(matches!(
         eval_source("let x = match true { true -> 1, false -> 0 };"),
-        Ok(Value::Int(1))
+        Ok(Value::Int(n)) if n == int(1)
     ));
 }
 
@@ -1238,7 +1243,7 @@ fn test_eval_match_multiple_arms_first() {
 fn test_eval_match_multiple_arms_second() {
     assert!(matches!(
         eval_source("let x = match false { true -> 1, false -> 0 };"),
-        Ok(Value::Int(0))
+        Ok(Value::Int(n)) if n == int(0)
     ));
 }
 
@@ -1248,14 +1253,14 @@ fn test_eval_match_multiple_arms_second() {
 
 #[test]
 fn test_eval_let_simple() {
-    assert!(matches!(eval_source("let x = 42;"), Ok(Value::Int(42))));
+    assert!(matches!(eval_source("let x = 42;"), Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
 fn test_eval_let_with_expression() {
     assert!(matches!(
         eval_source("let x = 1 + 2 + 3;"),
-        Ok(Value::Int(6))
+        Ok(Value::Int(n)) if n == int(6)
     ));
 }
 
@@ -1263,7 +1268,7 @@ fn test_eval_let_with_expression() {
 fn test_eval_multiple_lets() {
     assert!(matches!(
         eval_source("let a = 1; let b = 2; let c = a + b;"),
-        Ok(Value::Int(3))
+        Ok(Value::Int(n)) if n == int(3)
     ));
 }
 
@@ -1271,7 +1276,7 @@ fn test_eval_multiple_lets() {
 fn test_eval_let_shadowing() {
     assert!(matches!(
         eval_source("let x = 1; let x = x + 1; let x = x + 1;"),
-        Ok(Value::Int(3))
+        Ok(Value::Int(n)) if n == int(3)
     ));
 }
 
@@ -1279,7 +1284,7 @@ fn test_eval_let_shadowing() {
 fn test_eval_let_uses_previous() {
     assert!(matches!(
         eval_source("let a = 10; let b = a * 2; let c = b + a;"),
-        Ok(Value::Int(30))
+        Ok(Value::Int(n)) if n == int(30)
     ));
 }
 
@@ -1291,13 +1296,13 @@ fn test_eval_let_uses_previous() {
 fn test_eval_unary_minus_expression() {
     assert!(matches!(
         eval_source("let x = -(1 + 2);"),
-        Ok(Value::Int(-3))
+        Ok(Value::Int(n)) if n == int(-3)
     ));
 }
 
 #[test]
 fn test_eval_double_negation() {
-    assert!(matches!(eval_source("let x = - -42;"), Ok(Value::Int(42))));
+    assert!(matches!(eval_source("let x = - -42;"), Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
@@ -1344,7 +1349,7 @@ fn test_eval_deeply_nested_list() {
     match eval_source("let x = [[[1]]];") {
         Ok(Value::List(l1)) => match &l1[0] {
             Value::List(l2) => match &l2[0] {
-                Value::List(l3) => assert!(matches!(l3[0], Value::Int(1))),
+                Value::List(l3) => assert!(matches!(&l3[0], Value::Int(n) if n == &int(1))),
                 _ => panic!("expected innermost list"),
             },
             _ => panic!("expected middle list"),
@@ -1365,7 +1370,7 @@ fn test_eval_many_functions() {
         let x = f1(f2(f3(f4(f5(0)))));
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(15))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(15)));
 }
 
 #[test]
@@ -1384,7 +1389,7 @@ fn test_eval_complex_record() {
         let x = config.settings.level;
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(5))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(5)));
 }
 
 // ============================================================================
@@ -1435,7 +1440,7 @@ fn test_eval_lambda_simple() {
         let y = f(21);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(42))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]
@@ -1447,7 +1452,7 @@ fn test_eval_lambda_closure() {
         let result = add5(10);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(15))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(15)));
 }
 
 #[test]
@@ -1459,7 +1464,7 @@ fn test_eval_lambda_higher_order() {
         let result = apply(double, 21);
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(42))));
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
 // ============================================================================
@@ -1468,24 +1473,24 @@ fn test_eval_lambda_higher_order() {
 
 #[test]
 fn test_eval_power_simple() {
-    assert!(matches!(eval_source("let x = 2 ^ 3;"), Ok(Value::Int(8))));
+    assert!(matches!(eval_source("let x = 2 ^ 3;"), Ok(Value::Int(n)) if n == int(8)));
 }
 
 #[test]
 fn test_eval_power_zero_exponent() {
-    assert!(matches!(eval_source("let x = 5 ^ 0;"), Ok(Value::Int(1))));
+    assert!(matches!(eval_source("let x = 5 ^ 0;"), Ok(Value::Int(n)) if n == int(1)));
 }
 
 #[test]
 fn test_eval_power_one_exponent() {
-    assert!(matches!(eval_source("let x = 5 ^ 1;"), Ok(Value::Int(5))));
+    assert!(matches!(eval_source("let x = 5 ^ 1;"), Ok(Value::Int(n)) if n == int(5)));
 }
 
 #[test]
 fn test_eval_power_larger() {
     assert!(matches!(
         eval_source("let x = 2 ^ 10;"),
-        Ok(Value::Int(1024))
+        Ok(Value::Int(n)) if n == int(1024)
     ));
 }
 

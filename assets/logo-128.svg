@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 256 256" fill="none">
+<!-- Mark -->
+  <g transform="translate(128 128)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Blue arms -->
+    <g stroke="#5fb8f2">
+      <g transform="rotate(0)"><path d="M 0 -96 V -64 H 26"/></g>
+      <g transform="rotate(120)"><path d="M 0 -96 V -64 H 26"/></g>
+      <g transform="rotate(240)"><path d="M 0 -96 V -64 H 26"/></g>
+    </g>
+
+    <!-- Violet arms -->
+    <g stroke="#aaa1f6">
+      <g transform="rotate(60)"><path d="M 0 -96 V -64 H 26"/></g>
+      <g transform="rotate(180)"><path d="M 0 -96 V -64 H 26"/></g>
+      <g transform="rotate(300)"><path d="M 0 -96 V -64 H 26"/></g>
+    </g>
+
+    <!-- Center dot: "ice core" -->
+    <circle cx="0" cy="0" r="8" fill="#ffffff" fill-opacity="0.9" stroke="none"/>
+  </g>
+</svg>

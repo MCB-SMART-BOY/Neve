@@ -781,6 +781,9 @@ impl ModuleLoader {
                     // 立即传播循环依赖错误
                     if let Err(e) = self.load_module(&abs_path) {
                         match &e {
+                            ModuleLoadError::NotFound(_) if Self::is_std_path(&abs_path) => {
+                                continue;
+                            }
                             // Circular dependencies and module not found should fail immediately
                             // 循环依赖和模块未找到应立即失败
                             ModuleLoadError::CircularDependency { .. }
@@ -826,6 +829,14 @@ impl ModuleLoader {
                     resolver.register_imports(resolved);
                 }
                 Err(err) => {
+                    if matches!(err, ImportResolveError::ModuleNotFound(_)) {
+                        let import_path = ModulePath::from_hir_import(import);
+                        if let Some(abs_path) = self.make_absolute(&import_path, Some(path))
+                            && Self::is_std_path(&abs_path)
+                        {
+                            continue;
+                        }
+                    }
                     self.diagnostics.push(Diagnostic::error(
                         neve_diagnostic::DiagnosticKind::Module,
                         import.span,
@@ -1000,6 +1011,12 @@ impl ModuleLoader {
         path.last()
             .cloned()
             .unwrap_or_else(|| "main".to_string())
+    }
+
+    /// Check if a module path points to the std namespace.
+    /// 检查模块路径是否指向 std 命名空间。
+    fn is_std_path(path: &[String]) -> bool {
+        path.first().map(|seg| seg == "std").unwrap_or(false)
     }
 
     /// Get module info by ID.

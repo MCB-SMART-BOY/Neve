@@ -4,7 +4,7 @@
 //! Provides immutable hash set operations.
 //! 提供不可变哈希集合操作。
 
-use neve_eval::Value;
+use neve_eval::{Value, stable_key};
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -29,7 +29,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 1 {
                         return Err("Set.singleton requires 1 argument".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     let mut set = HashSet::new();
                     set.insert(key);
                     Ok(Value::Set(Rc::new(set)))
@@ -49,7 +49,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     match &args[0] {
                         Value::List(list) => {
                             let set: HashSet<String> =
-                                list.iter().map(|v| format!("{:?}", v)).collect();
+                                list.iter().map(|v| stable_key(v)).collect();
                             Ok(Value::Set(Rc::new(set)))
                         }
                         _ => Err("Set.fromList expects a list".into()),
@@ -71,7 +71,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Set.contains requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[1] {
                         Value::Set(set) => Ok(Value::Bool(set.contains(&key))),
                         _ => Err("Set.contains expects a set as second argument".into()),
@@ -90,7 +90,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         return Err("Set.size requires 1 argument".into());
                     }
                     match &args[0] {
-                        Value::Set(set) => Ok(Value::Int(set.len() as i64)),
+                        Value::Set(set) => Ok(Value::Int(set.len().into())),
                         _ => Err("Set.size expects a set".into()),
                     }
                 }),
@@ -127,7 +127,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Set.insert requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[1] {
                         Value::Set(set) => {
                             let mut new_set = (**set).clone();
@@ -149,7 +149,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args.len() != 2 {
                         return Err("Set.remove requires 2 arguments".into());
                     }
-                    let key = format!("{:?}", args[0]);
+                    let key = stable_key(&args[0]);
                     match &args[1] {
                         Value::Set(set) => {
                             let mut new_set = (**set).clone();
@@ -313,8 +313,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     }
                     match &args[0] {
                         Value::Set(set) => {
-                            // Elements are stored as debug strings
-                            // 元素存储为调试字符串
+                            // Elements are stored as stable canonical strings
+                            // 元素存储为稳定的规范字符串
                             let list: Vec<Value> = set
                                 .iter()
                                 .map(|s| Value::String(Rc::new(s.clone())))

@@ -1,7 +1,19 @@
-# Neve Architecture / 架构设计
+<div align="center">
+
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Neve Architecture</h1>
+
+<p><em>架构设计</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong>
+</p>
+
+</div>
 
 This document describes the internal architecture of Neve for contributors and developers.
-
 本文档为贡献者和开发者描述 Neve 的内部架构。
 
 ---

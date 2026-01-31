@@ -1,6 +1,9 @@
 //! Math operations for the standard library.
 //! 标准库的数学操作。
 
+use neve_common::{
+    int_abs, int_from_f64, int_is_negative, int_to_f64, int_to_i64, int_to_u32, parse_int, Int,
+};
 use neve_eval::value::{BuiltinFn, Value};
 
 /// Returns all math builtins.
@@ -14,7 +17,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.abs",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Int(n) => Ok(Value::Int(n.abs())),
+                    Value::Int(n) => Ok(Value::Int(int_abs(n))),
                     Value::Float(n) => Ok(Value::Float(n.abs())),
                     _ => Err("math.abs expects a number".to_string()),
                 },
@@ -26,8 +29,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.floor",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Float(n) => Ok(Value::Int(n.floor() as i64)),
-                    Value::Int(n) => Ok(Value::Int(*n)),
+                    Value::Float(n) => int_from_f64(n.floor())
+                        .map(Value::Int)
+                        .ok_or_else(|| "math.floor expects a finite number".to_string()),
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
                     _ => Err("math.floor expects a number".to_string()),
                 },
             }),
@@ -38,8 +43,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.ceil",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Float(n) => Ok(Value::Int(n.ceil() as i64)),
-                    Value::Int(n) => Ok(Value::Int(*n)),
+                    Value::Float(n) => int_from_f64(n.ceil())
+                        .map(Value::Int)
+                        .ok_or_else(|| "math.ceil expects a finite number".to_string()),
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
                     _ => Err("math.ceil expects a number".to_string()),
                 },
             }),
@@ -50,8 +57,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.round",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Float(n) => Ok(Value::Int(n.round() as i64)),
-                    Value::Int(n) => Ok(Value::Int(*n)),
+                    Value::Float(n) => int_from_f64(n.round())
+                        .map(Value::Int)
+                        .ok_or_else(|| "math.round expects a finite number".to_string()),
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
                     _ => Err("math.round expects a number".to_string()),
                 },
             }),
@@ -63,7 +72,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.sqrt())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).sqrt())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.sqrt()))
+                        .ok_or_else(|| "math.sqrt expects a finite number".to_string()),
                     _ => Err("math.sqrt expects a number".to_string()),
                 },
             }),
@@ -75,18 +86,26 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Int(base), Value::Int(exp)) => {
-                        if *exp >= 0 {
-                            Ok(Value::Int(base.pow(*exp as u32)))
+                        if int_is_negative(exp) {
+                            let base_f = int_to_f64(base)
+                                .ok_or_else(|| "math.pow expects finite numbers".to_string())?;
+                            let exp_i32 = int_to_i32(exp, "math.pow exponent")?;
+                            Ok(Value::Float(base_f.powi(exp_i32)))
                         } else {
-                            Ok(Value::Float((*base as f64).powi(*exp as i32)))
+                            let exp_u32 = int_to_u32(exp)
+                                .ok_or_else(|| "math.pow exponent is too large".to_string())?;
+                            Ok(Value::Int(base.pow(exp_u32)))
                         }
                     }
                     (Value::Float(base), Value::Int(exp)) => {
-                        Ok(Value::Float(base.powi(*exp as i32)))
+                        let exp_i32 = int_to_i32(exp, "math.pow exponent")?;
+                        Ok(Value::Float(base.powi(exp_i32)))
                     }
                     (Value::Float(base), Value::Float(exp)) => Ok(Value::Float(base.powf(*exp))),
                     (Value::Int(base), Value::Float(exp)) => {
-                        Ok(Value::Float((*base as f64).powf(*exp)))
+                        let base_f = int_to_f64(base)
+                            .ok_or_else(|| "math.pow expects finite numbers".to_string())?;
+                        Ok(Value::Float(base_f.powf(*exp)))
                     }
                     _ => Err("math.pow expects two numbers".to_string()),
                 },
@@ -99,7 +118,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.ln())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).ln())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.ln()))
+                        .ok_or_else(|| "math.log expects a finite number".to_string()),
                     _ => Err("math.log expects a number".to_string()),
                 },
             }),
@@ -111,7 +132,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.log10())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).log10())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.log10()))
+                        .ok_or_else(|| "math.log10 expects a finite number".to_string()),
                     _ => Err("math.log10 expects a number".to_string()),
                 },
             }),
@@ -123,7 +146,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.exp())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).exp())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.exp()))
+                        .ok_or_else(|| "math.exp expects a finite number".to_string()),
                     _ => Err("math.exp expects a number".to_string()),
                 },
             }),
@@ -136,7 +161,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.sin())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).sin())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.sin()))
+                        .ok_or_else(|| "math.sin expects a finite number".to_string()),
                     _ => Err("math.sin expects a number".to_string()),
                 },
             }),
@@ -148,7 +175,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.cos())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).cos())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.cos()))
+                        .ok_or_else(|| "math.cos expects a finite number".to_string()),
                     _ => Err("math.cos expects a number".to_string()),
                 },
             }),
@@ -160,7 +189,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.tan())),
-                    Value::Int(n) => Ok(Value::Float((*n as f64).tan())),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(|v| Value::Float(v.tan()))
+                        .ok_or_else(|| "math.tan expects a finite number".to_string()),
                     _ => Err("math.tan expects a number".to_string()),
                 },
             }),
@@ -172,10 +203,20 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.max",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(*a.max(b))),
+                    (Value::Int(a), Value::Int(b)) => {
+                        Ok(Value::Int(if a >= b { a.clone() } else { b.clone() }))
+                    }
                     (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.max(*b))),
-                    (Value::Int(a), Value::Float(b)) => Ok(Value::Float((*a as f64).max(*b))),
-                    (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a.max(*b as f64))),
+                    (Value::Int(a), Value::Float(b)) => {
+                        let a = int_to_f64(a)
+                            .ok_or_else(|| "math.max expects finite numbers".to_string())?;
+                        Ok(Value::Float(a.max(*b)))
+                    }
+                    (Value::Float(a), Value::Int(b)) => {
+                        let b = int_to_f64(b)
+                            .ok_or_else(|| "math.max expects finite numbers".to_string())?;
+                        Ok(Value::Float(a.max(b)))
+                    }
                     _ => Err("math.max expects two numbers".to_string()),
                 },
             }),
@@ -186,10 +227,20 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.min",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::Int(a), Value::Int(b)) => Ok(Value::Int(*a.min(b))),
+                    (Value::Int(a), Value::Int(b)) => {
+                        Ok(Value::Int(if a <= b { a.clone() } else { b.clone() }))
+                    }
                     (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.min(*b))),
-                    (Value::Int(a), Value::Float(b)) => Ok(Value::Float((*a as f64).min(*b))),
-                    (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a.min(*b as f64))),
+                    (Value::Int(a), Value::Float(b)) => {
+                        let a = int_to_f64(a)
+                            .ok_or_else(|| "math.min expects finite numbers".to_string())?;
+                        Ok(Value::Float(a.min(*b)))
+                    }
+                    (Value::Float(a), Value::Int(b)) => {
+                        let b = int_to_f64(b)
+                            .ok_or_else(|| "math.min expects finite numbers".to_string())?;
+                        Ok(Value::Float(a.min(b)))
+                    }
                     _ => Err("math.min expects two numbers".to_string()),
                 },
             }),
@@ -201,7 +252,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 3,
                 func: |args| match (&args[0], &args[1], &args[2]) {
                     (Value::Int(val), Value::Int(min), Value::Int(max)) => {
-                        Ok(Value::Int(*val.max(min).min(max)))
+                        let clamped = if val < min {
+                            min.clone()
+                        } else if val > max {
+                            max.clone()
+                        } else {
+                            val.clone()
+                        };
+                        Ok(Value::Int(clamped))
                     }
                     (Value::Float(val), Value::Float(min), Value::Float(max)) => {
                         Ok(Value::Float(val.max(*min).min(*max)))
@@ -222,12 +280,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.toInt",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Int(n) => Ok(Value::Int(*n)),
-                    Value::Float(n) => Ok(Value::Int(*n as i64)),
-                    Value::String(s) => s
-                        .parse::<i64>()
+                    Value::Int(n) => Ok(Value::Int(n.clone())),
+                    Value::Float(n) => int_from_f64(*n)
                         .map(Value::Int)
-                        .map_err(|_| format!("cannot parse '{}' as integer", s)),
+                        .ok_or_else(|| format!("cannot parse '{}' as integer", n)),
+                    Value::String(s) => parse_int(s)
+                        .map(Value::Int)
+                        .ok_or_else(|| format!("cannot parse '{}' as integer", s)),
                     _ => Err("math.toInt expects a number or string".to_string()),
                 },
             }),
@@ -238,7 +297,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "math.toFloat",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Int(n) => Ok(Value::Float(*n as f64)),
+                    Value::Int(n) => int_to_f64(n)
+                        .map(Value::Float)
+                        .ok_or_else(|| "math.toFloat expects a finite number".to_string()),
                     Value::Float(n) => Ok(Value::Float(*n)),
                     Value::String(s) => s
                         .parse::<f64>()
@@ -274,4 +335,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
     ]
+}
+
+fn int_to_i32(value: &Int, context: &str) -> Result<i32, String> {
+    let as_i64 = int_to_i64(value).ok_or_else(|| format!("{context} is out of range"))?;
+    i32::try_from(as_i64).map_err(|_| format!("{context} is out of range"))
 }

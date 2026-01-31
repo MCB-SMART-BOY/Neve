@@ -1,7 +1,19 @@
-# Neve Contributor Onboarding / 贡献者入门
+<div align="center">
+
+<img src="../assets/logo.svg" width="120" alt="Neve logo">
+
+<h1>Contributor Onboarding</h1>
+
+<p><em>贡献者入门</em></p>
+
+<p>
+  <strong><a href="../README.md">Home</a></strong> ·
+  <strong><a href="./">Docs</a></strong>
+</p>
+
+</div>
 
 This guide helps new contributors understand how the Neve codebase is organized and where to start.
-
 本指南帮助新贡献者理解 Neve 代码库的组织方式与入门路径。
 
 ---
