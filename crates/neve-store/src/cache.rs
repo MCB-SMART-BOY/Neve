@@ -253,20 +253,14 @@ impl NarInfo {
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                 }
-                "NarHash" => {
-                    if !value.is_empty() {
-                        nar_hash = Some(value.to_string());
-                    }
+                "NarHash" if !value.is_empty() => {
+                    nar_hash = Some(value.to_string());
                 }
-                "FileHash" => {
-                    if !value.is_empty() {
-                        file_hash = Some(value.to_string());
-                    }
+                "FileHash" if !value.is_empty() => {
+                    file_hash = Some(value.to_string());
                 }
-                "Sig" => {
-                    if !value.is_empty() {
-                        signature = Some(value.to_string());
-                    }
+                "Sig" if !value.is_empty() => {
+                    signature = Some(value.to_string());
                 }
                 _ => {}
             }

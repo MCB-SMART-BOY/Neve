@@ -190,24 +190,24 @@ fn add_type_mismatch_help(mut diag: Diagnostic, expected: &Ty, found: &Ty) -> Di
             diag = diag.with_note("this expression does not return a value");
         }
         // Function mismatch
-        (TyKind::Fn(exp_params, _), TyKind::Fn(found_params, _)) => {
-            if exp_params.len() != found_params.len() {
-                diag = diag.with_note(format!(
-                    "expected function with {} parameter(s), found function with {} parameter(s)",
-                    exp_params.len(),
-                    found_params.len()
-                ));
-            }
+        (TyKind::Fn(exp_params, _), TyKind::Fn(found_params, _))
+            if exp_params.len() != found_params.len() =>
+        {
+            diag = diag.with_note(format!(
+                "expected function with {} parameter(s), found function with {} parameter(s)",
+                exp_params.len(),
+                found_params.len()
+            ));
         }
         // Tuple size mismatch
-        (TyKind::Tuple(exp_elems), TyKind::Tuple(found_elems)) => {
-            if exp_elems.len() != found_elems.len() {
-                diag = diag.with_note(format!(
-                    "expected tuple with {} element(s), found tuple with {} element(s)",
-                    exp_elems.len(),
-                    found_elems.len()
-                ));
-            }
+        (TyKind::Tuple(exp_elems), TyKind::Tuple(found_elems))
+            if exp_elems.len() != found_elems.len() =>
+        {
+            diag = diag.with_note(format!(
+                "expected tuple with {} element(s), found tuple with {} element(s)",
+                exp_elems.len(),
+                found_elems.len()
+            ));
         }
         _ => {}
     }
