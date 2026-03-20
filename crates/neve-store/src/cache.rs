@@ -721,13 +721,15 @@ impl BinaryCache {
     /// 下载并安装缓存的路径。
     pub fn fetch(&mut self, cached: &CachedPath) -> Result<(), CacheError> {
         let mut visiting = HashSet::new();
-        self.fetch_with_references(cached, &mut visiting)
+        let mut db = Database::open(self.store.root().to_path_buf())?;
+        self.fetch_with_references(cached, &mut visiting, &mut db)
     }
 
     fn fetch_with_references(
         &mut self,
         cached: &CachedPath,
         visiting: &mut HashSet<StorePath>,
+        db: &mut Database,
     ) -> Result<(), CacheError> {
         if !visiting.insert(cached.path.clone()) {
             // Cyclic references in metadata should not cause infinite recursion.
@@ -740,7 +742,7 @@ impl BinaryCache {
             // 确保元数据引用的路径也存在于本地存储中。
             for reference in &cached.references {
                 if self.store.path_exists(reference) {
-                    self.backfill_existing_path_metadata(reference, visiting)?;
+                    self.backfill_existing_path_metadata(reference, visiting, db)?;
                     continue;
                 }
 
@@ -752,7 +754,7 @@ impl BinaryCache {
                     ))
                 })?;
 
-                self.fetch_with_references(&reference_cached, visiting)?;
+                self.fetch_with_references(&reference_cached, visiting, db)?;
             }
 
             // Fetch current path after references are present. This prevents
@@ -774,9 +776,9 @@ impl BinaryCache {
                     }
                     .into());
                 }
-                self.register_fetched_path_info(cached, Some(extracted_nar_hash))?;
+                self.register_fetched_path_info(db, cached, Some(extracted_nar_hash))?;
             } else {
-                self.register_fetched_path_info(cached, None)?;
+                self.register_fetched_path_info(db, cached, None)?;
             }
 
             Ok(())
@@ -790,33 +792,35 @@ impl BinaryCache {
         &mut self,
         path: &StorePath,
         visiting: &mut HashSet<StorePath>,
+        db: &mut Database,
     ) -> Result<(), CacheError> {
-        let mut db = Database::open(self.store.root().to_path_buf())?;
         if db.query(path)?.is_some() {
             return Ok(());
         }
-        drop(db);
 
         match self.query(path) {
-            Ok(Some(cached)) => self.fetch_with_references(&cached, visiting),
-            Ok(None) | Err(_) => self.register_minimal_path_info(path),
+            Ok(Some(cached)) => self.fetch_with_references(&cached, visiting, db),
+            Ok(None) | Err(_) => self.register_minimal_path_info(db, path),
         }
     }
 
-    fn register_minimal_path_info(&self, path: &StorePath) -> Result<(), CacheError> {
+    fn register_minimal_path_info(
+        &self,
+        db: &mut Database,
+        path: &StorePath,
+    ) -> Result<(), CacheError> {
         let nar_size = Self::fs_size(&self.store.to_path(path))?;
         let info = PathInfo::new(path.clone(), *path.hash(), nar_size);
-        let mut db = Database::open(self.store.root().to_path_buf())?;
         db.register(info)?;
         Ok(())
     }
 
     fn register_fetched_path_info(
         &self,
+        db: &mut Database,
         cached: &CachedPath,
         extracted_nar_hash: Option<Hash>,
     ) -> Result<(), CacheError> {
-        let mut db = Database::open(self.store.root().to_path_buf())?;
         let nar_hash = if let Some(hash) = extracted_nar_hash {
             hash
         } else {
