@@ -1057,11 +1057,11 @@ impl BinaryCache {
     }
 
     /// Accept both historical hash styles for compatibility:
-    /// - NAR hash of extracted path
-    /// - native store hash used by add_file/add_content/add_dir
-    /// 为兼容性接受两类历史哈希风格：
-    /// - 解包路径的 NAR 哈希
-    /// - add_file/add_content/add_dir 使用的 store 原生哈希
+    /// - NAR hash of extracted path.
+    /// - Native store hash used by add_file/add_content/add_dir.
+    ///
+    /// 兼容两类历史哈希风格：解包路径的 NAR 哈希，以及
+    /// add_file/add_content/add_dir 使用的 store 原生哈希。
     fn matches_expected_store_hash(
         &self,
         expected_path: &StorePath,
