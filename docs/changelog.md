@@ -29,6 +29,20 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [1.0.1] - 2026-03-20
+
+### Added / 新增
+- **Store metadata registration**: Cache fetch and builder outputs now record path metadata into the store database. / **Store 元数据登记**: 缓存拉取与构建输出现在会把路径元数据登记进 store 数据库。
+- **Cache roundtrip tests**: Added local and remote roundtrip coverage for `add_content` and `add_dir` path fetches. / **缓存回归测试**: 新增 `add_content` 与 `add_dir` 的本地/远程 roundtrip 拉取覆盖。
+
+### Improved / 改进
+- **Cache closure reliability**: Hardened signature checks, retry behavior, and closure fetch handling for binary cache downloads. / **缓存闭包可靠性**: 强化二进制缓存下载时的签名检查、重试行为与 closure 拉取流程。
+- **Recursive fetch efficiency**: Reused store DB handles across recursive fetch operations and backfilled metadata for existing references. / **递归拉取效率**: 递归拉取流程复用 store DB 句柄，并为已有引用路径补全元数据。
+
+### Fixed / 修复
+- **Registration ordering bug**: Prevented early DB registration before final hash validation during fetch. / **登记顺序缺陷**: 修复拉取流程中在最终哈希校验前提前写入数据库的问题。
+- **Hash compatibility bug**: Fetch verification now accepts store-native hash format to avoid false mismatch failures. / **哈希兼容性缺陷**: 拉取校验现在兼容 store 原生哈希格式，避免误报不匹配。
+
 ## [1.0.0] - 2026-01-31
 
 ### Added / 新增
