@@ -2145,6 +2145,49 @@ mod tests {
     }
 
     #[test]
+    fn test_remote_cache_roundtrip_fetch_for_add_content_path() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = TestHttpCacheServer::start();
+
+        let upload_store = Store::open_at(temp.path().join("upload-store")).unwrap();
+        let store_path = upload_store
+            .add_content(b"remote-add-content-roundtrip", "pkg-1.0")
+            .unwrap();
+
+        let mut upload_cache = BinaryCache::new(upload_store).unwrap();
+        upload_cache.add_cache(CacheConfig {
+            name: "remote-upload".to_string(),
+            url: Some(server.base_url.clone()),
+            upload: true,
+            ..Default::default()
+        });
+        upload_cache.push(&store_path).unwrap();
+
+        let fetch_root = temp.path().join("fetch-store");
+        let mut fetch_cache =
+            BinaryCache::new(Store::open_at(fetch_root.clone()).unwrap()).unwrap();
+        fetch_cache.add_cache(CacheConfig {
+            name: "remote-read".to_string(),
+            url: Some(server.base_url.clone()),
+            ..Default::default()
+        });
+
+        let cached = fetch_cache
+            .query(&store_path)
+            .unwrap()
+            .expect("remote cache query should return narinfo");
+        fetch_cache.fetch(&cached).unwrap();
+
+        let fetched_store = Store::open_at(fetch_root).unwrap();
+        assert!(fetched_store.path_exists(&store_path));
+        let fetched_path = fetched_store.to_path(&store_path);
+        assert_eq!(
+            fs::read(fetched_path).unwrap(),
+            b"remote-add-content-roundtrip"
+        );
+    }
+
+    #[test]
     fn test_fetch_remote_cache_recursively_fetches_references() {
         let temp = tempfile::TempDir::new().unwrap();
         let server = TestHttpCacheServer::start();
