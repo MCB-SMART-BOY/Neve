@@ -2188,6 +2188,55 @@ mod tests {
     }
 
     #[test]
+    fn test_remote_cache_roundtrip_fetch_for_add_dir_path() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = TestHttpCacheServer::start();
+
+        let source_dir = temp.path().join("remote-source-dir");
+        fs::create_dir_all(source_dir.join("nested")).unwrap();
+        fs::write(source_dir.join("root.txt"), b"remote-root").unwrap();
+        fs::write(source_dir.join("nested").join("child.txt"), b"remote-child").unwrap();
+
+        let upload_store = Store::open_at(temp.path().join("upload-store")).unwrap();
+        let store_path = upload_store.add_dir(&source_dir, "pkg-dir-1.0").unwrap();
+
+        let mut upload_cache = BinaryCache::new(upload_store).unwrap();
+        upload_cache.add_cache(CacheConfig {
+            name: "remote-upload".to_string(),
+            url: Some(server.base_url.clone()),
+            upload: true,
+            ..Default::default()
+        });
+        upload_cache.push(&store_path).unwrap();
+
+        let fetch_root = temp.path().join("fetch-store");
+        let mut fetch_cache =
+            BinaryCache::new(Store::open_at(fetch_root.clone()).unwrap()).unwrap();
+        fetch_cache.add_cache(CacheConfig {
+            name: "remote-read".to_string(),
+            url: Some(server.base_url.clone()),
+            ..Default::default()
+        });
+
+        let cached = fetch_cache
+            .query(&store_path)
+            .unwrap()
+            .expect("remote cache query should return narinfo");
+        fetch_cache.fetch(&cached).unwrap();
+
+        let fetched_store = Store::open_at(fetch_root).unwrap();
+        let fetched_path = fetched_store.to_path(&store_path);
+        assert_eq!(
+            fs::read(fetched_path.join("root.txt")).unwrap(),
+            b"remote-root"
+        );
+        assert_eq!(
+            fs::read(fetched_path.join("nested").join("child.txt")).unwrap(),
+            b"remote-child"
+        );
+    }
+
+    #[test]
     fn test_fetch_remote_cache_recursively_fetches_references() {
         let temp = tempfile::TempDir::new().unwrap();
         let server = TestHttpCacheServer::start();
