@@ -589,6 +589,7 @@ impl Sandbox {
 
     /// Execute with configurable namespace isolation mode (Linux).
     /// 使用可配置的命名空间隔离模式执行（Linux）。
+    #[cfg(target_os = "linux")]
     pub fn execute_with_mode(
         &self,
         program: &str,
