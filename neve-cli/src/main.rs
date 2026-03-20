@@ -76,6 +76,32 @@ enum Commands {
         /// Build backend (native, docker, simple). / 构建后端（native, docker, simple）。
         #[arg(long, default_value = "auto")]
         backend: String,
+
+        /// Binary cache URL (repeatable). / 二进制缓存 URL（可重复）。
+        #[arg(long = "cache-url", value_name = "URL")]
+        cache_urls: Vec<String>,
+
+        /// Local binary cache directory (repeatable). / 本地二进制缓存目录（可重复）。
+        #[arg(long = "cache-dir", value_name = "DIR")]
+        cache_dirs: Vec<String>,
+
+        /// Disable substituter downloads. / 禁用 substituter 下载。
+        #[arg(long = "no-substitute")]
+        no_substitute: bool,
+
+        /// Upload successful outputs to writable caches. / 将成功产物上传到可写缓存。
+        #[arg(long = "cache-upload")]
+        cache_upload: bool,
+
+        /// Public key for narinfo signature verification (`ed25519:<base64>`, repeatable).
+        /// narinfo 签名验证公钥（`ed25519:<base64>`，可重复）。
+        #[arg(long = "cache-public-key", value_name = "KEY")]
+        cache_public_keys: Vec<String>,
+
+        /// Private key for narinfo signing on upload (`ed25519:<base64>`, repeatable).
+        /// 上传时用于 narinfo 签名的私钥（`ed25519:<base64>`，可重复）。
+        #[arg(long = "cache-private-key", value_name = "KEY")]
+        cache_private_keys: Vec<String>,
     },
 
     /// Package management commands (Unix only). / 软件包管理命令（仅限 Unix）。
@@ -184,6 +210,15 @@ enum ConfigAction {
     Rollback,
     /// List configuration generations. / 列出配置代。
     List,
+    /// Verify generation activation snapshot integrity. / 校验 generation 激活快照完整性。
+    Verify {
+        /// Verify all generations instead of only current. / 校验全部 generation，而不是仅当前。
+        #[arg(long, short = 'a', conflicts_with = "generation")]
+        all: bool,
+        /// Generation number to verify. / 要校验的 generation 编号。
+        #[arg(conflicts_with = "all")]
+        generation: Option<u64>,
+    },
 }
 
 /// Store management subcommands (Unix only).
@@ -241,7 +276,25 @@ fn main() {
         // Unix-only commands (package management)
         // 仅限 Unix 的命令（软件包管理）
         #[cfg(unix)]
-        Commands::Build { package, backend } => commands::build::run(package.as_deref(), &backend),
+        Commands::Build {
+            package,
+            backend,
+            cache_urls,
+            cache_dirs,
+            no_substitute,
+            cache_upload,
+            cache_public_keys,
+            cache_private_keys,
+        } => commands::build::run(
+            package.as_deref(),
+            &backend,
+            &cache_urls,
+            &cache_dirs,
+            !no_substitute,
+            cache_upload,
+            &cache_public_keys,
+            &cache_private_keys,
+        ),
         #[cfg(unix)]
         Commands::Package { action } => match action {
             PackageAction::Install { package } => commands::install::run(&package),
@@ -260,6 +313,7 @@ fn main() {
             ConfigAction::SwitchTo => commands::config::switch_interactive(),
             ConfigAction::Rollback => commands::config::rollback(),
             ConfigAction::List => commands::config::list_generations(),
+            ConfigAction::Verify { all, generation } => commands::config::verify(generation, all),
         },
         #[cfg(unix)]
         Commands::Store { action } => match action {

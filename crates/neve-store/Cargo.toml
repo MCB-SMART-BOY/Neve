@@ -17,3 +17,6 @@ flate2.workspace = true
 lzma-rs.workspace = true
 zstd.workspace = true
 tempfile.workspace = true
+reqwest.workspace = true
+base64.workspace = true
+ed25519-dalek.workspace = true
