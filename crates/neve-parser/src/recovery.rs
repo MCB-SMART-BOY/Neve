@@ -199,20 +199,14 @@ impl DelimiterStack {
             TokenKind::LBrace | TokenKind::HashLBrace => self.push(DelimiterKind::Brace),
             // Closing delimiters - pop from stack if matching
             // 闭合定界符 - 如果匹配则从栈中弹出
-            TokenKind::RParen => {
-                if self.stack.last() == Some(&DelimiterKind::Paren) {
-                    self.pop();
-                }
+            TokenKind::RParen if self.stack.last() == Some(&DelimiterKind::Paren) => {
+                self.pop();
             }
-            TokenKind::RBracket => {
-                if self.stack.last() == Some(&DelimiterKind::Bracket) {
-                    self.pop();
-                }
+            TokenKind::RBracket if self.stack.last() == Some(&DelimiterKind::Bracket) => {
+                self.pop();
             }
-            TokenKind::RBrace => {
-                if self.stack.last() == Some(&DelimiterKind::Brace) {
-                    self.pop();
-                }
+            TokenKind::RBrace if self.stack.last() == Some(&DelimiterKind::Brace) => {
+                self.pop();
             }
             _ => {}
         }
