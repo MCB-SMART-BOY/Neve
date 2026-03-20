@@ -7,7 +7,7 @@
 //! 避免从源码重新构建包。
 
 use crate::nar::{self, NarError};
-use crate::{Database, Store, StoreError};
+use crate::{Database, PathInfo, Store, StoreError};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -763,6 +763,7 @@ impl BinaryCache {
 
                 let extracted_nar_hash = self.extract_nar(&nar_file, &cached.path)?;
                 self.verify_extracted_nar_hash(cached, &extracted_nar_hash)?;
+                self.register_fetched_path_info(cached, Some(extracted_nar_hash))?;
 
                 let extracted_path = self.store.to_path(&cached.path);
                 let actual_hash = self.compute_path_hash(&extracted_path)?;
@@ -773,6 +774,8 @@ impl BinaryCache {
                     }
                     .into());
                 }
+            } else {
+                self.register_fetched_path_info(cached, None)?;
             }
 
             Ok(())
@@ -780,6 +783,28 @@ impl BinaryCache {
 
         visiting.remove(&cached.path);
         result
+    }
+
+    fn register_fetched_path_info(
+        &self,
+        cached: &CachedPath,
+        extracted_nar_hash: Option<Hash>,
+    ) -> Result<(), CacheError> {
+        let mut db = Database::open(self.store.root().to_path_buf())?;
+        let nar_hash = if let Some(hash) = extracted_nar_hash {
+            hash
+        } else {
+            parse_cache_hash(cached.nar_hash.as_deref())?.unwrap_or(*cached.path.hash())
+        };
+
+        let mut info = PathInfo::new(cached.path.clone(), nar_hash, cached.size);
+        for reference in &cached.references {
+            if reference != &cached.path {
+                info.add_reference(reference.clone());
+            }
+        }
+        db.register(info)?;
+        Ok(())
     }
 
     /// Verify downloaded compressed NAR hash if metadata provides it.
@@ -2054,6 +2079,52 @@ mod tests {
         let fetched_store = Store::open_at(fetch_root).unwrap();
         assert!(fetched_store.path_exists(&root));
         assert!(fetched_store.path_exists(&dependency));
+
+        let mut db = Database::open(fetched_store.root().to_path_buf()).unwrap();
+        let root_info = db
+            .query(&root)
+            .unwrap()
+            .expect("root metadata should be registered");
+        let dep_info = db
+            .query(&dependency)
+            .unwrap()
+            .expect("dependency metadata should be registered");
+        assert!(root_info.references.contains(&dependency));
+        assert!(dep_info.references.is_empty());
+    }
+
+    #[test]
+    fn test_fetch_existing_path_registers_metadata_without_download() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store_root = temp.path().join("store");
+        let store = Store::open_at(store_root.clone()).unwrap();
+        let dependency = store
+            .add_content(b"dependency-existing", "dep-1.0")
+            .unwrap();
+        let root = store.add_content(b"root-existing", "root-1.0").unwrap();
+
+        let cached = CachedPath {
+            path: root.clone(),
+            derivation: placeholder_derivation("root-1.0"),
+            references: vec![dependency.clone()],
+            size: 777,
+            compression: CompressionFormat::Xz,
+            url: None,
+            file_hash: None,
+            nar_hash: None,
+        };
+
+        let mut cache = BinaryCache::new(Store::open_at(store_root.clone()).unwrap()).unwrap();
+        cache.fetch(&cached).unwrap();
+
+        let mut db = Database::open(store_root).unwrap();
+        let info = db
+            .query(&root)
+            .unwrap()
+            .expect("existing path metadata should be registered");
+        assert_eq!(info.nar_hash, *root.hash());
+        assert_eq!(info.nar_size, 777);
+        assert!(info.references.contains(&dependency));
     }
 
     #[test]
