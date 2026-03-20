@@ -19,16 +19,29 @@ use std::time::Instant;
 
 /// Run the build command.
 /// 运行构建命令。
-pub fn run(
-    package: Option<&str>,
-    backend_arg: &str,
-    cli_cache_urls: &[String],
-    cli_cache_dirs: &[String],
-    cli_substitute: bool,
-    cli_cache_upload: bool,
-    cli_cache_public_keys: &[String],
-    cli_cache_private_keys: &[String],
-) -> Result<(), String> {
+pub struct BuildRunArgs<'a> {
+    pub package: Option<&'a str>,
+    pub backend_arg: &'a str,
+    pub cli_cache_urls: &'a [String],
+    pub cli_cache_dirs: &'a [String],
+    pub cli_substitute: bool,
+    pub cli_cache_upload: bool,
+    pub cli_cache_public_keys: &'a [String],
+    pub cli_cache_private_keys: &'a [String],
+}
+
+pub fn run(args: BuildRunArgs<'_>) -> Result<(), String> {
+    let BuildRunArgs {
+        package,
+        backend_arg,
+        cli_cache_urls,
+        cli_cache_dirs,
+        cli_substitute,
+        cli_cache_upload,
+        cli_cache_public_keys,
+        cli_cache_private_keys,
+    } = args;
+
     let start = Instant::now();
 
     // Detect platform and determine build backend
