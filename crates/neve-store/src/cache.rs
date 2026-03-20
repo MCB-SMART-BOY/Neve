@@ -740,6 +740,7 @@ impl BinaryCache {
             // 确保元数据引用的路径也存在于本地存储中。
             for reference in &cached.references {
                 if self.store.path_exists(reference) {
+                    self.backfill_existing_path_metadata(reference, visiting)?;
                     continue;
                 }
 
@@ -785,6 +786,31 @@ impl BinaryCache {
         result
     }
 
+    fn backfill_existing_path_metadata(
+        &mut self,
+        path: &StorePath,
+        visiting: &mut HashSet<StorePath>,
+    ) -> Result<(), CacheError> {
+        let mut db = Database::open(self.store.root().to_path_buf())?;
+        if db.query(path)?.is_some() {
+            return Ok(());
+        }
+        drop(db);
+
+        match self.query(path) {
+            Ok(Some(cached)) => self.fetch_with_references(&cached, visiting),
+            Ok(None) | Err(_) => self.register_minimal_path_info(path),
+        }
+    }
+
+    fn register_minimal_path_info(&self, path: &StorePath) -> Result<(), CacheError> {
+        let nar_size = Self::fs_size(&self.store.to_path(path))?;
+        let info = PathInfo::new(path.clone(), *path.hash(), nar_size);
+        let mut db = Database::open(self.store.root().to_path_buf())?;
+        db.register(info)?;
+        Ok(())
+    }
+
     fn register_fetched_path_info(
         &self,
         cached: &CachedPath,
@@ -805,6 +831,23 @@ impl BinaryCache {
         }
         db.register(info)?;
         Ok(())
+    }
+
+    fn fs_size(path: &Path) -> Result<u64, std::io::Error> {
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.is_file() || metadata.file_type().is_symlink() {
+            return Ok(metadata.len());
+        }
+        if !metadata.is_dir() {
+            return Ok(0);
+        }
+
+        let mut total = 0u64;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            total += Self::fs_size(&entry.path())?;
+        }
+        Ok(total)
     }
 
     /// Verify downloaded compressed NAR hash if metadata provides it.
@@ -2125,6 +2168,56 @@ mod tests {
         assert_eq!(info.nar_hash, *root.hash());
         assert_eq!(info.nar_size, 777);
         assert!(info.references.contains(&dependency));
+
+        let dep_info = db
+            .query(&dependency)
+            .unwrap()
+            .expect("existing dependency metadata should be backfilled");
+        assert_eq!(dep_info.nar_hash, *dependency.hash());
+        assert!(dep_info.references.is_empty());
+        assert!(dep_info.nar_size > 0);
+    }
+
+    #[test]
+    fn test_fetch_existing_path_backfills_reference_metadata_when_cache_query_fails() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store_root = temp.path().join("store");
+        let store = Store::open_at(store_root.clone()).unwrap();
+        let dependency = store
+            .add_content(b"dependency-existing", "dep-1.0")
+            .unwrap();
+        let root = store.add_content(b"root-existing", "root-1.0").unwrap();
+
+        let down_server = TestHttpCacheServer::start();
+        let down_url = down_server.base_url.clone();
+        drop(down_server);
+
+        let cached = CachedPath {
+            path: root.clone(),
+            derivation: placeholder_derivation("root-1.0"),
+            references: vec![dependency.clone()],
+            size: 777,
+            compression: CompressionFormat::Xz,
+            url: None,
+            file_hash: None,
+            nar_hash: None,
+        };
+
+        let mut cache = BinaryCache::new(Store::open_at(store_root.clone()).unwrap()).unwrap();
+        cache.add_cache(CacheConfig {
+            name: "down-cache".to_string(),
+            url: Some(down_url),
+            ..Default::default()
+        });
+        cache.fetch(&cached).unwrap();
+
+        let mut db = Database::open(store_root).unwrap();
+        let dep_info = db
+            .query(&dependency)
+            .unwrap()
+            .expect("dependency metadata should still be backfilled");
+        assert_eq!(dep_info.nar_hash, *dependency.hash());
+        assert!(dep_info.references.is_empty());
     }
 
     #[test]
