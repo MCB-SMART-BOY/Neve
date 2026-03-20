@@ -1,8 +1,10 @@
 //! Integration tests for neve-builder crate.
 
-use neve_builder::BuilderConfig;
-use neve_builder::output::{format_size, output_size};
+use neve_builder::output::{format_size, output_size, validate_output};
 use neve_builder::sandbox::{IsolationLevel, Sandbox, SandboxConfig};
+use neve_builder::{BuildBackend, Builder, BuilderConfig};
+use neve_derive::Derivation;
+use neve_store::{Database, Store};
 use std::env;
 use std::fs;
 
@@ -269,6 +271,57 @@ fn test_output_size_binary_file() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[cfg(unix)]
+#[test]
+fn test_output_size_does_not_follow_directory_symlink() {
+    use std::os::unix::fs::symlink;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let dir = env::temp_dir().join(format!(
+        "neve-output-symlink-loop-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("file.txt"), b"1234").unwrap();
+    symlink(".", dir.join("loop")).unwrap();
+
+    // Symlink should not be followed (otherwise this would recurse infinitely).
+    let size = output_size(&dir).unwrap();
+    assert_eq!(size, 4);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_validate_output_does_not_recurse_into_directory_symlink() {
+    use std::os::unix::fs::symlink;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let dir = env::temp_dir().join(format!(
+        "neve-validate-symlink-loop-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("ok.txt"), b"ok").unwrap();
+    symlink(".", dir.join("loop")).unwrap();
+
+    // Should succeed without traversing into `loop`.
+    validate_output(&dir).unwrap();
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // ============================================================================
 // SandboxConfig 边缘测试
 // ============================================================================
@@ -425,4 +478,130 @@ fn test_sandbox_rapid_create_cleanup() {
         sandbox.cleanup().unwrap();
         assert!(!root.exists());
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_builder_links_real_input_output_path() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let store_root = env::temp_dir().join(format!(
+        "neve-builder-input-store-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+    let build_root = env::temp_dir().join(format!(
+        "neve-builder-input-build-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+
+    let dep_drv = Derivation::builder("dep", "1.0")
+        .builder_path("/bin/sh")
+        .arg("-c")
+        .arg("mkdir -p \"$out\"; echo dep > \"$out/dep.txt\"")
+        .build();
+    let dep_drv_path = store.add_derivation(&dep_drv).unwrap();
+
+    let input_link_name = format!("{}-out", dep_drv_path.name());
+    let main_script = format!(
+        "test -f \"$NIX_BUILD_TOP/inputs/{}/dep.txt\"; mkdir -p \"$out\"; echo main > \"$out/main.txt\"",
+        input_link_name
+    );
+    let main_drv = Derivation::builder("main", "1.0")
+        .builder_path("/bin/sh")
+        .arg("-c")
+        .arg(main_script)
+        .input_drv(dep_drv_path.clone(), vec!["out".to_string()])
+        .build();
+
+    let mut config = BuilderConfig::default();
+    config.backend = BuildBackend::Simple;
+    config.sandbox = false;
+    config.temp_dir = build_root.clone();
+
+    let mut builder = Builder::with_config(store, config);
+    let result = builder.build(&main_drv).unwrap();
+    let out_path = result.outputs.get("out").unwrap();
+    let out_fs_path = builder.store().to_path(out_path);
+    assert!(out_fs_path.join("main.txt").exists());
+
+    let _ = fs::remove_dir_all(store_root);
+    let _ = fs::remove_dir_all(build_root);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_builder_registers_output_metadata_with_references() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let store_root = env::temp_dir().join(format!(
+        "neve-builder-db-store-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+    let build_root = env::temp_dir().join(format!(
+        "neve-builder-db-build-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+    let input_src = store.add_content(b"source-input", "src-1.0").unwrap();
+
+    let dep_drv = Derivation::builder("dep", "1.0")
+        .builder_path("/bin/sh")
+        .arg("-c")
+        .arg("mkdir -p \"$out\"; echo dep > \"$out/dep.txt\"")
+        .build();
+    let dep_drv_path = store.add_derivation(&dep_drv).unwrap();
+
+    let dep_link = format!("{}-out", dep_drv_path.name());
+    let src_link = input_src.name().to_string();
+    let main_script = format!(
+        "test -f \"$NIX_BUILD_TOP/inputs/{}/dep.txt\"; test -f \"$NIX_BUILD_TOP/inputs/{}\"; mkdir -p \"$out\"; echo main > \"$out/main.txt\"",
+        dep_link, src_link
+    );
+    let main_drv = Derivation::builder("main", "1.0")
+        .builder_path("/bin/sh")
+        .arg("-c")
+        .arg(main_script)
+        .input_drv(dep_drv_path.clone(), vec!["out".to_string()])
+        .input_src(input_src.clone())
+        .build();
+
+    let mut config = BuilderConfig::default();
+    config.backend = BuildBackend::Simple;
+    config.sandbox = false;
+    config.temp_dir = build_root.clone();
+
+    let mut builder = Builder::with_config(store, config);
+    let dep_result = builder.build(&dep_drv).unwrap();
+    let dep_output = dep_result.outputs.get("out").unwrap().clone();
+
+    let main_result = builder.build(&main_drv).unwrap();
+    let main_output = main_result.outputs.get("out").unwrap().clone();
+
+    let mut db = Database::open(store_root.clone()).unwrap();
+    let info = db
+        .query(&main_output)
+        .unwrap()
+        .expect("missing output metadata");
+    assert_eq!(info.deriver.as_ref(), Some(&main_drv.drv_path()));
+    assert!(info.references.contains(&input_src));
+    assert!(info.references.contains(&dep_output));
+    assert!(info.nar_size > 0);
+
+    let _ = fs::remove_dir_all(store_root);
+    let _ = fs::remove_dir_all(build_root);
 }

@@ -5,10 +5,10 @@
 //! 在沙箱环境中执行派生构建。
 
 use crate::sandbox::{Sandbox, SandboxConfig};
-use crate::{BuildError, BuilderConfig};
+use crate::{BuildBackend, BuildError, BuilderConfig};
 use neve_derive::{Derivation, Hash, StorePath};
-use neve_store::Store;
-use std::collections::HashMap;
+use neve_store::{Database, PathInfo, Store};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -33,6 +33,7 @@ impl<'a> BuildExecutor<'a> {
     pub fn execute(
         &self,
         drv: &Derivation,
+        resolved_input_drvs: &HashMap<StorePath, HashMap<String, StorePath>>,
     ) -> Result<(HashMap<String, StorePath>, String), BuildError> {
         // Create temporary build directory
         // 创建临时构建目录
@@ -55,7 +56,7 @@ impl<'a> BuildExecutor<'a> {
 
         // Set up input symlinks
         // 设置输入符号链接
-        self.setup_inputs(drv, &sandbox)?;
+        self.setup_inputs(drv, resolved_input_drvs, &sandbox)?;
 
         // Create output directories
         // 创建输出目录
@@ -63,7 +64,21 @@ impl<'a> BuildExecutor<'a> {
 
         // Execute the builder
         // 执行构建器
-        let output = sandbox.execute(&drv.builder, &drv.args, &env)?;
+        let output = match self.config.backend {
+            BuildBackend::Native => {
+                sandbox.execute_with_mode(&drv.builder, &drv.args, &env, true)?
+            }
+            BuildBackend::Simple => {
+                sandbox.execute_with_mode(&drv.builder, &drv.args, &env, false)?
+            }
+            BuildBackend::Docker => {
+                let docker = crate::docker::DockerExecutor::new(
+                    self.store.root().to_path_buf(),
+                    self.config.temp_dir.clone(),
+                );
+                docker.execute(drv, sandbox.build_dir(), sandbox.output_dir())?
+            }
+        };
 
         let log = format!(
             "=== stdout ===\n{}\n=== stderr ===\n{}",
@@ -88,7 +103,7 @@ impl<'a> BuildExecutor<'a> {
 
         // Collect outputs
         // 收集输出
-        let outputs = self.collect_outputs(drv, &output_dirs)?;
+        let outputs = self.collect_outputs(drv, resolved_input_drvs, &output_dirs)?;
 
         // Clean up
         // 清理
@@ -185,29 +200,64 @@ impl<'a> BuildExecutor<'a> {
 
     /// Set up input paths in the sandbox.
     /// 在沙箱中设置输入路径。
-    fn setup_inputs(&self, drv: &Derivation, sandbox: &Sandbox) -> Result<(), BuildError> {
+    fn setup_inputs(
+        &self,
+        drv: &Derivation,
+        resolved_input_drvs: &HashMap<StorePath, HashMap<String, StorePath>>,
+        sandbox: &Sandbox,
+    ) -> Result<(), BuildError> {
         let inputs_dir = sandbox.build_dir().join("inputs");
         fs::create_dir_all(&inputs_dir)?;
 
         // Link input derivation outputs
         // 链接输入派生的输出
         for (input_drv_path, output_names) in &drv.input_drvs {
-            let input_store_path = self.store.to_path(input_drv_path);
+            let resolved_outputs = resolved_input_drvs.get(input_drv_path).ok_or_else(|| {
+                BuildError::MissingInput(format!(
+                    "missing resolved outputs for input derivation: {}",
+                    input_drv_path.display_name()
+                ))
+            })?;
 
             for output_name in output_names {
+                let output_store_path = resolved_outputs.get(output_name).ok_or_else(|| {
+                    BuildError::MissingInput(format!(
+                        "missing output '{}' for input derivation {}",
+                        output_name,
+                        input_drv_path.display_name()
+                    ))
+                })?;
+                let output_fs_path = self.store.to_path(output_store_path);
+                if !output_fs_path.exists() {
+                    return Err(BuildError::MissingInput(format!(
+                        "missing realized output '{}' at {}",
+                        output_name,
+                        output_fs_path.display()
+                    )));
+                }
+
                 let link_name = format!("{}-{}", input_drv_path.name(), output_name);
                 let link_path = inputs_dir.join(&link_name);
 
-                // In a real implementation, we would link to the actual output path
-                // 在实际实现中，我们会链接到实际的输出路径
-                // For now, just link to the derivation file
-                // 目前，只链接到派生文件
-                if input_store_path.exists() {
-                    #[cfg(unix)]
-                    std::os::unix::fs::symlink(&input_store_path, &link_path)?;
+                if link_path.exists() || link_path.is_symlink() {
+                    let meta = fs::symlink_metadata(&link_path)?;
+                    if meta.is_dir() && !meta.file_type().is_symlink() {
+                        fs::remove_dir_all(&link_path)?;
+                    } else {
+                        fs::remove_file(&link_path)?;
+                    }
+                }
 
-                    #[cfg(not(unix))]
-                    fs::copy(&input_store_path, &link_path)?;
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&output_fs_path, &link_path)?;
+
+                #[cfg(not(unix))]
+                {
+                    if output_fs_path.is_dir() {
+                        copy_dir_recursive(&output_fs_path, &link_path)?;
+                    } else {
+                        fs::copy(&output_fs_path, &link_path)?;
+                    }
                 }
             }
         }
@@ -259,6 +309,7 @@ impl<'a> BuildExecutor<'a> {
     fn collect_outputs(
         &self,
         drv: &Derivation,
+        resolved_input_drvs: &HashMap<StorePath, HashMap<String, StorePath>>,
         output_dirs: &HashMap<String, std::path::PathBuf>,
     ) -> Result<HashMap<String, StorePath>, BuildError> {
         let mut outputs = HashMap::new();
@@ -303,7 +354,78 @@ impl<'a> BuildExecutor<'a> {
             outputs.insert(name.clone(), store_path);
         }
 
+        self.register_output_metadata(drv, resolved_input_drvs, &outputs)?;
+
         Ok(outputs)
+    }
+
+    fn register_output_metadata(
+        &self,
+        drv: &Derivation,
+        resolved_input_drvs: &HashMap<StorePath, HashMap<String, StorePath>>,
+        outputs: &HashMap<String, StorePath>,
+    ) -> Result<(), BuildError> {
+        let mut references = HashSet::new();
+
+        for source in &drv.input_srcs {
+            if self.store.path_exists(source) {
+                references.insert(source.clone());
+            }
+        }
+
+        for (input_drv, required_outputs) in &drv.input_drvs {
+            let Some(resolved_outputs) = resolved_input_drvs.get(input_drv) else {
+                continue;
+            };
+
+            for output_name in required_outputs {
+                if let Some(store_path) = resolved_outputs.get(output_name) {
+                    references.insert(store_path.clone());
+                }
+            }
+        }
+
+        let mut db = Database::open(self.store.root().to_path_buf())?;
+        let deriver = drv.drv_path();
+        for output_path in outputs.values() {
+            let mut info = PathInfo::new(
+                output_path.clone(),
+                *output_path.hash(),
+                self.store_path_size(output_path)?,
+            );
+            info.set_deriver(deriver.clone());
+
+            for reference in &references {
+                if reference != output_path {
+                    info.add_reference(reference.clone());
+                }
+            }
+
+            db.register(info)?;
+        }
+
+        Ok(())
+    }
+
+    fn store_path_size(&self, path: &StorePath) -> Result<u64, BuildError> {
+        Self::fs_size(&self.store.to_path(path))
+    }
+
+    fn fs_size(path: &Path) -> Result<u64, BuildError> {
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.is_file() || metadata.file_type().is_symlink() {
+            return Ok(metadata.len());
+        }
+        if !metadata.is_dir() {
+            return Ok(0);
+        }
+
+        let mut total = 0u64;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            total += Self::fs_size(&entry.path())?;
+        }
+        Ok(total)
     }
 }
 
@@ -330,21 +452,29 @@ fn hash_path(path: &Path) -> Result<Hash, BuildError> {
 /// Recursively hash a path.
 /// 递归哈希路径。
 fn hash_path_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), BuildError> {
-    if path.is_file() {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        hasher.update_byte(b'L');
+        let target = fs::read_link(path)?;
+        hasher.update_len_prefixed(target.as_os_str().as_encoded_bytes());
+    } else if metadata.is_file() {
+        hasher.update_byte(b'F');
         let content = fs::read(path)?;
-        hasher.update(&content);
-    } else if path.is_dir() {
+        hasher.update_len_prefixed(&content);
+    } else if metadata.is_dir() {
         let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
         entries.sort_by_key(|e| e.file_name());
+        hasher.update_byte(b'D');
+        hasher.update_u64(entries.len() as u64);
 
         for entry in entries {
             let name = entry.file_name();
-            hasher.update(name.as_encoded_bytes());
+            hasher.update_byte(b'E');
+            hasher.update_len_prefixed(name.as_encoded_bytes());
             hash_path_recursive(&entry.path(), hasher)?;
         }
-    } else if path.is_symlink() {
-        let target = fs::read_link(path)?;
-        hasher.update(target.as_os_str().as_encoded_bytes());
+    } else {
+        hasher.update_byte(b'U');
     }
 
     Ok(())
