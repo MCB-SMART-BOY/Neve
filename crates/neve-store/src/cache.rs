@@ -763,7 +763,6 @@ impl BinaryCache {
 
                 let extracted_nar_hash = self.extract_nar(&nar_file, &cached.path)?;
                 self.verify_extracted_nar_hash(cached, &extracted_nar_hash)?;
-                self.register_fetched_path_info(cached, Some(extracted_nar_hash))?;
 
                 let extracted_path = self.store.to_path(&cached.path);
                 let actual_hash = self.compute_path_hash(&extracted_path)?;
@@ -774,6 +773,7 @@ impl BinaryCache {
                     }
                     .into());
                 }
+                self.register_fetched_path_info(cached, Some(extracted_nar_hash))?;
             } else {
                 self.register_fetched_path_info(cached, None)?;
             }
@@ -2528,5 +2528,44 @@ mod tests {
 
         let err = cache.fetch(&cached).unwrap_err();
         assert!(matches!(err, CacheError::HashMismatch { kind: "nar", .. }));
+    }
+
+    #[test]
+    fn test_fetch_hash_mismatch_does_not_register_metadata() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store_root = temp.path().join("store");
+        let store = Store::open_at(store_root.clone()).unwrap();
+        let mut cache = BinaryCache::new(store).unwrap();
+
+        let source = temp.path().join("source-hash-mismatch.txt");
+        fs::write(&source, b"hello-hash-mismatch").unwrap();
+
+        let nar_data = nar::create_nar(&source).unwrap();
+        let nar_hash = Hash::of(&nar_data);
+        let mut compressed = Vec::new();
+        lzma_rs::xz_compress(&mut std::io::Cursor::new(&nar_data), &mut compressed).unwrap();
+        let nar_file = temp.path().join("payload-hash-mismatch.nar.xz");
+        fs::write(&nar_file, &compressed).unwrap();
+
+        let wrong_store_path = StorePath::new(Hash::of(b"wrong-store-path"), "pkg-1.0".to_string());
+        let cached = CachedPath {
+            path: wrong_store_path.clone(),
+            derivation: placeholder_derivation("pkg-1.0"),
+            references: Vec::new(),
+            size: nar_data.len() as u64,
+            compression: CompressionFormat::Xz,
+            url: Some(nar_file.to_string_lossy().to_string()),
+            file_hash: Some(format_hash(&Hash::of(&compressed))),
+            nar_hash: Some(format_hash(&nar_hash)),
+        };
+
+        let err = cache.fetch(&cached).unwrap_err();
+        assert!(matches!(
+            err,
+            CacheError::Store(StoreError::HashMismatch { .. })
+        ));
+
+        let mut db = Database::open(store_root).unwrap();
+        assert!(db.query(&wrong_store_path).unwrap().is_none());
     }
 }
