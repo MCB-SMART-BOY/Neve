@@ -81,6 +81,9 @@ async-trait = "0.1"
 dashmap = "6"
 num-bigint = "0.4"
 num-traits = "0.2"
+sha2 = "0.10"
+base64 = "0.22"
+ed25519-dalek = "2"
 
 # Dependencies for integration tests
 [dev-dependencies]
