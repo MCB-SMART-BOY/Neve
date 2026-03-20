@@ -768,14 +768,7 @@ impl BinaryCache {
                 self.verify_extracted_nar_hash(cached, &extracted_nar_hash)?;
 
                 let extracted_path = self.store.to_path(&cached.path);
-                let actual_hash = self.compute_path_hash(&extracted_path)?;
-                if actual_hash != *cached.path.hash() {
-                    return Err(StoreError::HashMismatch {
-                        expected: *cached.path.hash(),
-                        actual: actual_hash,
-                    }
-                    .into());
-                }
+                self.verify_store_path_hash_compatibility(&cached.path, &extracted_path)?;
                 self.register_fetched_path_info(db, cached, Some(extracted_nar_hash))?;
             } else {
                 self.register_fetched_path_info(db, cached, None)?;
@@ -1011,6 +1004,91 @@ impl BinaryCache {
         // 使用 NAR 格式哈希路径以获得确定性结果
         let hash = nar::hash_path(path)?;
         Ok(hash)
+    }
+
+    /// Compute the hash of a store path using store-native hashing rules.
+    /// 使用 store 原生规则计算存储路径哈希。
+    fn compute_store_native_hash(&self, path: &Path) -> Result<Hash, CacheError> {
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink() {
+            let target = fs::read_link(path)?;
+            return Ok(Hash::of(target.as_os_str().as_encoded_bytes()));
+        }
+        if metadata.is_file() {
+            let content = fs::read(path)?;
+            return Ok(Hash::of(&content));
+        }
+        if metadata.is_dir() {
+            let mut hasher = neve_derive::Hasher::new();
+            Self::hash_dir_native(path, &mut hasher)?;
+            return Ok(hasher.finalize());
+        }
+        Ok(Hash::of(b""))
+    }
+
+    fn hash_dir_native(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), CacheError> {
+        let mut entries = fs::read_dir(path)?.collect::<Result<Vec<_>, std::io::Error>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+
+        hasher.update_byte(b'D');
+        hasher.update_u64(entries.len() as u64);
+        for entry in entries {
+            let name = entry.file_name();
+            hasher.update_byte(b'E');
+            hasher.update_len_prefixed(name.as_os_str().as_encoded_bytes());
+
+            let child = entry.path();
+            let metadata = fs::symlink_metadata(&child)?;
+            if metadata.file_type().is_symlink() {
+                hasher.update_byte(b'L');
+                let target = fs::read_link(&child)?;
+                hasher.update_len_prefixed(target.as_os_str().as_encoded_bytes());
+            } else if metadata.is_file() {
+                hasher.update_byte(b'F');
+                let content = fs::read(&child)?;
+                hasher.update_len_prefixed(&content);
+            } else if metadata.is_dir() {
+                Self::hash_dir_native(&child, hasher)?;
+            } else {
+                hasher.update_byte(b'U');
+            }
+        }
+        Ok(())
+    }
+
+    /// Accept both historical hash styles for compatibility:
+    /// - NAR hash of extracted path
+    /// - native store hash used by add_file/add_content/add_dir
+    /// 为兼容性接受两类历史哈希风格：
+    /// - 解包路径的 NAR 哈希
+    /// - add_file/add_content/add_dir 使用的 store 原生哈希
+    fn matches_expected_store_hash(
+        &self,
+        expected_path: &StorePath,
+        extracted_path: &Path,
+    ) -> Result<bool, CacheError> {
+        let expected = *expected_path.hash();
+        if self.compute_path_hash(extracted_path)? == expected {
+            return Ok(true);
+        }
+        Ok(self.compute_store_native_hash(extracted_path)? == expected)
+    }
+
+    fn verify_store_path_hash_compatibility(
+        &self,
+        expected_path: &StorePath,
+        extracted_path: &Path,
+    ) -> Result<(), CacheError> {
+        if self.matches_expected_store_hash(expected_path, extracted_path)? {
+            return Ok(());
+        }
+
+        let actual = self.compute_path_hash(extracted_path)?;
+        Err(StoreError::HashMismatch {
+            expected: *expected_path.hash(),
+            actual,
+        }
+        .into())
     }
 
     /// Parse a .narinfo file.
@@ -2557,6 +2635,47 @@ mod tests {
             .expect("query should succeed");
         assert_eq!(queried.path, store_path);
         assert!(queried.url.is_some());
+    }
+
+    #[test]
+    fn test_local_cache_roundtrip_fetch_for_add_content_path() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let local_cache = temp.path().join("local-cache");
+
+        let upload_root = temp.path().join("upload-store");
+        let upload_store = Store::open_at(upload_root).unwrap();
+        let store_path = upload_store
+            .add_content(b"roundtrip-payload", "pkg-1.0")
+            .unwrap();
+
+        let mut upload_cache = BinaryCache::new(upload_store).unwrap();
+        upload_cache.add_cache(CacheConfig {
+            name: "local-upload".to_string(),
+            local_dir: Some(local_cache.clone()),
+            upload: true,
+            ..Default::default()
+        });
+        upload_cache.push(&store_path).unwrap();
+
+        let fetch_root = temp.path().join("fetch-store");
+        let mut fetch_cache =
+            BinaryCache::new(Store::open_at(fetch_root.clone()).unwrap()).unwrap();
+        fetch_cache.add_cache(CacheConfig {
+            name: "local-read".to_string(),
+            local_dir: Some(local_cache),
+            ..Default::default()
+        });
+
+        let cached = fetch_cache
+            .query(&store_path)
+            .unwrap()
+            .expect("query should return cached metadata");
+        fetch_cache.fetch(&cached).unwrap();
+
+        let fetched_store = Store::open_at(fetch_root).unwrap();
+        assert!(fetched_store.path_exists(&store_path));
+        let fetched_path = fetched_store.to_path(&store_path);
+        assert_eq!(fs::read(fetched_path).unwrap(), b"roundtrip-payload");
     }
 
     #[test]
