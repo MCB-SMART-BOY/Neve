@@ -2679,6 +2679,56 @@ mod tests {
     }
 
     #[test]
+    fn test_local_cache_roundtrip_fetch_for_add_dir_path() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let local_cache = temp.path().join("local-cache");
+
+        let source_dir = temp.path().join("source-dir");
+        fs::create_dir_all(source_dir.join("nested")).unwrap();
+        fs::write(source_dir.join("root.txt"), b"root-file").unwrap();
+        fs::write(source_dir.join("nested").join("child.txt"), b"child-file").unwrap();
+
+        let upload_root = temp.path().join("upload-store");
+        let upload_store = Store::open_at(upload_root).unwrap();
+        let store_path = upload_store.add_dir(&source_dir, "pkg-dir-1.0").unwrap();
+
+        let mut upload_cache = BinaryCache::new(upload_store).unwrap();
+        upload_cache.add_cache(CacheConfig {
+            name: "local-upload".to_string(),
+            local_dir: Some(local_cache.clone()),
+            upload: true,
+            ..Default::default()
+        });
+        upload_cache.push(&store_path).unwrap();
+
+        let fetch_root = temp.path().join("fetch-store");
+        let mut fetch_cache =
+            BinaryCache::new(Store::open_at(fetch_root.clone()).unwrap()).unwrap();
+        fetch_cache.add_cache(CacheConfig {
+            name: "local-read".to_string(),
+            local_dir: Some(local_cache),
+            ..Default::default()
+        });
+
+        let cached = fetch_cache
+            .query(&store_path)
+            .unwrap()
+            .expect("query should return cached metadata");
+        fetch_cache.fetch(&cached).unwrap();
+
+        let fetched_store = Store::open_at(fetch_root).unwrap();
+        let fetched_path = fetched_store.to_path(&store_path);
+        assert_eq!(
+            fs::read(fetched_path.join("root.txt")).unwrap(),
+            b"root-file"
+        );
+        assert_eq!(
+            fs::read(fetched_path.join("nested").join("child.txt")).unwrap(),
+            b"child-file"
+        );
+    }
+
+    #[test]
     fn test_fetch_rejects_file_hash_mismatch() {
         let temp = tempfile::TempDir::new().unwrap();
         let store = Store::open_at(temp.path().join("store")).unwrap();
