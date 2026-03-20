@@ -154,14 +154,13 @@ impl<'src> Lexer<'src> {
             '%' => TokenKind::Percent,
 
             // Record literal #{ - 记录字面量 #{
+            '#' if self.peek_char() == Some('{') => {
+                self.advance();
+                TokenKind::HashLBrace
+            }
             '#' => {
-                if self.peek_char() == Some('{') {
-                    self.advance();
-                    TokenKind::HashLBrace
-                } else {
-                    self.error_unexpected_char(ch, start);
-                    TokenKind::Error
-                }
+                self.error_unexpected_char(ch, start);
+                TokenKind::Error
             }
 
             // Dot, DotDot, or path starting with ./ or ../
@@ -288,14 +287,13 @@ impl<'src> Lexer<'src> {
             }
 
             // Ampersand (logical and) - & 符号（逻辑与）
+            '&' if self.peek_char() == Some('&') => {
+                self.advance();
+                TokenKind::AndAnd
+            }
             '&' => {
-                if self.peek_char() == Some('&') {
-                    self.advance();
-                    TokenKind::AndAnd
-                } else {
-                    self.error_unexpected_char(ch, start);
-                    TokenKind::Error
-                }
+                self.error_unexpected_char(ch, start);
+                TokenKind::Error
             }
 
             // Pipe - 管道符号
@@ -398,20 +396,18 @@ impl<'src> Lexer<'src> {
     fn skip_block_comment(&mut self) {
         loop {
             match self.advance() {
-                Some((_, '-')) => {
-                    if self.peek_char() == Some('-') {
-                        self.advance();
-                        // Check for closing: -- -- (space then --)
-                        // 检查结束标记：-- --（空格后跟 --）
-                        if self.peek_char() == Some(' ')
-                            && self.peek_nth(1) == Some('-')
-                            && self.peek_nth(2) == Some('-')
-                        {
-                            self.advance(); // skip space
-                            self.advance(); // skip -
-                            self.advance(); // skip -
-                            break;
-                        }
+                Some((_, '-')) if self.peek_char() == Some('-') => {
+                    self.advance();
+                    // Check for closing: -- -- (space then --)
+                    // 检查结束标记：-- --（空格后跟 --）
+                    if self.peek_char() == Some(' ')
+                        && self.peek_nth(1) == Some('-')
+                        && self.peek_nth(2) == Some('-')
+                    {
+                        self.advance(); // skip space
+                        self.advance(); // skip -
+                        self.advance(); // skip -
+                        break;
                     }
                 }
                 None => {

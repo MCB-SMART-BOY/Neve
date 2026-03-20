@@ -285,16 +285,16 @@ fn main() {
             cache_upload,
             cache_public_keys,
             cache_private_keys,
-        } => commands::build::run(
-            package.as_deref(),
-            &backend,
-            &cache_urls,
-            &cache_dirs,
-            !no_substitute,
-            cache_upload,
-            &cache_public_keys,
-            &cache_private_keys,
-        ),
+        } => commands::build::run(commands::build::BuildRunArgs {
+            package: package.as_deref(),
+            backend_arg: &backend,
+            cli_cache_urls: &cache_urls,
+            cli_cache_dirs: &cache_dirs,
+            cli_substitute: !no_substitute,
+            cli_cache_upload: cache_upload,
+            cli_cache_public_keys: &cache_public_keys,
+            cli_cache_private_keys: &cache_private_keys,
+        }),
         #[cfg(unix)]
         Commands::Package { action } => match action {
             PackageAction::Install { package } => commands::install::run(&package),
