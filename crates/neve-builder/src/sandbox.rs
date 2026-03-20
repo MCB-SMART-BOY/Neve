@@ -584,9 +584,19 @@ impl Sandbox {
         args: &[String],
         env: &HashMap<String, String>,
     ) -> Result<std::process::Output, BuildError> {
-        // Check if we can use namespace isolation
-        // 检查是否可以使用命名空间隔离
-        if namespace_available() {
+        self.execute_with_mode(program, args, env, true)
+    }
+
+    /// Execute with configurable namespace isolation mode (Linux).
+    /// 使用可配置的命名空间隔离模式执行（Linux）。
+    pub fn execute_with_mode(
+        &self,
+        program: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        use_namespaces: bool,
+    ) -> Result<std::process::Output, BuildError> {
+        if use_namespaces && namespace_available() {
             self.execute_with_namespaces(program, args, env)
         } else {
             self.execute_simple(program, args, env)
@@ -607,6 +617,11 @@ impl Sandbox {
         use nix::sys::wait::waitpid;
         use nix::unistd::{ForkResult, chdir, chroot, fork, sethostname};
         use std::os::unix::process::ExitStatusExt;
+
+        let stdout_log = self.config.build_dir.join(".neve-sandbox-stdout");
+        let stderr_log = self.config.build_dir.join(".neve-sandbox-stderr");
+        let _ = std::fs::remove_file(&stdout_log);
+        let _ = std::fs::remove_file(&stderr_log);
 
         // Create a new root for the sandbox
         // 为沙箱创建新的根目录
@@ -653,6 +668,11 @@ impl Sandbox {
                 let status = waitpid(child, None)
                     .map_err(|e| BuildError::Sandbox(format!("waitpid failed: {}", e)))?;
 
+                let stdout = std::fs::read(&stdout_log).unwrap_or_default();
+                let stderr = std::fs::read(&stderr_log).unwrap_or_default();
+                let _ = std::fs::remove_file(&stdout_log);
+                let _ = std::fs::remove_file(&stderr_log);
+
                 // Clean up
                 // 清理
                 let _ = std::fs::remove_dir_all(&newroot);
@@ -660,9 +680,14 @@ impl Sandbox {
                 use nix::sys::wait::WaitStatus;
                 match status {
                     WaitStatus::Exited(_, code) => Ok(std::process::Output {
-                        status: std::process::ExitStatus::from_raw(code),
-                        stdout: Vec::new(),
-                        stderr: Vec::new(),
+                        status: std::process::ExitStatus::from_raw(code << 8),
+                        stdout,
+                        stderr,
+                    }),
+                    WaitStatus::Signaled(_, signal, _) => Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(signal as i32),
+                        stdout,
+                        stderr,
                     }),
                     _ => Err(BuildError::Sandbox(
                         "child process did not exit normally".into(),
@@ -855,11 +880,16 @@ impl Sandbox {
 
                 // Execute
                 // 执行
-                let status = cmd.status();
-                match status {
-                    Ok(s) => std::process::exit(s.code().unwrap_or(1)),
+                let output = cmd.output();
+                match output {
+                    Ok(o) => {
+                        let _ = std::fs::write("/build/.neve-sandbox-stdout", &o.stdout);
+                        let _ = std::fs::write("/build/.neve-sandbox-stderr", &o.stderr);
+                        std::process::exit(o.status.code().unwrap_or(1));
+                    }
                     Err(e) => {
-                        eprintln!("Failed to execute {}: {}", program, e);
+                        let msg = format!("Failed to execute {}: {}", program, e);
+                        let _ = std::fs::write("/build/.neve-sandbox-stderr", msg.as_bytes());
                         std::process::exit(1);
                     }
                 }
@@ -903,6 +933,19 @@ impl Sandbox {
 
         let output = cmd.output()?;
         Ok(output)
+    }
+
+    /// Execute with configurable isolation mode (non-Linux fallback).
+    /// 使用可配置隔离模式执行（非 Linux 回退）。
+    #[cfg(not(target_os = "linux"))]
+    pub fn execute_with_mode(
+        &self,
+        program: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        _use_namespaces: bool,
+    ) -> Result<std::process::Output, BuildError> {
+        self.execute(program, args, env)
     }
 
     /// Execute a command in the sandbox (non-Linux).

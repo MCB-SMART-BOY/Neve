@@ -53,37 +53,67 @@ impl Derivation {
     pub fn hash(&self) -> Hash {
         let mut hasher = Hasher::new();
 
-        // Hash all fields in a deterministic order
-        // 按确定性顺序哈希所有字段
-        hasher.update_str(&self.name);
-        hasher.update_str(&self.version);
-        hasher.update_str(&self.system);
-        hasher.update_str(&self.builder);
+        // Hash all fields in a deterministic and structurally unambiguous way.
+        // 按确定性且结构无歧义的方式哈希所有字段。
+        hasher.update_byte(1); // hash format version / 哈希格式版本
 
+        hasher.update_str_prefixed(&self.name);
+        hasher.update_str_prefixed(&self.version);
+        hasher.update_str_prefixed(&self.system);
+        hasher.update_str_prefixed(&self.builder);
+
+        hasher.update_u64(self.args.len() as u64);
         for arg in &self.args {
-            hasher.update_str(arg);
+            hasher.update_str_prefixed(arg);
         }
 
+        hasher.update_u64(self.env.len() as u64);
         for (key, value) in &self.env {
-            hasher.update_str(key);
-            hasher.update_str(value);
+            hasher.update_str_prefixed(key);
+            hasher.update_str_prefixed(value);
         }
 
+        hasher.update_u64(self.input_drvs.len() as u64);
         for (path, outputs) in &self.input_drvs {
-            hasher.update(path.hash().as_bytes());
+            hasher.update_str_prefixed(&path.display_name());
+            hasher.update_u64(outputs.len() as u64);
             for out in outputs {
-                hasher.update_str(out);
+                hasher.update_str_prefixed(out);
             }
         }
 
+        hasher.update_u64(self.input_srcs.len() as u64);
         for src in &self.input_srcs {
-            hasher.update(src.hash().as_bytes());
+            hasher.update_str_prefixed(&src.display_name());
         }
 
+        hasher.update_u64(self.outputs.len() as u64);
         for (name, output) in &self.outputs {
-            hasher.update_str(name);
+            hasher.update_str_prefixed(name);
+
+            if let Some(path) = &output.path {
+                hasher.update_byte(1);
+                hasher.update_str_prefixed(&path.display_name());
+            } else {
+                hasher.update_byte(0);
+            }
+
+            if let Some(mode) = output.hash_mode {
+                hasher.update_byte(1);
+                let mode_byte = match mode {
+                    crate::HashMode::Flat => 0u8,
+                    crate::HashMode::Recursive => 1u8,
+                };
+                hasher.update_byte(mode_byte);
+            } else {
+                hasher.update_byte(0);
+            }
+
             if let Some(hash) = &output.expected_hash {
+                hasher.update_byte(1);
                 hasher.update(hash.as_bytes());
+            } else {
+                hasher.update_byte(0);
             }
         }
 

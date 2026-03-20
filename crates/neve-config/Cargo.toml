@@ -12,6 +12,7 @@ neve-parser.workspace = true
 neve-derive.workspace = true
 neve-store.workspace = true
 neve-builder.workspace = true
+neve-fetch.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true

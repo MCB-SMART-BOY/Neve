@@ -8,7 +8,7 @@ use crate::FetchError;
 use flate2::read::GzDecoder;
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use tar::Archive;
 
 /// Supported archive formats.
@@ -205,7 +205,13 @@ fn extract_tar_stripped<R: Read>(
 
         // Build new path with stripped components
         // 用剥离后的组件构建新路径
-        let new_path: std::path::PathBuf = components[strip..].iter().collect();
+        let new_path: PathBuf = components[strip..].iter().collect();
+        if !is_safe_relative_path(&new_path) {
+            return Err(FetchError::Archive(format!(
+                "unsafe archive entry path: {}",
+                path.display()
+            )));
+        }
         let dest_path = dest_dir.join(&new_path);
 
         // Create parent directories
@@ -236,10 +242,35 @@ fn extract_tar_stripped<R: Read>(
             if let Ok(link_name) = entry.link_name()
                 && let Some(target) = link_name
             {
-                let _ = std::os::unix::fs::symlink(target, &dest_path);
+                let target_path = target.as_ref();
+                if !is_safe_relative_path(target_path) {
+                    return Err(FetchError::Archive(format!(
+                        "unsafe symlink target in archive: {} -> {}",
+                        dest_path.display(),
+                        target_path.display()
+                    )));
+                }
+                std::os::unix::fs::symlink(target_path, &dest_path).map_err(|e| {
+                    FetchError::Archive(format!(
+                        "failed to create symlink '{}': {}",
+                        dest_path.display(),
+                        e
+                    ))
+                })?;
             }
         }
     }
 
     Ok(())
+}
+
+/// Check that a path is a safe relative path without traversal or prefix components.
+/// 检查路径是否为安全的相对路径（不包含穿越或前缀组件）。
+fn is_safe_relative_path(path: &Path) -> bool {
+    if path.as_os_str().is_empty() {
+        return false;
+    }
+
+    path.components()
+        .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
 }

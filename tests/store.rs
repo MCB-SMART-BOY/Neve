@@ -60,6 +60,42 @@ fn test_add_derivation() {
     let _ = fs::remove_dir_all(store.root());
 }
 
+#[cfg(unix)]
+#[test]
+fn test_add_dir_preserves_symlink_entries() {
+    use std::os::unix::fs::symlink;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let store = temp_store("dir-symlink");
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let src = env::temp_dir().join(format!(
+        "neve-store-src-symlink-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("real.txt"), b"real").unwrap();
+    symlink("real.txt", src.join("link.txt")).unwrap();
+
+    let store_path = store.add_dir(&src, "with-symlink").unwrap();
+    let stored_root = store.to_path(&store_path);
+    let stored_link = stored_root.join("link.txt");
+
+    let link_meta = fs::symlink_metadata(&stored_link).unwrap();
+    assert!(link_meta.file_type().is_symlink());
+    assert_eq!(
+        fs::read_link(&stored_link).unwrap().to_string_lossy(),
+        "real.txt"
+    );
+
+    let _ = fs::remove_dir_all(&src);
+    let _ = fs::remove_dir_all(store.root());
+}
+
 #[test]
 fn test_store_content_addressable() {
     let store = temp_store("ca");
@@ -256,6 +292,22 @@ fn test_store_path_inequality_different_name() {
     let path1 = StorePath::new(hash, "pkg1".to_string());
     let path2 = StorePath::new(hash, "pkg2".to_string());
     assert_ne!(path1, path2);
+}
+
+#[test]
+fn test_store_path_parse_roundtrip_full_hash() {
+    let hash = Hash::of(b"roundtrip");
+    let path = StorePath::new(hash, "pkg-1.0".to_string());
+    let parsed = StorePath::parse_name(&path.display_name()).expect("parse full hash path");
+    assert_eq!(parsed, path);
+}
+
+#[test]
+fn test_store_path_parse_legacy_short_hash() {
+    let hash = Hash::of(b"legacy");
+    let legacy = format!("{}-pkg", hash.to_short_hex());
+    let parsed = StorePath::parse_name(&legacy).expect("parse legacy short hash path");
+    assert_eq!(parsed.name(), "pkg");
 }
 
 // ============================================================================

@@ -102,6 +102,8 @@ pub struct UserConfig {
     pub groups: Vec<String>,
     /// User's packages. / 用户包。
     pub packages: Vec<String>,
+    /// Password hash for /etc/shadow. / /etc/shadow 的密码哈希。
+    pub password_hash: Option<String>,
 }
 
 impl SystemConfig {
@@ -156,6 +158,7 @@ impl UserConfig {
             shell: None,
             groups: Vec::new(),
             packages: Vec::new(),
+            password_hash: None,
         }
     }
 
@@ -174,6 +177,13 @@ impl UserConfig {
     /// Add a package.
     pub fn package(mut self, package: impl Into<String>) -> Self {
         self.packages.push(package.into());
+        self
+    }
+
+    /// Set a password hash entry for /etc/shadow.
+    /// 设置 /etc/shadow 使用的密码哈希条目。
+    pub fn password_hash(mut self, hash: impl Into<String>) -> Self {
+        self.password_hash = Some(hash.into());
         self
     }
 }

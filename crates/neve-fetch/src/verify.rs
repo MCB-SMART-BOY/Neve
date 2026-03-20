@@ -64,6 +64,8 @@ fn hash_dir_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(
     // Sort for deterministic hashing
     // 排序以实现确定性哈希
     entries.sort_by_key(|e| e.file_name());
+    hasher.update_byte(b'D');
+    hasher.update_u64(entries.len() as u64);
 
     for entry in entries {
         let entry_path = entry.path();
@@ -71,25 +73,26 @@ fn hash_dir_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(
 
         // Hash the entry name
         // 哈希条目名称
-        hasher.update(name.as_encoded_bytes());
+        hasher.update_byte(b'E');
+        hasher.update_len_prefixed(name.as_encoded_bytes());
 
-        if entry_path.is_dir() {
-            // Directory marker
-            // 目录标记
-            hasher.update(b"d");
-            hash_dir_recursive(&entry_path, hasher)?;
-        } else if entry_path.is_file() {
-            // File marker and content
-            // 文件标记和内容
-            hasher.update(b"f");
-            let content = fs::read(&entry_path)?;
-            hasher.update(&content);
-        } else if entry_path.is_symlink() {
+        let metadata = fs::symlink_metadata(&entry_path)?;
+        if metadata.file_type().is_symlink() {
             // Symlink marker and target
             // 符号链接标记和目标
-            hasher.update(b"l");
+            hasher.update_byte(b'L');
             let target = fs::read_link(&entry_path)?;
-            hasher.update(target.as_os_str().as_encoded_bytes());
+            hasher.update_len_prefixed(target.as_os_str().as_encoded_bytes());
+        } else if metadata.is_dir() {
+            hash_dir_recursive(&entry_path, hasher)?;
+        } else if metadata.is_file() {
+            // File marker and content
+            // 文件标记和内容
+            hasher.update_byte(b'F');
+            let content = fs::read(&entry_path)?;
+            hasher.update_len_prefixed(&content);
+        } else {
+            hasher.update_byte(b'U');
         }
     }
 

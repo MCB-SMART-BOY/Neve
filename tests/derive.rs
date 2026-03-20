@@ -89,6 +89,21 @@ fn test_derivation_hash() {
 }
 
 #[test]
+fn test_derivation_hash_field_boundary_safety() {
+    let drv1 = Derivation::builder("ab", "c")
+        .system("x86_64-linux")
+        .builder_path("/bin/sh")
+        .build();
+    let drv2 = Derivation::builder("a", "bc")
+        .system("x86_64-linux")
+        .builder_path("/bin/sh")
+        .build();
+
+    // Different field boundaries must not collide.
+    assert_ne!(drv1.hash(), drv2.hash());
+}
+
+#[test]
 fn test_derivation_json() {
     let drv = Derivation::builder("test", "1.0").env("FOO", "bar").build();
 
@@ -98,6 +113,23 @@ fn test_derivation_json() {
     assert_eq!(drv.name, parsed.name);
     assert_eq!(drv.version, parsed.version);
     assert_eq!(drv.env.get("FOO"), parsed.env.get("FOO"));
+}
+
+#[test]
+fn test_derivation_json_with_input_derivations() {
+    let dep = Derivation::builder("dep", "1.0").build();
+    let dep_path = dep.drv_path();
+
+    let drv = Derivation::builder("main", "1.0")
+        .input_drv(dep_path.clone(), vec!["out".to_string()])
+        .build();
+
+    let json = drv.to_json().unwrap();
+    let parsed = Derivation::from_json(&json).unwrap();
+
+    assert_eq!(parsed.input_drvs.len(), 1);
+    let outputs = parsed.input_drvs.get(&dep_path).unwrap();
+    assert_eq!(outputs, &vec!["out".to_string()]);
 }
 
 // StorePath and Output tests

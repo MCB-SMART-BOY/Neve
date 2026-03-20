@@ -1,9 +1,12 @@
 //! Integration tests for neve-std crate.
 
+use neve_derive::Hash;
 use neve_eval::Value;
 use neve_std::stdlib;
 use std::collections::HashMap;
+use std::fs;
 use std::rc::Rc;
+use tempfile::TempDir;
 
 fn get_builtin(name: &str) -> Option<Value> {
     stdlib()
@@ -15,6 +18,14 @@ fn get_builtin(name: &str) -> Option<Value> {
 fn call_builtin_fn(f: &Value, args: Vec<Value>) -> Result<Value, String> {
     match f {
         Value::BuiltinFn(_, func) => func(args),
+        _ => Err("Not a builtin function".into()),
+    }
+}
+
+fn call_builtin(f: &Value, args: &[Value]) -> Result<Value, String> {
+    match f {
+        Value::Builtin(builtin) => (builtin.func)(args),
+        Value::BuiltinFn(_, func) => func(args.to_vec()),
         _ => Err("Not a builtin function".into()),
     }
 }
@@ -169,6 +180,72 @@ fn test_stdlib_has_list_builtins() {
         .filter(|(name, _)| name.starts_with("list."))
         .collect();
     assert!(!list_builtins.is_empty(), "No list.* builtins found");
+}
+
+#[test]
+fn test_stdlib_has_fetch_builtins() {
+    let builtins = stdlib();
+    let fetch_builtins: Vec<_> = builtins
+        .iter()
+        .filter(|(name, _)| name.starts_with("fetch."))
+        .collect();
+    assert!(!fetch_builtins.is_empty(), "No fetch.* builtins found");
+}
+
+#[test]
+fn test_fetch_path_builtin_returns_metadata_record() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"fetch-path-content";
+    fs::write(&file_path, content).unwrap();
+
+    let builtin = get_builtin("fetch.path").expect("fetch.path builtin should exist");
+    let args = vec![Value::String(Rc::new(
+        file_path.to_string_lossy().to_string(),
+    ))];
+    let result = call_builtin(&builtin, &args).expect("fetch.path should succeed");
+
+    match result {
+        Value::Record(fields) => {
+            match fields.get("path").expect("path field should exist") {
+                Value::String(path) => {
+                    assert_eq!(path.as_str(), file_path.to_string_lossy().as_ref())
+                }
+                _ => panic!("path field should be a string"),
+            }
+
+            match fields.get("hash").expect("hash field should exist") {
+                Value::String(hash) => assert_eq!(hash.as_str(), Hash::of(content).to_hex()),
+                _ => panic!("hash field should be a string"),
+            }
+
+            match fields.get("cached").expect("cached field should exist") {
+                Value::Bool(cached) => assert!(*cached),
+                _ => panic!("cached field should be a bool"),
+            }
+        }
+        _ => panic!("fetch.path should return a record"),
+    }
+}
+
+#[test]
+fn test_fetch_path_with_hash_rejects_mismatch() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    fs::write(&file_path, b"actual-content").unwrap();
+
+    let wrong_hash = Hash::of(b"different-content").to_hex();
+    let builtin = get_builtin("fetch.pathWithHash").expect("fetch.pathWithHash should exist");
+    let args = vec![
+        Value::String(Rc::new(file_path.to_string_lossy().to_string())),
+        Value::String(Rc::new(wrong_hash)),
+    ];
+
+    let err = call_builtin(&builtin, &args).expect_err("expected hash mismatch error");
+    assert!(
+        err.contains("hash mismatch"),
+        "expected hash mismatch error, got: {err}"
+    );
 }
 
 // ============================================================================

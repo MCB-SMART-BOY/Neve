@@ -178,14 +178,12 @@ impl DockerExecutor {
         std::fs::write(&dockerfile_path, BUILD_DOCKERFILE)?;
 
         let output = Command::new("docker")
-            .args([
-                "build",
-                "-t",
-                &self.config.image,
-                "-f",
-                dockerfile_path.to_str().unwrap(),
-                dockerfile_dir.to_str().unwrap(),
-            ])
+            .arg("build")
+            .arg("-t")
+            .arg(&self.config.image)
+            .arg("-f")
+            .arg(&dockerfile_path)
+            .arg(&dockerfile_dir)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()?;
@@ -256,13 +254,6 @@ impl DockerExecutor {
             args.push(cpu.clone());
         }
 
-        // Add environment variables
-        // 添加环境变量
-        for (key, value) in &drv.env {
-            args.push("-e".to_string());
-            args.push(format!("{}={}", key, value));
-        }
-
         // Standard environment
         // 标准环境变量
         args.push("-e".to_string());
@@ -270,9 +261,26 @@ impl DockerExecutor {
         args.push("-e".to_string());
         args.push("TMPDIR=/tmp".to_string());
         args.push("-e".to_string());
-        args.push("out=/output".to_string());
-        args.push("-e".to_string());
         args.push(format!("NIX_BUILD_CORES={}", num_cpus::get()));
+
+        // Output paths (support multi-output derivations)
+        // 输出路径（支持多输出派生）
+        for output_name in drv.outputs.keys() {
+            args.push("-e".to_string());
+            let path = format!("/output/{}", output_name);
+            if output_name == "out" {
+                args.push(format!("out={}", path));
+            } else {
+                args.push(format!("{}={}", output_name, path));
+            }
+        }
+
+        // Add user environment variables last so they can override defaults
+        // 最后添加用户环境变量以允许覆盖默认值
+        for (key, value) in &drv.env {
+            args.push("-e".to_string());
+            args.push(format!("{}={}", key, value));
+        }
 
         // Add working directory
         // 添加工作目录

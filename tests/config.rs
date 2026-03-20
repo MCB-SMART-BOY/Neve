@@ -7,6 +7,7 @@ use neve_config::module::{Module, OptionDecl, OptionType};
 use neve_config::{SystemConfig, UserConfig};
 use neve_derive::{Hash, StorePath};
 use neve_eval::Value;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -103,6 +104,151 @@ fn test_module_to_system_config() {
     assert_eq!(config.options.packages, vec!["vim", "git"]);
 }
 
+#[test]
+fn test_module_to_system_config_rejects_invalid_declared_option_type() {
+    let module = Module::new("typed")
+        .option(OptionDecl::new("hostname", OptionType::String))
+        .option(OptionDecl::new(
+            "services",
+            OptionType::List(Box::new(OptionType::String)),
+        ))
+        .set("hostname", Value::String(Rc::new("test-host".to_string())))
+        .set("services", Value::List(Rc::new(vec![Value::Int(1.into())])));
+
+    let err = module
+        .to_system_config()
+        .expect_err("type validation should fail");
+    assert!(
+        err.to_string()
+            .contains("option 'services' has invalid type")
+    );
+}
+
+#[test]
+fn test_module_to_system_config_rejects_unknown_declared_option() {
+    let module = Module::new("typed")
+        .option(OptionDecl::new("hostname", OptionType::String))
+        .set("timezone", Value::String(Rc::new("UTC".to_string())));
+
+    let err = module
+        .to_system_config()
+        .expect_err("undeclared option should fail");
+    assert!(err.to_string().contains("unknown option 'timezone'"));
+}
+
+#[test]
+fn test_module_to_system_config_parses_users() {
+    let mut user_record = HashMap::new();
+    user_record.insert(
+        "name".to_string(),
+        Value::String(Rc::new("alice".to_string())),
+    );
+    user_record.insert(
+        "home".to_string(),
+        Value::String(Rc::new("/srv/alice".to_string())),
+    );
+    user_record.insert(
+        "shell".to_string(),
+        Value::String(Rc::new("/bin/zsh".to_string())),
+    );
+    user_record.insert(
+        "groups".to_string(),
+        Value::List(Rc::new(vec![Value::String(Rc::new("wheel".to_string()))])),
+    );
+    user_record.insert(
+        "packages".to_string(),
+        Value::List(Rc::new(vec![Value::String(Rc::new("git".to_string()))])),
+    );
+    user_record.insert(
+        "passwordHash".to_string(),
+        Value::String(Rc::new("$6$hash".to_string())),
+    );
+
+    let module = Module::new("users").set(
+        "users",
+        Value::List(Rc::new(vec![Value::Record(Rc::new(user_record))])),
+    );
+
+    let config = module.to_system_config().expect("users should parse");
+    assert_eq!(config.options.users.len(), 1);
+    let user = &config.options.users[0];
+    assert_eq!(user.name, "alice");
+    assert_eq!(user.home, PathBuf::from("/srv/alice"));
+    assert_eq!(user.shell.as_deref(), Some("/bin/zsh"));
+    assert_eq!(user.groups, vec!["wheel"]);
+    assert_eq!(user.packages, vec!["git"]);
+    assert_eq!(user.password_hash.as_deref(), Some("$6$hash"));
+}
+
+#[test]
+fn test_module_load_merged_resolves_imports_in_order() {
+    let dir = temp_dir("module-import-merge");
+    fs::create_dir_all(&dir).unwrap();
+
+    let base = dir.join("base.neve");
+    fs::write(
+        &base,
+        r#"let module = #{
+    timezone = "UTC",
+    packages = ["git"]
+};
+"#,
+    )
+    .unwrap();
+
+    let child = dir.join("child.neve");
+    fs::write(
+        &child,
+        r#"let module = #{
+    imports = ["./base.neve"],
+    hostname = "demo",
+    packages = ["vim"]
+};
+"#,
+    )
+    .unwrap();
+
+    let config = Module::load_merged(&child).expect("module graph should load");
+    assert_eq!(config.options.hostname, Some("demo".to_string()));
+    assert_eq!(config.options.timezone, Some("UTC".to_string()));
+    assert_eq!(config.options.packages, vec!["git", "vim"]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_module_load_with_imports_detects_cycle() {
+    let dir = temp_dir("module-import-cycle");
+    fs::create_dir_all(&dir).unwrap();
+
+    let a = dir.join("a.neve");
+    let b = dir.join("b.neve");
+
+    fs::write(
+        &a,
+        r#"let module = #{
+    imports = ["./b.neve"],
+    hostname = "a"
+};
+"#,
+    )
+    .unwrap();
+    fs::write(
+        &b,
+        r#"let module = #{
+    imports = ["./a.neve"],
+    hostname = "b"
+};
+"#,
+    )
+    .unwrap();
+
+    let err = Module::load_with_imports(&a).expect_err("cycle should be rejected");
+    assert!(err.to_string().contains("module import cycle detected"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // Generator tests
 
 fn temp_dir(suffix: &str) -> PathBuf {
@@ -130,6 +276,20 @@ fn test_generator() {
     assert_eq!(generated.services, vec!["sshd"]);
 
     // Cleanup
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_generator_uses_user_password_hash_in_shadow() {
+    let dir = temp_dir("gen-shadow-hash");
+
+    let config = SystemConfig::new("test").user(UserConfig::new("alice").password_hash("$6$abc"));
+    let generator = Generator::new(dir.clone());
+    let _generated = generator.generate(&config).unwrap();
+
+    let shadow = fs::read_to_string(dir.join("etc/shadow")).unwrap();
+    assert!(shadow.contains("alice:$6$abc:19000:0:99999:7:::"));
+
     let _ = fs::remove_dir_all(&dir);
 }
 

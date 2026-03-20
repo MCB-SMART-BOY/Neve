@@ -395,15 +395,28 @@ impl Generator {
             mode: 0o644,
         });
 
-        // Generate shadow entries (placeholder - actual passwords would be hashed)
-        // 生成 shadow 条目（占位符 - 实际密码会被哈希）
+        // Generate shadow entries
+        // 生成 shadow 条目
         let mut shadow_content = String::new();
         shadow_content.push_str("root:!:19000:0:99999:7:::\n");
 
         for user in &config.options.users {
-            // Locked account by default (! prefix)
-            // 默认锁定账户（! 前缀）
-            shadow_content.push_str(&format!("{}:!:19000:0:99999:7:::\n", user.name));
+            // Use configured password hash if provided, otherwise keep account locked (`!`).
+            // 若提供密码哈希则写入；否则保持锁定（`!`）。
+            let password_hash = user.password_hash.as_deref().unwrap_or("!");
+            if password_hash.contains(':')
+                || password_hash.contains('\n')
+                || password_hash.contains('\r')
+            {
+                return Err(ConfigError::Invalid(format!(
+                    "invalid password hash for user '{}': contains forbidden characters",
+                    user.name
+                )));
+            }
+            shadow_content.push_str(&format!(
+                "{}:{}:19000:0:99999:7:::\n",
+                user.name, password_hash
+            ));
         }
 
         let shadow_path = etc_dir.join("shadow");
