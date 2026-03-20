@@ -231,7 +231,9 @@ pub fn warn_limited_sandbox() {
 
         if caps.docker_available {
             eprintln!("         Using Docker backend for isolated builds.");
-            eprintln!("         Use --backend native to force native mode (less isolation).");
+            eprintln!(
+                "         Use --backend docker to force Docker mode or --backend simple for no isolation."
+            );
         } else {
             eprintln!("         Builds will run with limited isolation.");
             eprintln!(

@@ -14,10 +14,16 @@
 //!   输出函数，生成包、配置等
 
 use crate::ConfigError;
+use neve_derive::Hash;
 use neve_eval::Value;
-use std::collections::HashMap;
+use neve_fetch::{
+    archive as fetch_archive, git as fetch_git, url as fetch_url, verify as fetch_verify,
+};
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A flake input specification.
 /// Flake 输入规范。
@@ -143,6 +149,23 @@ pub enum FlakeOutput {
     Other(Value),
 }
 
+impl FlakeOutput {
+    /// Extract the underlying output value.
+    /// 提取底层输出值。
+    fn into_value(self) -> Value {
+        match self {
+            Self::Package(value)
+            | Self::DevShell(value)
+            | Self::System(value)
+            | Self::HomeConfig(value)
+            | Self::Overlay(value)
+            | Self::Module(value)
+            | Self::Template(value)
+            | Self::Other(value) => value,
+        }
+    }
+}
+
 /// A flake lock entry.
 /// Flake 锁定条目。
 #[derive(Debug, Clone)]
@@ -254,12 +277,17 @@ impl FlakeLock {
     /// 转换为 JSON 字符串。
     pub fn to_json(&self) -> String {
         let mut nodes = serde_json::Map::new();
+        let mut names: Vec<&str> = self.inputs.keys().map(|s| s.as_str()).collect();
+        names.sort_unstable();
 
         // Root node
         // 根节点
         let mut root_inputs = serde_json::Map::new();
-        for name in self.inputs.keys() {
-            root_inputs.insert(name.clone(), serde_json::Value::String(name.clone()));
+        for name in &names {
+            root_inputs.insert(
+                (*name).to_string(),
+                serde_json::Value::String((*name).to_string()),
+            );
         }
         nodes.insert(
             "root".to_string(),
@@ -270,7 +298,8 @@ impl FlakeLock {
 
         // Input nodes
         // 输入节点
-        for (name, entry) in &self.inputs {
+        for name in names {
+            let entry = &self.inputs[name];
             let mut locked = serde_json::Map::new();
             locked.insert(
                 "url".to_string(),
@@ -289,7 +318,7 @@ impl FlakeLock {
             }
 
             nodes.insert(
-                name.clone(),
+                name.to_string(),
                 serde_json::json!({
                     "locked": locked
                 }),
@@ -380,6 +409,13 @@ impl Flake {
 
         let mut parser = Parser::new(tokens);
         let ast = parser.parse_file();
+        let parse_errors = parser.diagnostics();
+        if !parse_errors.is_empty() {
+            return Err(ConfigError::Flake(format!(
+                "parser errors: {:?}",
+                parse_errors
+            )));
+        }
 
         let mut evaluator = AstEvaluator::new();
         evaluator = evaluator.with_base_path(root.clone());
@@ -439,26 +475,130 @@ impl Flake {
     /// Resolve a single input.
     /// 解析单个输入。
     fn resolve_input(&self, input: &FlakeInput) -> Result<FlakeLockEntry, ConfigError> {
-        // Parse the URL to determine the type
-        // 解析 URL 以确定类型
-        let url = &input.url;
+        let url = input.url.as_str();
 
-        // For now, create a placeholder entry
-        // 目前，创建一个占位条目
-        // In a real implementation, this would fetch the input and compute its hash
-        // 在实际实现中，这会获取输入并计算其哈希
-        let hash = format!("sha256-placeholder-{}", input.name);
-        let last_modified = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        if url.starts_with("github:") {
+            let repo_path = url
+                .strip_prefix("github:")
+                .ok_or_else(|| ConfigError::Flake("invalid github URL".into()))?;
+            let parts: Vec<&str> = repo_path.split('/').collect();
+            if parts.len() < 2 {
+                return Err(ConfigError::Flake(format!("invalid github URL: {}", url)));
+            }
+            let owner = parts[0];
+            let repo = parts[1];
+            let owner_repo = format!("{}/{}", owner, repo);
+            let url_ref = if parts.len() > 2 {
+                Some(parts[2..].join("/"))
+            } else {
+                None
+            };
+            let git_ref = input
+                .rev
+                .clone()
+                .or_else(|| input.tag.clone())
+                .or_else(|| input.branch.clone())
+                .or(url_ref)
+                .unwrap_or_else(|| "HEAD".to_string());
+            let git_url = format!("https://github.com/{}.git", owner_repo);
+            let (commit, hash) = resolve_git_source(&git_url, &git_ref)?;
+            return Ok(FlakeLockEntry {
+                name: input.name.clone(),
+                url: format!(
+                    "https://github.com/{}/archive/{}.tar.gz",
+                    owner_repo, commit
+                ),
+                hash: hash_to_lock(&hash),
+                last_modified: stable_last_modified_from_hash(&hash),
+                rev: Some(commit),
+            });
+        }
 
-        Ok(FlakeLockEntry {
-            name: input.name.clone(),
-            url: url.clone(),
-            hash,
-            last_modified,
-            rev: input.rev.clone(),
+        if url.starts_with("git+") || url.ends_with(".git") {
+            let git_url = url.strip_prefix("git+").unwrap_or(url);
+            let git_ref = input
+                .rev
+                .clone()
+                .or_else(|| input.tag.clone())
+                .or_else(|| input.branch.clone())
+                .unwrap_or_else(|| "HEAD".to_string());
+            let (commit, hash) = resolve_git_source(git_url, &git_ref)?;
+            return Ok(FlakeLockEntry {
+                name: input.name.clone(),
+                url: git_url.to_string(),
+                hash: hash_to_lock(&hash),
+                last_modified: stable_last_modified_from_hash(&hash),
+                rev: Some(commit),
+            });
+        }
+
+        if url.starts_with("path:") || url.starts_with("./") || url.starts_with('/') {
+            let raw = url.strip_prefix("path:").unwrap_or(url);
+            let raw_path = Path::new(raw);
+            let abs_path = if raw_path.is_absolute() {
+                raw_path.to_path_buf()
+            } else {
+                self.root.join(raw_path)
+            };
+            let path = abs_path
+                .canonicalize()
+                .map_err(|e| ConfigError::Flake(format!("invalid path input '{}': {}", raw, e)))?;
+            let metadata = fs::symlink_metadata(&path).map_err(|e| {
+                ConfigError::Flake(format!("cannot read metadata '{}': {}", path.display(), e))
+            })?;
+            let hash = if metadata.file_type().is_symlink() {
+                let target = fs::read_link(&path).map_err(|e| {
+                    ConfigError::Flake(format!(
+                        "cannot read symlink target '{}': {}",
+                        path.display(),
+                        e
+                    ))
+                })?;
+                Hash::of(target.as_os_str().to_string_lossy().as_bytes())
+            } else if metadata.is_file() {
+                let content = fs::read(&path).map_err(|e| {
+                    ConfigError::Flake(format!("cannot read file '{}': {}", path.display(), e))
+                })?;
+                Hash::of(&content)
+            } else if metadata.is_dir() {
+                fetch_verify::hash_dir(&path).map_err(|e| {
+                    ConfigError::Flake(format!("cannot hash directory '{}': {}", path.display(), e))
+                })?
+            } else {
+                return Err(ConfigError::Flake(format!(
+                    "unsupported path input type: {}",
+                    path.display()
+                )));
+            };
+
+            return Ok(FlakeLockEntry {
+                name: input.name.clone(),
+                url: format!("path:{}", path.display()),
+                hash: hash_to_lock(&hash),
+                last_modified: stable_last_modified_from_hash(&hash),
+                rev: None,
+            });
+        }
+
+        if url.starts_with("http://") || url.starts_with("https://") {
+            let content = fetch_url::fetch_url(url)
+                .map_err(|e| ConfigError::Flake(format!("failed to fetch '{}': {}", url, e)))?;
+            let hash = Hash::of(&content);
+            return Ok(FlakeLockEntry {
+                name: input.name.clone(),
+                url: url.to_string(),
+                hash: hash_to_lock(&hash),
+                last_modified: stable_last_modified_from_hash(&hash),
+                rev: None,
+            });
+        }
+
+        // Fallback: treat as GitHub shorthand like "owner/repo" or "owner/repo/ref".
+        // 回退：将其视为 GitHub 简写，如 "owner/repo" 或 "owner/repo/ref"。
+        let shorthand = format!("github:{}", url);
+        self.resolve_input(&FlakeInput {
+            url: shorthand,
+            ..input.clone()
         })
     }
 
@@ -472,10 +612,28 @@ impl Flake {
     /// Evaluate the flake outputs.
     /// 评估 flake 输出。
     pub fn eval_outputs(&mut self) -> Result<HashMap<String, FlakeOutput>, ConfigError> {
+        let root = self
+            .root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone());
+        let mut stack = vec![root];
+        self.eval_outputs_with_stack(&mut stack)
+    }
+
+    /// Evaluate outputs with recursion stack tracking for input flakes.
+    /// 使用递归栈追踪输入 flake 来评估输出。
+    fn eval_outputs_with_stack(
+        &mut self,
+        stack: &mut Vec<PathBuf>,
+    ) -> Result<HashMap<String, FlakeOutput>, ConfigError> {
         let outputs_fn = self
             .outputs
             .clone()
             .ok_or_else(|| ConfigError::Flake("flake has no outputs".into()))?;
+
+        // Resolve each declared input to a concrete value.
+        // 解析每个声明的输入为具体值。
+        self.resolve_all_inputs_for_outputs(stack)?;
 
         // Create the inputs record to pass to the outputs function
         // 创建要传递给输出函数的输入记录
@@ -483,14 +641,13 @@ impl Flake {
         inputs_record.insert("self".to_string(), self.to_value());
 
         for name in self.inputs.keys() {
-            // For now, create placeholder values for inputs
-            // 目前，为输入创建占位值
-            // In a real implementation, this would load the locked input
-            // 在实际实现中，这会加载锁定的输入
             if let Some(resolved) = self.resolved_inputs.get(name) {
                 inputs_record.insert(name.clone(), resolved.clone());
             } else {
-                inputs_record.insert(name.clone(), Value::Record(Rc::new(HashMap::new())));
+                inputs_record.insert(
+                    name.clone(),
+                    self.input_url_to_value(&self.inputs[name].url),
+                );
             }
         }
 
@@ -517,6 +674,450 @@ impl Flake {
         // Parse the outputs
         // 解析输出
         self.parse_outputs(&result)
+    }
+
+    /// Resolve all declared inputs before evaluating outputs.
+    /// 在评估输出前解析所有声明的输入。
+    fn resolve_all_inputs_for_outputs(
+        &mut self,
+        stack: &mut Vec<PathBuf>,
+    ) -> Result<(), ConfigError> {
+        let mut resolving = HashSet::new();
+        let input_names: Vec<String> = self.inputs.keys().cloned().collect();
+
+        for name in input_names {
+            let value = self.resolve_single_input_value(&name, &mut resolving, stack)?;
+            self.resolved_inputs.insert(name, value);
+        }
+
+        Ok(())
+    }
+
+    /// Resolve a single input value with cycle detection.
+    /// 解析单个输入值并进行循环检测。
+    fn resolve_single_input_value(
+        &mut self,
+        name: &str,
+        resolving: &mut HashSet<String>,
+        stack: &mut Vec<PathBuf>,
+    ) -> Result<Value, ConfigError> {
+        if let Some(existing) = self.resolved_inputs.get(name) {
+            return Ok(existing.clone());
+        }
+
+        let input = self
+            .inputs
+            .get(name)
+            .cloned()
+            .ok_or_else(|| ConfigError::Flake(format!("unknown flake input '{}'", name)))?;
+
+        if !resolving.insert(name.to_string()) {
+            return Err(ConfigError::Flake(format!(
+                "flake input cycle detected while resolving '{}'",
+                name
+            )));
+        }
+
+        let resolved = (|| -> Result<Value, ConfigError> {
+            if let Some(follows) = input.follows.clone() {
+                if !self.inputs.contains_key(&follows) {
+                    return Err(ConfigError::Flake(format!(
+                        "input '{}' follows unknown input '{}'",
+                        name, follows
+                    )));
+                }
+                return self.resolve_single_input_value(&follows, resolving, stack);
+            }
+
+            if let Some(value) = self.try_resolve_input_flake_value(name, &input, stack)? {
+                return Ok(value);
+            }
+
+            if let Some(entry) = self.lock.inputs.get(name) {
+                return Ok(self.lock_entry_to_value(entry));
+            }
+
+            Ok(self.input_url_to_value(&input.url))
+        })();
+
+        resolving.remove(name);
+
+        let value = resolved?;
+        self.resolved_inputs.insert(name.to_string(), value.clone());
+        Ok(value)
+    }
+
+    /// Try to load and evaluate an input flake recursively.
+    /// 尝试递归加载并评估输入 flake。
+    fn try_resolve_input_flake_value(
+        &self,
+        name: &str,
+        input: &FlakeInput,
+        stack: &mut Vec<PathBuf>,
+    ) -> Result<Option<Value>, ConfigError> {
+        let lock_entry = self.lock.inputs.get(name);
+        let source_root = if let Some(entry) = lock_entry {
+            self.resolve_input_source_root(
+                entry.url.as_str(),
+                entry.rev.as_deref(),
+                Some(&entry.hash),
+            )?
+            .or_else(|| {
+                self.resolve_input_source_root(input.url.as_str(), input.rev.as_deref(), None)
+                    .ok()
+                    .flatten()
+            })
+        } else {
+            self.resolve_input_source_root(input.url.as_str(), input.rev.as_deref(), None)?
+        };
+
+        let Some(source_root) = source_root else {
+            return Ok(None);
+        };
+
+        if !source_root.join("flake.neve").exists() {
+            return Ok(None);
+        }
+
+        if stack.contains(&source_root) {
+            return Err(ConfigError::Flake(format!(
+                "flake input cycle detected at '{}'",
+                source_root.display()
+            )));
+        }
+
+        let mut input_flake = Flake::load(&source_root)?;
+        stack.push(source_root.clone());
+        let outputs = input_flake.eval_outputs_with_stack(stack);
+        let _ = stack.pop();
+        let outputs = outputs?;
+
+        Ok(Some(self.build_input_flake_value(
+            &input_flake,
+            outputs,
+            lock_entry,
+        )))
+    }
+
+    /// Build the value exposed to `outputs` for a fully loaded input flake.
+    /// 构建完整输入 flake 暴露给 `outputs` 的值。
+    fn build_input_flake_value(
+        &self,
+        input_flake: &Flake,
+        outputs: HashMap<String, FlakeOutput>,
+        lock_entry: Option<&FlakeLockEntry>,
+    ) -> Value {
+        let mut fields = match input_flake.to_value() {
+            Value::Record(record) => (*record).clone(),
+            _ => HashMap::new(),
+        };
+
+        for (name, output) in outputs {
+            fields.insert(name, output.into_value());
+        }
+
+        if let Some(entry) = lock_entry {
+            self.apply_lock_entry_metadata(&mut fields, entry);
+        }
+
+        Value::Record(Rc::new(fields))
+    }
+
+    /// Apply lock metadata fields to an already constructed input value.
+    /// 将 lock 元数据字段合并到已构建的输入值中。
+    fn apply_lock_entry_metadata(
+        &self,
+        fields: &mut HashMap<String, Value>,
+        entry: &FlakeLockEntry,
+    ) {
+        fields
+            .entry("url".to_string())
+            .or_insert_with(|| Value::String(Rc::new(entry.url.clone())));
+        fields
+            .entry("narHash".to_string())
+            .or_insert_with(|| Value::String(Rc::new(entry.hash.clone())));
+        fields
+            .entry("lastModified".to_string())
+            .or_insert(Value::Int(entry.last_modified.into()));
+
+        if let Some(rev) = &entry.rev {
+            fields
+                .entry("rev".to_string())
+                .or_insert_with(|| Value::String(Rc::new(rev.clone())));
+        }
+    }
+
+    /// Resolve an input source URL to a local root directory if possible.
+    /// 将输入源 URL 解析为本地根目录（若可行）。
+    fn resolve_input_source_root(
+        &self,
+        url: &str,
+        rev: Option<&str>,
+        expected_lock_hash: Option<&str>,
+    ) -> Result<Option<PathBuf>, ConfigError> {
+        if is_path_input(url) {
+            return self.materialize_path_source(url).map(Some);
+        }
+
+        if url.starts_with("git+") || url.ends_with(".git") {
+            let git_url = url.strip_prefix("git+").unwrap_or(url);
+            return self.materialize_git_source(git_url, rev, expected_lock_hash);
+        }
+
+        if url.starts_with("http://") || url.starts_with("https://") {
+            let archive_format = archive_format_from_url(url);
+            if let Some(format) = archive_format {
+                return self.materialize_archive_source(url, format, expected_lock_hash);
+            }
+            return Ok(None);
+        }
+
+        if url.starts_with("github:") {
+            let temp_input = FlakeInput {
+                name: "temp-input".to_string(),
+                url: url.to_string(),
+                follows: None,
+                rev: rev.map(|r| r.to_string()),
+                branch: None,
+                tag: None,
+            };
+            let resolved = self.resolve_input(&temp_input)?;
+            return self.resolve_input_source_root(
+                &resolved.url,
+                resolved.rev.as_deref(),
+                Some(&resolved.hash),
+            );
+        }
+
+        if url.split('/').count() >= 2 {
+            // Fallback: treat "owner/repo[/ref]" as GitHub shorthand.
+            // 回退：将 "owner/repo[/ref]" 视为 GitHub 简写。
+            let github_url = format!("github:{}", url);
+            return self.resolve_input_source_root(&github_url, rev, expected_lock_hash);
+        }
+
+        Ok(None)
+    }
+
+    /// Materialize a path input and return its canonical source root.
+    /// 物化路径输入并返回规范化后的源码根目录。
+    fn materialize_path_source(&self, url: &str) -> Result<PathBuf, ConfigError> {
+        let raw = url.strip_prefix("path:").unwrap_or(url);
+        let raw_path = Path::new(raw);
+        let abs_path = if raw_path.is_absolute() {
+            raw_path.to_path_buf()
+        } else {
+            self.root.join(raw_path)
+        };
+        abs_path
+            .canonicalize()
+            .map_err(|e| ConfigError::Flake(format!("invalid path input '{}': {}", raw, e)))
+    }
+
+    /// Materialize a git input into the source cache directory.
+    /// 将 git 输入物化到源码缓存目录。
+    fn materialize_git_source(
+        &self,
+        git_url: &str,
+        rev: Option<&str>,
+        expected_lock_hash: Option<&str>,
+    ) -> Result<Option<PathBuf>, ConfigError> {
+        let git_ref = rev.unwrap_or("HEAD");
+        let cache_root = flake_source_cache_dir()?;
+        let cache_key = expected_lock_hash
+            .and_then(lock_hash_to_raw_hex)
+            .map(std::borrow::ToOwned::to_owned)
+            .unwrap_or_else(|| Hash::of_str(&format!("{}@{}", git_url, git_ref)).to_hex());
+        let checkout_dir = cache_root.join(format!("git-{}", cache_key));
+
+        if !checkout_dir.exists() {
+            let work_dir = temp_work_dir("neve-flake-input-git")?;
+            let clone_path = work_dir.join("repo");
+
+            let repo = fetch_git::clone_repo(git_url, &clone_path).map_err(|e| {
+                ConfigError::Flake(format!("failed to clone git input '{}': {}", git_url, e))
+            })?;
+            fetch_git::checkout_rev(&repo, git_ref).map_err(|e| {
+                ConfigError::Flake(format!(
+                    "failed to checkout git input '{}' at '{}': {}",
+                    git_url, git_ref, e
+                ))
+            })?;
+            drop(repo);
+
+            let git_dir = clone_path.join(".git");
+            if git_dir.exists() {
+                fs::remove_dir_all(&git_dir)
+                    .map_err(|e| ConfigError::Flake(format!("failed to remove .git: {}", e)))?;
+            }
+
+            if let Some(expected_hash) = parse_lock_hash(expected_lock_hash) {
+                let actual_hash = fetch_git::hash_directory(&clone_path).map_err(|e| {
+                    ConfigError::Flake(format!("failed to hash git input '{}': {}", git_url, e))
+                })?;
+                if actual_hash != expected_hash {
+                    return Err(ConfigError::Flake(format!(
+                        "hash mismatch for git input '{}': expected {}, got {}",
+                        git_url,
+                        hash_to_lock(&expected_hash),
+                        hash_to_lock(&actual_hash)
+                    )));
+                }
+            }
+
+            if let Some(parent) = checkout_dir.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            if let Err(err) = fs::rename(&clone_path, &checkout_dir) {
+                copy_dir_recursive(&clone_path, &checkout_dir)?;
+                let _ = fs::remove_dir_all(&clone_path);
+                if checkout_dir.exists() {
+                    // Keep copy fallback result and continue.
+                    // 保留复制回退结果并继续。
+                } else {
+                    return Err(ConfigError::Flake(format!(
+                        "failed to cache git input '{}': {}",
+                        git_url, err
+                    )));
+                }
+            }
+            let _ = fs::remove_dir_all(&work_dir);
+        }
+
+        Ok(if checkout_dir.join("flake.neve").exists() {
+            Some(checkout_dir.canonicalize().unwrap_or(checkout_dir))
+        } else {
+            None
+        })
+    }
+
+    /// Materialize an archive input into the source cache directory.
+    /// 将归档输入物化到源码缓存目录。
+    fn materialize_archive_source(
+        &self,
+        url: &str,
+        format: fetch_archive::ArchiveFormat,
+        expected_lock_hash: Option<&str>,
+    ) -> Result<Option<PathBuf>, ConfigError> {
+        let cache_root = flake_source_cache_dir()?;
+        let cache_key = expected_lock_hash
+            .and_then(lock_hash_to_raw_hex)
+            .map(std::borrow::ToOwned::to_owned)
+            .unwrap_or_else(|| Hash::of_str(url).to_hex());
+        let extract_dir = cache_root.join(format!("archive-{}", cache_key));
+
+        if !extract_dir.exists() {
+            let content = fetch_url::fetch_url(url)
+                .map_err(|e| ConfigError::Flake(format!("failed to fetch '{}': {}", url, e)))?;
+
+            let work_dir = temp_work_dir("neve-flake-input-archive")?;
+            fetch_archive::extract_from_bytes(&content, &work_dir, format)
+                .map_err(|e| ConfigError::Flake(format!("failed to extract '{}': {}", url, e)))?;
+
+            let source_root = detected_archive_root(&work_dir);
+            if let Some(expected_hash) = parse_lock_hash(expected_lock_hash) {
+                let actual_hash = fetch_verify::hash_dir(&source_root).map_err(|e| {
+                    ConfigError::Flake(format!(
+                        "failed to hash extracted archive from '{}': {}",
+                        url, e
+                    ))
+                })?;
+                if actual_hash != expected_hash {
+                    return Err(ConfigError::Flake(format!(
+                        "hash mismatch for archive input '{}': expected {}, got {}",
+                        url,
+                        hash_to_lock(&expected_hash),
+                        hash_to_lock(&actual_hash)
+                    )));
+                }
+            }
+
+            if let Some(parent) = extract_dir.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            if let Err(err) = fs::rename(&work_dir, &extract_dir) {
+                copy_dir_recursive(&work_dir, &extract_dir)?;
+                let _ = fs::remove_dir_all(&work_dir);
+                if extract_dir.exists() {
+                    // Keep copy fallback result and continue.
+                    // 保留复制回退结果并继续。
+                } else {
+                    return Err(ConfigError::Flake(format!(
+                        "failed to cache extracted input '{}': {}",
+                        url, err
+                    )));
+                }
+            }
+        }
+
+        let root = detected_archive_root(&extract_dir);
+        Ok(if root.join("flake.neve").exists() {
+            Some(root.canonicalize().unwrap_or(root))
+        } else {
+            None
+        })
+    }
+
+    /// Create a fallback input value directly from the raw input URL.
+    /// 直接从原始输入 URL 创建回退输入值。
+    fn input_url_to_value(&self, url: &str) -> Value {
+        let mut fields = HashMap::new();
+        let out_path = if is_path_input(url) {
+            let raw = url.strip_prefix("path:").unwrap_or(url);
+            let raw_path = Path::new(raw);
+            let abs = if raw_path.is_absolute() {
+                raw_path.to_path_buf()
+            } else {
+                self.root.join(raw_path)
+            };
+            abs.canonicalize()
+                .unwrap_or(abs)
+                .to_string_lossy()
+                .to_string()
+        } else {
+            url.to_string()
+        };
+        fields.insert("outPath".to_string(), Value::String(Rc::new(out_path)));
+        fields.insert("url".to_string(), Value::String(Rc::new(url.to_string())));
+        Value::Record(Rc::new(fields))
+    }
+
+    /// Convert a lock entry to an input value record exposed to outputs.
+    /// 将 lock 条目转换为暴露给 outputs 的输入值记录。
+    fn lock_entry_to_value(&self, entry: &FlakeLockEntry) -> Value {
+        let mut fields = HashMap::new();
+
+        let out_path = if let Some(raw) = entry.url.strip_prefix("path:") {
+            let raw_path = Path::new(raw);
+            let abs = if raw_path.is_absolute() {
+                raw_path.to_path_buf()
+            } else {
+                self.root.join(raw_path)
+            };
+            abs.canonicalize()
+                .unwrap_or(abs)
+                .to_string_lossy()
+                .to_string()
+        } else {
+            entry.url.clone()
+        };
+
+        fields.insert("outPath".to_string(), Value::String(Rc::new(out_path)));
+        fields.insert("url".to_string(), Value::String(Rc::new(entry.url.clone())));
+        fields.insert(
+            "narHash".to_string(),
+            Value::String(Rc::new(entry.hash.clone())),
+        );
+        fields.insert(
+            "lastModified".to_string(),
+            Value::Int(entry.last_modified.into()),
+        );
+
+        if let Some(rev) = &entry.rev {
+            fields.insert("rev".to_string(), Value::String(Rc::new(rev.clone())));
+        }
+
+        Value::Record(Rc::new(fields))
     }
 
     /// Parse outputs from a value.
@@ -571,9 +1172,12 @@ impl Flake {
     /// 按名称获取包。
     pub fn get_package(&mut self, system: &str, name: &str) -> Result<Option<Value>, ConfigError> {
         let outputs = self.eval_outputs()?;
+        let normalized_system = system.replace('-', "_");
 
         if let Some(FlakeOutput::Package(Value::Record(systems))) = outputs.get("packages")
-            && let Some(Value::Record(pkgs)) = systems.get(system)
+            && let Some(Value::Record(pkgs)) = systems
+                .get(system)
+                .or_else(|| systems.get(normalized_system.as_str()))
         {
             return Ok(pkgs.get(name).cloned());
         }
@@ -595,9 +1199,12 @@ impl Flake {
         name: &str,
     ) -> Result<Option<Value>, ConfigError> {
         let outputs = self.eval_outputs()?;
+        let normalized_system = system.replace('-', "_");
 
         if let Some(FlakeOutput::DevShell(Value::Record(systems))) = outputs.get("devShells")
-            && let Some(Value::Record(shell_map)) = systems.get(system)
+            && let Some(Value::Record(shell_map)) = systems
+                .get(system)
+                .or_else(|| systems.get(normalized_system.as_str()))
         {
             return Ok(shell_map.get(name).cloned());
         }
@@ -612,23 +1219,23 @@ pub fn init_flake(root: &Path, description: Option<&str>) -> Result<Flake, Confi
     std::fs::create_dir_all(root)?;
 
     let flake_content = format!(
-        r#"{{
-    description = "{}";
-    
-    inputs = {{
-        neve = {{
-            url = "github:example/neve";
-        }};
-    }};
-    
-    outputs = \inputs -> {{
-        packages = {{
-            x86_64-linux = {{
-                default = inputs.neve.packages.x86_64-linux.hello;
-            }};
-        }};
-    }};
-}}
+        r#"let flake = #{{
+    description = "{}",
+
+    inputs = #{{
+        neve = #{{
+            url = "github:example/neve"
+        }}
+    }},
+
+    outputs = fn(inputs) #{{
+        packages = #{{
+            x86_64_linux = #{{
+                default = inputs.neve.packages.x86_64_linux.hello
+            }}
+        }}
+    }}
+}};
 "#,
         description.unwrap_or("A Neve flake")
     );
@@ -636,4 +1243,359 @@ pub fn init_flake(root: &Path, description: Option<&str>) -> Result<Flake, Confi
     std::fs::write(root.join("flake.neve"), flake_content)?;
 
     Flake::load(root)
+}
+
+/// Resolve a git source to a concrete commit and content hash.
+/// 将 git 源解析为具体提交和内容哈希。
+fn resolve_git_source(url: &str, git_ref: &str) -> Result<(String, Hash), ConfigError> {
+    let work_dir = temp_work_dir("neve-flake-git")?;
+    let clone_path = work_dir.join("repo");
+
+    let repo = fetch_git::clone_repo(url, &clone_path)
+        .map_err(|e| ConfigError::Flake(format!("failed to clone '{}': {}", url, e)))?;
+    let oid = fetch_git::checkout_rev(&repo, git_ref).map_err(|e| {
+        ConfigError::Flake(format!(
+            "failed to checkout revision '{}' from '{}': {}",
+            git_ref, url, e
+        ))
+    })?;
+    drop(repo);
+
+    let git_dir = clone_path.join(".git");
+    if git_dir.exists() {
+        fs::remove_dir_all(&git_dir)
+            .map_err(|e| ConfigError::Flake(format!("failed to remove .git: {}", e)))?;
+    }
+
+    let hash = fetch_git::hash_directory(&clone_path)
+        .map_err(|e| ConfigError::Flake(format!("failed to hash git source '{}': {}", url, e)))?;
+    let _ = fs::remove_dir_all(&work_dir);
+    Ok((oid.to_string(), hash))
+}
+
+/// Format a content hash for lock file storage.
+/// 将内容哈希格式化为锁文件存储格式。
+fn hash_to_lock(hash: &Hash) -> String {
+    format!("blake3-{}", hash.to_hex())
+}
+
+/// Produce a deterministic lastModified value from a content hash.
+/// 基于内容哈希生成确定性的 lastModified 值。
+fn stable_last_modified_from_hash(hash: &Hash) -> u64 {
+    let hex = hash.to_hex();
+    let prefix = hex.get(..16).unwrap_or(hex.as_str());
+    u64::from_str_radix(prefix, 16).unwrap_or(0)
+}
+
+/// Parse a lock hash string like `blake3-<hex>` into a `Hash`.
+/// 将 `blake3-<hex>` 形式的锁哈希解析为 `Hash`。
+fn parse_lock_hash(lock_hash: Option<&str>) -> Option<Hash> {
+    let lock_hash = lock_hash?;
+    let raw = lock_hash_to_raw_hex(lock_hash)?;
+    Hash::from_hex(raw).ok()
+}
+
+/// Strip lock hash prefix and return raw hex content.
+/// 去除锁哈希前缀并返回原始十六进制内容。
+fn lock_hash_to_raw_hex(lock_hash: &str) -> Option<&str> {
+    let raw = lock_hash.strip_prefix("blake3-").unwrap_or(lock_hash);
+    if raw.len() == 64 && raw.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(raw)
+    } else {
+        None
+    }
+}
+
+/// Return whether a URL is a local path input.
+/// 判断 URL 是否为本地路径输入。
+fn is_path_input(url: &str) -> bool {
+    url.starts_with("path:")
+        || url.starts_with("./")
+        || url.starts_with("../")
+        || url.starts_with('/')
+}
+
+/// Detect archive format from a URL path.
+/// 从 URL 路径检测归档格式。
+fn archive_format_from_url(url: &str) -> Option<fetch_archive::ArchiveFormat> {
+    let without_query = url.split('?').next().unwrap_or(url);
+    let file_name = Path::new(without_query).file_name()?.to_str()?;
+    fetch_archive::ArchiveFormat::from_name(file_name)
+}
+
+/// Determine archive extraction root and skip single top-level wrapper directory when present.
+/// 确定归档解压根目录，并在存在单一顶层包装目录时跳过它。
+fn detected_archive_root(root: &Path) -> PathBuf {
+    if root.join("flake.neve").exists() {
+        return root.to_path_buf();
+    }
+
+    let Ok(entries) = fs::read_dir(root) else {
+        return root.to_path_buf();
+    };
+
+    let dirs: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            entry
+                .file_type()
+                .ok()
+                .filter(|t| t.is_dir())
+                .map(|_| entry.path())
+        })
+        .collect();
+
+    if dirs.len() == 1 {
+        return dirs[0].clone();
+    }
+
+    root.to_path_buf()
+}
+
+/// Get the shared cache directory for materialized flake input sources.
+/// 获取用于物化 flake 输入源码的共享缓存目录。
+fn flake_source_cache_dir() -> Result<PathBuf, ConfigError> {
+    let path = std::env::temp_dir().join("neve-flake-source-cache");
+    fs::create_dir_all(&path)
+        .map_err(|e| ConfigError::Flake(format!("failed to create source cache dir: {}", e)))?;
+    Ok(path)
+}
+
+/// Recursively copy a directory.
+/// 递归复制目录。
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), ConfigError> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Create a temporary working directory.
+/// 创建临时工作目录。
+fn temp_work_dir(prefix: &str) -> Result<PathBuf, ConfigError> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let path = std::env::temp_dir().join(format!("{}-{}-{}", prefix, std::process::id(), nonce));
+    fs::create_dir_all(&path).map_err(|e| {
+        ConfigError::Flake(format!(
+            "failed to create temporary directory '{}': {}",
+            prefix, e
+        ))
+    })?;
+    Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_eval_outputs_recursively_loads_path_inputs() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = tempdir()?;
+        let root = temp.path();
+
+        let core_dir = root.join("core");
+        fs::create_dir_all(&core_dir)?;
+        fs::write(
+            core_dir.join("flake.neve"),
+            r#"let flake = #{
+    outputs = fn(inputs) #{
+        packages = #{
+            x86_64_linux = #{
+                default = #{
+                    name = "core",
+                    version = "1.0.0"
+                }
+            }
+        }
+    }
+};
+"#,
+        )?;
+
+        let dep_dir = root.join("dep");
+        fs::create_dir_all(&dep_dir)?;
+        fs::write(
+            dep_dir.join("flake.neve"),
+            r#"let flake = #{
+    inputs = #{
+        core = #{ url = "../core" }
+    },
+
+    outputs = fn(inputs) #{
+        packages = #{
+            x86_64_linux = #{
+                default = inputs.core.packages.x86_64_linux.default
+            }
+        }
+    }
+};
+"#,
+        )?;
+
+        fs::write(
+            root.join("flake.neve"),
+            r#"let flake = #{
+    inputs = #{
+        dep = #{ url = "./dep" }
+    },
+
+    outputs = fn(inputs) #{
+        packages = #{
+            x86_64_linux = #{
+                default = inputs.dep.packages.x86_64_linux.default
+            }
+        }
+    }
+};
+"#,
+        )?;
+
+        let mut flake = Flake::load(root)?;
+        let default_pkg = flake
+            .get_default_package("x86_64-linux")?
+            .ok_or("missing default package")?;
+
+        match default_pkg {
+            Value::Record(fields) => {
+                let Some(Value::String(name)) = fields.get("name") else {
+                    return Err("missing package name".into());
+                };
+                assert_eq!(name.as_str(), "core");
+            }
+            _ => return Err("expected package record".into()),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_eval_outputs_supports_follows_alias() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = tempdir()?;
+        let root = temp.path();
+
+        let dep_dir = root.join("dep");
+        fs::create_dir_all(&dep_dir)?;
+        fs::write(
+            dep_dir.join("flake.neve"),
+            r#"let flake = #{
+    outputs = fn(inputs) #{
+        packages = #{
+            x86_64_linux = #{
+                default = #{
+                    name = "dep",
+                    version = "2.0.0"
+                }
+            }
+        }
+    }
+};
+"#,
+        )?;
+
+        fs::write(
+            root.join("flake.neve"),
+            r#"let flake = #{
+    inputs = #{
+        base = #{ url = "./dep" },
+        alias = #{ url = "./dep", follows = "base" }
+    },
+
+    outputs = fn(inputs) #{
+        packages = #{
+            x86_64_linux = #{
+                default = inputs.alias.packages.x86_64_linux.default
+            }
+        }
+    }
+};
+"#,
+        )?;
+
+        let mut flake = Flake::load(root)?;
+        let default_pkg = flake
+            .get_default_package("x86_64-linux")?
+            .ok_or("missing default package")?;
+
+        match default_pkg {
+            Value::Record(fields) => {
+                let Some(Value::String(name)) = fields.get("name") else {
+                    return Err("missing package name".into());
+                };
+                assert_eq!(name.as_str(), "dep");
+            }
+            _ => return Err("expected package record".into()),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lock_to_json_is_deterministic_for_input_order() {
+        let mut lock_a = FlakeLock::new();
+        lock_a.inputs.insert(
+            "b".to_string(),
+            FlakeLockEntry {
+                name: "b".to_string(),
+                url: "https://example.com/b.tar.gz".to_string(),
+                hash: "blake3-2222".to_string(),
+                last_modified: 2,
+                rev: None,
+            },
+        );
+        lock_a.inputs.insert(
+            "a".to_string(),
+            FlakeLockEntry {
+                name: "a".to_string(),
+                url: "https://example.com/a.tar.gz".to_string(),
+                hash: "blake3-1111".to_string(),
+                last_modified: 1,
+                rev: Some("rev-a".to_string()),
+            },
+        );
+
+        let mut lock_b = FlakeLock::new();
+        lock_b.inputs.insert(
+            "a".to_string(),
+            FlakeLockEntry {
+                name: "a".to_string(),
+                url: "https://example.com/a.tar.gz".to_string(),
+                hash: "blake3-1111".to_string(),
+                last_modified: 1,
+                rev: Some("rev-a".to_string()),
+            },
+        );
+        lock_b.inputs.insert(
+            "b".to_string(),
+            FlakeLockEntry {
+                name: "b".to_string(),
+                url: "https://example.com/b.tar.gz".to_string(),
+                hash: "blake3-2222".to_string(),
+                last_modified: 2,
+                rev: None,
+            },
+        );
+
+        assert_eq!(lock_a.to_json(), lock_b.to_json());
+    }
+
+    #[test]
+    fn test_stable_last_modified_from_hash_is_deterministic() {
+        let hash = Hash::of(b"same-content");
+        let ts1 = stable_last_modified_from_hash(&hash);
+        let ts2 = stable_last_modified_from_hash(&hash);
+        assert_eq!(ts1, ts2);
+    }
 }

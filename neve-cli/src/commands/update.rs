@@ -6,7 +6,11 @@
 
 use crate::output;
 use neve_config::flake::{Flake, FlakeLock};
-use std::path::Path;
+use neve_derive::Hash;
+use neve_fetch::{git as fetch_git, url as fetch_url, verify as fetch_verify};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Run the update command.
 /// 运行更新命令。
@@ -57,7 +61,12 @@ pub fn run() -> Result<(), String> {
     for (i, (name, input)) in flake.inputs.iter().enumerate() {
         output::numbered_item(i + 1, &format!("Updating '{}'", name));
 
-        match update_input(&input.url, input.rev.as_deref(), input.branch.as_deref()) {
+        match update_input(
+            &input.url,
+            input.rev.as_deref(),
+            input.branch.as_deref(),
+            input.tag.as_deref(),
+        ) {
             Ok(entry) => {
                 flake.lock.inputs.insert(name.clone(), entry);
                 updated_count += 1;
@@ -116,15 +125,14 @@ fn update_input(
     url: &str,
     rev: Option<&str>,
     branch: Option<&str>,
+    tag: Option<&str>,
 ) -> Result<neve_config::flake::FlakeLockEntry, String> {
-    use std::time::SystemTime;
-
     // Parse the URL to determine the type
     // 解析 URL 以确定类型
     let (resolved_url, resolved_rev, hash) = if url.starts_with("github:") {
-        update_github_input(url, rev, branch)?
+        update_github_input(url, rev, branch, tag)?
     } else if url.starts_with("git+") || url.ends_with(".git") {
-        update_git_input(url, rev, branch)?
+        update_git_input(url, rev, branch, tag)?
     } else if url.starts_with("path:") || url.starts_with("./") || url.starts_with("/") {
         update_path_input(url)?
     } else if url.starts_with("http://") || url.starts_with("https://") {
@@ -133,22 +141,14 @@ fn update_input(
         // Assume it's a GitHub shorthand
         // 假设它是 GitHub 简写
         let github_url = format!("github:{}", url);
-        update_github_input(&github_url, rev, branch)?
+        update_github_input(&github_url, rev, branch, tag)?
     };
 
-    let last_modified = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let last_modified = stable_last_modified_from_lock_hash(&hash);
 
     // Extract name from URL
     // 从 URL 中提取名称
-    let name = url
-        .split('/')
-        .next_back()
-        .unwrap_or("unknown")
-        .trim_end_matches(".git")
-        .to_string();
+    let name = infer_input_name(url);
 
     Ok(neve_config::flake::FlakeLockEntry {
         name,
@@ -165,6 +165,7 @@ fn update_github_input(
     url: &str,
     rev: Option<&str>,
     branch: Option<&str>,
+    tag: Option<&str>,
 ) -> Result<(String, Option<String>, String), String> {
     // Parse github:owner/repo format
     // 解析 github:owner/repo 格式
@@ -172,59 +173,36 @@ fn update_github_input(
         .strip_prefix("github:")
         .ok_or_else(|| "invalid github URL".to_string())?;
 
-    // Extract owner/repo and optional ref
-    // 提取 owner/repo 和可选的 ref
-    let (owner_repo, url_ref) = if let Some(pos) = repo_path.find('/') {
-        let rest = &repo_path[pos + 1..];
-        if let Some(ref_pos) = rest.find('/') {
-            let repo = &rest[..ref_pos];
-            let reference = &rest[ref_pos + 1..];
-            (
-                format!("{}/{}", &repo_path[..pos], repo),
-                Some(reference.to_string()),
-            )
-        } else {
-            (repo_path.to_string(), None)
-        }
-    } else {
+    let parts: Vec<&str> = repo_path.split('/').collect();
+    if parts.len() < 2 {
         return Err(format!("invalid github URL: {}", url));
+    }
+    let owner = parts[0];
+    let repo = parts[1];
+    let owner_repo = format!("{}/{}", owner, repo);
+    let url_ref = if parts.len() > 2 {
+        Some(parts[2..].join("/"))
+    } else {
+        None
     };
 
     // Determine the ref to use
     // 确定要使用的 ref
     let git_ref = rev
         .map(|s| s.to_string())
+        .or_else(|| tag.map(|s| s.to_string()))
         .or_else(|| branch.map(|s| s.to_string()))
         .or(url_ref)
-        .unwrap_or_else(|| "main".to_string());
+        .unwrap_or_else(|| "HEAD".to_string());
 
-    // In a real implementation, we would:
-    // 在真实实现中，我们将：
-    // For now, we generate a placeholder
-    // 目前，我们生成一个占位符
-
-    let _api_url = format!(
-        "https://api.github.com/repos/{}/commits/{}",
-        owner_repo, git_ref
-    );
+    let git_url = format!("https://github.com/{}.git", owner_repo);
+    let (commit_hash, content_hash) = resolve_git_source(&git_url, &git_ref)?;
     let tarball_url = format!(
         "https://github.com/{}/archive/{}.tar.gz",
-        owner_repo, git_ref
+        owner_repo, commit_hash
     );
 
-    // Try to fetch the commit hash (simplified - in production would use proper HTTP client)
-    // 尝试获取提交哈希（简化版 - 在生产中应使用适当的 HTTP 客户端）
-    let commit_hash =
-        fetch_github_commit(&owner_repo, &git_ref).unwrap_or_else(|_| format!("ref-{}", git_ref));
-
-    // Generate content hash (placeholder - would hash actual content)
-    // 生成内容哈希（占位符 - 应该哈希实际内容）
-    let content_hash = format!(
-        "sha256-{}",
-        hash_string(&format!("{}:{}", owner_repo, commit_hash))
-    );
-
-    Ok((tarball_url, Some(commit_hash), content_hash))
+    Ok((tarball_url, Some(commit_hash), hash_to_lock(&content_hash)))
 }
 
 /// Update a Git input.
@@ -233,136 +211,151 @@ fn update_git_input(
     url: &str,
     rev: Option<&str>,
     branch: Option<&str>,
+    tag: Option<&str>,
 ) -> Result<(String, Option<String>, String), String> {
     let git_url = url.strip_prefix("git+").unwrap_or(url);
 
     let git_ref = rev
         .map(|s| s.to_string())
+        .or_else(|| tag.map(|s| s.to_string()))
         .or_else(|| branch.map(|s| s.to_string()))
         .unwrap_or_else(|| "HEAD".to_string());
 
-    // In a real implementation, we would:
-    // 在真实实现中，我们将：
+    let (resolved_rev, content_hash) = resolve_git_source(git_url, &git_ref)?;
 
-    let content_hash = format!(
-        "sha256-{}",
-        hash_string(&format!("{}:{}", git_url, git_ref))
-    );
-
-    Ok((git_url.to_string(), Some(git_ref), content_hash))
+    Ok((
+        git_url.to_string(),
+        Some(resolved_rev),
+        hash_to_lock(&content_hash),
+    ))
 }
 
 /// Update a path input.
 /// 更新路径输入。
 fn update_path_input(url: &str) -> Result<(String, Option<String>, String), String> {
     let path = url.strip_prefix("path:").unwrap_or(url);
-    let path = Path::new(path);
+    let path = Path::new(path)
+        .canonicalize()
+        .map_err(|e| format!("path does not exist or is inaccessible: {} ({})", path, e))?;
 
     if !path.exists() {
         return Err(format!("path does not exist: {}", path.display()));
     }
 
-    // Hash the directory contents
-    // 哈希目录内容
-    let content_hash = hash_path(path)?;
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|e| format!("cannot read metadata for {}: {}", path.display(), e))?;
+    let content_hash = if metadata.file_type().is_symlink() {
+        let target =
+            fs::read_link(&path).map_err(|e| format!("cannot read symlink target: {}", e))?;
+        Hash::of(target.as_os_str().to_string_lossy().as_bytes())
+    } else if metadata.is_file() {
+        let content =
+            fs::read(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
+        Hash::of(&content)
+    } else if metadata.is_dir() {
+        fetch_verify::hash_dir(&path)
+            .map_err(|e| format!("cannot hash {}: {}", path.display(), e))?
+    } else {
+        return Err(format!("unsupported path type: {}", path.display()));
+    };
 
     Ok((
-        format!(
-            "path:{}",
-            path.canonicalize()
-                .unwrap_or_else(|_| path.to_path_buf())
-                .display()
-        ),
+        format!("path:{}", path.display()),
         None,
-        format!("sha256-{}", content_hash),
+        hash_to_lock(&content_hash),
     ))
 }
 
 /// Update a URL input.
 /// 更新 URL 输入。
 fn update_url_input(url: &str) -> Result<(String, Option<String>, String), String> {
-    // In a real implementation, we would fetch the URL and hash its contents
-    // 在真实实现中，我们将获取 URL 并哈希其内容
-    let content_hash = format!("sha256-{}", hash_string(url));
-
-    Ok((url.to_string(), None, content_hash))
+    let content = fetch_url::fetch_url(url).map_err(|e| format!("failed to fetch URL: {}", e))?;
+    let content_hash = Hash::of(&content);
+    Ok((url.to_string(), None, hash_to_lock(&content_hash)))
 }
 
-/// Fetch the latest commit hash from GitHub.
-/// 从 GitHub 获取最新的提交哈希。
-fn fetch_github_commit(owner_repo: &str, git_ref: &str) -> Result<String, String> {
-    // This is a simplified implementation
-    // 这是一个简化的实现
-    // In production, we would use reqwest or similar to actually fetch the commit
-    // 在生产中，我们将使用 reqwest 或类似工具来实际获取提交
+/// Resolve a git source to a concrete commit and content hash.
+/// 将 git 源解析为具体提交和内容哈希。
+fn resolve_git_source(url: &str, git_ref: &str) -> Result<(String, Hash), String> {
+    let work_dir = temp_work_dir("neve-update-git")?;
+    let clone_path = work_dir.join("repo");
 
-    // For now, generate a deterministic hash based on the ref
-    // 目前，根据 ref 生成确定性哈希
-    // This allows the system to work offline while still being deterministic
-    // 这允许系统离线工作，同时保持确定性
-    Ok(format!(
-        "{:0>40}",
-        hash_string(&format!("{}:{}", owner_repo, git_ref))
-    ))
-}
+    let repo =
+        fetch_git::clone_repo(url, &clone_path).map_err(|e| format!("failed to clone: {}", e))?;
+    let oid = fetch_git::checkout_rev(&repo, git_ref)
+        .map_err(|e| format!("failed to checkout revision '{}': {}", git_ref, e))?;
+    drop(repo);
 
-/// Hash a string using a simple algorithm.
-/// 使用简单算法哈希字符串。
-fn hash_string(s: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = DefaultHasher::new();
-    s.hash(&mut hasher);
-    let hash = hasher.finish();
-    format!("{:016x}", hash)
-}
-
-/// Hash a path's contents.
-/// 哈希路径的内容。
-fn hash_path(path: &Path) -> Result<String, String> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::Hasher;
-
-    let mut hasher = DefaultHasher::new();
-    hash_path_recursive(path, &mut hasher)?;
-    let hash = hasher.finish();
-    Ok(format!("{:016x}", hash))
-}
-
-/// Recursively hash a path.
-/// 递归哈希路径。
-fn hash_path_recursive(
-    path: &Path,
-    hasher: &mut std::collections::hash_map::DefaultHasher,
-) -> Result<(), String> {
-    use std::fs;
-    use std::hash::Hash;
-
-    if path.is_file() {
-        let content =
-            fs::read(path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
-        content.hash(hasher);
-    } else if path.is_dir() {
-        let mut entries: Vec<_> = fs::read_dir(path)
-            .map_err(|e| format!("cannot read dir {}: {}", path.display(), e))?
-            .filter_map(|e| e.ok())
-            .collect();
-        entries.sort_by_key(|e| e.file_name());
-
-        for entry in entries {
-            let name = entry.file_name();
-            // Skip hidden files and common non-content files
-            // 跳过隐藏文件和常见的非内容文件
-            let name_str = name.to_string_lossy();
-            if name_str.starts_with('.') || name_str == "flake.lock" {
-                continue;
-            }
-
-            name.hash(hasher);
-            hash_path_recursive(&entry.path(), hasher)?;
-        }
+    let git_dir = clone_path.join(".git");
+    if git_dir.exists() {
+        fs::remove_dir_all(&git_dir).map_err(|e| format!("failed to remove .git: {}", e))?;
     }
 
-    Ok(())
+    let hash = fetch_git::hash_directory(&clone_path)
+        .map_err(|e| format!("failed to hash repo: {}", e))?;
+    let _ = fs::remove_dir_all(&work_dir);
+    Ok((oid.to_string(), hash))
+}
+
+/// Format a hash for lock file storage.
+/// 将哈希格式化为锁文件字符串。
+fn hash_to_lock(hash: &Hash) -> String {
+    format!("blake3-{}", hash.to_hex())
+}
+
+/// Produce a deterministic lastModified value from a lock hash.
+/// 基于锁哈希生成确定性的 lastModified 值。
+fn stable_last_modified_from_lock_hash(lock_hash: &str) -> u64 {
+    let raw = lock_hash.strip_prefix("blake3-").unwrap_or(lock_hash);
+    let prefix = raw.get(..16).unwrap_or(raw);
+    u64::from_str_radix(prefix, 16).unwrap_or(0)
+}
+
+/// Create a temporary working directory path.
+/// 创建临时工作目录路径。
+fn temp_work_dir(prefix: &str) -> Result<PathBuf, String> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let path = std::env::temp_dir().join(format!("{}-{}-{}", prefix, std::process::id(), nonce));
+    fs::create_dir_all(&path).map_err(|e| format!("failed to create temp dir: {}", e))?;
+    Ok(path)
+}
+
+/// Infer a human-friendly input name from URL.
+/// 从 URL 推断友好的输入名称。
+fn infer_input_name(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix("github:") {
+        let mut parts = rest.split('/');
+        let _owner = parts.next();
+        if let Some(repo) = parts.next() {
+            return repo.trim_end_matches(".git").to_string();
+        }
+    }
+    url.split('/')
+        .next_back()
+        .unwrap_or("unknown")
+        .trim_end_matches(".git")
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stable_last_modified_from_lock_hash_is_deterministic() {
+        let hash = "blake3-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let ts1 = stable_last_modified_from_lock_hash(hash);
+        let ts2 = stable_last_modified_from_lock_hash(hash);
+        assert_eq!(ts1, ts2);
+    }
+
+    #[test]
+    fn test_stable_last_modified_from_lock_hash_accepts_raw_hex() {
+        let raw_hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let ts = stable_last_modified_from_lock_hash(raw_hash);
+        assert_eq!(ts, 0x0123456789abcdef);
+    }
 }

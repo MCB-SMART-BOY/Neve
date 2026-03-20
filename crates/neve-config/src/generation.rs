@@ -9,6 +9,7 @@ use neve_derive::StorePath;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generations directory name.
 /// 代目录名称。
@@ -116,14 +117,7 @@ impl GenerationManager {
         // Update current link
         // 更新当前链接
         let current = self.current_link();
-        if current.exists() || current.is_symlink() {
-            fs::remove_file(&current)?;
-        }
-
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&gen_path, &current)?;
-        #[cfg(not(unix))]
-        fs::write(&current, gen_path.to_string_lossy().as_bytes())?;
+        replace_current_link_atomically(&current, &gen_path)?;
 
         Ok(Generation {
             number: gen_num,
@@ -210,14 +204,7 @@ impl GenerationManager {
         // Update current link
         // 更新当前链接
         let current = self.current_link();
-        if current.exists() || current.is_symlink() {
-            fs::remove_file(&current)?;
-        }
-
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&generation.path, &current)?;
-        #[cfg(not(unix))]
-        fs::write(&current, generation.path.to_string_lossy().as_bytes())?;
+        replace_current_link_atomically(&current, &generation.path)?;
 
         Ok(generation)
     }
@@ -247,6 +234,50 @@ impl GenerationManager {
 
         Ok(deleted)
     }
+}
+
+/// Atomically replace the current generation link/file.
+/// 原子替换当前代链接/文件。
+fn replace_current_link_atomically(current: &PathBuf, target: &PathBuf) -> Result<(), ConfigError> {
+    let parent = current
+        .parent()
+        .ok_or_else(|| ConfigError::Invalid("invalid current link path".to_string()))?;
+    fs::create_dir_all(parent)?;
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let temp = parent.join(format!(".current.tmp-{}-{}", std::process::id(), nonce));
+
+    #[cfg(unix)]
+    {
+        if current.is_dir() && !current.is_symlink() {
+            return Err(ConfigError::Invalid(format!(
+                "current generation path is a directory: {}",
+                current.display()
+            )));
+        }
+
+        if temp.exists() || temp.is_symlink() {
+            fs::remove_file(&temp)?;
+        }
+
+        std::os::unix::fs::symlink(target, &temp)?;
+        fs::rename(&temp, current)?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        if temp.exists() {
+            fs::remove_file(&temp)?;
+        }
+
+        fs::write(&temp, target.to_string_lossy().as_bytes())?;
+        fs::rename(&temp, current)?;
+    }
+
+    Ok(())
 }
 
 /// A configuration generation.

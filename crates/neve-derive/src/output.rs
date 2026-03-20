@@ -14,7 +14,7 @@ pub const STORE_PREFIX: &str = "/neve/store";
 
 /// A store path pointing to a derivation output.
 /// 指向推导输出的存储路径。
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StorePath {
     /// The hash component of the path. / 路径的哈希组件。
     hash: Hash,
@@ -37,9 +37,10 @@ impl StorePath {
         // 输出哈希从推导哈希派生
         // 在实际实现中，这还会包括输出名称
         let mut hasher = crate::Hasher::new();
+        hasher.update_byte(1);
         hasher.update(drv_hash.as_bytes());
-        hasher.update_str("out");
-        hasher.update_str(name);
+        hasher.update_str_prefixed("out");
+        hasher.update_str_prefixed(name);
 
         Self {
             hash: hasher.finalize(),
@@ -68,13 +69,13 @@ impl StorePath {
     /// Get the full path with a custom store prefix.
     /// 使用自定义存储前缀获取完整路径。
     pub fn path_with_prefix(&self, prefix: &str) -> PathBuf {
-        PathBuf::from(prefix).join(format!("{}-{}", self.hash.to_short_hex(), self.name))
+        PathBuf::from(prefix).join(format!("{}-{}", self.hash.to_hex(), self.name))
     }
 
-    /// Get the short display name (hash-name).
-    /// 获取短显示名称（哈希-名称）。
+    /// Get the display name (hash-name).
+    /// 获取显示名称（哈希-名称）。
     pub fn display_name(&self) -> String {
-        format!("{}-{}", self.hash.to_short_hex(), self.name)
+        format!("{}-{}", self.hash.to_hex(), self.name)
     }
 
     /// Parse a store path from a path string.
@@ -88,22 +89,23 @@ impl StorePath {
     /// 从 "哈希-名称" 字符串解析。
     pub fn parse_name(name: &str) -> Option<Self> {
         let dash_pos = name.find('-')?;
-        if dash_pos != 32 {
-            // Short hex is 32 characters
-            // 短十六进制为 32 个字符
+        let hash_str = &name[..dash_pos];
+        let name_part = &name[dash_pos + 1..];
+        let hash = if hash_str.len() == 64 {
+            Hash::from_hex(hash_str).ok()?
+        } else if hash_str.len() == 32 {
+            // Backward compatibility for old short-hash store paths.
+            // 旧版短哈希存储路径的向后兼容。
+            let mut hash_bytes = [0u8; 32];
+            let short_bytes = hex_decode(hash_str)?;
+            hash_bytes[..16].copy_from_slice(&short_bytes);
+            Hash::from_bytes(hash_bytes)
+        } else {
             return None;
-        }
-        let hash_str = &name[..32];
-        let name_part = &name[33..];
-
-        // Reconstruct full hash from short hex (pad with zeros for now)
-        // 从短十六进制重建完整哈希（目前用零填充）
-        let mut hash_bytes = [0u8; 32];
-        let short_bytes = hex_decode(hash_str)?;
-        hash_bytes[..16].copy_from_slice(&short_bytes);
+        };
 
         Some(Self {
-            hash: Hash::from_bytes(hash_bytes),
+            hash,
             name: name_part.to_string(),
         })
     }
@@ -112,6 +114,26 @@ impl StorePath {
 impl std::fmt::Display for StorePath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.path().display())
+    }
+}
+
+impl Serialize for StorePath {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.display_name())
+    }
+}
+
+impl<'de> Deserialize<'de> for StorePath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        StorePath::parse_name(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid store path: {}", s)))
     }
 }
 

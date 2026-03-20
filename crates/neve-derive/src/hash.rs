@@ -87,7 +87,7 @@ impl fmt::Debug for Hash {
 
 impl fmt::Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_short_hex())
+        write!(f, "{}", self.to_hex())
     }
 }
 
@@ -129,6 +129,31 @@ impl Hasher {
     /// 用字符串更新哈希器。
     pub fn update_str(&mut self, s: &str) -> &mut Self {
         self.update(s.as_bytes())
+    }
+
+    /// Update with a single byte marker.
+    /// 使用单字节标记更新。
+    pub fn update_byte(&mut self, byte: u8) -> &mut Self {
+        self.update(&[byte])
+    }
+
+    /// Update with a u64 value in little-endian form.
+    /// 使用小端序 u64 更新。
+    pub fn update_u64(&mut self, value: u64) -> &mut Self {
+        self.update(&value.to_le_bytes())
+    }
+
+    /// Update with length-prefixed bytes.
+    /// 使用长度前缀字节更新。
+    pub fn update_len_prefixed(&mut self, data: &[u8]) -> &mut Self {
+        self.update_u64(data.len() as u64);
+        self.update(data)
+    }
+
+    /// Update with a length-prefixed string.
+    /// 使用长度前缀字符串更新。
+    pub fn update_str_prefixed(&mut self, s: &str) -> &mut Self {
+        self.update_len_prefixed(s.as_bytes())
     }
 
     /// Finalize and return the hash.

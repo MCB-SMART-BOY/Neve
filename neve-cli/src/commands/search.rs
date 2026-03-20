@@ -5,6 +5,7 @@
 //! 在存储和可用软件包源中搜索软件包。
 
 use crate::output;
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
@@ -27,7 +28,13 @@ pub fn run(query: &str) -> Result<(), String> {
 
     // Search in package index (if available)
     // 在软件包索引中搜索（如果可用）
-    let index_matches = search_index(query)?;
+    let index_matches = match search_index(query) {
+        Ok(matches) => matches,
+        Err(e) => {
+            output::warning(&format!("Package index unavailable: {}", e));
+            Vec::new()
+        }
+    };
 
     status.success(Some(&format!("Search complete for '{query}'")));
 
@@ -92,53 +99,89 @@ fn search_store(store_dir: &PathBuf, query: &str) -> Result<Vec<(String, PathBuf
 /// Search the package index.
 /// 搜索软件包索引。
 fn search_index(query: &str) -> Result<Vec<(String, String)>, String> {
-    // In a real implementation, this would query a package database
-    // 在真实实现中，这将查询软件包数据库
-    // For now, return some example packages that match common queries
-    // 目前，返回一些匹配常见查询的示例软件包
-    let packages = vec![
-        ("gcc", "GNU Compiler Collection"),
-        // GNU 编译器集合
-        ("clang", "LLVM C/C++ compiler"),
-        // LLVM C/C++ 编译器
-        ("rust", "Rust programming language"),
-        // Rust 编程语言
-        ("python", "Python programming language"),
-        // Python 编程语言
-        ("node", "Node.js JavaScript runtime"),
-        // Node.js JavaScript 运行时
-        ("git", "Distributed version control system"),
-        ("vim", "Vi IMproved text editor"),
-        // Vi 改进版文本编辑器
-        ("neovim", "Hyperextensible Vim-based text editor"),
-        ("emacs", "Extensible text editor"),
-        ("zsh", "Z shell"),
-        // Z shell
-        ("bash", "Bourne Again SHell"),
-        // Bourne Again SHell
-        ("fish", "Friendly interactive shell"),
-        ("tmux", "Terminal multiplexer"),
-        ("htop", "Interactive process viewer"),
-        ("curl", "Command line tool for transferring data"),
-        ("wget", "Network downloader"),
-        ("jq", "Command-line JSON processor"),
-        ("ripgrep", "Fast line-oriented search tool"),
-        ("fd", "Fast and user-friendly find alternative"),
-        ("fzf", "Fuzzy finder"),
-        ("bat", "Cat clone with syntax highlighting"),
-        ("exa", "Modern replacement for ls"),
-        ("tokei", "Code statistics tool"),
-        ("hyperfine", "Command-line benchmarking tool"),
-    ];
+    let Some(index_path) = get_index_path() else {
+        return Ok(Vec::new());
+    };
+
+    if !index_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(&index_path)
+        .map_err(|e| format!("cannot read {}: {}", index_path.display(), e))?;
+    let parsed = parse_index(&content)
+        .map_err(|e| format!("cannot parse {}: {}", index_path.display(), e))?;
 
     let query_lower = query.to_lowercase();
-    let matches: Vec<(String, String)> = packages
+    let mut matches: Vec<(String, String)> = parsed
         .into_iter()
         .filter(|(name, desc)| {
             name.to_lowercase().contains(&query_lower) || desc.to_lowercase().contains(&query_lower)
         })
-        .map(|(name, desc)| (name.to_string(), desc.to_string()))
         .collect();
-
+    matches.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(matches)
+}
+
+/// Package index location.
+/// 软件包索引位置。
+fn get_index_path() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("NEVE_PACKAGE_INDEX") {
+        return Some(PathBuf::from(path));
+    }
+
+    std::env::var("HOME")
+        .ok()
+        .map(|home| PathBuf::from(home).join(".neve").join("package-index.json"))
+}
+
+#[derive(Debug, Deserialize)]
+struct IndexEntry {
+    name: String,
+    #[serde(default)]
+    description: String,
+}
+
+/// Parse supported package index JSON formats.
+/// 解析支持的软件包索引 JSON 格式。
+fn parse_index(content: &str) -> Result<Vec<(String, String)>, String> {
+    // Format 1: [{"name":"foo","description":"..."}]
+    if let Ok(entries) = serde_json::from_str::<Vec<IndexEntry>>(content) {
+        return Ok(entries
+            .into_iter()
+            .map(|e| (e.name, e.description))
+            .collect());
+    }
+
+    // Format 2: {"foo":"desc","bar":"desc"}
+    if let Ok(map) = serde_json::from_str::<std::collections::BTreeMap<String, String>>(content) {
+        return Ok(map.into_iter().collect());
+    }
+
+    Err("unsupported index format (expected array or object)".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_index;
+
+    #[test]
+    fn test_parse_index_array_format() {
+        let json = r#"
+        [
+          {"name":"foo","description":"Foo package"},
+          {"name":"bar","description":"Bar package"}
+        ]
+        "#;
+        let parsed = parse_index(json).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0], ("foo".to_string(), "Foo package".to_string()));
+    }
+
+    #[test]
+    fn test_parse_index_object_format() {
+        let json = r#"{"foo":"Foo package","bar":"Bar package"}"#;
+        let parsed = parse_index(json).unwrap();
+        assert_eq!(parsed.len(), 2);
+    }
 }

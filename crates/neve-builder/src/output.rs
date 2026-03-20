@@ -8,6 +8,7 @@ use crate::BuildError;
 use neve_derive::{Hash, StorePath};
 use neve_store::Store;
 use std::fs;
+use std::path::Component;
 use std::path::Path;
 
 /// Collect a build output and register it in the store.
@@ -61,37 +62,31 @@ fn hash_output(path: &Path) -> Result<Hash, BuildError> {
 /// Recursively hash a path.
 /// 递归哈希路径。
 fn hash_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), BuildError> {
-    if path.is_file() {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        hasher.update_byte(b'L');
+        let target = fs::read_link(path)?;
+        hasher.update_len_prefixed(target.as_os_str().as_encoded_bytes());
+    } else if metadata.is_file() {
+        hasher.update_byte(b'F');
         let content = fs::read(path)?;
-        hasher.update(&content);
-    } else if path.is_dir() {
+        hasher.update_len_prefixed(&content);
+    } else if metadata.is_dir() {
         let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
         entries.sort_by_key(|e| e.file_name());
+        hasher.update_byte(b'D');
+        hasher.update_u64(entries.len() as u64);
 
         for entry in entries {
             let name = entry.file_name();
-            hasher.update(name.as_encoded_bytes());
+            hasher.update_byte(b'E');
+            hasher.update_len_prefixed(name.as_encoded_bytes());
 
             let entry_path = entry.path();
-            if entry_path.is_dir() {
-                // Directory marker
-                // 目录标记
-                hasher.update(b"d");
-            } else if entry_path.is_symlink() {
-                // Symlink marker
-                // 符号链接标记
-                hasher.update(b"l");
-            } else {
-                // File marker
-                // 文件标记
-                hasher.update(b"f");
-            }
-
             hash_recursive(&entry_path, hasher)?;
         }
-    } else if path.is_symlink() {
-        let target = fs::read_link(path)?;
-        hasher.update(target.as_os_str().as_encoded_bytes());
+    } else {
+        hasher.update_byte(b'U');
     }
 
     Ok(())
@@ -122,10 +117,11 @@ fn validate_dir_recursive(dir: &Path) -> Result<(), BuildError> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)?;
 
         // Check for broken symlinks
         // 检查损坏的符号链接
-        if path.is_symlink() {
+        if metadata.file_type().is_symlink() {
             let target = fs::read_link(&path)?;
             if target.is_absolute() && !target.starts_with("/neve/store") {
                 return Err(BuildError::BuildFailed(format!(
@@ -134,9 +130,20 @@ fn validate_dir_recursive(dir: &Path) -> Result<(), BuildError> {
                     target.display()
                 )));
             }
+            if target
+                .components()
+                .any(|c| matches!(c, Component::ParentDir))
+            {
+                return Err(BuildError::BuildFailed(format!(
+                    "output contains symlink with parent traversal: {} -> {}",
+                    path.display(),
+                    target.display()
+                )));
+            }
+            continue;
         }
 
-        if path.is_dir() {
+        if metadata.is_dir() {
             validate_dir_recursive(&path)?;
         }
     }
@@ -147,18 +154,26 @@ fn validate_dir_recursive(dir: &Path) -> Result<(), BuildError> {
 /// Calculate the size of an output.
 /// 计算输出的大小。
 pub fn output_size(path: &Path) -> Result<u64, BuildError> {
-    let mut size = 0u64;
+    let metadata = fs::symlink_metadata(path)?;
 
-    if path.is_file() {
-        size = fs::metadata(path)?.len();
-    } else if path.is_dir() {
+    if metadata.file_type().is_symlink() {
+        return Ok(0);
+    }
+
+    if metadata.is_file() {
+        return Ok(metadata.len());
+    }
+
+    if metadata.is_dir() {
+        let mut size = 0u64;
         for entry in fs::read_dir(path)? {
             let entry = entry?;
             size += output_size(&entry.path())?;
         }
+        return Ok(size);
     }
 
-    Ok(size)
+    Ok(0)
 }
 
 /// Format a size as a human-readable string.

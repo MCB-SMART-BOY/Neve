@@ -330,8 +330,17 @@ derivation #{
 } -> Derivation
 ```
 
-Note: Source fetching helpers are not exposed as language builtins yet. Tooling
-uses `neve-fetch` for now.
+```neve
+fetch.path(path: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.pathWithHash(path: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.url(url: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.urlWithHash(url: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.git(url: String, rev: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.gitWithHash(url: String, rev: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+```
+
+Note: Fetch helpers are impure and can access local filesystem/network. Prefer
+`*WithHash` variants for reproducible builds.
 
 
 ```neve
@@ -345,7 +354,16 @@ derivation #{
 } -> Derivation
 ```
 
-注意：源码获取能力暂时还没有作为语言内置暴露，工具链目前使用 `neve-fetch`。
+```neve
+fetch.path(path: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.pathWithHash(path: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.url(url: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.urlWithHash(url: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.git(url: String, rev: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.gitWithHash(url: String, rev: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+```
+
+注意：fetch 函数是带副作用的，可能访问本地文件系统或网络。为了可复现构建，优先使用带 `WithHash` 的版本。
 
 
 ## Example / 示例

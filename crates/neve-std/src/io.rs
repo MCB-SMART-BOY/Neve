@@ -182,13 +182,28 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
 /// Compute SHA-256 hash and return as hex string.
 /// 计算 SHA-256 哈希并返回十六进制字符串。
 fn sha256_hex(data: &[u8]) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use sha2::{Digest, Sha256};
 
-    // Simple hash for now - in production, use a proper SHA-256 implementation
-    // 目前使用简单哈希 - 生产环境中应使用正确的 SHA-256 实现
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    let hash = hasher.finish();
-    format!("{:016x}", hash)
+    let digest = Sha256::digest(data);
+    format!("{:x}", digest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sha256_hex;
+
+    #[test]
+    fn test_sha256_hex_known_vector() {
+        let hash = sha256_hex(b"abc");
+        assert_eq!(
+            hash,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn test_sha256_hex_length() {
+        let hash = sha256_hex(b"hello");
+        assert_eq!(hash.len(), 64);
+    }
 }

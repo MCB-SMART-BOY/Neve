@@ -187,11 +187,11 @@ impl Builder {
             });
         }
 
-        // Ensure all inputs are available
-        self.ensure_inputs(drv)?;
+        // Ensure all inputs are available and resolve input derivation outputs
+        let resolved_input_drvs = self.ensure_inputs(drv)?;
 
         // Execute the build
-        let (outputs, log) = self.execute_build(drv)?;
+        let (outputs, log) = self.execute_build(drv, &resolved_input_drvs)?;
 
         let duration = start.elapsed().as_secs_f64();
 
@@ -224,18 +224,38 @@ impl Builder {
     }
 
     /// Ensure all inputs are available.
-    fn ensure_inputs(&mut self, drv: &Derivation) -> Result<(), BuildError> {
+    fn ensure_inputs(
+        &mut self,
+        drv: &Derivation,
+    ) -> Result<HashMap<StorePath, HashMap<String, StorePath>>, BuildError> {
+        let mut resolved_input_drvs: HashMap<StorePath, HashMap<String, StorePath>> =
+            HashMap::new();
+
         // Check input derivations
-        for input_drv_path in drv.input_drvs.keys() {
+        for (input_drv_path, required_outputs) in &drv.input_drvs {
             if !self.store.path_exists(input_drv_path) {
                 return Err(BuildError::MissingInput(input_drv_path.display_name()));
             }
 
             // Read and build the input derivation if its outputs don't exist
             let input_drv = self.store.read_derivation(input_drv_path)?;
-            if self.check_outputs_exist(&input_drv).is_none() {
-                self.build(&input_drv)?;
+            let input_outputs = if let Some(existing) = self.check_outputs_exist(&input_drv) {
+                existing
+            } else {
+                self.build(&input_drv)?.outputs
+            };
+
+            for output_name in required_outputs {
+                if !input_outputs.contains_key(output_name) {
+                    return Err(BuildError::MissingInput(format!(
+                        "{}#{}",
+                        input_drv_path.display_name(),
+                        output_name
+                    )));
+                }
             }
+
+            resolved_input_drvs.insert(input_drv_path.clone(), input_outputs);
         }
 
         // Check input sources
@@ -245,17 +265,18 @@ impl Builder {
             }
         }
 
-        Ok(())
+        Ok(resolved_input_drvs)
     }
 
     /// Execute the build.
     fn execute_build(
         &mut self,
         drv: &Derivation,
+        resolved_input_drvs: &HashMap<StorePath, HashMap<String, StorePath>>,
     ) -> Result<(HashMap<String, StorePath>, String), BuildError> {
         use executor::BuildExecutor;
 
         let executor = BuildExecutor::new(&self.store, &self.config);
-        executor.execute(drv)
+        executor.execute(drv, resolved_input_drvs)
     }
 }

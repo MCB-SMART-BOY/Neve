@@ -258,27 +258,73 @@ fn hash_dir(path: &Path) -> Result<Hash, StoreError> {
 /// Iteratively hash directory contents (stack-safe for deep directories).
 /// 迭代式哈希目录内容（对深层目录栈安全）。
 fn hash_dir_recursive(path: &Path, hasher: &mut neve_derive::Hasher) -> Result<(), StoreError> {
-    // Use a stack to avoid recursion and potential stack overflow
-    // 使用栈避免递归和潜在的栈溢出
-    let mut stack: Vec<PathBuf> = vec![path.to_path_buf()];
+    #[derive(Clone)]
+    struct EntryItem {
+        name: std::ffi::OsString,
+        path: PathBuf,
+    }
 
-    while let Some(current) = stack.pop() {
-        let mut entries: Vec<_> = fs::read_dir(&current)?.collect::<Result<_, _>>()?;
-        entries.sort_by_key(|e| e.file_name());
+    struct DirFrame {
+        entries: Vec<EntryItem>,
+        next: usize,
+    }
 
-        for entry in entries {
-            let entry_path = entry.path();
-            let name = entry.file_name();
-            hasher.update(name.as_encoded_bytes());
+    fn sorted_entries(dir: &Path) -> Result<Vec<EntryItem>, StoreError> {
+        let mut entries = fs::read_dir(dir)?
+            .map(|e| {
+                let e = e?;
+                Ok(EntryItem {
+                    name: e.file_name(),
+                    path: e.path(),
+                })
+            })
+            .collect::<Result<Vec<_>, io::Error>>()?;
+        entries.sort_by_key(|e| e.name.clone());
+        Ok(entries)
+    }
 
-            if entry_path.is_dir() {
-                hasher.update(b"d");
-                stack.push(entry_path);
-            } else {
-                hasher.update(b"f");
-                let content = fs::read(&entry_path)?;
-                hasher.update(&content);
-            }
+    // Stack-safe DFS with explicit frames.
+    // 使用显式帧的栈安全 DFS。
+    let root_entries = sorted_entries(path)?;
+    hasher.update_byte(b'D');
+    hasher.update_u64(root_entries.len() as u64);
+
+    let mut stack = vec![DirFrame {
+        entries: root_entries,
+        next: 0,
+    }];
+
+    while let Some(frame) = stack.last_mut() {
+        if frame.next >= frame.entries.len() {
+            stack.pop();
+            continue;
+        }
+
+        let item = frame.entries[frame.next].clone();
+        frame.next += 1;
+
+        hasher.update_byte(b'E');
+        hasher.update_len_prefixed(item.name.as_os_str().as_encoded_bytes());
+
+        let metadata = fs::symlink_metadata(&item.path)?;
+        if metadata.file_type().is_symlink() {
+            hasher.update_byte(b'L');
+            let target = fs::read_link(&item.path)?;
+            hasher.update_len_prefixed(target.as_os_str().as_encoded_bytes());
+        } else if metadata.is_file() {
+            hasher.update_byte(b'F');
+            let content = fs::read(&item.path)?;
+            hasher.update_len_prefixed(&content);
+        } else if metadata.is_dir() {
+            let child_entries = sorted_entries(&item.path)?;
+            hasher.update_byte(b'D');
+            hasher.update_u64(child_entries.len() as u64);
+            stack.push(DirFrame {
+                entries: child_entries,
+                next: 0,
+            });
+        } else {
+            hasher.update_byte(b'U');
         }
     }
 
@@ -299,8 +345,27 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), StoreError> {
             let entry = entry?;
             let src_path = entry.path();
             let dst_path = dst_dir.join(entry.file_name());
+            let metadata = fs::symlink_metadata(&src_path)?;
 
-            if src_path.is_dir() {
+            if metadata.file_type().is_symlink() {
+                let target = fs::read_link(&src_path)?;
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&target, &dst_path)?;
+                #[cfg(windows)]
+                {
+                    let target_path = src_path
+                        .parent()
+                        .unwrap_or_else(|| Path::new("."))
+                        .join(&target);
+                    if target_path.is_dir() {
+                        std::os::windows::fs::symlink_dir(&target, &dst_path)?;
+                    } else {
+                        std::os::windows::fs::symlink_file(&target, &dst_path)?;
+                    }
+                }
+                #[cfg(not(any(unix, windows)))]
+                fs::write(&dst_path, target.as_os_str().to_string_lossy().as_bytes())?;
+            } else if metadata.is_dir() {
                 work_queue.push((src_path, dst_path));
             } else {
                 fs::copy(&src_path, &dst_path)?;
@@ -321,7 +386,8 @@ fn make_readonly_recursive(path: &Path) -> Result<(), StoreError> {
 
     while let Some(current) = stack.pop() {
         paths.push(current.clone());
-        if current.is_dir() {
+        let metadata = fs::symlink_metadata(&current)?;
+        if metadata.is_dir() {
             for entry in fs::read_dir(&current)? {
                 stack.push(entry?.path());
             }
@@ -331,6 +397,10 @@ fn make_readonly_recursive(path: &Path) -> Result<(), StoreError> {
     // Set permissions in reverse order (children first, then parents)
     // 按逆序设置权限（先子目录，后父目录）
     for p in paths.into_iter().rev() {
+        let metadata = fs::symlink_metadata(&p)?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
         let mut perms = fs::metadata(&p)?.permissions();
         perms.set_readonly(true);
         fs::set_permissions(&p, perms)?;
@@ -352,7 +422,8 @@ fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
 
     while let Some(current) = stack.pop() {
         paths.push(current.clone());
-        if current.is_dir() {
+        let metadata = fs::symlink_metadata(&current)?;
+        if metadata.is_dir() {
             for entry in fs::read_dir(&current)? {
                 stack.push(entry?.path());
             }
@@ -362,6 +433,10 @@ fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
     // Set permissions (parents first so we can access children)
     // 设置权限（先父目录以便访问子目录）
     for p in &paths {
+        let metadata = fs::symlink_metadata(p)?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
         let perms = fs::metadata(p)?.permissions();
         let mode = if p.is_dir() { 0o755 } else { 0o644 };
         let new_perms = fs::Permissions::from_mode(perms.mode() | mode);
@@ -380,7 +455,8 @@ fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
 
     while let Some(current) = stack.pop() {
         paths.push(current.clone());
-        if current.is_dir() {
+        let metadata = fs::symlink_metadata(&current)?;
+        if metadata.is_dir() {
             for entry in fs::read_dir(&current)? {
                 stack.push(entry?.path());
             }
@@ -390,6 +466,10 @@ fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
     // Set permissions
     // 设置权限
     for p in &paths {
+        let metadata = fs::symlink_metadata(p)?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
         let mut perms = fs::metadata(p)?.permissions();
         #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
@@ -402,24 +482,24 @@ fn make_writable_recursive(path: &Path) -> Result<(), StoreError> {
 /// Calculate the size of a directory.
 /// 计算目录的大小。
 fn dir_size(path: &Path) -> Result<u64, StoreError> {
-    let mut size = 0;
-
     if !path.exists() {
         return Ok(0);
     }
 
-    if path.is_file() {
-        return Ok(fs::metadata(path)?.len());
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        return Ok(metadata.len());
     }
 
+    if metadata.is_file() {
+        return Ok(metadata.len());
+    }
+
+    let mut size = 0;
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
-            size += dir_size(&path)?;
-        } else {
-            size += fs::metadata(&path)?.len();
-        }
+        size += dir_size(&path)?;
     }
 
     Ok(size)
