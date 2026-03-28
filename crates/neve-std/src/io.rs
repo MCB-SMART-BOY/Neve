@@ -7,6 +7,7 @@
 //! 主要用于包构建和配置生成期间。
 
 use neve_eval::value::{BuiltinFn, Value};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Returns all IO builtins.
@@ -176,6 +177,32 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Process execution / 进程执行
+        (
+            "io.exec",
+            Value::Builtin(BuiltinFn {
+                name: "io.exec",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(program), Value::List(argv)) => {
+                        let argv = list_to_string_vec(argv, "io.exec args")?;
+                        execute_command(program, &argv)
+                    }
+                    _ => Err("io.exec expects (String, List<String>)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.execShell",
+            Value::Builtin(BuiltinFn {
+                name: "io.execShell",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(command) => execute_shell_command(command),
+                    _ => Err("io.execShell expects a string command".to_string()),
+                },
+            }),
+        ),
     ]
 }
 
@@ -186,6 +213,61 @@ fn sha256_hex(data: &[u8]) -> String {
 
     let digest = Sha256::digest(data);
     format!("{:x}", digest)
+}
+
+fn list_to_string_vec(items: &[Value], arg_name: &str) -> Result<Vec<String>, String> {
+    items
+        .iter()
+        .enumerate()
+        .map(|(idx, v)| match v {
+            Value::String(s) => Ok(s.to_string()),
+            _ => Err(format!("{arg_name}[{idx}] must be String")),
+        })
+        .collect()
+}
+
+fn output_to_record(output: std::process::Output) -> Value {
+    let mut fields = HashMap::with_capacity(4);
+    let code = output.status.code().unwrap_or(-1);
+    fields.insert("code".to_string(), Value::Int(code.into()));
+    fields.insert("success".to_string(), Value::Bool(output.status.success()));
+    fields.insert(
+        "stdout".to_string(),
+        Value::String(Rc::new(String::from_utf8_lossy(&output.stdout).to_string())),
+    );
+    fields.insert(
+        "stderr".to_string(),
+        Value::String(Rc::new(String::from_utf8_lossy(&output.stderr).to_string())),
+    );
+    Value::Record(Rc::new(fields))
+}
+
+fn execute_command(program: &str, argv: &[String]) -> Result<Value, String> {
+    std::process::Command::new(program)
+        .args(argv)
+        .output()
+        .map(output_to_record)
+        .map_err(|e| format!("io.exec: {e}"))
+}
+
+#[cfg(not(windows))]
+fn execute_shell_command(command: &str) -> Result<Value, String> {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .map(output_to_record)
+        .map_err(|e| format!("io.execShell: {e}"))
+}
+
+#[cfg(windows)]
+fn execute_shell_command(command: &str) -> Result<Value, String> {
+    std::process::Command::new("cmd")
+        .arg("/C")
+        .arg(command)
+        .output()
+        .map(output_to_record)
+        .map_err(|e| format!("io.execShell: {e}"))
 }
 
 #[cfg(test)]

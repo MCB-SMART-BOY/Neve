@@ -248,6 +248,49 @@ fn test_fetch_path_with_hash_rejects_mismatch() {
     );
 }
 
+#[test]
+fn test_io_exec_returns_structured_result() {
+    let builtin = get_builtin("io.exec").expect("io.exec builtin should exist");
+    let args = vec![
+        Value::String(Rc::new("rustc".to_string())),
+        Value::List(Rc::new(vec![Value::String(Rc::new(
+            "--version".to_string(),
+        ))])),
+    ];
+
+    let result = call_builtin(&builtin, &args).expect("io.exec should succeed");
+    match result {
+        Value::Record(fields) => {
+            assert!(matches!(fields.get("success"), Some(Value::Bool(true))));
+            assert!(matches!(fields.get("code"), Some(Value::Int(code)) if *code == 0.into()));
+            assert!(
+                matches!(fields.get("stdout"), Some(Value::String(s)) if s.contains("rustc")),
+                "stdout should contain rustc version"
+            );
+            assert!(matches!(fields.get("stderr"), Some(Value::String(_))));
+        }
+        _ => panic!("io.exec should return a record"),
+    }
+}
+
+#[test]
+fn test_io_exec_shell_returns_structured_result() {
+    let builtin = get_builtin("io.execShell").expect("io.execShell builtin should exist");
+    let args = vec![Value::String(Rc::new("rustc --version".to_string()))];
+
+    let result = call_builtin(&builtin, &args).expect("io.execShell should succeed");
+    match result {
+        Value::Record(fields) => {
+            assert!(matches!(fields.get("success"), Some(Value::Bool(true))));
+            assert!(
+                matches!(fields.get("stdout"), Some(Value::String(s)) if s.contains("rustc")),
+                "stdout should contain rustc version"
+            );
+        }
+        _ => panic!("io.execShell should return a record"),
+    }
+}
+
 // ============================================================================
 // List 模块边缘测试
 // ============================================================================
