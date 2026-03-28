@@ -369,6 +369,42 @@ fn test_io_append_file_appends_content() {
     assert!(matches!(read_result, Value::String(s) if s.as_str() == "ab"));
 }
 
+#[test]
+fn test_io_create_and_remove_dir_all() {
+    let temp = TempDir::new().unwrap();
+    let nested = temp.path().join("a").join("b").join("c");
+    let nested_str = nested.to_string_lossy().to_string();
+
+    let create = get_builtin("io.createDirAll").expect("io.createDirAll builtin should exist");
+    let remove = get_builtin("io.removeDirAll").expect("io.removeDirAll builtin should exist");
+    let exists = get_builtin("io.pathExists").expect("io.pathExists builtin should exist");
+    let is_dir = get_builtin("io.isDir").expect("io.isDir builtin should exist");
+
+    let create_args = vec![Value::String(Rc::new(nested_str.clone()))];
+    let create_result = call_builtin(&create, &create_args).expect("io.createDirAll should work");
+    assert!(matches!(create_result, Value::Unit));
+
+    let exists_args = vec![Value::String(Rc::new(nested_str.clone()))];
+    assert!(matches!(
+        call_builtin(&exists, &exists_args).unwrap(),
+        Value::Bool(true)
+    ));
+    assert!(matches!(
+        call_builtin(&is_dir, &exists_args).unwrap(),
+        Value::Bool(true)
+    ));
+
+    let remove_args = vec![Value::String(Rc::new(nested_str.clone()))];
+    let remove_result = call_builtin(&remove, &remove_args).expect("io.removeDirAll should work");
+    assert!(matches!(remove_result, Value::Unit));
+
+    let exists_after_args = vec![Value::String(Rc::new(nested_str))];
+    assert!(matches!(
+        call_builtin(&exists, &exists_after_args).unwrap(),
+        Value::Bool(false)
+    ));
+}
+
 // ============================================================================
 // List 模块边缘测试
 // ============================================================================

@@ -88,6 +88,32 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        (
+            "io.createDirAll",
+            Value::Builtin(BuiltinFn {
+                name: "io.createDirAll",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => std::fs::create_dir_all(path.as_str())
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("io.createDirAll: {e}")),
+                    _ => Err("io.createDirAll expects a string path".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.removeDirAll",
+            Value::Builtin(BuiltinFn {
+                name: "io.removeDirAll",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => std::fs::remove_dir_all(path.as_str())
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("io.removeDirAll: {e}")),
+                    _ => Err("io.removeDirAll expects a string path".to_string()),
+                },
+            }),
+        ),
         // File checks / 文件检查
         (
             "io.pathExists",
