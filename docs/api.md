@@ -242,6 +242,8 @@ io.homeDir() -> Option<String>
 io.hashFile(path: String) -> String
 io.hashString(content: String) -> String
 io.currentSystem() -> String
+io.exec(program: String, args: List<String>) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
+io.execShell(command: String) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 ```
 
 
@@ -259,6 +261,8 @@ io.homeDir() -> Option<String>
 io.hashFile(path: String) -> String
 io.hashString(content: String) -> String
 io.currentSystem() -> String
+io.exec(program: String, args: List<String>) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
+io.execShell(command: String) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 ```
 
 
