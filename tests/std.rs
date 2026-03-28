@@ -320,6 +320,55 @@ fn test_io_exec_with_returns_structured_result() {
     }
 }
 
+#[test]
+fn test_io_write_file_and_read_back() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("io-write.txt");
+    let path_str = path.to_string_lossy().to_string();
+
+    let write = get_builtin("io.writeFile").expect("io.writeFile builtin should exist");
+    let read = get_builtin("io.readFile").expect("io.readFile builtin should exist");
+
+    let write_args = vec![
+        Value::String(Rc::new(path_str.clone())),
+        Value::String(Rc::new("hello".to_string())),
+    ];
+    let write_result = call_builtin(&write, &write_args).expect("io.writeFile should succeed");
+    assert!(matches!(write_result, Value::Unit));
+
+    let read_args = vec![Value::String(Rc::new(path_str.clone()))];
+    let read_result = call_builtin(&read, &read_args).expect("io.readFile should succeed");
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "hello"));
+}
+
+#[test]
+fn test_io_append_file_appends_content() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("io-append.txt");
+    let path_str = path.to_string_lossy().to_string();
+
+    let write = get_builtin("io.writeFile").expect("io.writeFile builtin should exist");
+    let append = get_builtin("io.appendFile").expect("io.appendFile builtin should exist");
+    let read = get_builtin("io.readFile").expect("io.readFile builtin should exist");
+
+    let write_args = vec![
+        Value::String(Rc::new(path_str.clone())),
+        Value::String(Rc::new("a".to_string())),
+    ];
+    call_builtin(&write, &write_args).expect("io.writeFile should succeed");
+
+    let append_args = vec![
+        Value::String(Rc::new(path_str.clone())),
+        Value::String(Rc::new("b".to_string())),
+    ];
+    let append_result = call_builtin(&append, &append_args).expect("io.appendFile should succeed");
+    assert!(matches!(append_result, Value::Unit));
+
+    let read_args = vec![Value::String(Rc::new(path_str))];
+    let read_result = call_builtin(&read, &read_args).expect("io.readFile should succeed");
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "ab"));
+}
+
 // ============================================================================
 // List 模块边缘测试
 // ============================================================================

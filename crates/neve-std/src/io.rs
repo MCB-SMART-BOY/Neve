@@ -54,6 +54,40 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        (
+            "io.writeFile",
+            Value::Builtin(BuiltinFn {
+                name: "io.writeFile",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(path), Value::String(content)) => {
+                        std::fs::write(path.as_str(), content.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.writeFile: {e}"))
+                    }
+                    _ => Err("io.writeFile expects (String, String)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.appendFile",
+            Value::Builtin(BuiltinFn {
+                name: "io.appendFile",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(path), Value::String(content)) => {
+                        std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(path.as_str())
+                            .and_then(|mut f| f.write_all(content.as_bytes()))
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.appendFile: {e}"))
+                    }
+                    _ => Err("io.appendFile expects (String, String)".to_string()),
+                },
+            }),
+        ),
         // File checks / 文件检查
         (
             "io.pathExists",
