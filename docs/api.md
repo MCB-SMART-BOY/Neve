@@ -235,6 +235,8 @@ io.readFile(path: String) -> String
 io.readDir(path: String) -> List<String>
 io.writeFile(path: String, content: String) -> Unit
 io.appendFile(path: String, content: String) -> Unit
+io.createDirAll(path: String) -> Unit
+io.removeDirAll(path: String) -> Unit
 io.pathExists(path: String) -> Bool
 io.isDir(path: String) -> Bool
 io.isFile(path: String) -> Bool
@@ -263,6 +265,8 @@ io.readFile(path: String) -> String
 io.readDir(path: String) -> List<String>
 io.writeFile(path: String, content: String) -> Unit
 io.appendFile(path: String, content: String) -> Unit
+io.createDirAll(path: String) -> Unit
+io.removeDirAll(path: String) -> Unit
 io.pathExists(path: String) -> Bool
 io.isDir(path: String) -> Bool
 io.isFile(path: String) -> Bool
