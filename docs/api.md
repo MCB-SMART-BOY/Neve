@@ -233,6 +233,8 @@ I/O helpers are impure and raise runtime errors on failure.
 ```neve
 io.readFile(path: String) -> String
 io.readDir(path: String) -> List<String>
+io.writeFile(path: String, content: String) -> Unit
+io.appendFile(path: String, content: String) -> Unit
 io.pathExists(path: String) -> Bool
 io.isDir(path: String) -> Bool
 io.isFile(path: String) -> Bool
@@ -259,6 +261,8 @@ I/O 函数是非纯的，失败会抛出运行时错误。
 ```neve
 io.readFile(path: String) -> String
 io.readDir(path: String) -> List<String>
+io.writeFile(path: String, content: String) -> Unit
+io.appendFile(path: String, content: String) -> Unit
 io.pathExists(path: String) -> Bool
 io.isDir(path: String) -> Bool
 io.isFile(path: String) -> Bool
