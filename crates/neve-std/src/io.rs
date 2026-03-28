@@ -8,6 +8,7 @@
 
 use neve_eval::value::{BuiltinFn, Value};
 use std::collections::HashMap;
+use std::io::Write;
 use std::rc::Rc;
 
 /// Returns all IO builtins.
@@ -203,6 +204,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        (
+            "io.execWith",
+            Value::Builtin(BuiltinFn {
+                name: "io.execWith",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Record(options) => execute_with_options(options),
+                    _ => Err("io.execWith expects a record options object".to_string()),
+                },
+            }),
+        ),
     ]
 }
 
@@ -250,6 +262,45 @@ fn execute_command(program: &str, argv: &[String]) -> Result<Value, String> {
         .map_err(|e| format!("io.exec: {e}"))
 }
 
+fn execute_with_options(options: &HashMap<String, Value>) -> Result<Value, String> {
+    let program = record_string_required(options, "program", "io.execWith")?;
+    let args = record_string_list_optional(options, "args", "io.execWith")?.unwrap_or_default();
+    let cwd = record_string_optional(options, "cwd", "io.execWith")?;
+    let stdin = record_string_optional(options, "stdin", "io.execWith")?;
+    let env = record_env_optional(options, "env", "io.execWith")?;
+
+    let mut cmd = std::process::Command::new(program.as_str());
+    cmd.args(&args);
+
+    if let Some(cwd) = cwd {
+        cmd.current_dir(cwd);
+    }
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+
+    if let Some(stdin_text) = stdin {
+        cmd.stdin(std::process::Stdio::piped());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
+        let mut child = cmd.spawn().map_err(|e| format!("io.execWith: {e}"))?;
+        if let Some(mut pipe) = child.stdin.take() {
+            pipe.write_all(stdin_text.as_bytes())
+                .map_err(|e| format!("io.execWith: failed writing stdin: {e}"))?;
+        }
+
+        child
+            .wait_with_output()
+            .map(output_to_record)
+            .map_err(|e| format!("io.execWith: {e}"))
+    } else {
+        cmd.output()
+            .map(output_to_record)
+            .map_err(|e| format!("io.execWith: {e}"))
+    }
+}
+
 #[cfg(not(windows))]
 fn execute_shell_command(command: &str) -> Result<Value, String> {
     std::process::Command::new("sh")
@@ -258,6 +309,64 @@ fn execute_shell_command(command: &str) -> Result<Value, String> {
         .output()
         .map(output_to_record)
         .map_err(|e| format!("io.execShell: {e}"))
+}
+
+fn record_string_required(
+    options: &HashMap<String, Value>,
+    key: &str,
+    fn_name: &str,
+) -> Result<String, String> {
+    match options.get(key) {
+        Some(Value::String(s)) => Ok(s.to_string()),
+        Some(_) => Err(format!("{fn_name}.{key} must be String")),
+        None => Err(format!("{fn_name} requires '{key}'")),
+    }
+}
+
+fn record_string_optional(
+    options: &HashMap<String, Value>,
+    key: &str,
+    fn_name: &str,
+) -> Result<Option<String>, String> {
+    match options.get(key) {
+        Some(Value::String(s)) => Ok(Some(s.to_string())),
+        Some(_) => Err(format!("{fn_name}.{key} must be String")),
+        None => Ok(None),
+    }
+}
+
+fn record_string_list_optional(
+    options: &HashMap<String, Value>,
+    key: &str,
+    fn_name: &str,
+) -> Result<Option<Vec<String>>, String> {
+    match options.get(key) {
+        Some(Value::List(items)) => list_to_string_vec(items, &format!("{fn_name}.{key}")).map(Some),
+        Some(_) => Err(format!("{fn_name}.{key} must be List<String>")),
+        None => Ok(None),
+    }
+}
+
+fn record_env_optional(
+    options: &HashMap<String, Value>,
+    key: &str,
+    fn_name: &str,
+) -> Result<HashMap<String, String>, String> {
+    match options.get(key) {
+        Some(Value::Record(fields)) => {
+            let mut env = HashMap::new();
+            for (k, v) in fields.iter() {
+                if let Value::String(val) = v {
+                    env.insert(k.clone(), val.to_string());
+                } else {
+                    return Err(format!("{fn_name}.{key}.{k} must be String"));
+                }
+            }
+            Ok(env)
+        }
+        Some(_) => Err(format!("{fn_name}.{key} must be Record<String, String>")),
+        None => Ok(HashMap::new()),
+    }
 }
 
 #[cfg(windows)]
