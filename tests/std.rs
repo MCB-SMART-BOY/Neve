@@ -291,6 +291,35 @@ fn test_io_exec_shell_returns_structured_result() {
     }
 }
 
+#[test]
+fn test_io_exec_with_returns_structured_result() {
+    let builtin = get_builtin("io.execWith").expect("io.execWith builtin should exist");
+
+    let mut options = HashMap::new();
+    options.insert("program".to_string(), Value::String(Rc::new("rustc".to_string())));
+    options.insert(
+        "args".to_string(),
+        Value::List(Rc::new(vec![Value::String(Rc::new(
+            "--version".to_string(),
+        ))])),
+    );
+
+    let args = vec![Value::Record(Rc::new(options))];
+    let result = call_builtin(&builtin, &args).expect("io.execWith should succeed");
+
+    match result {
+        Value::Record(fields) => {
+            assert!(matches!(fields.get("success"), Some(Value::Bool(true))));
+            assert!(matches!(fields.get("code"), Some(Value::Int(code)) if *code == 0.into()));
+            assert!(
+                matches!(fields.get("stdout"), Some(Value::String(s)) if s.contains("rustc")),
+                "stdout should contain rustc version"
+            );
+        }
+        _ => panic!("io.execWith should return a record"),
+    }
+}
+
 // ============================================================================
 // List 模块边缘测试
 // ============================================================================

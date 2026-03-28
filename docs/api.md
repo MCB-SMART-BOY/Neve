@@ -244,6 +244,13 @@ io.hashString(content: String) -> String
 io.currentSystem() -> String
 io.exec(program: String, args: List<String>) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 io.execShell(command: String) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
+io.execWith(opts: #{
+  program: String,
+  args?: List<String>,
+  cwd?: String,
+  env?: #{ ...String },
+  stdin?: String
+}) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 ```
 
 
@@ -263,6 +270,13 @@ io.hashString(content: String) -> String
 io.currentSystem() -> String
 io.exec(program: String, args: List<String>) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 io.execShell(command: String) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
+io.execWith(opts: #{
+  program: String,
+  args?: List<String>,
+  cwd?: String,
+  env?: #{ ...String },
+  stdin?: String
+}) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 ```
 
 
