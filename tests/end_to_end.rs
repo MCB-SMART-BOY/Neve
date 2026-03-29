@@ -174,3 +174,19 @@ fn test_end_to_end_binding_pattern_runtime_parity() {
         Value::Int(int(43)),
     );
 }
+
+#[test]
+fn test_end_to_end_list_rest_pattern_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let x = match [1, 2, 3, 4] {
+            [first, ..middle, last] -> match middle {
+                [a, b] -> first + a + b + last,
+                _ -> 0,
+            },
+            _ -> 0,
+        };
+        ",
+        Value::Int(int(10)),
+    );
+}

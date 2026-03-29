@@ -72,3 +72,23 @@ fn test_frontend_accepts_or_and_binding_patterns() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_list_rest_patterns() {
+    let result = analyze_source(
+        r#"
+            let x = match [1, 2, 3, 4] {
+                [first, ..middle, last] -> match middle {
+                    [a, b] -> first + a + b + last,
+                    _ -> 0,
+                },
+                _ -> 0,
+            };
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

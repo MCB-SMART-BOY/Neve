@@ -779,6 +779,12 @@ pub enum PatternKind {
     Tuple(Vec<Pattern>),
     /// List pattern. / 列表模式。
     List(Vec<Pattern>),
+    /// List rest pattern (`[head, ..tail]`). / 列表剩余模式（`[head, ..tail]`）。
+    ListRest {
+        init: Vec<Pattern>,
+        rest: Option<Box<Pattern>>,
+        tail: Vec<Pattern>,
+    },
     /// Record pattern. / 记录模式。
     Record(Vec<(String, Pattern)>),
     /// Constructor pattern. / 构造器模式。

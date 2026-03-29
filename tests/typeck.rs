@@ -419,6 +419,21 @@ fn test_typeck_binding_pattern() {
     check_no_errors("let x = match 42 { n @ 42 -> n, _ -> 0 };");
 }
 
+#[test]
+fn test_typeck_list_rest_pattern() {
+    check_no_errors(
+        "
+        let x = match [1, 2, 3, 4] {
+            [first, ..middle, last] -> match middle {
+                [a, b] -> first + a + b + last,
+                _ -> 0,
+            },
+            _ -> 0,
+        };
+        ",
+    );
+}
+
 // ============================================================================
 // 函数定义
 // ============================================================================

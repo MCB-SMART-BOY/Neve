@@ -1292,6 +1292,17 @@ impl Resolver {
                     Self::collect_pattern_bindings(pattern, bindings);
                 }
             }
+            PatternKind::ListRest { init, rest, tail } => {
+                for pattern in init {
+                    Self::collect_pattern_bindings(pattern, bindings);
+                }
+                if let Some(pattern) = rest {
+                    Self::collect_pattern_bindings(pattern, bindings);
+                }
+                for pattern in tail {
+                    Self::collect_pattern_bindings(pattern, bindings);
+                }
+            }
             PatternKind::Record(fields) => {
                 for (_, pattern) in fields {
                     Self::collect_pattern_bindings(pattern, bindings);
@@ -1352,6 +1363,29 @@ impl Resolver {
                     })
                     .collect();
                 PatternKind::List(patterns)
+            }
+
+            ast::PatternKind::ListRest { init, rest, tail } => {
+                let init = init
+                    .iter()
+                    .map(|p| {
+                        self.lower_pattern_with_bindings(p, shared_bindings, expose_new_bindings)
+                    })
+                    .collect();
+                let rest = rest.as_ref().map(|pattern| {
+                    Box::new(self.lower_pattern_with_bindings(
+                        pattern,
+                        shared_bindings,
+                        expose_new_bindings,
+                    ))
+                });
+                let tail = tail
+                    .iter()
+                    .map(|p| {
+                        self.lower_pattern_with_bindings(p, shared_bindings, expose_new_bindings)
+                    })
+                    .collect();
+                PatternKind::ListRest { init, rest, tail }
             }
 
             ast::PatternKind::Record { fields, .. } => {
@@ -1427,8 +1461,6 @@ impl Resolver {
                     self.lower_pattern_with_bindings(pattern, shared_bindings, expose_new_bindings);
                 PatternKind::Binding(id, name.name.clone(), Box::new(inner))
             }
-
-            _ => PatternKind::Wildcard,
         };
 
         Pattern { kind, span }
