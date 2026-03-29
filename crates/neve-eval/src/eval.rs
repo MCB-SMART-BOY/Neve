@@ -260,6 +260,21 @@ impl Evaluator {
                 self.apply(func_val, arg_vals?)
             }
 
+            ExprKind::MethodCall {
+                receiver,
+                target,
+                args,
+                ..
+            } => {
+                let func_val = self.eval(target)?;
+                let recv_val = self.eval(receiver)?;
+                let mut arg_vals = vec![recv_val];
+                for arg in args {
+                    arg_vals.push(self.eval(arg)?);
+                }
+                self.apply(func_val, arg_vals)
+            }
+
             ExprKind::Field(base, field) => {
                 let base_val = self.eval(base)?;
                 match base_val {

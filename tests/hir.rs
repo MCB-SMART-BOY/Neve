@@ -267,3 +267,23 @@ fn test_lower_try_expr_preserves_try_node() {
         _ => panic!("expected function"),
     }
 }
+
+#[test]
+fn test_lower_method_call_preserves_method_node() {
+    let source = "let x = 1.show();";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::MethodCall { method, args, .. } => {
+                assert_eq!(method, "show");
+                assert!(args.is_empty());
+            }
+            other => panic!("expected MethodCall, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}

@@ -454,6 +454,29 @@ fn test_typeck_try_on_result_like_enum() {
     );
 }
 
+#[test]
+fn test_typeck_method_call_falls_back_to_function_call_semantics() {
+    check_no_errors(
+        "
+        fn twice(x: Int) -> Int = x + x;
+        let y = 21.twice();
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_method_call_resolves_trait_impl_signature() {
+    check_no_errors(
+        "
+        trait Show { fn show(self) -> String; };
+        impl Show for Int {
+            fn show(self) -> String = toString(self);
+        };
+        let x = 1.show();
+        ",
+    );
+}
+
 // ============================================================================
 // 函数定义
 // ============================================================================
