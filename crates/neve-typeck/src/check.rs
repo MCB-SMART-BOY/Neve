@@ -6,6 +6,10 @@
 //! 本模块实现 Neve 的主类型检查器。
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
+use crate::builtin_types::{
+    builtin_list, builtin_map, builtin_option, builtin_result, builtin_set, is_builtin_option_type,
+    is_builtin_result_type,
+};
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
     unbound_variable, unreachable_pattern, unused_variable,
@@ -21,12 +25,6 @@ use neve_hir::{
     TypeAlias, UnaryOp,
 };
 use std::collections::HashMap;
-
-const BUILTIN_LIST_TYPE_ID: DefId = DefId(u32::MAX);
-const BUILTIN_OPTION_TYPE_ID: DefId = DefId(u32::MAX - 1);
-const BUILTIN_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 2);
-const BUILTIN_MAP_TYPE_ID: DefId = DefId(u32::MAX - 3);
-const BUILTIN_SET_TYPE_ID: DefId = DefId(u32::MAX - 4);
 
 fn builtin_ty(kind: TyKind, span: Span) -> Ty {
     Ty { kind, span }
@@ -48,26 +46,6 @@ fn builtin_forall(params: Vec<&str>, body: Ty, span: Span) -> Ty {
         ),
         span,
     )
-}
-
-fn builtin_list(elem: Ty, span: Span) -> Ty {
-    builtin_ty(TyKind::Named(BUILTIN_LIST_TYPE_ID, vec![elem]), span)
-}
-
-fn builtin_option(elem: Ty, span: Span) -> Ty {
-    builtin_ty(TyKind::Named(BUILTIN_OPTION_TYPE_ID, vec![elem]), span)
-}
-
-fn builtin_result(ok: Ty, err: Ty, span: Span) -> Ty {
-    builtin_ty(TyKind::Named(BUILTIN_RESULT_TYPE_ID, vec![ok, err]), span)
-}
-
-fn builtin_map(key: Ty, value: Ty, span: Span) -> Ty {
-    builtin_ty(TyKind::Named(BUILTIN_MAP_TYPE_ID, vec![key, value]), span)
-}
-
-fn builtin_set(elem: Ty, span: Span) -> Ty {
-    builtin_ty(TyKind::Named(BUILTIN_SET_TYPE_ID, vec![elem]), span)
 }
 
 fn builtin_record(fields: Vec<(&str, Ty)>, span: Span) -> Ty {
@@ -111,14 +89,6 @@ fn builtin_fetch_result(span: Span) -> Ty {
         ],
         span,
     )
-}
-
-fn is_builtin_option_type(def_id: DefId) -> bool {
-    def_id == BUILTIN_OPTION_TYPE_ID
-}
-
-fn is_builtin_result_type(def_id: DefId) -> bool {
-    def_id == BUILTIN_RESULT_TYPE_ID
 }
 
 /// Information about a local variable.

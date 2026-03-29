@@ -9,20 +9,19 @@ use neve_hir::{DefId, ItemKind as HirItemKind, Resolver, Ty, TyKind};
 use neve_parser::parse;
 use neve_std::std_module_overrides;
 use neve_syntax::PatternKind;
-use neve_typeck::TypeChecker;
+use neve_typeck::{
+    LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, TypeChecker,
+    builtin_list, builtin_map, builtin_option, builtin_result, builtin_set,
+    format_builtin_named_type,
+};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-const REPL_LIST_TYPE_ID: DefId = DefId(u32::MAX - 1);
-const REPL_OPTION_TYPE_ID: DefId = DefId(u32::MAX - 2);
-const REPL_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 3);
-const REPL_MAP_TYPE_ID: DefId = DefId(u32::MAX - 4);
-const REPL_SET_TYPE_ID: DefId = DefId(u32::MAX - 5);
-const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 6);
-const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 7);
+const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 5);
+const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 6);
 
 /// Run the REPL.
 /// 运行 REPL。
@@ -556,9 +555,7 @@ fn type_from_value(value: &Value) -> Ty {
             kind: TyKind::Unit,
             span: Span::DUMMY,
         },
-        Value::List(items) => {
-            named_repl_ty(REPL_LIST_TYPE_ID, vec![common_runtime_type(items.iter())])
-        }
+        Value::List(items) => builtin_list(common_runtime_type(items.iter()), Span::DUMMY),
         Value::Tuple(items) => Ty {
             kind: TyKind::Tuple(items.iter().map(type_from_value).collect()),
             span: Span::DUMMY,
@@ -572,18 +569,12 @@ fn type_from_value(value: &Value) -> Ty {
             ),
             span: Span::DUMMY,
         },
-        Value::Some(value) => named_repl_ty(REPL_OPTION_TYPE_ID, vec![type_from_value(value)]),
-        Value::None => named_repl_ty(REPL_OPTION_TYPE_ID, vec![unknown_ty()]),
-        Value::Ok(value) => named_repl_ty(
-            REPL_RESULT_TYPE_ID,
-            vec![type_from_value(value), unknown_ty()],
-        ),
-        Value::Err(value) => named_repl_ty(
-            REPL_RESULT_TYPE_ID,
-            vec![unknown_ty(), type_from_value(value)],
-        ),
-        Value::Map(_) => named_repl_ty(REPL_MAP_TYPE_ID, vec![unknown_ty(), unknown_ty()]),
-        Value::Set(_) => named_repl_ty(REPL_SET_TYPE_ID, vec![unknown_ty()]),
+        Value::Some(value) => builtin_option(type_from_value(value), Span::DUMMY),
+        Value::None => builtin_option(unknown_ty(), Span::DUMMY),
+        Value::Ok(value) => builtin_result(type_from_value(value), unknown_ty(), Span::DUMMY),
+        Value::Err(value) => builtin_result(unknown_ty(), type_from_value(value), Span::DUMMY),
+        Value::Map(_) => builtin_map(unknown_ty(), unknown_ty(), Span::DUMMY),
+        Value::Set(_) => builtin_set(unknown_ty(), Span::DUMMY),
         Value::Thunk(_) => named_repl_ty(REPL_LAZY_TYPE_ID, vec![unknown_ty()]),
         Value::Builtin(builtin) => fn_repl_ty(builtin.arity),
         Value::BuiltinFn(_, _) => named_repl_ty(REPL_FN_TYPE_ID, Vec::new()),
@@ -591,16 +582,10 @@ fn type_from_value(value: &Value) -> Ty {
         Value::AstClosure(closure) => fn_repl_ty(closure.params.len()),
         Value::VariantCtor { arity, .. } => fn_repl_ty(*arity),
         Value::Variant(name, payload) => match name.as_str() {
-            "Some" => named_repl_ty(REPL_OPTION_TYPE_ID, vec![type_from_value(payload)]),
-            "None" => named_repl_ty(REPL_OPTION_TYPE_ID, vec![unknown_ty()]),
-            "Ok" => named_repl_ty(
-                REPL_RESULT_TYPE_ID,
-                vec![type_from_value(payload), unknown_ty()],
-            ),
-            "Err" => named_repl_ty(
-                REPL_RESULT_TYPE_ID,
-                vec![unknown_ty(), type_from_value(payload)],
-            ),
+            "Some" => builtin_option(type_from_value(payload), Span::DUMMY),
+            "None" => builtin_option(unknown_ty(), Span::DUMMY),
+            "Ok" => builtin_result(type_from_value(payload), unknown_ty(), Span::DUMMY),
+            "Err" => builtin_result(unknown_ty(), type_from_value(payload), Span::DUMMY),
             _ => unknown_ty(),
         },
     }
@@ -648,28 +633,18 @@ fn format_repl_type(ty: &Ty) -> String {
         TyKind::Forall(params, inner) => {
             format!("forall {}. {}", params.join(", "), format_repl_type(inner))
         }
-        TyKind::Named(def_id, args) if *def_id == REPL_LIST_TYPE_ID => {
-            format!("List[{}]", format_repl_type(&args[0]))
-        }
-        TyKind::Named(def_id, args) if *def_id == REPL_OPTION_TYPE_ID => {
-            format!("Option[{}]", format_repl_type(&args[0]))
-        }
-        TyKind::Named(def_id, args) if *def_id == REPL_RESULT_TYPE_ID => {
-            format!(
-                "Result[{}, {}]",
-                format_repl_type(&args[0]),
-                format_repl_type(&args[1])
-            )
-        }
-        TyKind::Named(def_id, args) if *def_id == REPL_MAP_TYPE_ID => {
-            format!(
-                "Map[{}, {}]",
-                format_repl_type(&args[0]),
-                format_repl_type(&args[1])
-            )
-        }
-        TyKind::Named(def_id, args) if *def_id == REPL_SET_TYPE_ID => {
-            format!("Set[{}]", format_repl_type(&args[0]))
+        TyKind::Named(def_id, args)
+            if [
+                LIST_TYPE_ID,
+                OPTION_TYPE_ID,
+                RESULT_TYPE_ID,
+                MAP_TYPE_ID,
+                SET_TYPE_ID,
+            ]
+            .contains(def_id) =>
+        {
+            format_builtin_named_type(*def_id, args, &format_repl_type)
+                .unwrap_or_else(|| neve_typeck::format_type(ty))
         }
         TyKind::Named(def_id, _) if *def_id == REPL_FN_TYPE_ID => "Fn".to_string(),
         TyKind::Named(def_id, args) if *def_id == REPL_LAZY_TYPE_ID => {

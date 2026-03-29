@@ -1,0 +1,79 @@
+//! Shared builtin type IDs and constructors.
+//! 共享的内置类型 ID 与构造辅助函数。
+
+use neve_common::Span;
+use neve_hir::{DefId, Ty, TyKind};
+
+pub const LIST_TYPE_ID: DefId = DefId(u32::MAX);
+pub const OPTION_TYPE_ID: DefId = DefId(u32::MAX - 1);
+pub const RESULT_TYPE_ID: DefId = DefId(u32::MAX - 2);
+pub const MAP_TYPE_ID: DefId = DefId(u32::MAX - 3);
+pub const SET_TYPE_ID: DefId = DefId(u32::MAX - 4);
+
+pub fn builtin_list(elem: Ty, span: Span) -> Ty {
+    Ty {
+        kind: TyKind::Named(LIST_TYPE_ID, vec![elem]),
+        span,
+    }
+}
+
+pub fn builtin_option(elem: Ty, span: Span) -> Ty {
+    Ty {
+        kind: TyKind::Named(OPTION_TYPE_ID, vec![elem]),
+        span,
+    }
+}
+
+pub fn builtin_result(ok: Ty, err: Ty, span: Span) -> Ty {
+    Ty {
+        kind: TyKind::Named(RESULT_TYPE_ID, vec![ok, err]),
+        span,
+    }
+}
+
+pub fn builtin_map(key: Ty, value: Ty, span: Span) -> Ty {
+    Ty {
+        kind: TyKind::Named(MAP_TYPE_ID, vec![key, value]),
+        span,
+    }
+}
+
+pub fn builtin_set(elem: Ty, span: Span) -> Ty {
+    Ty {
+        kind: TyKind::Named(SET_TYPE_ID, vec![elem]),
+        span,
+    }
+}
+
+pub fn is_builtin_option_type(def_id: DefId) -> bool {
+    def_id == OPTION_TYPE_ID
+}
+
+pub fn is_builtin_result_type(def_id: DefId) -> bool {
+    def_id == RESULT_TYPE_ID
+}
+
+pub fn builtin_type_name(def_id: DefId) -> Option<&'static str> {
+    match def_id {
+        LIST_TYPE_ID => Some("List"),
+        OPTION_TYPE_ID => Some("Option"),
+        RESULT_TYPE_ID => Some("Result"),
+        MAP_TYPE_ID => Some("Map"),
+        SET_TYPE_ID => Some("Set"),
+        _ => None,
+    }
+}
+
+pub fn format_builtin_named_type(
+    def_id: DefId,
+    args: &[Ty],
+    render: &impl Fn(&Ty) -> String,
+) -> Option<String> {
+    let name = builtin_type_name(def_id)?;
+    if args.is_empty() {
+        Some(name.to_string())
+    } else {
+        let rendered_args: Vec<_> = args.iter().map(render).collect();
+        Some(format!("{name}[{}]", rendered_args.join(", ")))
+    }
+}
