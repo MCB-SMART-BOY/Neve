@@ -917,14 +917,23 @@ impl AstEvaluator {
             }
 
             ExprKind::Try(inner) => {
-                let val = self.eval_expr(inner)?;
-                match val {
-                    Value::Ok(v) => Ok((*v).clone()),
-                    Value::Err(e) => Err(EvalError::TypeError(format!("{:?}", e))),
-                    Value::Some(v) => Ok((*v).clone()),
-                    Value::None => Err(EvalError::TypeError("unwrap on None".to_string())),
-                    other => Ok(other),
+                fn unwrap_try_value(value: Value) -> Result<Value, EvalError> {
+                    match value {
+                        Value::Ok(v) | Value::Some(v) => Ok((*v).clone()),
+                        Value::Err(e) => Err(EvalError::TypeError(format!("{:?}", e))),
+                        Value::None => Err(EvalError::TypeError("unwrap on None".to_string())),
+                        Value::Variant(tag, payload) => match tag.as_str() {
+                            "Ok" | "Some" => Ok((*payload).clone()),
+                            "Err" => Err(EvalError::TypeError(format!("{:?}", payload))),
+                            "None" => Err(EvalError::TypeError("unwrap on None".to_string())),
+                            _ => Ok(Value::Variant(tag, payload)),
+                        },
+                        other => Ok(other),
+                    }
                 }
+
+                let val = self.eval_expr(inner)?;
+                unwrap_try_value(val)
             }
 
             ExprKind::Path(parts) => {

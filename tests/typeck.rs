@@ -434,6 +434,26 @@ fn test_typeck_list_rest_pattern() {
     );
 }
 
+#[test]
+fn test_typeck_try_on_option_like_enum() {
+    check_no_errors(
+        "
+        enum Option { Some(Int), None };
+        let x = Some(41)? + 1;
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_try_on_result_like_enum() {
+    check_no_errors(
+        "
+        enum Result { Ok(Int), Err(String) };
+        let x = Ok(41)? + 1;
+        ",
+    );
+}
+
 // ============================================================================
 // 函数定义
 // ============================================================================

@@ -1155,34 +1155,7 @@ impl Resolver {
                 ExprKind::Match(Box::new(value), arms)
             }
 
-            ast::ExprKind::Try(inner) => {
-                // Desugar expr? to match expr { Ok(x) => x, Err(e) => return Err(e) }
-                // 将 expr? 解糖为 match expr { Ok(x) => x, Err(e) => return Err(e) }
-                let inner = self.lower_expr(inner);
-                let x_id = self.fresh_local_id();
-
-                let arms = vec![MatchArm {
-                    pattern: Pattern {
-                        kind: PatternKind::Constructor(
-                            DefId(u32::MAX),
-                            vec![Pattern {
-                                kind: PatternKind::Var(x_id, "x".to_string()),
-                                span,
-                            }],
-                        ),
-                        span,
-                    },
-                    guard: None,
-                    body: Expr {
-                        kind: ExprKind::Var(x_id),
-                        ty: Self::unknown_ty(span),
-                        span,
-                    },
-                    span,
-                }];
-
-                ExprKind::Match(Box::new(inner), arms)
-            }
+            ast::ExprKind::Try(inner) => ExprKind::Try(Box::new(self.lower_expr(inner))),
 
             ast::ExprKind::Interpolated(parts) => {
                 let parts = parts

@@ -470,6 +470,45 @@ impl TypeChecker {
         Some(instantiate(&polymorphic, &mut || self.fresh_var()))
     }
 
+    fn enum_has_variants(&self, def_id: DefId, required: &[&str]) -> bool {
+        let Some(info) = self.enums.get(&def_id) else {
+            return false;
+        };
+        required
+            .iter()
+            .all(|name| info.variants.contains_key(*name))
+    }
+
+    fn try_payload_type(&self, def_id: DefId, variant_name: &str, span: Span) -> Option<Ty> {
+        self.enums
+            .get(&def_id)?
+            .variants
+            .get(variant_name)?
+            .first()
+            .cloned()
+            .map(|mut ty| {
+                ty.span = span;
+                ty
+            })
+    }
+
+    fn try_result_type(&mut self, inner_ty: Ty, span: Span) -> Ty {
+        let inner_ty = self.apply(&inner_ty);
+        match inner_ty.kind {
+            TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Some", "None"]) => self
+                .try_payload_type(def_id, "Some", span)
+                .unwrap_or_else(|| self.fresh_var()),
+            TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Ok", "Err"]) => self
+                .try_payload_type(def_id, "Ok", span)
+                .unwrap_or_else(|| self.fresh_var()),
+            TyKind::Var(_) | TyKind::Unknown => self.fresh_var(),
+            _ => {
+                self.error(span, "`?` expects Option-like or Result-like value");
+                self.fresh_var()
+            }
+        }
+    }
+
     /// Check if a type variable has been resolved.
     /// 检查类型变量是否已被解析。
     pub fn is_resolved(&self, var: u32) -> bool {
@@ -1056,6 +1095,11 @@ impl TypeChecker {
                 self.unify(&value_ty, &declared_ty, value.span);
                 self.check_pattern(pattern, &declared_ty);
                 self.infer_expr(body)
+            }
+
+            ExprKind::Try(inner) => {
+                let inner_ty = self.infer_expr(inner);
+                self.try_result_type(inner_ty, span)
             }
 
             ExprKind::Lazy(inner) => self.infer_expr(inner),

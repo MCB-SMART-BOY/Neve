@@ -324,6 +324,25 @@ impl Evaluator {
                 }
             }
 
+            ExprKind::Try(inner) => {
+                fn unwrap_try_value(value: Value) -> Result<Value, EvalError> {
+                    match value {
+                        Value::Ok(v) | Value::Some(v) => Ok((*v).clone()),
+                        Value::Err(e) => Err(EvalError::TypeError(format!("{:?}", e))),
+                        Value::None => Err(EvalError::TypeError("unwrap on None".to_string())),
+                        Value::Variant(tag, payload) => match tag.as_str() {
+                            "Ok" | "Some" => Ok((*payload).clone()),
+                            "Err" => Err(EvalError::TypeError(format!("{:?}", payload))),
+                            "None" => Err(EvalError::TypeError("unwrap on None".to_string())),
+                            _ => Ok(Value::Variant(tag, payload)),
+                        },
+                        other => Ok(other),
+                    }
+                }
+
+                unwrap_try_value(self.eval(inner)?)
+            }
+
             ExprKind::Block(stmts, expr) => {
                 let old_env = self.env.clone();
                 self.env = self.env.child();
