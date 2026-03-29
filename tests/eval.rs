@@ -154,6 +154,21 @@ fn test_eval_hir_std_path_builtins() {
 }
 
 #[test]
+fn test_eval_hir_std_io_builtins() {
+    let source = r#"
+        import std.io as io;
+        let digest = io.hashString("abc");
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(
+            s.as_ref(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        ),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_import_std_root() {
     let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {

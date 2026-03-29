@@ -60,6 +60,49 @@ fn builtin_result(ok: Ty, err: Ty, span: Span) -> Ty {
     builtin_ty(TyKind::Named(BUILTIN_RESULT_TYPE_ID, vec![ok, err]), span)
 }
 
+fn builtin_record(fields: Vec<(&str, Ty)>, span: Span) -> Ty {
+    builtin_ty(
+        TyKind::Record(
+            fields
+                .into_iter()
+                .map(|(name, ty)| (name.to_string(), ty))
+                .collect(),
+        ),
+        span,
+    )
+}
+
+fn builtin_string_option(span: Span) -> Ty {
+    builtin_option(builtin_ty(TyKind::String, span), span)
+}
+
+fn builtin_string_list(span: Span) -> Ty {
+    builtin_list(builtin_ty(TyKind::String, span), span)
+}
+
+fn builtin_exec_result(span: Span) -> Ty {
+    builtin_record(
+        vec![
+            ("code", builtin_ty(TyKind::Int, span)),
+            ("success", builtin_ty(TyKind::Bool, span)),
+            ("stdout", builtin_ty(TyKind::String, span)),
+            ("stderr", builtin_ty(TyKind::String, span)),
+        ],
+        span,
+    )
+}
+
+fn builtin_fetch_result(span: Span) -> Ty {
+    builtin_record(
+        vec![
+            ("path", builtin_ty(TyKind::String, span)),
+            ("hash", builtin_ty(TyKind::String, span)),
+            ("cached", builtin_ty(TyKind::Bool, span)),
+        ],
+        span,
+    )
+}
+
 fn is_builtin_option_type(def_id: DefId) -> bool {
     def_id == BUILTIN_OPTION_TYPE_ID
 }
@@ -825,6 +868,72 @@ impl TypeChecker {
             "path.is_absolute" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "io.readFile" | "io.hashFile" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "io.readDir" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_string_list(span),
+                span,
+            ),
+            "io.writeFile" | "io.appendFile" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.createDirAll" | "io.removeDirAll" | "io.pathExists" | "io.isDir" | "io.isFile" => {
+                let ret_ty = match name {
+                    "io.createDirAll" | "io.removeDirAll" => builtin_ty(TyKind::Unit, span),
+                    _ => builtin_ty(TyKind::Bool, span),
+                };
+                builtin_fn(vec![builtin_ty(TyKind::String, span)], ret_ty, span)
+            }
+            "io.getEnv" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_string_option(span),
+                span,
+            ),
+            "io.currentDir" | "io.currentSystem" => {
+                builtin_fn(Vec::new(), builtin_ty(TyKind::String, span), span)
+            }
+            "io.homeDir" => builtin_fn(Vec::new(), builtin_string_option(span), span),
+            "io.exec" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span), builtin_string_list(span)],
+                builtin_exec_result(span),
+                span,
+            ),
+            "io.execShell" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_exec_result(span),
+                span,
+            ),
+            "fetch.url" | "fetch.path" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_fetch_result(span),
+                span,
+            ),
+            "fetch.urlWithHash" | "fetch.pathWithHash" | "fetch.git" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_fetch_result(span),
+                span,
+            ),
+            "fetch.gitWithHash" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_fetch_result(span),
                 span,
             ),
             _ if name.contains('.') => return Some(self.fresh_var()),

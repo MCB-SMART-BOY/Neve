@@ -359,3 +359,18 @@ fn test_end_to_end_std_path_builtin_runtime_parity() {
         Value::String("/tmp".to_string().into()),
     );
 }
+
+#[test]
+fn test_end_to_end_std_io_builtin_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let x = io.hashString(\"abc\");
+        ",
+        Value::String(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+                .to_string()
+                .into(),
+        ),
+    );
+}

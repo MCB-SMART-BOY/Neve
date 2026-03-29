@@ -211,3 +211,21 @@ fn test_frontend_accepts_std_path_builtins() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_std_io_and_fetch_builtins() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.fetch as fetch;
+            let a = io.hashString("abc");
+            let b = io.exec("printf", ["neve"]).stdout;
+            let c = fetch.path("Cargo.toml").hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
