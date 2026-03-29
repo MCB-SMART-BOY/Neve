@@ -144,28 +144,14 @@ fn test_end_to_end_enum_match_runtime_parity() {
 }
 
 #[test]
-fn test_known_gap_ast_runtime_cannot_self_recurse_yet() {
-    let analysis = analyze_without_diagnostics(
+fn test_end_to_end_recursive_fibonacci_runtime_parity() {
+    assert_runtime_parity(
         "
         fn fib(n) = if n <= 1 then n else fib(n - 1) + fib(n - 2);
         let x = fib(10);
         ",
+        Value::Int(int(55)),
     );
-
-    let ast_error =
-        eval_ast(&analysis).expect_err("AST runtime should still fail recursion here");
-    match ast_error {
-        EvalError::TypeError(message) => {
-            assert!(
-                message.contains("undefined variable: fib"),
-                "unexpected AST recursion error: {message}"
-            );
-        }
-        other => panic!("expected recursion support gap, got {other:?}"),
-    }
-
-    let hir_value = eval_hir(&analysis).expect("HIR runtime should handle recursion");
-    assert_eq!(hir_value, Value::Int(int(55)));
 }
 
 #[test]

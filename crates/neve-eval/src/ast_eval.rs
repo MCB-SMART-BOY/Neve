@@ -337,6 +337,9 @@ impl AstEvaluator {
         }
 
         let mut new_env = AstEnv::child(closure.env.clone());
+        if let Some(name) = &closure.name {
+            new_env.define(name.clone(), Value::AstClosure(Rc::new(closure.clone())));
+        }
         for (param, arg) in closure.params.iter().zip(args) {
             let name = pattern_name(&param.pattern);
             new_env.define(name, arg);
@@ -393,6 +396,7 @@ impl AstEvaluator {
     pub fn eval_fn_def(&mut self, fn_def: &FnDef) -> Result<Value, EvalError> {
         // Create a closure that captures the current environment
         let func = AstClosure {
+            name: Some(fn_def.name.name.clone()),
             params: fn_def.params.clone(),
             body: fn_def.body.clone(),
             env: self.env.clone(),
@@ -410,30 +414,13 @@ impl AstEvaluator {
                 Ok(value)
             }
             ItemKind::Fn(fn_def) => {
-                // For recursive functions, we need to define the function first,
-                // then update the closure to capture the environment that includes itself.
                 let name = fn_def.name.name.clone();
                 let is_pub = fn_def.visibility == Visibility::Public;
-
-                // Create a placeholder closure first
-                let func = AstClosure {
-                    params: fn_def.params.clone(),
-                    body: fn_def.body.clone(),
-                    env: self.env.clone(), // Will be updated below
-                };
-
-                // Define the function in the environment
-                Rc::make_mut(&mut self.env).define_with_visibility(
-                    name.clone(),
-                    Value::AstClosure(Rc::new(func)),
-                    is_pub,
-                );
-
-                // Now update the closure to have the environment that includes itself
                 let recursive_func = AstClosure {
+                    name: Some(name.clone()),
                     params: fn_def.params.clone(),
                     body: fn_def.body.clone(),
-                    env: self.env.clone(), // Now includes the function itself
+                    env: self.env.clone(),
                 };
                 Rc::make_mut(&mut self.env).define_with_visibility(
                     name,
@@ -746,6 +733,7 @@ impl AstEvaluator {
 
             ExprKind::Lambda { params, body } => {
                 let closure = AstClosure {
+                    name: None,
                     params: params
                         .iter()
                         .map(|p| Param {
@@ -1413,10 +1401,10 @@ impl AstEvaluator {
                         return Err(EvalError::WrongArity);
                     }
 
-                    // Use the closure's captured environment as the parent,
-                    // which allows recursive calls to find the function
-                    // 使用闭包捕获的环境作为父环境，这允许递归调用找到函数
                     let mut new_env = AstEnv::child(closure.env.clone());
+                    if let Some(name) = &closure.name {
+                        new_env.define(name.clone(), Value::AstClosure(closure.clone()));
+                    }
                     for (param, arg) in closure.params.iter().zip(current_args) {
                         let name = pattern_name(&param.pattern);
                         new_env.define(name, arg);
@@ -1900,8 +1888,10 @@ impl AstEvaluator {
                     return Err(EvalError::WrongArity);
                 }
 
-                // For immutable apply, use the closure's captured environment
                 let mut new_env = AstEnv::child(closure.env.clone());
+                if let Some(name) = &closure.name {
+                    new_env.define(name.clone(), Value::AstClosure(closure.clone()));
+                }
                 for (param, arg) in closure.params.iter().zip(args) {
                     let name = pattern_name(&param.pattern);
                     new_env.define(name, arg);
@@ -2166,6 +2156,8 @@ impl Default for AstEvaluator {
 /// 闭包捕获其定义环境以及函数参数和函数体。
 #[derive(Clone)]
 pub struct AstClosure {
+    /// Function name for recursive self-binding / 用于递归自绑定的函数名
+    pub name: Option<String>,
     /// Function parameters / 函数参数
     pub params: Vec<Param>,
     /// Function body expression / 函数体表达式
