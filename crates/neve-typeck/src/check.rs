@@ -7,8 +7,8 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::errors::{
-    TypeMismatchError, format_type, missing_assoc_type, missing_method, unbound_variable,
-    unused_variable,
+    TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
+    unbound_variable, unreachable_pattern, unused_variable,
 };
 use crate::infer::InferContext;
 use crate::traits::{ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
@@ -58,6 +58,8 @@ struct EnumInfo {
 struct VariantInfo {
     /// Enum definition ID. / 枚举定义 ID。
     enum_id: DefId,
+    /// Variant name. / 变体名称。
+    name: String,
     /// Field types. / 字段类型。
     fields: Vec<Ty>,
 }
@@ -536,6 +538,239 @@ impl TypeChecker {
         }
     }
 
+    fn bool_pattern_coverage(&self, pattern: &Pattern) -> (bool, bool) {
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Var(_, _) => (true, true),
+            PatternKind::Binding(_, _, inner) => self.bool_pattern_coverage(inner),
+            PatternKind::Literal(Literal::Bool(value)) => (*value, !*value),
+            PatternKind::Or(patterns) => patterns.iter().fold((false, false), |(t, f), pattern| {
+                let (covers_true, covers_false) = self.bool_pattern_coverage(pattern);
+                (t || covers_true, f || covers_false)
+            }),
+            _ => (false, false),
+        }
+    }
+
+    fn pattern_covers_unit(&self, pattern: &Pattern) -> bool {
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
+            PatternKind::Binding(_, _, inner) => self.pattern_covers_unit(inner),
+            PatternKind::Literal(Literal::Unit) => true,
+            PatternKind::Or(patterns) => patterns.iter().any(|pattern| self.pattern_covers_unit(pattern)),
+            _ => false,
+        }
+    }
+
+    fn pattern_is_irrefutable_for(&self, pattern: &Pattern, expected: &Ty) -> bool {
+        let expected = self.apply(expected);
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
+            PatternKind::Binding(_, _, inner) => self.pattern_is_irrefutable_for(inner, &expected),
+            PatternKind::Literal(Literal::Unit) => matches!(expected.kind, TyKind::Unit),
+            PatternKind::Tuple(patterns) => match &expected.kind {
+                TyKind::Tuple(elem_tys) if elem_tys.len() == patterns.len() => patterns
+                    .iter()
+                    .zip(elem_tys.iter())
+                    .all(|(pattern, ty)| self.pattern_is_irrefutable_for(pattern, ty)),
+                _ => false,
+            },
+            PatternKind::Constructor(def_id, patterns) => {
+                let Some(variant) = self.variants.get(def_id) else {
+                    return false;
+                };
+                let TyKind::Named(enum_id, _) = expected.kind else {
+                    return false;
+                };
+                if variant.enum_id != enum_id {
+                    return false;
+                }
+                let Some(enum_info) = self.enums.get(&enum_id) else {
+                    return false;
+                };
+                if enum_info.variants.len() != 1 || variant.fields.len() != patterns.len() {
+                    return false;
+                }
+                patterns
+                    .iter()
+                    .zip(variant.fields.iter())
+                    .all(|(pattern, ty)| self.pattern_is_irrefutable_for(pattern, ty))
+            }
+            PatternKind::Or(patterns) => {
+                let (covers_true, covers_false) = self.bool_pattern_coverage(pattern);
+                matches!(expected.kind, TyKind::Bool) && covers_true && covers_false
+                    || patterns
+                        .iter()
+                        .any(|pattern| self.pattern_is_irrefutable_for(pattern, &expected))
+            }
+            _ => false,
+        }
+    }
+
+    fn pattern_covers_enum_variant(
+        &self,
+        pattern: &Pattern,
+        enum_id: DefId,
+        variant_name: &str,
+    ) -> bool {
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
+            PatternKind::Binding(_, _, inner) => {
+                self.pattern_covers_enum_variant(inner, enum_id, variant_name)
+            }
+            PatternKind::Constructor(def_id, patterns) => {
+                let Some(variant) = self.variants.get(def_id) else {
+                    return false;
+                };
+                if variant.enum_id != enum_id
+                    || variant.name != variant_name
+                    || variant.fields.len() != patterns.len()
+                {
+                    return false;
+                }
+                patterns
+                    .iter()
+                    .zip(variant.fields.iter())
+                    .all(|(pattern, ty)| self.pattern_is_irrefutable_for(pattern, ty))
+            }
+            PatternKind::Or(patterns) => patterns
+                .iter()
+                .any(|pattern| self.pattern_covers_enum_variant(pattern, enum_id, variant_name)),
+            _ => false,
+        }
+    }
+
+    fn missing_enum_patterns(&self, enum_id: DefId, covered_variants: &[String]) -> Vec<String> {
+        let Some(enum_info) = self.enums.get(&enum_id) else {
+            return Vec::new();
+        };
+
+        enum_info
+            .variants
+            .iter()
+            .filter(|(name, _)| !covered_variants.iter().any(|covered| covered == *name))
+            .map(|(name, fields)| {
+                if fields.is_empty() {
+                    name.clone()
+                } else {
+                    let placeholders = std::iter::repeat_n("_", fields.len()).collect::<Vec<_>>();
+                    format!("{}({})", name, placeholders.join(", "))
+                }
+            })
+            .collect()
+    }
+
+    fn check_match_coverage(&mut self, scrutinee_ty: &Ty, arms: &[MatchArm], span: Span) {
+        let scrutinee_ty = self.apply(scrutinee_ty);
+        let mut irrefutable_arm_span = None;
+
+        match &scrutinee_ty.kind {
+            TyKind::Bool => {
+                let mut covers_true = false;
+                let mut covers_false = false;
+
+                for arm in arms {
+                    if let Some(previous_span) = irrefutable_arm_span {
+                        self.diagnostics
+                            .push(unreachable_pattern(arm.span, previous_span));
+                        continue;
+                    }
+                    if arm.guard.is_some() {
+                        continue;
+                    }
+                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
+                        irrefutable_arm_span = Some(arm.span);
+                        covers_true = true;
+                        covers_false = true;
+                        continue;
+                    }
+
+                    let (arm_true, arm_false) = self.bool_pattern_coverage(&arm.pattern);
+                    covers_true |= arm_true;
+                    covers_false |= arm_false;
+                }
+
+                let mut missing = Vec::new();
+                if !covers_true {
+                    missing.push("true".to_string());
+                }
+                if !covers_false {
+                    missing.push("false".to_string());
+                }
+                if !missing.is_empty() {
+                    self.diagnostics.push(non_exhaustive_match(&missing, span));
+                }
+            }
+
+            TyKind::Unit => {
+                let mut covered = false;
+
+                for arm in arms {
+                    if let Some(previous_span) = irrefutable_arm_span {
+                        self.diagnostics
+                            .push(unreachable_pattern(arm.span, previous_span));
+                        continue;
+                    }
+                    if arm.guard.is_some() {
+                        continue;
+                    }
+                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
+                        irrefutable_arm_span = Some(arm.span);
+                        covered = true;
+                        continue;
+                    }
+
+                    covered |= self.pattern_covers_unit(&arm.pattern);
+                }
+
+                if !covered {
+                    self.diagnostics
+                        .push(non_exhaustive_match(&["()".to_string()], span));
+                }
+            }
+
+            TyKind::Named(enum_id, _) if self.enums.contains_key(enum_id) => {
+                let mut covered_variants = Vec::new();
+
+                for arm in arms {
+                    if let Some(previous_span) = irrefutable_arm_span {
+                        self.diagnostics
+                            .push(unreachable_pattern(arm.span, previous_span));
+                        continue;
+                    }
+                    if arm.guard.is_some() {
+                        continue;
+                    }
+                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
+                        irrefutable_arm_span = Some(arm.span);
+                        if let Some(enum_info) = self.enums.get(enum_id) {
+                            covered_variants = enum_info.variants.keys().cloned().collect();
+                        }
+                        continue;
+                    }
+
+                    let Some(enum_info) = self.enums.get(enum_id) else {
+                        continue;
+                    };
+
+                    for variant_name in enum_info.variants.keys() {
+                        if !covered_variants.iter().any(|covered| covered == variant_name)
+                            && self.pattern_covers_enum_variant(&arm.pattern, *enum_id, variant_name)
+                        {
+                            covered_variants.push(variant_name.clone());
+                        }
+                    }
+                }
+
+                let missing = self.missing_enum_patterns(*enum_id, &covered_variants);
+                if !missing.is_empty() {
+                    self.diagnostics.push(non_exhaustive_match(&missing, span));
+                }
+            }
+
+            _ => {}
+        }
+    }
+
     /// Check if a type variable has been resolved.
     /// 检查类型变量是否已被解析。
     pub fn is_resolved(&self, var: u32) -> bool {
@@ -671,6 +906,7 @@ impl TypeChecker {
                 variant.id,
                 VariantInfo {
                     enum_id: def_id,
+                    name: variant.name.clone(),
                     fields: fields.clone(),
                 },
             );
@@ -1133,6 +1369,8 @@ impl TypeChecker {
                 for arm in arms {
                     self.check_arm(arm, &scrutinee_ty, &result_ty);
                 }
+
+                self.check_match_coverage(&scrutinee_ty, arms, span);
 
                 self.apply(&result_ty)
             }

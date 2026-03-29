@@ -73,8 +73,8 @@
 | Binding pattern `x @ pat` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `name @ pattern` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | List rest pattern `[x, ..xs]` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `init/rest/tail` 语义已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | 记录模式匹配 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 语言形态存在，编译器级检查不足 |
-| Match 穷尽性检查 | N/A | N/A | ❌ | N/A | N/A | ❌ | 诊断函数已存在，但主流程还没真正接上 |
-| Unreachable pattern 警告 | N/A | N/A | ❌ | N/A | N/A | ❌ | 和穷尽性同类，能力未正式落地 |
+| Match 穷尽性检查 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已接入 typecheck 主流程，支持 `Bool`、`Unit` 与可证明全覆盖的枚举变体；更复杂模式仍需继续扩展 |
+| Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置不可反驳分支导致后续分支不可达”的告警；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ❌ | 仍是占位提示，不是实际类型查询 |
 | 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ❌ | 当前 `tests/end_to_end.rs` 还存在占位 helper |
 
