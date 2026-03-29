@@ -92,3 +92,20 @@ fn test_frontend_accepts_list_rest_patterns() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_try_on_option_and_result_like_enums() {
+    let result = analyze_source(
+        r#"
+            enum Option { Some(Int), None };
+            enum Result { Ok(Int), Err(String) };
+            let a = Some(41)? + 1;
+            let b = Ok(1)? + 1;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

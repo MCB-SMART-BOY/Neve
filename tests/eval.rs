@@ -931,6 +931,33 @@ fn test_eval_hir_list_rest_pattern() {
 }
 
 #[test]
+fn test_eval_hir_try_on_option_like_enum() {
+    let result = eval_source(
+        "
+        enum Option { Some(Int), None };
+        let x = Some(41)? + 1;
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
+fn test_eval_hir_try_on_result_like_enum_error() {
+    let result = eval_source(
+        "
+        enum Result { Ok(Int), Err(String) };
+        let x = Err(\"boom\")?;
+    ",
+    );
+    match result {
+        Err(EvalError::TypeError(message)) => {
+            assert!(message.contains("boom"), "unexpected error: {message}");
+        }
+        other => panic!("expected propagated error, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_record_multiple_fields() {
     match eval_source("let x = #{ a = 1, b = 2, c = 3 };") {
         Ok(Value::Record(fields)) => {

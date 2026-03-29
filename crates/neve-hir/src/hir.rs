@@ -622,6 +622,8 @@ pub enum ExprKind {
     Unary(UnaryOp, Box<Expr>),
     /// Conditional expression. / 条件表达式。
     If(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// Error propagation (`expr?`). / 错误传播（`expr?`）。
+    Try(Box<Expr>),
     /// Pattern matching. / 模式匹配。
     Match(Box<Expr>, Vec<MatchArm>),
     /// Block expression. / 块表达式。

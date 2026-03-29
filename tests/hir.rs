@@ -251,3 +251,19 @@ fn test_lower_list_rest_pattern_preserves_segments() {
         _ => panic!("expected function"),
     }
 }
+
+#[test]
+fn test_lower_try_expr_preserves_try_node() {
+    let source = "let x = value?;";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => {
+            assert!(matches!(fn_def.body.kind, ExprKind::Try(_)));
+        }
+        _ => panic!("expected function"),
+    }
+}

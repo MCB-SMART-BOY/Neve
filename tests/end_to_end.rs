@@ -45,6 +45,28 @@ fn assert_runtime_parity(source: &str, expected: Value) {
     assert_eq!(ast_value, hir_value, "AST/HIR runtime split detected");
 }
 
+fn assert_runtime_error_parity(source: &str, expected_fragment: &str) {
+    let analysis = analyze_without_diagnostics(source);
+
+    let ast_error = eval_ast(&analysis).expect_err("AST evaluator should fail");
+    let hir_error = eval_hir(&analysis).expect_err("HIR evaluator should fail");
+
+    match (ast_error, hir_error) {
+        (EvalError::TypeError(ast), EvalError::TypeError(hir)) => {
+            assert!(
+                ast.contains(expected_fragment),
+                "unexpected AST error: {ast}"
+            );
+            assert!(
+                hir.contains(expected_fragment),
+                "unexpected HIR error: {hir}"
+            );
+            assert_eq!(ast, hir, "AST/HIR error split detected");
+        }
+        other => panic!("expected matching type errors, got {:?}", other),
+    }
+}
+
 #[test]
 fn test_frontend_reports_parse_errors() {
     let analysis = analyze_source("let x =");
@@ -188,5 +210,27 @@ fn test_end_to_end_list_rest_pattern_runtime_parity() {
         };
         ",
         Value::Int(int(10)),
+    );
+}
+
+#[test]
+fn test_end_to_end_try_runtime_parity() {
+    assert_runtime_parity(
+        "
+        enum Option { Some(Int), None };
+        let x = Some(41)? + 1;
+        ",
+        Value::Int(int(42)),
+    );
+}
+
+#[test]
+fn test_end_to_end_try_error_runtime_parity() {
+    assert_runtime_error_parity(
+        "
+        enum Result { Ok(Int), Err(String) };
+        let x = Err(\"boom\")?;
+        ",
+        "boom",
     );
 }
