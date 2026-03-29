@@ -30,16 +30,12 @@ fn check_has_errors(source: &str) {
     assert!(!diags.is_empty(), "expected type errors but got none");
 }
 
-fn assert_has_diagnostic(
-    source: &str,
-    severity: Severity,
-    message_fragment: &str,
-) {
+fn assert_has_diagnostic(source: &str, severity: Severity, message_fragment: &str) {
     let diags = check_source(source);
     assert!(
-        diags.iter().any(|diag| {
-            diag.severity == severity && diag.message.contains(message_fragment)
-        }),
+        diags
+            .iter()
+            .any(|diag| { diag.severity == severity && diag.message.contains(message_fragment) }),
         "expected diagnostic containing '{message_fragment}', got {:?}",
         diags
     );
@@ -190,6 +186,54 @@ fn test_typeck_enum_constructor() {
 fn test_typeck_enum_match() {
     check_no_errors(
         "enum Option { Some(Int), None }; let x = Some(1); let y = match x { Some(v) -> v, None -> 0 };",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_builtin_signatures_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.list;
+            let count: Int = list.len(list.range(1, 4));
+            let keep: Bool = list.isEmpty([]);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_builtin_signatures_reject_wrong_annotation() {
+    assert_has_diagnostic(
+        r#"
+            fn expectBool(x: Bool) -> Bool = x;
+            import std.list (len);
+            let wrong = expectBool(len([1, 2, 3]));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_string_builtin_signatures_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.string as string;
+            let size: Int = string.len("abc");
+            let ok: Bool = string.contains("abc", "a");
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_string_builtin_signatures_reject_wrong_annotation() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.string as string;
+            let wrong = expectInt(string.trim("abc"));
+        "#,
+        Severity::Error,
+        "type mismatch",
     );
 }
 
