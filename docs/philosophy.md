@@ -101,11 +101,11 @@ Do one thing well. Compose. Text is universal.
 
 | Area / 领域 | Status | Notes / 说明 |
 |------------|--------|-------------|
-| Language core / 语言核心 | ✅ Complete | Lexer, parser, HM + traits, evaluator / 词法、语法、HM + trait、求值器 |
-| Runtime / 运行时 | ✅ Complete | Lazy evaluation + TCO / 惰性求值 + 尾调用优化 |
-| Toolchain / 工具链 | ✅ Complete | REPL, formatter, diagnostics / REPL、格式化、诊断系统 |
+| Language core / 语言核心 | ⚠️ Broad but not fully converged | 语法表面较广，但 parser/lowering/typeck/eval 仍未完全收敛 |
+| Runtime / 运行时 | ⚠️ Partially converged | AST 与 HIR 运行时并存，效果边界仍未正式划清 |
+| Toolchain / 工具链 | ⚠️ Usable but uneven | REPL、formatter、diagnostics、LSP 已有基础，但语义一致性还在补 |
 | Package system / 包管理 | 🚧 In progress | Fetch/store/derive/builder integration / 获取、存储、派生、构建整合 |
-| OS integration / 系统集成 | 📋 Planned | System configuration modules / 系统配置模块 |
+| OS integration / 系统集成 | ⚠️ Prototype | System configuration modules exist in prototype form / 系统配置模块已有原型 |
 
 ### Focus Now / 当前重点
 
