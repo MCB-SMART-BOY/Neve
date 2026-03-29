@@ -409,6 +409,16 @@ fn test_typeck_lazy_predicates() {
     check_no_errors("let thunk = lazy 42; let x = isLazy(thunk); let y = isEvaluated(thunk);");
 }
 
+#[test]
+fn test_typeck_or_pattern_with_shared_binding() {
+    check_no_errors("let x = match (1, 2) { (0, v) | (1, v) -> v, _ -> 0 };");
+}
+
+#[test]
+fn test_typeck_binding_pattern() {
+    check_no_errors("let x = match 42 { n @ 42 -> n, _ -> 0 };");
+}
+
 // ============================================================================
 // 函数定义
 // ============================================================================

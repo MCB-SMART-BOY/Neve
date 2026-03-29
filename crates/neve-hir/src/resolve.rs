@@ -1253,6 +1253,59 @@ impl Resolver {
     /// Lower a pattern to HIR.
     /// 将模式降级为 HIR。
     fn lower_pattern(&mut self, pattern: &ast::Pattern) -> Pattern {
+        self.lower_pattern_with_bindings(pattern, None, true)
+    }
+
+    fn lower_pattern_binding(
+        &mut self,
+        name: &str,
+        shared_bindings: Option<&HashMap<String, LocalId>>,
+        expose_new_bindings: bool,
+    ) -> LocalId {
+        if let Some(shared) = shared_bindings
+            && let Some(id) = shared.get(name)
+        {
+            return *id;
+        }
+
+        if expose_new_bindings {
+            self.define_local(name.to_string())
+        } else {
+            self.fresh_local_id()
+        }
+    }
+
+    fn collect_pattern_bindings(pattern: &Pattern, bindings: &mut HashMap<String, LocalId>) {
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Literal(_) => {}
+            PatternKind::Var(id, name) | PatternKind::Binding(id, name, _) => {
+                bindings.insert(name.clone(), *id);
+                if let PatternKind::Binding(_, _, inner) = &pattern.kind {
+                    Self::collect_pattern_bindings(inner, bindings);
+                }
+            }
+            PatternKind::Tuple(patterns)
+            | PatternKind::List(patterns)
+            | PatternKind::Constructor(_, patterns)
+            | PatternKind::Or(patterns) => {
+                for pattern in patterns {
+                    Self::collect_pattern_bindings(pattern, bindings);
+                }
+            }
+            PatternKind::Record(fields) => {
+                for (_, pattern) in fields {
+                    Self::collect_pattern_bindings(pattern, bindings);
+                }
+            }
+        }
+    }
+
+    fn lower_pattern_with_bindings(
+        &mut self,
+        pattern: &ast::Pattern,
+        shared_bindings: Option<&HashMap<String, LocalId>>,
+        expose_new_bindings: bool,
+    ) -> Pattern {
         let span = pattern.span;
         let kind = match &pattern.kind {
             ast::PatternKind::Wildcard => PatternKind::Wildcard,
@@ -1261,7 +1314,11 @@ impl Resolver {
                 if ident.name == "_" {
                     PatternKind::Wildcard
                 } else {
-                    let id = self.define_local(ident.name.clone());
+                    let id = self.lower_pattern_binding(
+                        &ident.name,
+                        shared_bindings,
+                        expose_new_bindings,
+                    );
                     PatternKind::Var(id, ident.name.clone())
                 }
             }
@@ -1278,12 +1335,22 @@ impl Resolver {
             }
 
             ast::PatternKind::Tuple(patterns) => {
-                let patterns = patterns.iter().map(|p| self.lower_pattern(p)).collect();
+                let patterns = patterns
+                    .iter()
+                    .map(|p| {
+                        self.lower_pattern_with_bindings(p, shared_bindings, expose_new_bindings)
+                    })
+                    .collect();
                 PatternKind::Tuple(patterns)
             }
 
             ast::PatternKind::List(patterns) => {
-                let patterns = patterns.iter().map(|p| self.lower_pattern(p)).collect();
+                let patterns = patterns
+                    .iter()
+                    .map(|p| {
+                        self.lower_pattern_with_bindings(p, shared_bindings, expose_new_bindings)
+                    })
+                    .collect();
                 PatternKind::List(patterns)
             }
 
@@ -1294,9 +1361,19 @@ impl Resolver {
                         let pattern = f
                             .pattern
                             .as_ref()
-                            .map(|p| self.lower_pattern(p))
+                            .map(|p| {
+                                self.lower_pattern_with_bindings(
+                                    p,
+                                    shared_bindings,
+                                    expose_new_bindings,
+                                )
+                            })
                             .unwrap_or_else(|| {
-                                let id = self.define_local(f.name.name.clone());
+                                let id = self.lower_pattern_binding(
+                                    &f.name.name,
+                                    shared_bindings,
+                                    expose_new_bindings,
+                                );
                                 Pattern {
                                     kind: PatternKind::Var(id, f.name.name.clone()),
                                     span,
@@ -1313,25 +1390,42 @@ impl Resolver {
                     .first()
                     .and_then(|p| self.lookup_global(&p.name))
                     .unwrap_or(DefId(u32::MAX));
-                let args = args.iter().map(|p| self.lower_pattern(p)).collect();
+                let args = args
+                    .iter()
+                    .map(|p| {
+                        self.lower_pattern_with_bindings(p, shared_bindings, expose_new_bindings)
+                    })
+                    .collect();
                 PatternKind::Constructor(def_id, args)
             }
 
             ast::PatternKind::Or(patterns) => {
-                // For now, just use the first alternative
-                // 目前，只使用第一个选项
-                if let Some(first) = patterns.first() {
-                    return self.lower_pattern(first);
+                if let Some((first, rest)) = patterns.split_first() {
+                    let first = self.lower_pattern_with_bindings(
+                        first,
+                        shared_bindings,
+                        expose_new_bindings,
+                    );
+                    let mut bindings = HashMap::new();
+                    Self::collect_pattern_bindings(&first, &mut bindings);
+
+                    let mut lowered = Vec::with_capacity(patterns.len());
+                    lowered.push(first);
+                    lowered.extend(rest.iter().map(|pattern| {
+                        self.lower_pattern_with_bindings(pattern, Some(&bindings), false)
+                    }));
+                    PatternKind::Or(lowered)
+                } else {
+                    PatternKind::Wildcard
                 }
-                PatternKind::Wildcard
             }
 
             ast::PatternKind::Binding { name, pattern } => {
-                let id = self.define_local(name.name.clone());
-                let _inner = self.lower_pattern(pattern);
-                // For @ patterns, we bind the whole value
-                // 对于 @ 模式，我们绑定整个值
-                PatternKind::Var(id, name.name.clone())
+                let id =
+                    self.lower_pattern_binding(&name.name, shared_bindings, expose_new_bindings);
+                let inner =
+                    self.lower_pattern_with_bindings(pattern, shared_bindings, expose_new_bindings);
+                PatternKind::Binding(id, name.name.clone(), Box::new(inner))
             }
 
             _ => PatternKind::Wildcard,

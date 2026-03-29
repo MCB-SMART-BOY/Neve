@@ -903,6 +903,18 @@ fn test_eval_hir_lazy_predicates() {
 }
 
 #[test]
+fn test_eval_hir_or_pattern_with_shared_binding() {
+    let result = eval_source("let x = match (1, 2) { (0, v) | (1, v) -> v, _ -> 0 };");
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(2)));
+}
+
+#[test]
+fn test_eval_hir_binding_pattern() {
+    let result = eval_source("let x = match 42 { n @ 42 -> n + 1, _ -> 0 };");
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(43)));
+}
+
+#[test]
 fn test_eval_record_multiple_fields() {
     match eval_source("let x = #{ a = 1, b = 2, c = 3 };") {
         Ok(Value::Record(fields)) => {

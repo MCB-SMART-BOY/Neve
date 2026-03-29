@@ -900,6 +900,7 @@ impl Evaluator {
             match &pattern.kind {
                 PatternKind::Wildcard => 0,
                 PatternKind::Var(_, _) => 1,
+                PatternKind::Binding(_, _, pattern) => 1 + estimate_bindings(pattern),
                 PatternKind::Literal(_) => 0,
                 PatternKind::Tuple(patterns) | PatternKind::List(patterns) => {
                     patterns.iter().map(estimate_bindings).sum()
@@ -907,7 +908,7 @@ impl Evaluator {
                 PatternKind::Record(fields) => {
                     fields.iter().map(|(_, pat)| estimate_bindings(pat)).sum()
                 }
-                PatternKind::Constructor(_, patterns) => {
+                PatternKind::Constructor(_, patterns) | PatternKind::Or(patterns) => {
                     patterns.iter().map(estimate_bindings).sum()
                 }
             }
@@ -916,6 +917,11 @@ impl Evaluator {
         match &pattern.kind {
             PatternKind::Wildcard => Some(Vec::new()),
             PatternKind::Var(id, _) => Some(vec![(*id, value.clone())]),
+            PatternKind::Binding(id, _, pattern) => {
+                let mut bindings = self.match_pattern(pattern, value)?;
+                bindings.push((*id, value.clone()));
+                Some(bindings)
+            }
             PatternKind::Literal(lit) => {
                 let lit_val = self.eval_literal(lit);
                 if Self::values_equal(&lit_val, value) {
@@ -1007,6 +1013,14 @@ impl Evaluator {
                     ([p], Value::Err(v)) => self.match_pattern(p, v),
                     _ => None,
                 }
+            }
+            PatternKind::Or(patterns) => {
+                for pattern in patterns {
+                    if let Some(bindings) = self.match_pattern(pattern, value) {
+                        return Some(bindings);
+                    }
+                }
+                None
             }
         }
     }

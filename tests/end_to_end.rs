@@ -148,3 +148,29 @@ fn test_end_to_end_lazy_force_runtime_parity() {
         Value::Int(int(42)),
     );
 }
+
+#[test]
+fn test_end_to_end_or_pattern_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let x = match (1, 2) {
+            (0, v) | (1, v) -> v,
+            _ -> 0,
+        };
+        ",
+        Value::Int(int(2)),
+    );
+}
+
+#[test]
+fn test_end_to_end_binding_pattern_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let x = match 42 {
+            n @ 42 -> n + 1,
+            _ -> 0,
+        };
+        ",
+        Value::Int(int(43)),
+    );
+}
