@@ -7,12 +7,12 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::errors::{
-    TypeMismatchError, format_type, missing_assoc_type, missing_method, unbound_variable,
-    unused_variable,
+    format_type, missing_assoc_type, missing_method, unbound_variable, unused_variable,
+    TypeMismatchError,
 };
 use crate::infer::InferContext;
 use crate::traits::{ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
-use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify};
+use crate::unify::{free_type_vars, generalize, instantiate, unify, Substitution};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{
@@ -661,7 +661,7 @@ impl TypeChecker {
         }
     }
 
-    fn check_fn(&mut self, _id: DefId, fn_def: &FnDef) {
+    fn check_fn(&mut self, id: DefId, fn_def: &FnDef) {
         // Create fresh type variables for generic parameters
         let mut generic_vars: HashMap<String, Ty> = HashMap::new();
         for (idx, param) in fn_def.generics.iter().enumerate() {
@@ -672,8 +672,10 @@ impl TypeChecker {
 
         // Bind parameter types (resolving generic references)
         // Parameters are considered used by default (they're part of the function signature)
+        let mut param_tys = Vec::with_capacity(fn_def.params.len());
         for param in &fn_def.params {
             let ty = self.resolve_type_with_generics(&param.ty, &generic_vars);
+            param_tys.push(ty.clone());
             self.locals.insert(
                 param.id,
                 LocalInfo {
@@ -693,11 +695,34 @@ impl TypeChecker {
         if !self.unify(&body_ty, &ret_ty, fn_def.body.span) {
             // Emit a more detailed error
             self.emit(
-                TypeMismatchError::new(ret_ty, body_ty, fn_def.body.span)
+                TypeMismatchError::new(ret_ty.clone(), body_ty.clone(), fn_def.body.span)
                     .with_context("function return type")
                     .build(),
             );
         }
+
+        // Refine the global type after body checking so later items in the same
+        // module can see the actual inferred type instead of the placeholder signature.
+        let refined_ret_ty = self.apply(&ret_ty);
+        let refined_param_tys: Vec<Ty> = param_tys.iter().map(|ty| self.apply(ty)).collect();
+        let refined_global_ty = if refined_param_tys.is_empty() {
+            refined_ret_ty
+        } else {
+            Ty {
+                kind: TyKind::Fn(refined_param_tys, Box::new(refined_ret_ty)),
+                span: Span::DUMMY,
+            }
+        };
+        let refined_global_ty = if fn_def.generics.is_empty() {
+            refined_global_ty
+        } else {
+            let params: Vec<String> = fn_def.generics.iter().map(|g| g.name.clone()).collect();
+            Ty {
+                kind: TyKind::Forall(params, Box::new(refined_global_ty)),
+                span: Span::DUMMY,
+            }
+        };
+        self.globals.insert(id, refined_global_ty);
 
         // Check for unused variables before clearing
         self.check_unused_locals();
