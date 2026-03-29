@@ -1,6 +1,6 @@
 //! Integration tests for neve-hir crate.
 
-use neve_hir::{BinOp, ExprKind, ItemKind, lower};
+use neve_hir::{BinOp, ExprKind, ItemKind, PatternKind, lower};
 use neve_parser::parse;
 
 #[test]
@@ -151,6 +151,72 @@ fn test_lower_record() {
                 assert_eq!(fields.len(), 2);
             }
             other => panic!("expected Record, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
+fn test_lower_or_pattern_preserves_shared_binding_ids() {
+    let source = "let x = match (1, 2) { (0, v) | (1, v) -> v, _ -> 0 };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Match(_, arms) => match &arms[0].pattern.kind {
+                PatternKind::Or(patterns) => {
+                    assert_eq!(patterns.len(), 2);
+                    match (&patterns[0].kind, &patterns[1].kind) {
+                        (PatternKind::Tuple(lhs), PatternKind::Tuple(rhs)) => {
+                            match (&lhs[1].kind, &rhs[1].kind) {
+                                (
+                                    PatternKind::Var(lhs_id, lhs_name),
+                                    PatternKind::Var(rhs_id, rhs_name),
+                                ) => {
+                                    assert_eq!(lhs_name, "v");
+                                    assert_eq!(rhs_name, "v");
+                                    assert_eq!(
+                                        lhs_id, rhs_id,
+                                        "or-pattern alternatives must reuse the same LocalId"
+                                    );
+                                }
+                                other => {
+                                    panic!("expected shared variable bindings, got {:?}", other)
+                                }
+                            }
+                        }
+                        other => panic!("expected tuple alternatives, got {:?}", other),
+                    }
+                }
+                other => panic!("expected Or pattern, got {:?}", other),
+            },
+            other => panic!("expected Match, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
+fn test_lower_binding_pattern_preserves_inner_pattern() {
+    let source = "let x = match 42 { n @ 42 -> n, _ -> 0 };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Match(_, arms) => match &arms[0].pattern.kind {
+                PatternKind::Binding(_, name, inner) => {
+                    assert_eq!(name, "n");
+                    assert!(matches!(inner.kind, PatternKind::Literal(_)));
+                }
+                other => panic!("expected Binding pattern, got {:?}", other),
+            },
+            other => panic!("expected Match, got {:?}", other),
         },
         _ => panic!("expected function"),
     }

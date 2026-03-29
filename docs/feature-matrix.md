@@ -69,8 +69,8 @@
 | Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明和部分完整性检查存在，但还不能视为完全闭环 |
 | 关联类型（声明与完整性） | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明层有，真实 use-site 语义仍需补完 |
 | 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 目前更像语法糖，不是稳定的一等方法语义 |
-| Or pattern `a | b` | ✅ | ⚠️ | ⚠️ | ✅ | ⚠️ | AST 路径可表达，HIR lowering 当前会丢语义 |
-| Binding pattern `x @ pat` | ✅ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | AST 路径可用，lowering 后语义不保真 |
+| Or pattern `a | b` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | HIR lowering/typecheck/runtime 已收敛，工具链覆盖仍需继续补齐 |
+| Binding pattern `x @ pat` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `name @ pattern` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | List rest pattern `[x, ..xs]` | ✅ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | parser 接受，但 canonical 路径未完成收敛 |
 | 记录模式匹配 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 语言形态存在，编译器级检查不足 |
 | Match 穷尽性检查 | N/A | N/A | ❌ | N/A | N/A | ❌ | 诊断函数已存在，但主流程还没真正接上 |

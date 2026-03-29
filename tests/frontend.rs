@@ -57,3 +57,18 @@ fn test_frontend_accepts_lazy_force_pipeline() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_or_and_binding_patterns() {
+    let result = analyze_source(
+        r#"
+            let a = match (1, 2) { (0, v) | (1, v) -> v, _ -> 0 };
+            let b = match 42 { n @ 42 -> n, _ -> 0 };
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

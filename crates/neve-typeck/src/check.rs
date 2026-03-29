@@ -1228,12 +1228,50 @@ impl TypeChecker {
         self.unify(&body_ty, result_ty, arm.body.span);
     }
 
+    fn pattern_binding_ids(pattern: &Pattern, bindings: &mut Vec<LocalId>) {
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Literal(_) => {}
+            PatternKind::Var(local_id, _) => bindings.push(*local_id),
+            PatternKind::Binding(local_id, _, inner) => {
+                bindings.push(*local_id);
+                Self::pattern_binding_ids(inner, bindings);
+            }
+            PatternKind::Tuple(patterns)
+            | PatternKind::List(patterns)
+            | PatternKind::Constructor(_, patterns)
+            | PatternKind::Or(patterns) => {
+                for pattern in patterns {
+                    Self::pattern_binding_ids(pattern, bindings);
+                }
+            }
+            PatternKind::Record(fields) => {
+                for (_, pattern) in fields {
+                    Self::pattern_binding_ids(pattern, bindings);
+                }
+            }
+        }
+    }
+
+    fn pattern_binding_signature(pattern: &Pattern) -> Vec<u32> {
+        let mut bindings = Vec::new();
+        Self::pattern_binding_ids(pattern, &mut bindings);
+        let mut ids: Vec<u32> = bindings.into_iter().map(|id| id.0).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+
     fn check_pattern(&mut self, pattern: &Pattern, expected: &Ty) {
         match &pattern.kind {
             PatternKind::Wildcard => {}
 
             PatternKind::Var(local_id, name) => {
                 self.define_local(*local_id, name.clone(), expected.clone(), pattern.span);
+            }
+
+            PatternKind::Binding(local_id, name, inner) => {
+                self.define_local(*local_id, name.clone(), expected.clone(), pattern.span);
+                self.check_pattern(inner, expected);
             }
 
             PatternKind::Literal(lit) => {
@@ -1311,6 +1349,32 @@ impl TypeChecker {
                         self.check_pattern(pat, &arg_ty);
                     }
                 }
+            }
+
+            PatternKind::Or(patterns) => {
+                let saved_locals = self.locals.clone();
+                let mut first_signature = None;
+                let mut merged_locals = None;
+
+                for pattern in patterns {
+                    self.locals = saved_locals.clone();
+                    self.check_pattern(pattern, expected);
+
+                    let signature = Self::pattern_binding_signature(pattern);
+                    if let Some(first) = &first_signature {
+                        if first != &signature {
+                            self.error(
+                                pattern.span,
+                                "or-pattern alternatives must bind the same variables",
+                            );
+                        }
+                    } else {
+                        first_signature = Some(signature);
+                        merged_locals = Some(self.locals.clone());
+                    }
+                }
+
+                self.locals = merged_locals.unwrap_or(saved_locals);
             }
         }
     }

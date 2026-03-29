@@ -771,6 +771,8 @@ pub enum PatternKind {
     Wildcard,
     /// Variable binding. / 变量绑定。
     Var(LocalId, String),
+    /// Binding pattern (`name @ pattern`). / 绑定模式（`name @ pattern`）。
+    Binding(LocalId, String, Box<Pattern>),
     /// Literal pattern. / 字面量模式。
     Literal(Literal),
     /// Tuple pattern. / 元组模式。
@@ -781,6 +783,8 @@ pub enum PatternKind {
     Record(Vec<(String, Pattern)>),
     /// Constructor pattern. / 构造器模式。
     Constructor(DefId, Vec<Pattern>),
+    /// Or pattern (`a | b`). / Or 模式（`a | b`）。
+    Or(Vec<Pattern>),
 }
 
 /// HIR statement.
