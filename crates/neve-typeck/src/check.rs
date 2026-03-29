@@ -303,8 +303,111 @@ impl TypeChecker {
                 }
 
                 self.check_assoc_type_bounds(&trait_info, &impl_info);
+                self.check_impl_method_signatures(&trait_info, &impl_info);
             }
         }
+    }
+
+    fn check_impl_method_signatures(&mut self, trait_info: &TraitInfo, impl_info: &ImplInfo) {
+        for trait_method in &trait_info.methods {
+            let Some(impl_method) = impl_info
+                .methods
+                .iter()
+                .find(|method| method.name == trait_method.name)
+            else {
+                continue;
+            };
+
+            let params_match = trait_method.params.len() == impl_method.params.len()
+                && trait_method
+                    .params
+                    .iter()
+                    .zip(impl_method.params.iter())
+                    .all(|(expected, actual)| self.method_signature_ty_compatible(expected, actual));
+            let return_match = self.method_signature_ty_compatible(
+                &trait_method.return_ty,
+                &impl_method.return_ty,
+            );
+
+            if params_match && return_match {
+                continue;
+            }
+
+            let expected_signature =
+                Self::format_method_signature(&trait_method.params, &trait_method.return_ty);
+            let actual_signature =
+                Self::format_method_signature(&impl_method.params, &impl_method.return_ty);
+            self.diagnostics.push(
+                Diagnostic::error(
+                    DiagnosticKind::Type,
+                    impl_method.span,
+                    format!(
+                        "impl method `{}` does not match trait `{}` signature",
+                        impl_method.name, trait_info.name
+                    ),
+                )
+                .with_note(format!("trait expects {expected_signature}"))
+                .with_note(format!("impl provides {actual_signature}")),
+            );
+        }
+    }
+
+    fn method_signature_ty_compatible(&self, expected: &Ty, actual: &Ty) -> bool {
+        let expected = self.apply(expected);
+        let actual = self.apply(actual);
+
+        match (&expected.kind, &actual.kind) {
+            (TyKind::Unknown, _) | (_, TyKind::Unknown) => true,
+            (TyKind::Var(_), _) | (_, TyKind::Var(_)) => true,
+            (TyKind::Param(_, _), _) | (_, TyKind::Param(_, _)) => true,
+            (TyKind::Int, TyKind::Int)
+            | (TyKind::Float, TyKind::Float)
+            | (TyKind::Bool, TyKind::Bool)
+            | (TyKind::Char, TyKind::Char)
+            | (TyKind::String, TyKind::String)
+            | (TyKind::Unit, TyKind::Unit) => true,
+            (TyKind::Named(left_id, left_args), TyKind::Named(right_id, right_args)) => {
+                left_id == right_id
+                    && left_args.len() == right_args.len()
+                    && left_args
+                        .iter()
+                        .zip(right_args.iter())
+                        .all(|(left, right)| self.method_signature_ty_compatible(left, right))
+            }
+            (TyKind::Fn(left_params, left_ret), TyKind::Fn(right_params, right_ret)) => {
+                left_params.len() == right_params.len()
+                    && left_params
+                        .iter()
+                        .zip(right_params.iter())
+                        .all(|(left, right)| self.method_signature_ty_compatible(left, right))
+                    && self.method_signature_ty_compatible(left_ret, right_ret)
+            }
+            (TyKind::Tuple(left), TyKind::Tuple(right)) => {
+                left.len() == right.len()
+                    && left
+                        .iter()
+                        .zip(right.iter())
+                        .all(|(left, right)| self.method_signature_ty_compatible(left, right))
+            }
+            (TyKind::Record(left_fields), TyKind::Record(right_fields)) => {
+                left_fields.len() == right_fields.len()
+                    && left_fields.iter().zip(right_fields.iter()).all(
+                        |((left_name, left_ty), (right_name, right_ty))| {
+                            left_name == right_name
+                                && self.method_signature_ty_compatible(left_ty, right_ty)
+                        },
+                    )
+            }
+            (TyKind::Forall(_, left), TyKind::Forall(_, right)) => {
+                self.method_signature_ty_compatible(left, right)
+            }
+            _ => false,
+        }
+    }
+
+    fn format_method_signature(params: &[Ty], ret: &Ty) -> String {
+        let params = params.iter().map(format_type).collect::<Vec<_>>().join(", ");
+        format!("({params}) -> {}", format_type(ret))
     }
 
     /// Get the trait resolver (for external use).

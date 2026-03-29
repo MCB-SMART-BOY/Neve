@@ -68,7 +68,7 @@
 | 错误传播 `?` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 已对齐并支持 Option/Result-like enum，以及 `std.option` / `std.result` builtin；完整类型与 effect 语义仍需继续收敛 |
 | Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明和部分完整性检查存在，但还不能视为完全闭环 |
 | 关联类型（声明与完整性） | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明层有，真实 use-site 语义仍需补完 |
-| 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 都已可执行方法调用，CLI 主路径已优先走 HIR，impl 方法体也开始进入 typecheck；但 trait 签名一致性、关联类型 use-site 与完整方法模型仍需继续收敛 |
+| 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 都已可执行方法调用，CLI 主路径已优先走 HIR，impl 方法体与 trait impl 签名一致性也开始进入 typecheck；但关联类型 use-site 与完整方法模型仍需继续收敛 |
 | Or pattern `a | b` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | HIR lowering/typecheck/runtime 已收敛，工具链覆盖仍需继续补齐 |
 | Binding pattern `x @ pat` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `name @ pattern` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | List rest pattern `[x, ..xs]` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `init/rest/tail` 语义已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
