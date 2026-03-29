@@ -267,3 +267,17 @@ fn test_end_to_end_method_call_fallback_runtime_parity() {
         Value::Int(int(42)),
     );
 }
+
+#[test]
+fn test_end_to_end_trait_method_runtime_parity() {
+    assert_runtime_parity(
+        "
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let x = 21.twice();
+        ",
+        Value::Int(int(42)),
+    );
+}

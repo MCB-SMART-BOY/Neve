@@ -57,6 +57,9 @@ struct Binding {
 pub struct AstEnv {
     /// Variable bindings in this scope / 此作用域中的变量绑定
     bindings: HashMap<String, Binding>,
+    /// Method bindings keyed by runtime type + method name.
+    /// 按运行时类型 + 方法名索引的方法绑定。
+    methods: HashMap<String, Binding>,
     /// Parent scope / 父作用域
     parent: Option<Rc<AstEnv>>,
 }
@@ -91,6 +94,7 @@ impl AstEnv {
     pub fn child(parent: Rc<AstEnv>) -> Self {
         Self {
             bindings: HashMap::new(),
+            methods: HashMap::new(),
             parent: Some(parent),
         }
     }
@@ -135,6 +139,34 @@ impl AstEnv {
             return parent.get(name);
         }
         None
+    }
+
+    /// Define a method binding with explicit visibility.
+    /// 定义具有显式可见性的方法绑定。
+    pub fn define_method_with_visibility(&mut self, key: String, value: Value, is_public: bool) {
+        self.methods.insert(key, Binding { value, is_public });
+    }
+
+    /// Look up a method binding by dispatch key.
+    /// 通过分派键查找方法绑定。
+    pub fn get_method(&self, key: &str) -> Option<Value> {
+        if let Some(binding) = self.methods.get(key) {
+            return Some(binding.value.clone());
+        }
+        if let Some(parent) = &self.parent {
+            return parent.get_method(key);
+        }
+        None
+    }
+
+    /// Get only public method bindings in this environment.
+    /// 获取当前环境中的公开方法绑定。
+    pub fn public_methods(&self) -> HashMap<String, Value> {
+        self.methods
+            .iter()
+            .filter(|(_, binding)| binding.is_public)
+            .map(|(name, binding)| (name.clone(), binding.value.clone()))
+            .collect()
     }
 
     /// Get all bindings in this environment (not including parent).
@@ -453,6 +485,24 @@ impl AstEvaluator {
                 }
                 Ok(Value::Unit)
             }
+            ItemKind::Impl(impl_def) => {
+                let target_key = ast_type_key(&impl_def.target);
+                for item in &impl_def.items {
+                    let method_key = method_dispatch_key(&target_key, &item.name.name);
+                    let method = AstClosure {
+                        name: Some(item.name.name.clone()),
+                        params: item.params.clone(),
+                        body: item.body.clone(),
+                        env: self.env.clone(),
+                    };
+                    Rc::make_mut(&mut self.env).define_method_with_visibility(
+                        method_key,
+                        Value::AstClosure(Rc::new(method)),
+                        true,
+                    );
+                }
+                Ok(Value::Unit)
+            }
             _ => Ok(Value::Unit),
         }
     }
@@ -608,6 +658,9 @@ impl AstEvaluator {
         import_def: &ImportDef,
     ) -> Result<(), EvalError> {
         let is_public = import_def.visibility == Visibility::Public;
+        for (name, value) in module_env.public_methods() {
+            Rc::make_mut(&mut self.env).define_method_with_visibility(name, value, is_public);
+        }
         match &import_def.items {
             ImportItems::Module => {
                 // Import the module as a namespace
@@ -769,8 +822,14 @@ impl AstEvaluator {
                     all_args.push(self.eval_expr(arg)?);
                 }
 
-                // Look up method as a function
-                if let Some(func) = self.env.get(&method.name) {
+                let dispatch_key = method_dispatch_key(
+                    &runtime_type_key(&all_args[0]),
+                    &method.name,
+                );
+
+                if let Some(func) = self.env.get_method(&dispatch_key) {
+                    self.apply(func, all_args)
+                } else if let Some(func) = self.env.get(&method.name) {
                     self.apply(func, all_args)
                 } else {
                     Err(EvalError::TypeError(format!(
@@ -2225,6 +2284,51 @@ pub struct AstClosure {
     pub body: Expr,
     /// Captured environment / 捕获的环境
     pub env: Rc<AstEnv>,
+}
+
+fn method_dispatch_key(type_key: &str, method_name: &str) -> String {
+    format!("{type_key}::{method_name}")
+}
+
+fn ast_type_key(ty: &Type) -> String {
+    match &ty.kind {
+        TypeKind::Named { path, .. } => path
+            .last()
+            .map(|ident| ident.name.clone())
+            .unwrap_or_else(|| "Unknown".to_string()),
+        TypeKind::Function { .. } => "Fn".to_string(),
+        TypeKind::Tuple(items) => format!("Tuple({})", items.len()),
+        TypeKind::Record(_) => "Record".to_string(),
+        TypeKind::Unit => "()".to_string(),
+        TypeKind::Infer => "Unknown".to_string(),
+    }
+}
+
+fn runtime_type_key(value: &Value) -> String {
+    match value {
+        Value::Int(_) => "Int".to_string(),
+        Value::Float(_) => "Float".to_string(),
+        Value::Bool(_) => "Bool".to_string(),
+        Value::Char(_) => "Char".to_string(),
+        Value::String(_) => "String".to_string(),
+        Value::Unit => "()".to_string(),
+        Value::List(_) => "List".to_string(),
+        Value::Tuple(items) => format!("Tuple({})", items.len()),
+        Value::Record(_) => "Record".to_string(),
+        Value::Map(_) => "Map".to_string(),
+        Value::Set(_) => "Set".to_string(),
+        Value::Closure { .. } | Value::AstClosure(_) | Value::Builtin(_) | Value::BuiltinFn(_, _) => {
+            "Fn".to_string()
+        }
+        Value::Variant(name, _) | Value::VariantCtor { name, .. } => match name.as_str() {
+            "Some" | "None" => "Option".to_string(),
+            "Ok" | "Err" => "Result".to_string(),
+            _ => format!("Variant({name})"),
+        },
+        Value::Some(_) | Value::None => "Option".to_string(),
+        Value::Ok(_) | Value::Err(_) => "Result".to_string(),
+        Value::Thunk(_) => "Thunk".to_string(),
+    }
 }
 
 fn pattern_name(pattern: &Pattern) -> String {
