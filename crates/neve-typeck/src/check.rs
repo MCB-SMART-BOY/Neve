@@ -22,6 +22,34 @@ use neve_hir::{
 };
 use std::collections::HashMap;
 
+const BUILTIN_LIST_TYPE_ID: DefId = DefId(u32::MAX);
+
+fn builtin_ty(kind: TyKind, span: Span) -> Ty {
+    Ty { kind, span }
+}
+
+fn builtin_param(idx: u32, name: &str, span: Span) -> Ty {
+    builtin_ty(TyKind::Param(idx, name.to_string()), span)
+}
+
+fn builtin_fn(params: Vec<Ty>, ret: Ty, span: Span) -> Ty {
+    builtin_ty(TyKind::Fn(params, Box::new(ret)), span)
+}
+
+fn builtin_forall(params: Vec<&str>, body: Ty, span: Span) -> Ty {
+    builtin_ty(
+        TyKind::Forall(
+            params.into_iter().map(|param| param.to_string()).collect(),
+            Box::new(body),
+        ),
+        span,
+    )
+}
+
+fn builtin_list(elem: Ty, span: Span) -> Ty {
+    builtin_ty(TyKind::Named(BUILTIN_LIST_TYPE_ID, vec![elem]), span)
+}
+
 /// Information about a local variable.
 /// 局部变量的信息。
 #[derive(Clone)]
@@ -449,15 +477,6 @@ impl TypeChecker {
     }
 
     fn builtin_type(&mut self, name: &str, span: Span) -> Option<Ty> {
-        if name.contains('.') {
-            // Std/module-qualified builtins are lowered into `Builtin(...)` but do not yet
-            // have canonical signature metadata. Keep the type checker permissive here so
-            // frontend/HIR can execute them while tighter builtin typing is added later.
-            // 标准库/模块限定 builtin 目前还没有统一签名元数据，这里先保守放宽，
-            // 让 frontend/HIR 主路径可以执行，后续再补精确类型。
-            return Some(self.fresh_var());
-        }
-
         let polymorphic = match name {
             "force" => Ty {
                 kind: TyKind::Forall(
@@ -497,6 +516,192 @@ impl TypeChecker {
                 ),
                 span,
             },
+            "list.empty" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(Vec::from(["a"]), builtin_list(a, span), span)
+            }
+            "list.singleton" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a.clone()], builtin_list(a, span), span),
+                    span,
+                )
+            }
+            "list.len" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_list(a, span)],
+                        builtin_ty(TyKind::Int, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.isEmpty" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_list(a, span)],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.tail" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_list(a.clone(), span)],
+                        builtin_list(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.append" => {
+                let a = builtin_param(0, "a", span);
+                let list_a = builtin_list(a.clone(), span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![list_a.clone(), list_a.clone()], list_a, span),
+                    span,
+                )
+            }
+            "list.map" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(
+                        vec![
+                            builtin_fn(vec![a.clone()], b.clone(), span),
+                            builtin_list(a, span),
+                        ],
+                        builtin_list(b, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.filter" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![
+                            builtin_fn(vec![a.clone()], builtin_ty(TyKind::Bool, span), span),
+                            builtin_list(a.clone(), span),
+                        ],
+                        builtin_list(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.fold" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(
+                        vec![
+                            b.clone(),
+                            builtin_fn(vec![b.clone(), a.clone()], b.clone(), span),
+                            builtin_list(a, span),
+                        ],
+                        b,
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.range" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span), builtin_ty(TyKind::Int, span)],
+                builtin_list(builtin_ty(TyKind::Int, span), span),
+                span,
+            ),
+            "string.len" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "string.split" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_list(builtin_ty(TyKind::String, span), span),
+                span,
+            ),
+            "string.join" => builtin_fn(
+                vec![
+                    builtin_list(builtin_ty(TyKind::String, span), span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "string.trim" | "string.upper" | "string.lower" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "string.contains" | "string.startsWith" | "string.endsWith" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "string.replace" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "string.substring" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::Int, span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "string.isEmpty" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "string.repeat" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "string.lines" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_list(builtin_ty(TyKind::String, span), span),
+                span,
+            ),
+            "string.chars" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_list(builtin_ty(TyKind::Char, span), span),
+                span,
+            ),
+            _ if name.contains('.') => return Some(self.fresh_var()),
             _ => return None,
         };
 
@@ -1190,11 +1395,7 @@ impl TypeChecker {
                     let item_ty = self.infer_expr(item);
                     self.unify(&elem_ty, &item_ty, item.span);
                 }
-                // For now, represent List<T> as a named type
-                Ty {
-                    kind: TyKind::Named(DefId(u32::MAX), vec![self.apply(&elem_ty)]),
-                    span,
-                }
+                builtin_list(self.apply(&elem_ty), span)
             }
 
             ExprKind::Tuple(items) => {
@@ -1462,10 +1663,7 @@ impl TypeChecker {
                 for generator in generators {
                     let iter_ty = self.infer_expr(&generator.iter);
                     let elem_ty = self.fresh_var();
-                    let list_ty = Ty {
-                        kind: TyKind::Named(DefId(u32::MAX), vec![elem_ty.clone()]),
-                        span: generator.span,
-                    };
+                    let list_ty = builtin_list(elem_ty.clone(), generator.span);
                     self.unify(&iter_ty, &list_ty, generator.iter.span);
                     self.check_pattern(&generator.pattern, &elem_ty);
                     if let Some(condition) = &generator.condition {
@@ -1481,10 +1679,7 @@ impl TypeChecker {
                     }
                 }
                 let body_ty = self.infer_expr(body);
-                Ty {
-                    kind: TyKind::Named(DefId(u32::MAX), vec![self.apply(&body_ty)]),
-                    span,
-                }
+                builtin_list(self.apply(&body_ty), span)
             }
 
             ExprKind::Error(message) => {
@@ -1701,10 +1896,7 @@ impl TypeChecker {
 
             PatternKind::List(patterns) => {
                 let elem_ty = self.fresh_var();
-                let list_ty = Ty {
-                    kind: TyKind::Named(DefId(u32::MAX), vec![elem_ty.clone()]),
-                    span: pattern.span,
-                };
+                let list_ty = builtin_list(elem_ty.clone(), pattern.span);
                 self.unify(&list_ty, expected, pattern.span);
                 for pat in patterns {
                     self.check_pattern(pat, &elem_ty);
@@ -1713,10 +1905,7 @@ impl TypeChecker {
 
             PatternKind::ListRest { init, rest, tail } => {
                 let elem_ty = self.fresh_var();
-                let list_ty = Ty {
-                    kind: TyKind::Named(DefId(u32::MAX), vec![elem_ty.clone()]),
-                    span: pattern.span,
-                };
+                let list_ty = builtin_list(elem_ty.clone(), pattern.span);
                 self.unify(&list_ty, expected, pattern.span);
                 for pat in init {
                     self.check_pattern(pat, &elem_ty);
