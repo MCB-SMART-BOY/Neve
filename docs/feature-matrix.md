@@ -84,7 +84,7 @@
 |-------------|------|----------|
 | `neve check` | ⚠️ 可用 | 类型检查能跑，但还不是编译器级闭环 |
 | `neve eval` | ⚠️ 可用 | 无 `import` 输入已默认走 frontend/HIR；含模块导入时仍回退 AST，所以还不是完全统一的 canonical path |
-| `neve run` | ⚠️ 可用 | 运行路径与类型/语义主线还未完全统一 |
+| `neve run` | ⚠️ 可用 | 无 `std` 导入的模块图已可走 HIR；含 `std` 导入和 direct fallback 场景仍走 AST，因此还不是完全统一的 canonical path |
 | REPL | ⚠️ 可用 | 交互有了，但类型查询和语义一致性不足 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，但功能完整性与一致性仍在补 |

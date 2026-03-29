@@ -131,6 +131,12 @@ impl Evaluator {
         self
     }
 
+    /// Replace statically resolved method call targets.
+    /// 替换静态解析得到的方法调用目标。
+    pub fn set_method_resolutions(&mut self, method_resolutions: HashMap<Span, DefId>) {
+        self.method_resolutions = method_resolutions;
+    }
+
     /// Create an evaluator with built-in functions.
     /// 创建一个带有内置函数的求值器。
     pub fn with_builtins() -> Self {

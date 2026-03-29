@@ -2,37 +2,80 @@
 //! `neve run` 命令。
 
 use crate::{commands::module_graph, output};
-use neve_diagnostic::emit;
-use neve_eval::{AstEvaluator, EvalError, Value};
+use neve_diagnostic::{Severity, emit};
+use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_hir::{ModuleId, ModuleLoadError, ModuleLoader};
-use neve_parser::parse;
 use neve_std::std_module_overrides;
+use neve_syntax::{ItemKind, SourceFile};
+use neve_typeck::TypeChecker;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone)]
 struct ParsedModule {
     id: ModuleId,
     file_path: PathBuf,
     module_path: Vec<String>,
-    ast: neve_syntax::SourceFile,
+    ast: SourceFile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunBackend {
+    FrontendHir,
+    AstFallback,
 }
 
 /// Run a Neve file.
 /// 运行 Neve 文件。
 pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let path = Path::new(file);
-    let (root_dir, module_path) = module_graph::resolve_module_path(path)?;
+    let (backend, value) = run_value(path, verbose)?;
+
+    if verbose {
+        output::info(match backend {
+            RunBackend::FrontendHir => "Run backend: frontend/HIR",
+            RunBackend::AstFallback => "Run backend: AST fallback",
+        });
+    }
+
+    if !matches!(value, Value::Unit) {
+        output::success(&format!("{value:?}"));
+    }
+
+    Ok(())
+}
+
+fn run_value(file: &Path, verbose: bool) -> Result<(RunBackend, Value), String> {
+    let (root_dir, module_path) = module_graph::resolve_module_path(file)?;
 
     let mut loader = ModuleLoader::new(&root_dir);
     let root_id = match loader.load_module(&module_path) {
         Ok(id) => id,
         Err(ModuleLoadError::NotFound(missing)) if is_std_module_path(&missing) => {
-            return run_direct(path, &root_dir, &module_path, verbose);
+            return run_direct_value(file, &root_dir, &module_path, verbose);
         }
         Err(e) => return Err(format!("module load error: {e}")),
     };
 
+    let parsed_modules = collect_parsed_modules(&loader, &root_dir, verbose)?;
+    if parsed_modules
+        .iter()
+        .any(|module| source_file_uses_std_imports(&module.ast))
+    {
+        let value = eval_modules_via_ast(&parsed_modules, root_id, &root_dir)?;
+        return Ok((RunBackend::AstFallback, value));
+    }
+
+    let value = eval_modules_via_hir(&loader, root_id)?;
+    Ok((RunBackend::FrontendHir, value))
+}
+
+fn collect_parsed_modules(
+    loader: &ModuleLoader,
+    root_dir: &Path,
+    verbose: bool,
+) -> Result<Vec<ParsedModule>, String> {
     let mut parse_errors = 0usize;
     let mut parsed_modules = Vec::new();
 
@@ -44,8 +87,6 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         let source = fs::read_to_string(&info.file_path)
             .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
 
-        // Reuse cached parse diagnostics from the module loader.
-        // 复用模块加载器缓存的解析诊断。
         let parse_diagnostics = loader.parsed_diagnostics(*module_id).unwrap_or(&[]);
         for diag in parse_diagnostics {
             emit(&source, &info.file_path.display().to_string(), diag);
@@ -61,10 +102,16 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         };
 
         if verbose {
+            let display_path = info
+                .file_path
+                .strip_prefix(root_dir)
+                .unwrap_or(&info.file_path)
+                .display()
+                .to_string();
             output::info(&format!(
                 "Parsed {} items in {}",
                 ast.items.len(),
-                info.file_path.display()
+                display_path
             ));
         }
 
@@ -81,17 +128,25 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         return Err("parse error".to_string());
     }
 
+    Ok(parsed_modules)
+}
+
+fn eval_modules_via_ast(
+    parsed_modules: &[ParsedModule],
+    root_id: ModuleId,
+    root_dir: &Path,
+) -> Result<Value, String> {
     let std_overrides = std_module_overrides();
     let mut module_cache = HashMap::new();
     let mut root_value = Value::Unit;
 
     for parsed in parsed_modules {
-        let base_dir = parsed.file_path.parent().unwrap_or(&root_dir).to_path_buf();
+        let base_dir = parsed.file_path.parent().unwrap_or(root_dir).to_path_buf();
 
         let mut evaluator = AstEvaluator::new()
             .with_module_overrides(std_overrides.clone())
             .with_base_path(base_dir)
-            .with_module_loader(ModuleLoader::new(&root_dir))
+            .with_module_loader(ModuleLoader::new(root_dir))
             .with_module_path(parsed.module_path.clone())
             .with_loaded_modules(module_cache);
 
@@ -121,23 +176,91 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         }
     }
 
-    if !matches!(root_value, Value::Unit) {
-        output::success(&format!("{root_value:?}"));
-    }
-
-    Ok(())
+    Ok(root_value)
 }
 
-fn run_direct(
+fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Value, String> {
+    let mut global_types = HashMap::new();
+    let mut global_spans = HashMap::new();
+
+    for module_id in loader.load_order() {
+        let Some(module) = loader.hir_module(*module_id) else {
+            continue;
+        };
+        let (types, spans) = TypeChecker::collect_signatures(module);
+        global_types.extend(types);
+        global_spans.extend(spans);
+    }
+
+    let mut had_errors = false;
+    let mut module_method_resolutions = HashMap::new();
+
+    for module_id in loader.load_order() {
+        let Some(module) = loader.hir_module(*module_id) else {
+            continue;
+        };
+        let Some(info) = loader.get_module(*module_id) else {
+            continue;
+        };
+
+        let source = fs::read_to_string(&info.file_path)
+            .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
+
+        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
+        checker.check(module);
+        let method_resolutions = checker.method_resolutions().clone();
+        let diagnostics = checker.diagnostics();
+
+        for diag in diagnostics {
+            emit(&source, &info.file_path.display().to_string(), &diag);
+            if diag.severity == Severity::Error {
+                had_errors = true;
+            }
+        }
+
+        module_method_resolutions.insert(*module_id, method_resolutions);
+    }
+
+    if had_errors {
+        return Err("type error".to_string());
+    }
+
+    let mut evaluator = Evaluator::new();
+    let mut root_value = Value::Unit;
+
+    for module_id in loader.load_order() {
+        let Some(module) = loader.hir_module(*module_id) else {
+            continue;
+        };
+
+        evaluator.set_method_resolutions(
+            module_method_resolutions
+                .remove(module_id)
+                .unwrap_or_default(),
+        );
+
+        let value = evaluator
+            .eval_module(module)
+            .map_err(|e| format!("evaluation error: {e:?}"))?;
+
+        if *module_id == root_id {
+            root_value = value;
+        }
+    }
+
+    Ok(root_value)
+}
+
+fn run_direct_value(
     file: &Path,
     root_dir: &Path,
     module_path: &[String],
     _verbose: bool,
-) -> Result<(), String> {
+) -> Result<(RunBackend, Value), String> {
     let source = fs::read_to_string(file)
         .map_err(|e| format!("cannot read file '{}': {}", file.display(), e))?;
 
-    let (ast, diagnostics) = parse(&source);
+    let (ast, diagnostics) = neve_parser::parse(&source);
     for diag in &diagnostics {
         emit(&source, &file.display().to_string(), diag);
     }
@@ -169,13 +292,76 @@ fn run_direct(
         Err(e) => return Err(format!("evaluation error: {e:?}")),
     };
 
-    if !matches!(value, Value::Unit) {
-        output::success(&format!("{value:?}"));
-    }
+    Ok((RunBackend::AstFallback, value))
+}
 
-    Ok(())
+fn source_file_uses_std_imports(file: &SourceFile) -> bool {
+    file.items.iter().any(|item| {
+        matches!(
+            &item.kind,
+            ItemKind::Import(import_def)
+                if import_def
+                    .path
+                    .first()
+                    .map(|segment| segment.name.as_str())
+                    == Some("std")
+        )
+    })
 }
 
 fn is_std_module_path(path: &[String]) -> bool {
     path.first().map(|seg| seg == "std").unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RunBackend, run_value};
+    use neve_eval::Value;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn write_module(dir: &std::path::Path, path: &[&str], content: &str) {
+        let mut full_path = dir.to_path_buf();
+        for (index, segment) in path.iter().enumerate() {
+            full_path.push(segment);
+            if index < path.len() - 1 {
+                fs::create_dir_all(&full_path).unwrap();
+            }
+        }
+        full_path.set_extension("neve");
+        fs::write(full_path, content).unwrap();
+    }
+
+    #[test]
+    fn run_value_prefers_frontend_hir_without_std_imports() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(root, &["math"], "pub fn add(x, y) = x + y;");
+        write_module(
+            root,
+            &["main"],
+            "import math (add); let result = add(1, 2);",
+        );
+
+        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        assert_eq!(backend, RunBackend::FrontendHir);
+        assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn run_value_falls_back_to_ast_for_std_imports() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(
+            root,
+            &["main"],
+            "import std.list (len); let result = len([1, 2]);",
+        );
+
+        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        assert_eq!(backend, RunBackend::AstFallback);
+        assert_eq!(value, Value::Int(2.into()));
+    }
 }
