@@ -15,12 +15,16 @@
 
 ---
 
-This directory contains integration tests for the Neve language, verifying the complete pipeline from lexing to execution.
-本目录包含 Neve 语言的集成测试，验证从词法分析到执行的完整管道。
+This directory contains integration tests for the Neve language.
+Some files validate a single compiler/runtime stage, while `end_to_end.rs`
+is reserved for trustworthy smoke coverage of real frontend/runtime paths.
+本目录包含 Neve 语言的集成测试。
+其中一部分测试单独验证某个编译器/运行时阶段，`end_to_end.rs`
+只保留给真实前端与运行时路径的可信烟雾测试。
 
 ## 测试结构 / Test Structure
 
-### [parsing.rs](parsing.rs)
+### [parser.rs](parser.rs)
 **解析器测试 / Parser Tests**
 
 测试完整的解析流程:Lexer → Parser → AST
@@ -57,7 +61,7 @@ Tests the module system including circular dependency detection.
 - ✅ 模块未找到 / Module not found
 - ✅ 菱形依赖 / Diamond dependencies
 
-### [evaluation.rs](evaluation.rs)
+### [eval.rs](eval.rs)
 **求值和 TCO 测试 / Evaluation and TCO Tests**
 
 测试求值器,包括尾调用优化。
@@ -85,7 +89,7 @@ Tests the evaluator including tail call optimization.
 - ✅ Match 表达式中的 TCO / TCO in match expressions
 - ✅ If 表达式中的 TCO / TCO in if expressions
 
-### [type_checking.rs](type_checking.rs)
+### [typeck.rs](typeck.rs)
 **类型检查测试 / Type Checking Tests**
 
 测试 Hindley-Milner 类型推导和 Trait 约束。
@@ -119,30 +123,16 @@ Tests Hindley-Milner type inference and trait constraints.
 ### [end_to_end.rs](end_to_end.rs)
 **端到端测试 / End-to-End Tests**
 
-测试完整管道:Lexer → Parser → HIR → TypeCheck → Eval
+测试真实入口的烟雾路径: Frontend(parse → lower → typecheck) + Runtime(AST/HIR)
 
-Tests complete pipeline: Lexer → Parser → HIR → TypeCheck → Eval
+Tests the trustworthy smoke path: Frontend(parse → lower → typecheck) + Runtime(AST/HIR)
 
 涵盖内容 / Coverage:
-- ✅ Hello World
-- ✅ Fibonacci 数列 / Fibonacci sequence
-- ✅ 列表处理 / List processing
-- ✅ 阶乘(带累加器) / Factorial with accumulator
-- ✅ 快速排序 / Quicksort
-- ✅ Option 链式调用 / Option chaining
-- ✅ Result 错误处理 / Result error handling
-- ✅ 树数据结构 / Tree data structure
-- ✅ 柯里化 / Currying
-- ✅ 函数组合 / Function composition
-- ✅ 部分应用 / Partial application
-- ✅ Y 组合子 / Y combinator
-- ✅ 记录模式匹配 / Record pattern matching
-- ✅ 惰性列表处理 / Lazy list processing
-- ✅ 字符串操作 / String manipulation
-- ✅ 嵌套 let 绑定 / Nested let bindings
-- ✅ 互递归函数 / Mutually recursive functions
-- ✅ 深度嵌套表达式 / Deeply nested expressions
-- ✅ 复杂模式匹配 / Complex pattern matching
+- ✅ 前端 parse 错误真实上报 / Real parser diagnostics through the frontend
+- ✅ 前端 type 错误真实上报 / Real type diagnostics through the frontend
+- ✅ AST/HIR 在已支持子集上的结果一致性 / AST/HIR parity on the supported subset
+- ✅ 算术、管道、列表匹配、枚举匹配等 smoke coverage
+- ✅ 当前已知分叉的显式哨兵测试（如 `lazy`、递归、记录字段访问）
 
 ## 运行测试 / Running Tests
 
@@ -153,18 +143,20 @@ cargo test --tests
 
 ### 运行特定测试文件 / Run Specific Test File
 ```bash
-cargo test --test parsing
+cargo test --test parser
 cargo test --test module_loading
-cargo test --test evaluation
-cargo test --test type_checking
+cargo test --test frontend
+cargo test --test hir
+cargo test --test eval
+cargo test --test typeck
 cargo test --test end_to_end
 ```
 
 ### 运行单个测试 / Run Single Test
 ```bash
-cargo test --test parsing test_parse_basic_function
+cargo test --test parser test_parse_basic_function
 cargo test --test module_loading test_circular_dependency_detection
-cargo test --test evaluation test_tail_recursion_factorial
+cargo test --test eval test_tail_recursion_factorial
 ```
 
 ### 显示测试输出 / Show Test Output
@@ -201,17 +193,20 @@ Tests should use realistic use cases, not artificial examples.
 
 ## 测试覆盖 / Test Coverage
 
-当前集成测试覆盖:
+当前集成测试覆盖多个层次:
 
-Current integration test coverage:
+Current integration test coverage spans multiple layers:
 
-- **解析器 / Parser**: 10 个测试,覆盖所有语法结构
-- **模块加载 / Module Loading**: 9 个测试,包括循环依赖检测
-- **求值器 / Evaluator**: 23 个测试,包括 TCO
-- **类型检查 / Type Checker**: 28 个测试,覆盖推导和错误
-- **端到端 / End-to-End**: 20 个测试,完整管道
+- **解析器 / Parser**: `parser.rs`
+- **模块加载 / Module Loading**: `module_loading.rs`
+- **前端分析 / Frontend analysis**: `frontend.rs`
+- **HIR 降级 / HIR lowering**: `hir.rs`
+- **求值器 / Evaluator**: `eval.rs`
+- **类型检查 / Type Checker**: `typeck.rs`, `module_typeck.rs`
+- **端到端烟雾测试 / End-to-End smoke tests**: `end_to_end.rs`
 
-**总计 / Total**: 90 个集成测试
+精确测试数量会持续变化，以 `cargo test --tests` 的实际输出为准。
+Exact test counts change over time; use `cargo test --tests` as the source of truth.
 
 ## 添加新测试 / Adding New Tests
 
@@ -220,11 +215,13 @@ Current integration test coverage:
 Steps to add new integration tests:
 
 1. **选择合适的测试文件** / Choose appropriate test file
-   - 解析相关 → `parsing.rs`
+   - 解析相关 → `parser.rs`
    - 模块相关 → `module_loading.rs`
-   - 求值相关 → `evaluation.rs`
-   - 类型相关 → `type_checking.rs`
-   - 完整流程 → `end_to_end.rs`
+   - 前端分析 → `frontend.rs`
+   - HIR 降级 → `hir.rs`
+   - 求值相关 → `eval.rs`
+   - 类型相关 → `typeck.rs` / `module_typeck.rs`
+   - 真实烟雾流程 → `end_to_end.rs`
 
 2. **编写测试函数** / Write test function
    ```rust
@@ -246,23 +243,26 @@ Steps to add new integration tests:
 
 4. **更新本 README** / Update this README
    - 在相应部分添加新测试描述
-   - 更新测试计数
+   - 不要保留已经失真的 coverage 说法
 
 ## 已知问题 / Known Issues
 
-某些测试可能失败或被跳过,因为以下功能尚未完全实现:
+某些能力仍未完全实现,因此测试里会显式标出当前缺口:
 
-Some tests may fail or be skipped because the following features are not fully implemented:
+Some capabilities are still incomplete, so tests should name current gaps explicitly:
 
 - ⚠️ 完整的 Trait 系统 / Complete trait system
 - ⚠️ 代数数据类型 (ADTs) / Algebraic Data Types
 - ⚠️ 记录模式匹配 / Record pattern matching
+- ⚠️ AST/HIR/runtime/frontend 尚未完全收敛 / AST/HIR/runtime/frontend are not fully converged
 - ⚠️ 某些内置函数 / Some built-in functions
 - ⚠️ 完整的错误恢复 / Complete error recovery
 
-这些测试被标记为 `assert!(result.is_ok() || result.is_err())` 以便在实现过程中跟踪进度。
+不要新增“无论成功失败都算通过”的测试。
+如果某项功能还没闭环，要么测试已经支持的子集，要么把缺口明确写成已知分叉哨兵。
 
-These tests are marked with `assert!(result.is_ok() || result.is_err())` to track progress during implementation.
+Do not add tests that pass regardless of success or failure.
+If a feature is incomplete, either test the supported subset or write the gap down as an explicit divergence sentinel.
 
 ## 贡献指南 / Contributing
 
