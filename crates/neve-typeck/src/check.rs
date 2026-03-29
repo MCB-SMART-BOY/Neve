@@ -105,6 +105,9 @@ pub struct TypeChecker {
     /// Collected diagnostics.
     /// 收集的诊断信息。
     diagnostics: Vec<Diagnostic>,
+    /// Resolved method call targets keyed by expression span.
+    /// 按表达式 span 存储的方法调用解析结果。
+    method_resolutions: HashMap<Span, DefId>,
     /// Whether to check for unused variables.
     /// 是否检查未使用的变量。
     check_unused: bool,
@@ -125,6 +128,7 @@ impl TypeChecker {
             variants: HashMap::new(),
             type_aliases: HashMap::new(),
             diagnostics: Vec::new(),
+            method_resolutions: HashMap::new(),
             check_unused: true,
         }
     }
@@ -288,6 +292,12 @@ impl TypeChecker {
     /// 获取收集的诊断信息。
     pub fn diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    /// Get resolved method call targets.
+    /// 获取已解析的方法调用目标。
+    pub fn method_resolutions(&self) -> &HashMap<Span, DefId> {
+        &self.method_resolutions
     }
 
     fn format_trait_bound(&self, bound: &TraitBound) -> String {
@@ -1001,6 +1011,9 @@ impl TypeChecker {
                     .trait_resolver
                     .resolve_method(&applied_receiver_ty, method)
                 {
+                    self.method_resolutions
+                        .insert(span, resolution.method_def_id);
+
                     if let Some(self_param_ty) = resolution.params.first() {
                         self.unify(&receiver_ty, self_param_ty, receiver.span);
                     }
