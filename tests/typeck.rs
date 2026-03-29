@@ -2,7 +2,7 @@
 //!
 //! This file contains extensive edge case tests for type checking.
 
-use neve_diagnostic::Diagnostic;
+use neve_diagnostic::{Diagnostic, Severity};
 use neve_hir::lower;
 use neve_parser::parse;
 use neve_typeck::TypeChecker;
@@ -28,6 +28,21 @@ fn check_no_errors(source: &str) {
 fn check_has_errors(source: &str) {
     let diags = check_source(source);
     assert!(!diags.is_empty(), "expected type errors but got none");
+}
+
+fn assert_has_diagnostic(
+    source: &str,
+    severity: Severity,
+    message_fragment: &str,
+) {
+    let diags = check_source(source);
+    assert!(
+        diags.iter().any(|diag| {
+            diag.severity == severity && diag.message.contains(message_fragment)
+        }),
+        "expected diagnostic containing '{message_fragment}', got {:?}",
+        diags
+    );
 }
 
 // ============================================================================
@@ -757,6 +772,47 @@ fn test_typeck_match_returns_consistent_type() {
             _ -> true
         };
     ",
+    );
+}
+
+#[test]
+fn test_typeck_match_bool_non_exhaustive() {
+    assert_has_diagnostic(
+        "
+        let x = match true {
+            true -> 1
+        };
+        ",
+        Severity::Error,
+        "non-exhaustive pattern match",
+    );
+}
+
+#[test]
+fn test_typeck_match_enum_non_exhaustive() {
+    assert_has_diagnostic(
+        "
+        enum Option { Some(Int), None };
+        let x = match Some(1) {
+            Some(value) -> value
+        };
+        ",
+        Severity::Error,
+        "non-exhaustive pattern match",
+    );
+}
+
+#[test]
+fn test_typeck_match_unreachable_after_wildcard() {
+    assert_has_diagnostic(
+        "
+        let x = match true {
+            _ -> 1,
+            false -> 0
+        };
+        ",
+        Severity::Warning,
+        "unreachable pattern",
     );
 }
 
