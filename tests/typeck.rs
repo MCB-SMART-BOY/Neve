@@ -311,6 +311,31 @@ fn test_typeck_std_math_constants_reject_wrong_annotation() {
     );
 }
 
+#[test]
+fn test_typeck_std_path_builtins_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.path as path;
+            let joined: String = path.join("a", "b");
+            let parent = path.parent("/tmp/file.txt") ?? "/";
+            let abs: Bool = path.is_absolute("/tmp/file.txt");
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_path_builtins_reject_wrong_use() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.path as path;
+            let wrong = expectInt(path.is_absolute("/tmp"));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
 // ============================================================================
 // 逻辑运算
 // ============================================================================

@@ -194,3 +194,20 @@ fn test_frontend_accepts_std_option_and_result_builtins() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_std_path_builtins() {
+    let result = analyze_source(
+        r#"
+            import std.path as path;
+            let a = path.join("a", "b");
+            let b = path.parent("/tmp/file.txt") ?? "/";
+            let c = path.is_absolute("/tmp/file.txt");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
