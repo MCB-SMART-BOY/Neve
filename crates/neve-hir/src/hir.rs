@@ -9,6 +9,37 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DefId(pub u32);
 
+/// Builtin constructor IDs reserved for canonical HIR lowering.
+/// 为 canonical HIR lowering 预留的内置构造器 ID。
+pub const BUILTIN_OPTION_SOME_CTOR_ID: DefId = DefId(u32::MAX - 16);
+pub const BUILTIN_OPTION_NONE_CTOR_ID: DefId = DefId(u32::MAX - 17);
+pub const BUILTIN_RESULT_OK_CTOR_ID: DefId = DefId(u32::MAX - 18);
+pub const BUILTIN_RESULT_ERR_CTOR_ID: DefId = DefId(u32::MAX - 19);
+
+/// Resolve a builtin constructor name into its reserved HIR ID.
+/// 将内置构造器名称解析为预留的 HIR ID。
+pub fn builtin_constructor_id(name: &str) -> Option<DefId> {
+    match name {
+        "Some" => Some(BUILTIN_OPTION_SOME_CTOR_ID),
+        "None" => Some(BUILTIN_OPTION_NONE_CTOR_ID),
+        "Ok" => Some(BUILTIN_RESULT_OK_CTOR_ID),
+        "Err" => Some(BUILTIN_RESULT_ERR_CTOR_ID),
+        _ => None,
+    }
+}
+
+/// Get the canonical builtin constructor name for a reserved HIR ID.
+/// 根据预留的 HIR ID 获取 canonical 内置构造器名称。
+pub fn builtin_constructor_name(def_id: DefId) -> Option<&'static str> {
+    match def_id {
+        BUILTIN_OPTION_SOME_CTOR_ID => Some("Some"),
+        BUILTIN_OPTION_NONE_CTOR_ID => Some("None"),
+        BUILTIN_RESULT_OK_CTOR_ID => Some("Ok"),
+        BUILTIN_RESULT_ERR_CTOR_ID => Some("Err"),
+        _ => None,
+    }
+}
+
 /// A unique identifier for a local variable.
 /// 局部变量的唯一标识符。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

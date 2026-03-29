@@ -11,7 +11,7 @@ use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32};
 use neve_diagnostic::Diagnostic;
 use neve_hir::{
     BinOp, DefId, Expr, ExprKind, FnDef, Generator, Item, ItemKind, Literal, LocalId, Module,
-    UnaryOp,
+    UnaryOp, builtin_constructor_name,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -1163,12 +1163,11 @@ impl Evaluator {
                     };
                 }
 
-                // Match Option/Result constructors
-                match (patterns.as_slice(), value) {
-                    ([p], Value::Some(v)) => self.match_pattern(p, v),
-                    ([], Value::None) => Some(Vec::new()),
-                    ([p], Value::Ok(v)) => self.match_pattern(p, v),
-                    ([p], Value::Err(v)) => self.match_pattern(p, v),
+                match (builtin_constructor_name(*def_id), patterns.as_slice(), value) {
+                    (Some("Some"), [p], Value::Some(v)) => self.match_pattern(p, v),
+                    (Some("None"), [], Value::None) => Some(Vec::new()),
+                    (Some("Ok"), [p], Value::Ok(v)) => self.match_pattern(p, v),
+                    (Some("Err"), [p], Value::Err(v)) => self.match_pattern(p, v),
                     _ => None,
                 }
             }

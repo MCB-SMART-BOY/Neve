@@ -1,6 +1,9 @@
 //! Integration tests for neve-hir crate.
 
-use neve_hir::{BinOp, ExprKind, ItemKind, PatternKind, lower};
+use neve_hir::{
+    BUILTIN_OPTION_NONE_CTOR_ID, BUILTIN_OPTION_SOME_CTOR_ID, BinOp, ExprKind, ItemKind,
+    PatternKind, lower,
+};
 use neve_parser::parse;
 
 #[test]
@@ -216,6 +219,39 @@ fn test_lower_binding_pattern_preserves_inner_pattern() {
                 }
                 other => panic!("expected Binding pattern, got {:?}", other),
             },
+            other => panic!("expected Match, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
+fn test_lower_builtin_option_constructor_patterns_use_reserved_ids() {
+    let source = "let x = match y { Some(v) -> v, None -> 0 };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Match(_, arms) => {
+                assert_eq!(arms.len(), 2);
+                match &arms[0].pattern.kind {
+                    PatternKind::Constructor(def_id, args) => {
+                        assert_eq!(*def_id, BUILTIN_OPTION_SOME_CTOR_ID);
+                        assert_eq!(args.len(), 1);
+                    }
+                    other => panic!("expected constructor pattern, got {:?}", other),
+                }
+                match &arms[1].pattern.kind {
+                    PatternKind::Constructor(def_id, args) => {
+                        assert_eq!(*def_id, BUILTIN_OPTION_NONE_CTOR_ID);
+                        assert!(args.is_empty());
+                    }
+                    other => panic!("expected constructor pattern, got {:?}", other),
+                }
+            }
             other => panic!("expected Match, got {:?}", other),
         },
         _ => panic!("expected function"),

@@ -127,6 +127,21 @@ fn test_eval_hir_std_option_builtins() {
 }
 
 #[test]
+fn test_eval_hir_builtin_option_match_patterns() {
+    let source = r#"
+        import std.option as option;
+        let result = match option.some(41) {
+            Some(value) -> value,
+            None -> 0
+        };
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(41)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_result_builtins() {
     let source = r#"
         import std.result as result;
@@ -136,6 +151,21 @@ fn test_eval_hir_std_result_builtins() {
     "#;
     match eval_checked_hir(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(42)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_builtin_result_match_patterns() {
+    let source = r#"
+        import std.result as result;
+        let answer = match result.err("boom") {
+            Ok(value) -> value,
+            Err(message) -> if message == "boom" then 1 else 0
+        };
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(1)),
         other => panic!("expected int, got {:?}", other),
     }
 }
