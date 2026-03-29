@@ -269,6 +269,22 @@ fn test_lower_try_expr_preserves_try_node() {
 }
 
 #[test]
+fn test_lower_coalesce_expr_preserves_coalesce_node() {
+    let source = "let x = value ?? fallback;";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => {
+            assert!(matches!(fn_def.body.kind, ExprKind::Coalesce { .. }));
+        }
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
 fn test_lower_method_call_preserves_method_node() {
     let source = "let x = 1.show();";
     let (ast, diagnostics) = parse(source);

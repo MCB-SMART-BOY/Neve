@@ -111,6 +111,23 @@ fn test_frontend_accepts_try_on_option_and_result_like_enums() {
 }
 
 #[test]
+fn test_frontend_accepts_coalesce_on_safe_field_and_option_enum() {
+    let result = analyze_source(
+        r#"
+            enum Option { Some(Int), None };
+            let a = Some(41) ?? 0;
+            let r = #{ name = "test" };
+            let b = r?.missing ?? "default";
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_trait_method_call_analysis() {
     let result = analyze_source(
         r#"

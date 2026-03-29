@@ -942,6 +942,29 @@ fn test_eval_hir_try_on_option_like_enum() {
 }
 
 #[test]
+fn test_eval_hir_coalesce_on_option_like_enum() {
+    let result = eval_source(
+        "
+        enum Option { Some(Int), None };
+        let a = Some(41) ?? 0;
+        let x = a + 1;
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
+fn test_eval_hir_coalesce_on_none_like_enum() {
+    let result = eval_source(
+        "
+        enum Option { Some(Int), None };
+        let x = None ?? 42;
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
 fn test_eval_hir_try_on_result_like_enum_error() {
     let result = eval_source(
         "

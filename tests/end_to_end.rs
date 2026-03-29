@@ -225,6 +225,28 @@ fn test_end_to_end_try_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_coalesce_runtime_parity() {
+    assert_runtime_parity(
+        "
+        enum Option { Some(Int), None };
+        let x = Some(41) ?? 0;
+        ",
+        Value::Int(int(41)),
+    );
+}
+
+#[test]
+fn test_end_to_end_safe_field_coalesce_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let r = #{ name = \"test\" };
+        let x = r?.missing ?? \"default\";
+        ",
+        Value::String("default".to_string().into()),
+    );
+}
+
+#[test]
 fn test_end_to_end_try_error_runtime_parity() {
     assert_runtime_error_parity(
         "

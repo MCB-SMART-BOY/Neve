@@ -339,6 +339,23 @@ impl Evaluator {
                 }
             }
 
+            ExprKind::Coalesce { value, default } => {
+                let value = self.eval(value)?;
+                match value {
+                    Value::None => self.eval(default),
+                    Value::Some(value) => Ok((*value).clone()),
+                    Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
+                        self.eval(default)
+                    }
+                    Value::Variant(tag, payload) => match tag.as_str() {
+                        "None" => self.eval(default),
+                        "Some" => Ok((*payload).clone()),
+                        _ => Ok(Value::Variant(tag, payload)),
+                    },
+                    other => Ok(other),
+                }
+            }
+
             ExprKind::Try(inner) => {
                 fn unwrap_try_value(value: Value) -> Result<Value, EvalError> {
                     match value {
