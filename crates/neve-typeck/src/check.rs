@@ -23,6 +23,8 @@ use neve_hir::{
 use std::collections::HashMap;
 
 const BUILTIN_LIST_TYPE_ID: DefId = DefId(u32::MAX);
+const BUILTIN_OPTION_TYPE_ID: DefId = DefId(u32::MAX - 1);
+const BUILTIN_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 2);
 
 fn builtin_ty(kind: TyKind, span: Span) -> Ty {
     Ty { kind, span }
@@ -48,6 +50,22 @@ fn builtin_forall(params: Vec<&str>, body: Ty, span: Span) -> Ty {
 
 fn builtin_list(elem: Ty, span: Span) -> Ty {
     builtin_ty(TyKind::Named(BUILTIN_LIST_TYPE_ID, vec![elem]), span)
+}
+
+fn builtin_option(elem: Ty, span: Span) -> Ty {
+    builtin_ty(TyKind::Named(BUILTIN_OPTION_TYPE_ID, vec![elem]), span)
+}
+
+fn builtin_result(ok: Ty, err: Ty, span: Span) -> Ty {
+    builtin_ty(TyKind::Named(BUILTIN_RESULT_TYPE_ID, vec![ok, err]), span)
+}
+
+fn is_builtin_option_type(def_id: DefId) -> bool {
+    def_id == BUILTIN_OPTION_TYPE_ID
+}
+
+fn is_builtin_result_type(def_id: DefId) -> bool {
+    def_id == BUILTIN_RESULT_TYPE_ID
 }
 
 /// Information about a local variable.
@@ -701,6 +719,96 @@ impl TypeChecker {
                 builtin_list(builtin_ty(TyKind::Char, span), span),
                 span,
             ),
+            "option.some" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a.clone()], builtin_option(a, span), span),
+                    span,
+                )
+            }
+            "option.none" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(Vec::from(["a"]), builtin_option(a, span), span)
+            }
+            "option.is_some" | "option.is_none" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_option(a, span)],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "option.unwrap" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_option(a.clone(), span)], a, span),
+                    span,
+                )
+            }
+            "option.unwrap_or" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_option(a.clone(), span), a.clone()], a, span),
+                    span,
+                )
+            }
+            "result.ok" => {
+                let t = builtin_param(0, "t", span);
+                let e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["t", "e"]),
+                    builtin_fn(vec![t.clone()], builtin_result(t, e, span), span),
+                    span,
+                )
+            }
+            "result.err" => {
+                let t = builtin_param(0, "t", span);
+                let e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["t", "e"]),
+                    builtin_fn(vec![e.clone()], builtin_result(t, e, span), span),
+                    span,
+                )
+            }
+            "result.is_ok" | "result.is_err" => {
+                let t = builtin_param(0, "t", span);
+                let e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["t", "e"]),
+                    builtin_fn(
+                        vec![builtin_result(t, e, span)],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "result.unwrap" => {
+                let t = builtin_param(0, "t", span);
+                let e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["t", "e"]),
+                    builtin_fn(vec![builtin_result(t.clone(), e, span)], t, span),
+                    span,
+                )
+            }
+            "result.unwrap_err" => {
+                let t = builtin_param(0, "t", span);
+                let e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["t", "e"]),
+                    builtin_fn(vec![builtin_result(t, e.clone(), span)], e, span),
+                    span,
+                )
+            }
+            "math.pi" | "math.e" | "math.inf" | "math.nan" => builtin_ty(TyKind::Float, span),
             _ if name.contains('.') => return Some(self.fresh_var()),
             _ => return None,
         };
@@ -733,6 +841,12 @@ impl TypeChecker {
     fn try_result_type(&mut self, inner_ty: Ty, span: Span) -> Ty {
         let inner_ty = self.apply(&inner_ty);
         match inner_ty.kind {
+            TyKind::Named(def_id, args) if is_builtin_option_type(def_id) => {
+                args.into_iter().next().unwrap_or_else(|| self.fresh_var())
+            }
+            TyKind::Named(def_id, args) if is_builtin_result_type(def_id) => {
+                args.into_iter().next().unwrap_or_else(|| self.fresh_var())
+            }
             TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Some", "None"]) => self
                 .try_payload_type(def_id, "Some", span)
                 .unwrap_or_else(|| self.fresh_var()),
@@ -750,6 +864,11 @@ impl TypeChecker {
     fn coalesce_result_type(&mut self, value_ty: Ty, default_ty: Ty, span: Span) -> Ty {
         let value_ty = self.apply(&value_ty);
         match value_ty.kind {
+            TyKind::Named(def_id, args) if is_builtin_option_type(def_id) => {
+                let payload_ty = args.into_iter().next().unwrap_or_else(|| self.fresh_var());
+                self.unify(&payload_ty, &default_ty, span);
+                self.apply(&payload_ty)
+            }
             TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Some", "None"]) => {
                 let payload_ty = self
                     .try_payload_type(def_id, "Some", span)

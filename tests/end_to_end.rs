@@ -321,3 +321,29 @@ fn test_end_to_end_std_glob_import_runtime_parity() {
         Value::Int(int(4)),
     );
 }
+
+#[test]
+fn test_end_to_end_std_option_builtin_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.option as option;
+        let a = option.some(41)? + 1;
+        let b = option.none ?? 5;
+        let x = a + b;
+        ",
+        Value::Int(int(47)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_result_builtin_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.result as result;
+        let a = result.ok(41)? + 1;
+        let err = result.unwrap_err(result.err(\"boom\"));
+        let x = if err == \"boom\" then a else 0;
+        ",
+        Value::Int(int(42)),
+    );
+}
