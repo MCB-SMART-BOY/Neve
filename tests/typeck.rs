@@ -1405,6 +1405,42 @@ fn test_typeck_assoc_type_bounds_missing_impl() {
     );
 }
 
+#[test]
+fn test_typeck_impl_method_body_return_type_mismatch() {
+    assert_has_diagnostic(
+        "
+        struct Counter {};
+        impl Counter {
+            fn value(self) -> Int = true;
+        };
+        ",
+        Severity::Error,
+        "impl method `value` return type",
+    );
+}
+
+#[test]
+fn test_typeck_trait_impl_method_body_return_type_mismatch() {
+    assert_has_diagnostic(
+        "
+        trait Show {
+            fn show(self) -> Int;
+        };
+        struct Counter {};
+        impl Show for Counter {
+            fn show(self) -> Int = true;
+        };
+        ",
+        Severity::Error,
+        "impl method `show` return type",
+    );
+}
+
+#[test]
+fn test_typeck_to_string_builtin() {
+    check_no_errors("let x = toString(42);");
+}
+
 // ============================================================================
 // 错误检测测试
 // ============================================================================

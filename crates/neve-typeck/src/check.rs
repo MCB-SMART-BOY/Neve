@@ -557,6 +557,14 @@ impl TypeChecker {
                 ),
                 span,
             },
+            "toString" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::String, span), span),
+                    span,
+                )
+            }
             "list.empty" => {
                 let a = builtin_param(0, "a", span);
                 builtin_forall(Vec::from(["a"]), builtin_list(a, span), span)
@@ -1802,8 +1810,10 @@ impl TypeChecker {
     // ===== Second pass: check bodies 第二遍：检查函数体 =====
 
     fn check_item(&mut self, item: &Item) {
-        if let ItemKind::Fn(fn_def) = &item.kind {
-            self.check_fn(item.id, fn_def);
+        match &item.kind {
+            ItemKind::Fn(fn_def) => self.check_fn(item.id, fn_def),
+            ItemKind::Impl(impl_def) => self.check_impl_methods(impl_def),
+            _ => {}
         }
     }
 
@@ -1875,6 +1885,85 @@ impl TypeChecker {
 
         // Clear locals after checking function
         self.locals.clear();
+    }
+
+    fn check_impl_methods(&mut self, impl_def: &ImplDef) {
+        let generic_vars = self.fresh_generic_bindings(&impl_def.generics);
+        let self_ty = self.resolve_type_with_generics(&impl_def.self_ty, &generic_vars);
+
+        for item in &impl_def.items {
+            self.check_impl_item(item, &self_ty, &generic_vars);
+        }
+    }
+
+    fn check_impl_item(
+        &mut self,
+        item: &neve_hir::ImplItem,
+        self_ty: &Ty,
+        impl_generics: &HashMap<String, Ty>,
+    ) {
+        let mut generic_vars = impl_generics.clone();
+        for param in &item.generics {
+            generic_vars.insert(param.name.clone(), self.fresh_var());
+        }
+
+        let mut param_tys = Vec::with_capacity(item.params.len());
+        for (index, param) in item.params.iter().enumerate() {
+            let ty = if index == 0 && param.name == "self" && matches!(param.ty.kind, TyKind::Unknown)
+            {
+                self_ty.clone()
+            } else {
+                self.resolve_type_with_generics(&param.ty, &generic_vars)
+            };
+            param_tys.push(ty.clone());
+            self.locals.insert(
+                param.id,
+                LocalInfo {
+                    ty,
+                    name: param.name.clone(),
+                    span: param.span,
+                    used: true,
+                },
+            );
+        }
+
+        let body_ty = self.infer_expr(&item.body);
+        let ret_ty = self.resolve_type_with_generics(&item.return_ty, &generic_vars);
+        if !self.unify(&body_ty, &ret_ty, item.body.span) {
+            self.emit(
+                TypeMismatchError::new(ret_ty.clone(), body_ty.clone(), item.body.span)
+                    .with_context(format!("impl method `{}` return type", item.name))
+                    .build(),
+            );
+        }
+
+        let refined_ret_ty = self.apply(&ret_ty);
+        let refined_param_tys: Vec<Ty> = param_tys.iter().map(|ty| self.apply(ty)).collect();
+        let method_ty = Ty {
+            kind: TyKind::Fn(refined_param_tys, Box::new(refined_ret_ty)),
+            span: Span::DUMMY,
+        };
+        let method_ty = if item.generics.is_empty() {
+            method_ty
+        } else {
+            let params: Vec<String> = item.generics.iter().map(|g| g.name.clone()).collect();
+            Ty {
+                kind: TyKind::Forall(params, Box::new(method_ty)),
+                span: Span::DUMMY,
+            }
+        };
+        self.globals.insert(item.id, method_ty);
+
+        self.check_unused_locals();
+        self.locals.clear();
+    }
+
+    fn fresh_generic_bindings(&mut self, generics: &[neve_hir::GenericParam]) -> HashMap<String, Ty> {
+        let mut generic_vars = HashMap::new();
+        for param in generics {
+            generic_vars.insert(param.name.clone(), self.fresh_var());
+        }
+        generic_vars
     }
 
     /// Resolve a type, substituting generic parameters with their bound types.

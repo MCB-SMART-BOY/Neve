@@ -94,6 +94,26 @@ fn test_frontend_accepts_list_rest_patterns() {
 }
 
 #[test]
+fn test_frontend_reports_impl_method_type_errors() {
+    let result = analyze_source(
+        r#"
+            struct Counter {};
+            impl Counter {
+                fn value(self) -> Int = true;
+            };
+        "#,
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type),
+        "expected impl method type diagnostics, got {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_try_on_option_and_result_like_enums() {
     let result = analyze_source(
         r#"
