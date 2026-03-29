@@ -25,6 +25,8 @@ use std::collections::HashMap;
 const BUILTIN_LIST_TYPE_ID: DefId = DefId(u32::MAX);
 const BUILTIN_OPTION_TYPE_ID: DefId = DefId(u32::MAX - 1);
 const BUILTIN_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 2);
+const BUILTIN_MAP_TYPE_ID: DefId = DefId(u32::MAX - 3);
+const BUILTIN_SET_TYPE_ID: DefId = DefId(u32::MAX - 4);
 
 fn builtin_ty(kind: TyKind, span: Span) -> Ty {
     Ty { kind, span }
@@ -58,6 +60,14 @@ fn builtin_option(elem: Ty, span: Span) -> Ty {
 
 fn builtin_result(ok: Ty, err: Ty, span: Span) -> Ty {
     builtin_ty(TyKind::Named(BUILTIN_RESULT_TYPE_ID, vec![ok, err]), span)
+}
+
+fn builtin_map(key: Ty, value: Ty, span: Span) -> Ty {
+    builtin_ty(TyKind::Named(BUILTIN_MAP_TYPE_ID, vec![key, value]), span)
+}
+
+fn builtin_set(elem: Ty, span: Span) -> Ty {
+    builtin_ty(TyKind::Named(BUILTIN_SET_TYPE_ID, vec![elem]), span)
 }
 
 fn builtin_record(fields: Vec<(&str, Ty)>, span: Span) -> Ty {
@@ -936,6 +946,208 @@ impl TypeChecker {
                 builtin_fetch_result(span),
                 span,
             ),
+            "Map.empty" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(Vec::from(["k", "v"]), builtin_map(k, v, span), span)
+            }
+            "Map.singleton" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(vec![k.clone(), v.clone()], builtin_map(k, v, span), span),
+                    span,
+                )
+            }
+            "Map.fromList" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                let pair = builtin_ty(TyKind::Tuple(vec![k.clone(), v.clone()]), span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![builtin_list(pair, span)],
+                        builtin_map(k, v, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Map.get" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![k.clone(), builtin_map(k, v.clone(), span)],
+                        builtin_option(v, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Map.getWithDefault" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![k.clone(), v.clone(), builtin_map(k, v.clone(), span)],
+                        v,
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Map.contains" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![k.clone(), builtin_map(k, v, span)],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Map.size" | "Map.isEmpty" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                let ret_ty = match name {
+                    "Map.size" => builtin_ty(TyKind::Int, span),
+                    _ => builtin_ty(TyKind::Bool, span),
+                };
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(vec![builtin_map(k, v, span)], ret_ty, span),
+                    span,
+                )
+            }
+            "Map.insert" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![
+                            k.clone(),
+                            v.clone(),
+                            builtin_map(k.clone(), v.clone(), span),
+                        ],
+                        builtin_map(k, v, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Map.remove" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![k.clone(), builtin_map(k.clone(), v.clone(), span)],
+                        builtin_map(k, v, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Map.union" | "Map.intersection" | "Map.difference" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                let map_kv = builtin_map(k, v, span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(vec![map_kv.clone(), map_kv.clone()], map_kv, span),
+                    span,
+                )
+            }
+            "Set.empty" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(Vec::from(["a"]), builtin_set(a, span), span)
+            }
+            "Set.singleton" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a.clone()], builtin_set(a, span), span),
+                    span,
+                )
+            }
+            "Set.fromList" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_list(a.clone(), span)],
+                        builtin_set(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Set.contains" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![a.clone(), builtin_set(a, span)],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Set.size" | "Set.isEmpty" => {
+                let a = builtin_param(0, "a", span);
+                let ret_ty = match name {
+                    "Set.size" => builtin_ty(TyKind::Int, span),
+                    _ => builtin_ty(TyKind::Bool, span),
+                };
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_set(a, span)], ret_ty, span),
+                    span,
+                )
+            }
+            "Set.insert" | "Set.remove" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![a.clone(), builtin_set(a.clone(), span)],
+                        builtin_set(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "Set.union" | "Set.intersection" | "Set.difference" | "Set.symmetricDifference" => {
+                let a = builtin_param(0, "a", span);
+                let set_a = builtin_set(a, span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![set_a.clone(), set_a.clone()], set_a, span),
+                    span,
+                )
+            }
+            "Set.isSubset" | "Set.isSuperset" | "Set.isDisjoint" => {
+                let a = builtin_param(0, "a", span);
+                let set_a = builtin_set(a, span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![set_a.clone(), set_a],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
             _ if name.contains('.') => return Some(self.fresh_var()),
             _ => return None,
         };
