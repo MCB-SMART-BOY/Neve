@@ -8,6 +8,9 @@ use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
 use neve_std::std_module_overrides;
+use std::fs;
+use std::path::Path;
+use tempfile::TempDir;
 
 fn eval_source(source: &str) -> Result<Value, EvalError> {
     let (ast, _) = parse(source);
@@ -49,6 +52,18 @@ fn eval_with_std(source: &str) -> Result<Value, String> {
 
 fn int(value: i64) -> Int {
     value.into()
+}
+
+fn create_test_module(dir: &Path, path: &[&str], content: &str) {
+    let mut full_path = dir.to_path_buf();
+    for (i, segment) in path.iter().enumerate() {
+        full_path.push(segment);
+        if i < path.len() - 1 {
+            fs::create_dir_all(&full_path).unwrap();
+        }
+    }
+    full_path.set_extension("neve");
+    fs::write(full_path, content).unwrap();
 }
 
 // ============================================================================
@@ -1003,6 +1018,52 @@ fn test_eval_hir_trait_method_runtime_dispatch() {
         let x = 21.twice();
     ",
     );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
+fn test_eval_ast_trait_method_runtime_dispatch() {
+    let result = eval_with_builtins(
+        "
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let x = 21.twice();
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
+fn test_eval_ast_imported_trait_method_runtime_dispatch() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    create_test_module(
+        root,
+        &["methods"],
+        r#"
+            pub trait Twice { fn twice(self) -> Int; };
+            impl Twice for Int {
+                fn twice(self) -> Int = self + self;
+            };
+        "#,
+    );
+
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            import methods;
+            let x = 21.twice();
+        "#,
+    );
+
+    let main_path = root.join("main.neve");
+    let mut eval = AstEvaluator::new().with_base_path(root.to_path_buf());
+    let result = eval.eval_file_at_path(&main_path);
+
     assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
