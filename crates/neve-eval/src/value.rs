@@ -41,10 +41,13 @@ pub struct Thunk {
 pub enum ThunkState {
     /// Unevaluated thunk with AST expression.
     /// 带有 AST 表达式的未求值 thunk。
-    Unevaluated {
+    AstUnevaluated {
         expr: neve_syntax::Expr,
         env: Rc<crate::ast_eval::AstEnv>,
     },
+    /// Unevaluated thunk with HIR expression.
+    /// 带有 HIR 表达式的未求值 thunk。
+    HirUnevaluated { expr: Expr, env: Environment },
     /// Currently being evaluated (for cycle detection).
     /// 当前正在求值（用于循环检测）。
     Evaluating,
@@ -56,9 +59,17 @@ pub enum ThunkState {
 impl Thunk {
     /// Create a new unevaluated thunk from an AST expression.
     /// 从 AST 表达式创建新的未求值 thunk。
-    pub fn new(expr: neve_syntax::Expr, env: Rc<crate::ast_eval::AstEnv>) -> Self {
+    pub fn new_ast(expr: neve_syntax::Expr, env: Rc<crate::ast_eval::AstEnv>) -> Self {
         Self {
-            inner: Rc::new(RefCell::new(ThunkState::Unevaluated { expr, env })),
+            inner: Rc::new(RefCell::new(ThunkState::AstUnevaluated { expr, env })),
+        }
+    }
+
+    /// Create a new unevaluated thunk from a HIR expression.
+    /// 从 HIR 表达式创建新的未求值 thunk。
+    pub fn new_hir(expr: Expr, env: Environment) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(ThunkState::HirUnevaluated { expr, env })),
         }
     }
 
@@ -98,7 +109,9 @@ impl Thunk {
 impl fmt::Debug for Thunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &*self.inner.borrow() {
-            ThunkState::Unevaluated { .. } => write!(f, "<thunk:unevaluated>"),
+            ThunkState::AstUnevaluated { .. } | ThunkState::HirUnevaluated { .. } => {
+                write!(f, "<thunk:unevaluated>")
+            }
             ThunkState::Evaluating => write!(f, "<thunk:evaluating>"),
             ThunkState::Evaluated(v) => write!(f, "<thunk:{:?}>", v),
         }
@@ -509,11 +522,16 @@ impl KeyCtx {
                 self.key_for_ptr(ptr, |ctx| match &*thunk.state() {
                     ThunkState::Evaluated(v) => format!("Thunk(Evaluated,{})", ctx.value_key(v)),
                     ThunkState::Evaluating => "Thunk(Evaluating)".to_string(),
-                    ThunkState::Unevaluated { expr, env } => {
+                    ThunkState::AstUnevaluated { expr, env } => {
                         let expr_key =
                             format!("AstExpr({})", escape_string(&format!("{:?}", expr)));
                         let env_key = ctx.ast_env_key(env);
-                        format!("Thunk(Unevaluated,{expr_key},{env_key})")
+                        format!("Thunk(AstUnevaluated,{expr_key},{env_key})")
+                    }
+                    ThunkState::HirUnevaluated { expr, env } => {
+                        let expr_key = format!("Expr({})", escape_string(&format!("{:?}", expr)));
+                        let env_key = ctx.env_key(env);
+                        format!("Thunk(HirUnevaluated,{expr_key},{env_key})")
                     }
                 })
             }

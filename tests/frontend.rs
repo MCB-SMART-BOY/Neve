@@ -42,3 +42,18 @@ fn test_frontend_accepts_record_field_access_after_record_binding() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_lazy_force_pipeline() {
+    let result = analyze_source(
+        r#"
+            let thunk = lazy 42;
+            let x = force(thunk);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

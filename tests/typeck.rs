@@ -399,6 +399,16 @@ fn test_typeck_record_field_access_after_record_binding() {
     );
 }
 
+#[test]
+fn test_typeck_lazy_force() {
+    check_no_errors("let thunk = lazy 42; let x = force(thunk);");
+}
+
+#[test]
+fn test_typeck_lazy_predicates() {
+    check_no_errors("let thunk = lazy 42; let x = isLazy(thunk); let y = isEvaluated(thunk);");
+}
+
 // ============================================================================
 // 函数定义
 // ============================================================================

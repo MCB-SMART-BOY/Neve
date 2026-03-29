@@ -472,6 +472,30 @@ impl Resolver {
         }
     }
 
+    fn is_supported_builtin(name: &str) -> bool {
+        matches!(name, "force" | "isLazy" | "isEvaluated")
+    }
+
+    fn lower_name_kind(&self, name: &str) -> ExprKind {
+        if let Some(local_id) = self.lookup_local(name) {
+            ExprKind::Var(local_id)
+        } else if let Some(def_id) = self.lookup_global(name) {
+            ExprKind::Global(def_id)
+        } else if Self::is_supported_builtin(name) {
+            ExprKind::Builtin(name.to_string())
+        } else {
+            ExprKind::Global(DefId(u32::MAX))
+        }
+    }
+
+    fn lower_name_expr(&self, name: &str, span: neve_common::Span) -> Expr {
+        Expr {
+            kind: self.lower_name_kind(name),
+            ty: Self::unknown_ty(span),
+            span,
+        }
+    }
+
     // === Second pass: lower items ===
     // === 第二遍：降级项 ===
 
@@ -797,17 +821,7 @@ impl Resolver {
             ast::ExprKind::Bool(b) => ExprKind::Literal(Literal::Bool(*b)),
             ast::ExprKind::Unit => ExprKind::Literal(Literal::Unit),
 
-            ast::ExprKind::Var(ident) => {
-                if let Some(local_id) = self.lookup_local(&ident.name) {
-                    ExprKind::Var(local_id)
-                } else if let Some(def_id) = self.lookup_global(&ident.name) {
-                    ExprKind::Global(def_id)
-                } else {
-                    // Unknown variable - will be caught during type checking
-                    // 未知变量 - 将在类型检查期间捕获
-                    ExprKind::Global(DefId(u32::MAX))
-                }
-            }
+            ast::ExprKind::Var(ident) => self.lower_name_kind(&ident.name),
 
             ast::ExprKind::Path(parts) => {
                 // Handle path like `r.a.b` as nested field access
@@ -820,7 +834,11 @@ impl Resolver {
                     let base_kind = self
                         .lookup_local(&first.name)
                         .map(ExprKind::Var)
-                        .or_else(|| self.lookup_global(&first.name).map(ExprKind::Global));
+                        .or_else(|| self.lookup_global(&first.name).map(ExprKind::Global))
+                        .or_else(|| {
+                            Self::is_supported_builtin(&first.name)
+                                .then(|| ExprKind::Builtin(first.name.clone()))
+                        });
 
                     if let Some(mut result_kind) = base_kind {
                         // Chain field accesses for remaining parts
@@ -892,25 +910,7 @@ impl Resolver {
                                     // Shorthand: #{ x } means #{ x = x }
                                     // 简写：#{ x } 表示 #{ x = x }
                                     let name = &f.name.name;
-                                    if let Some(local_id) = self.lookup_local(name) {
-                                        Expr {
-                                            kind: ExprKind::Var(local_id),
-                                            ty: Self::unknown_ty(span),
-                                            span,
-                                        }
-                                    } else if let Some(def_id) = self.lookup_global(name) {
-                                        Expr {
-                                            kind: ExprKind::Global(def_id),
-                                            ty: Self::unknown_ty(span),
-                                            span,
-                                        }
-                                    } else {
-                                        Expr {
-                                            kind: ExprKind::Global(DefId(u32::MAX)),
-                                            ty: Self::unknown_ty(span),
-                                            span,
-                                        }
-                                    }
+                                    self.lower_name_expr(name, span)
                                 });
                         (f.name.name.clone(), value)
                     })
@@ -933,25 +933,7 @@ impl Resolver {
                                     // Shorthand: #{ base | x } means use variable x
                                     // 简写：#{ base | x } 表示使用变量 x
                                     let name = &f.name.name;
-                                    if let Some(local_id) = self.lookup_local(name) {
-                                        Expr {
-                                            kind: ExprKind::Var(local_id),
-                                            ty: Self::unknown_ty(span),
-                                            span,
-                                        }
-                                    } else if let Some(def_id) = self.lookup_global(name) {
-                                        Expr {
-                                            kind: ExprKind::Global(def_id),
-                                            ty: Self::unknown_ty(span),
-                                            span,
-                                        }
-                                    } else {
-                                        Expr {
-                                            kind: ExprKind::Global(DefId(u32::MAX)),
-                                            ty: Self::unknown_ty(span),
-                                            span,
-                                        }
-                                    }
+                                    self.lower_name_expr(name, span)
                                 });
                         (f.name.name.clone(), value)
                     })
@@ -1003,19 +985,7 @@ impl Resolver {
                 let mut all_args = vec![recv];
                 all_args.extend(args.iter().map(|e| self.lower_expr(e)));
 
-                let func = if let Some(def_id) = self.lookup_global(&method.name) {
-                    Expr {
-                        kind: ExprKind::Global(def_id),
-                        ty: Self::unknown_ty(span),
-                        span,
-                    }
-                } else {
-                    Expr {
-                        kind: ExprKind::Global(DefId(u32::MAX)),
-                        ty: Self::unknown_ty(span),
-                        span,
-                    }
-                };
+                let func = self.lower_name_expr(&method.name, span);
 
                 ExprKind::Call(Box::new(func), all_args)
             }

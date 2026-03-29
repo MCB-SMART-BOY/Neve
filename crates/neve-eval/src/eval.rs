@@ -226,6 +226,10 @@ impl Evaluator {
                 }
             }
 
+            ExprKind::Builtin(name) => self
+                .builtin_value(name)
+                .ok_or_else(|| EvalError::TypeError(format!("unknown builtin: {name}"))),
+
             ExprKind::Record(fields) => {
                 let mut map = HashMap::with_capacity(fields.len());
                 for (name, expr) in fields {
@@ -409,9 +413,10 @@ impl Evaluator {
                 result
             }
 
-            ExprKind::Lazy(_) => Err(EvalError::TypeError(
-                "lazy is not supported in HIR evaluator".to_string(),
-            )),
+            ExprKind::Lazy(inner) => Ok(Value::Thunk(crate::value::Thunk::new_hir(
+                inner.as_ref().clone(),
+                self.env.clone(),
+            ))),
 
             ExprKind::ListComp { body, generators } => {
                 let mut results = Vec::new();
@@ -478,6 +483,12 @@ impl Evaluator {
         // 内置函数通过 AstEvaluator 的内置函数注册表处理。
         // HIR 求值器将内置函数委托给 AST 求值器。
         None
+    }
+
+    fn builtin_value(&self, name: &str) -> Option<Value> {
+        crate::builtins()
+            .into_iter()
+            .find_map(|(builtin_name, value)| (builtin_name == name).then_some(value))
     }
 
     fn eval_literal(&self, lit: &Literal) -> Value {
@@ -677,12 +688,24 @@ impl Evaluator {
                     }
                 }
                 Value::Builtin(builtin) => {
+                    if builtin.name == "force" {
+                        if current_args.len() != 1 {
+                            return Err(EvalError::WrongArity);
+                        }
+                        return self.force_value(&current_args[0]);
+                    }
                     if current_args.len() != builtin.arity {
                         return Err(EvalError::WrongArity);
                     }
                     return (builtin.func)(&current_args).map_err(EvalError::TypeError);
                 }
-                Value::BuiltinFn(_, func) => {
+                Value::BuiltinFn(name, func) => {
+                    if name == "force" {
+                        if current_args.len() != 1 {
+                            return Err(EvalError::WrongArity);
+                        }
+                        return self.force_value(&current_args[0]);
+                    }
                     return func(current_args).map_err(EvalError::TypeError);
                 }
                 Value::VariantCtor { name, arity } => {
@@ -788,6 +811,63 @@ impl Evaluator {
             _ => {
                 let val = self.eval(expr)?;
                 Ok(TcoResult::Value(val))
+            }
+        }
+    }
+
+    fn force_value(&mut self, value: &Value) -> Result<Value, EvalError> {
+        match value {
+            Value::Thunk(thunk) => self.force_thunk(thunk),
+            other => Ok(other.clone()),
+        }
+    }
+
+    fn force_thunk(&mut self, thunk: &crate::value::Thunk) -> Result<Value, EvalError> {
+        {
+            let state = thunk.state();
+            match &*state {
+                crate::value::ThunkState::Evaluated(v) => return Ok(v.clone()),
+                crate::value::ThunkState::Evaluating => {
+                    return Err(EvalError::TypeError(
+                        "infinite recursion in lazy evaluation".to_string(),
+                    ));
+                }
+                crate::value::ThunkState::HirUnevaluated { .. } => {}
+                crate::value::ThunkState::AstUnevaluated { .. } => {
+                    return Err(EvalError::TypeError(
+                        "cannot force AST thunk in HIR evaluator".to_string(),
+                    ));
+                }
+            }
+        }
+
+        let (expr, env) = {
+            let mut state = thunk.state_mut();
+            match std::mem::replace(&mut *state, crate::value::ThunkState::Evaluating) {
+                crate::value::ThunkState::HirUnevaluated { expr, env } => (expr, env),
+                _ => unreachable!(),
+            }
+        };
+
+        let mut eval = Self {
+            env,
+            globals: self.globals.clone(),
+            variant_ctors: self.variant_ctors.clone(),
+        };
+        let result = eval.eval(&expr);
+
+        match result {
+            Ok(value) => {
+                let mut state = thunk.state_mut();
+                *state = crate::value::ThunkState::Evaluated(value.clone());
+                Ok(value)
+            }
+            Err(e) => {
+                let mut state = thunk.state_mut();
+                *state = crate::value::ThunkState::Evaluated(Value::Err(Box::new(Value::String(
+                    Rc::new(e.to_string()),
+                ))));
+                Err(e)
             }
         }
     }
@@ -994,7 +1074,9 @@ impl Evaluator {
                 match &*thunk.state() {
                     ThunkState::Evaluated(v) => Self::value_to_string(v),
                     ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
-                    ThunkState::Unevaluated { .. } => "<thunk>".to_string(),
+                    ThunkState::AstUnevaluated { .. } | ThunkState::HirUnevaluated { .. } => {
+                        "<thunk>".to_string()
+                    }
                 }
             }
         }

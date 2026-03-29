@@ -598,6 +598,8 @@ pub enum ExprKind {
     Var(LocalId),
     /// Global definition reference. / 全局定义引用。
     Global(DefId),
+    /// Builtin function reference. / 内置函数引用。
+    Builtin(String),
     /// Record construction. / 记录构造。
     Record(Vec<(String, Expr)>),
     /// List literal. / 列表字面量。
