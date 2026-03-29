@@ -22,7 +22,7 @@ use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{
     BinOp, DefId, EnumDef, Expr, ExprKind, FnDef, ImplDef, Item, ItemKind, Literal, LocalId,
     MatchArm, Module, Pattern, PatternKind, Stmt, StmtKind, StructDef, TraitDef, Ty, TyKind,
-    TypeAlias, UnaryOp,
+    TypeAlias, UnaryOp, builtin_constructor_name,
 };
 use std::collections::HashMap;
 
@@ -1295,6 +1295,34 @@ impl TypeChecker {
         }
     }
 
+    fn pattern_covers_builtin_variant(
+        &self,
+        pattern: &Pattern,
+        variant_name: &str,
+        payload_ty: Option<&Ty>,
+    ) -> bool {
+        match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
+            PatternKind::Binding(_, _, inner) => {
+                self.pattern_covers_builtin_variant(inner, variant_name, payload_ty)
+            }
+            PatternKind::Constructor(def_id, patterns) => {
+                match (builtin_constructor_name(*def_id), variant_name, patterns.as_slice()) {
+                    (Some("Some"), "Some", [pattern])
+                    | (Some("Ok"), "Ok", [pattern])
+                    | (Some("Err"), "Err", [pattern]) => payload_ty
+                        .is_some_and(|ty| self.pattern_is_irrefutable_for(pattern, ty)),
+                    (Some("None"), "None", []) => true,
+                    _ => false,
+                }
+            }
+            PatternKind::Or(patterns) => patterns.iter().any(|pattern| {
+                self.pattern_covers_builtin_variant(pattern, variant_name, payload_ty)
+            }),
+            _ => false,
+        }
+    }
+
     fn missing_enum_patterns(&self, enum_id: DefId, covered_variants: &[String]) -> Vec<String> {
         let Some(enum_info) = self.enums.get(&enum_id) else {
             return Vec::new();
@@ -1317,7 +1345,7 @@ impl TypeChecker {
 
     fn check_match_coverage(&mut self, scrutinee_ty: &Ty, arms: &[MatchArm], span: Span) {
         let scrutinee_ty = self.apply(scrutinee_ty);
-        let mut irrefutable_arm_span = None;
+        let mut coverage_complete_span = None;
 
         match &scrutinee_ty.kind {
             TyKind::Bool => {
@@ -1325,7 +1353,7 @@ impl TypeChecker {
                 let mut covers_false = false;
 
                 for arm in arms {
-                    if let Some(previous_span) = irrefutable_arm_span {
+                    if let Some(previous_span) = coverage_complete_span {
                         self.diagnostics
                             .push(unreachable_pattern(arm.span, previous_span));
                         continue;
@@ -1334,7 +1362,7 @@ impl TypeChecker {
                         continue;
                     }
                     if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        irrefutable_arm_span = Some(arm.span);
+                        coverage_complete_span = Some(arm.span);
                         covers_true = true;
                         covers_false = true;
                         continue;
@@ -1343,6 +1371,10 @@ impl TypeChecker {
                     let (arm_true, arm_false) = self.bool_pattern_coverage(&arm.pattern);
                     covers_true |= arm_true;
                     covers_false |= arm_false;
+
+                    if covers_true && covers_false {
+                        coverage_complete_span = Some(arm.span);
+                    }
                 }
 
                 let mut missing = Vec::new();
@@ -1361,7 +1393,7 @@ impl TypeChecker {
                 let mut covered = false;
 
                 for arm in arms {
-                    if let Some(previous_span) = irrefutable_arm_span {
+                    if let Some(previous_span) = coverage_complete_span {
                         self.diagnostics
                             .push(unreachable_pattern(arm.span, previous_span));
                         continue;
@@ -1370,12 +1402,16 @@ impl TypeChecker {
                         continue;
                     }
                     if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        irrefutable_arm_span = Some(arm.span);
+                        coverage_complete_span = Some(arm.span);
                         covered = true;
                         continue;
                     }
 
                     covered |= self.pattern_covers_unit(&arm.pattern);
+
+                    if covered {
+                        coverage_complete_span = Some(arm.span);
+                    }
                 }
 
                 if !covered {
@@ -1384,11 +1420,13 @@ impl TypeChecker {
                 }
             }
 
-            TyKind::Named(enum_id, _) if self.enums.contains_key(enum_id) => {
-                let mut covered_variants = Vec::new();
+            TyKind::Named(def_id, args) if is_builtin_option_type(*def_id) => {
+                let payload_ty = args.first().cloned();
+                let mut covers_some = false;
+                let mut covers_none = false;
 
                 for arm in arms {
-                    if let Some(previous_span) = irrefutable_arm_span {
+                    if let Some(previous_span) = coverage_complete_span {
                         self.diagnostics
                             .push(unreachable_pattern(arm.span, previous_span));
                         continue;
@@ -1397,7 +1435,101 @@ impl TypeChecker {
                         continue;
                     }
                     if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        irrefutable_arm_span = Some(arm.span);
+                        coverage_complete_span = Some(arm.span);
+                        covers_some = true;
+                        covers_none = true;
+                        continue;
+                    }
+
+                    covers_some |= self.pattern_covers_builtin_variant(
+                        &arm.pattern,
+                        "Some",
+                        payload_ty.as_ref(),
+                    );
+                    covers_none |=
+                        self.pattern_covers_builtin_variant(&arm.pattern, "None", None);
+
+                    if covers_some && covers_none {
+                        coverage_complete_span = Some(arm.span);
+                    }
+                }
+
+                let mut missing = Vec::new();
+                if !covers_some {
+                    missing.push("Some(_)".to_string());
+                }
+                if !covers_none {
+                    missing.push("None".to_string());
+                }
+                if !missing.is_empty() {
+                    self.diagnostics.push(non_exhaustive_match(&missing, span));
+                }
+            }
+
+            TyKind::Named(def_id, args) if is_builtin_result_type(*def_id) => {
+                let ok_ty = args.first().cloned();
+                let err_ty = args.get(1).cloned();
+                let mut covers_ok = false;
+                let mut covers_err = false;
+
+                for arm in arms {
+                    if let Some(previous_span) = coverage_complete_span {
+                        self.diagnostics
+                            .push(unreachable_pattern(arm.span, previous_span));
+                        continue;
+                    }
+                    if arm.guard.is_some() {
+                        continue;
+                    }
+                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
+                        coverage_complete_span = Some(arm.span);
+                        covers_ok = true;
+                        covers_err = true;
+                        continue;
+                    }
+
+                    covers_ok |= self.pattern_covers_builtin_variant(
+                        &arm.pattern,
+                        "Ok",
+                        ok_ty.as_ref(),
+                    );
+                    covers_err |= self.pattern_covers_builtin_variant(
+                        &arm.pattern,
+                        "Err",
+                        err_ty.as_ref(),
+                    );
+
+                    if covers_ok && covers_err {
+                        coverage_complete_span = Some(arm.span);
+                    }
+                }
+
+                let mut missing = Vec::new();
+                if !covers_ok {
+                    missing.push("Ok(_)".to_string());
+                }
+                if !covers_err {
+                    missing.push("Err(_)".to_string());
+                }
+                if !missing.is_empty() {
+                    self.diagnostics.push(non_exhaustive_match(&missing, span));
+                }
+            }
+
+            TyKind::Named(enum_id, _) if self.enums.contains_key(enum_id) => {
+                let mut covered_variants = Vec::new();
+
+                for arm in arms {
+                    if let Some(previous_span) = coverage_complete_span {
+                        self.diagnostics
+                            .push(unreachable_pattern(arm.span, previous_span));
+                        continue;
+                    }
+                    if arm.guard.is_some() {
+                        continue;
+                    }
+                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
+                        coverage_complete_span = Some(arm.span);
                         if let Some(enum_info) = self.enums.get(enum_id) {
                             covered_variants = enum_info.variants.keys().cloned().collect();
                         }
@@ -1420,6 +1552,10 @@ impl TypeChecker {
                         {
                             covered_variants.push(variant_name.clone());
                         }
+                    }
+
+                    if covered_variants.len() == enum_info.variants.len() {
+                        coverage_complete_span = Some(arm.span);
                     }
                 }
 
@@ -2365,6 +2501,98 @@ impl TypeChecker {
             }
 
             PatternKind::Constructor(def_id, patterns) => {
+                if let Some(name) = builtin_constructor_name(*def_id) {
+                    let expected = self.apply(expected);
+                    let option_ctor = matches!(name, "Some" | "None");
+                    let result_ctor = matches!(name, "Ok" | "Err");
+                    if matches!(expected.kind, TyKind::Named(def_id, _) if option_ctor && is_builtin_result_type(def_id) || result_ctor && is_builtin_option_type(def_id))
+                    {
+                        self.error(pattern.span, "constructor does not match expected builtin type");
+                        return;
+                    }
+
+                    match name {
+                        "Some" => {
+                            let payload_ty = self.fresh_var();
+                            self.unify(
+                                &builtin_option(payload_ty.clone(), pattern.span),
+                                &expected,
+                                pattern.span,
+                            );
+                            if patterns.len() != 1 {
+                                self.error(
+                                    pattern.span,
+                                    format!(
+                                        "constructor expects 1 field(s), got {}",
+                                        patterns.len()
+                                    ),
+                                );
+                                return;
+                            }
+                            self.check_pattern(&patterns[0], &self.apply(&payload_ty));
+                        }
+                        "None" => {
+                            let elem_ty = self.fresh_var();
+                            self.unify(
+                                &builtin_option(elem_ty, pattern.span),
+                                &expected,
+                                pattern.span,
+                            );
+                            if !patterns.is_empty() {
+                                self.error(
+                                    pattern.span,
+                                    format!(
+                                        "constructor expects 0 field(s), got {}",
+                                        patterns.len()
+                                    ),
+                                );
+                            }
+                        }
+                        "Ok" => {
+                            let ok_ty = self.fresh_var();
+                            let err_ty = self.fresh_var();
+                            self.unify(
+                                &builtin_result(ok_ty.clone(), err_ty, pattern.span),
+                                &expected,
+                                pattern.span,
+                            );
+                            if patterns.len() != 1 {
+                                self.error(
+                                    pattern.span,
+                                    format!(
+                                        "constructor expects 1 field(s), got {}",
+                                        patterns.len()
+                                    ),
+                                );
+                                return;
+                            }
+                            self.check_pattern(&patterns[0], &self.apply(&ok_ty));
+                        }
+                        "Err" => {
+                            let ok_ty = self.fresh_var();
+                            let err_ty = self.fresh_var();
+                            self.unify(
+                                &builtin_result(ok_ty, err_ty.clone(), pattern.span),
+                                &expected,
+                                pattern.span,
+                            );
+                            if patterns.len() != 1 {
+                                self.error(
+                                    pattern.span,
+                                    format!(
+                                        "constructor expects 1 field(s), got {}",
+                                        patterns.len()
+                                    ),
+                                );
+                                return;
+                            }
+                            self.check_pattern(&patterns[0], &self.apply(&err_ty));
+                        }
+                        _ => {}
+                    }
+                    return;
+                }
+
                 if let Some(variant) = self.variants.get(def_id) {
                     let enum_id = variant.enum_id;
                     let fields = variant.fields.clone();
@@ -2390,6 +2618,12 @@ impl TypeChecker {
                         self.check_pattern(pat, ty);
                     }
                 } else {
+                    let expected = self.apply(expected);
+                    if matches!(expected.kind, TyKind::Named(def_id, _) if is_builtin_option_type(def_id) || is_builtin_result_type(def_id))
+                    {
+                        self.error(pattern.span, "constructor does not match expected builtin type");
+                        return;
+                    }
                     // Unknown constructor, use fresh type variables
                     // 未知构造函数，使用新类型变量
                     for pat in patterns {

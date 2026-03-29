@@ -336,6 +336,20 @@ fn test_end_to_end_std_option_builtin_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_builtin_option_match_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.option as option;
+        let x = match option.some(41) {
+            Some(value) -> value,
+            None -> 0
+        };
+        ",
+        Value::Int(int(41)),
+    );
+}
+
+#[test]
 fn test_end_to_end_std_result_builtin_runtime_parity() {
     assert_runtime_parity(
         "
@@ -345,6 +359,20 @@ fn test_end_to_end_std_result_builtin_runtime_parity() {
         let x = if err == \"boom\" then a else 0;
         ",
         Value::Int(int(42)),
+    );
+}
+
+#[test]
+fn test_end_to_end_builtin_result_match_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.result as result;
+        let x = match result.err(\"boom\") {
+            Ok(value) -> value,
+            Err(message) -> if message == \"boom\" then 1 else 0
+        };
+        ",
+        Value::Int(int(1)),
     );
 }
 

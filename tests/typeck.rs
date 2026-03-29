@@ -1030,12 +1030,70 @@ fn test_typeck_match_enum_non_exhaustive() {
 }
 
 #[test]
+fn test_typeck_match_builtin_option_non_exhaustive() {
+    assert_has_diagnostic(
+        "
+        import std.option as option;
+        let x = match option.some(1) {
+            Some(value) -> value
+        };
+        ",
+        Severity::Error,
+        "non-exhaustive pattern match",
+    );
+}
+
+#[test]
+fn test_typeck_match_builtin_result_non_exhaustive() {
+    assert_has_diagnostic(
+        "
+        import std.result as result;
+        let x = match result.ok(1) {
+            Ok(value) -> value
+        };
+        ",
+        Severity::Error,
+        "non-exhaustive pattern match",
+    );
+}
+
+#[test]
+fn test_typeck_match_builtin_option_rejects_wrong_constructor() {
+    assert_has_diagnostic(
+        "
+        import std.option as option;
+        let x = match option.some(1) {
+            Ok(value) -> value,
+            None -> 0
+        };
+        ",
+        Severity::Error,
+        "constructor does not match expected builtin type",
+    );
+}
+
+#[test]
 fn test_typeck_match_unreachable_after_wildcard() {
     assert_has_diagnostic(
         "
         let x = match true {
             _ -> 1,
             false -> 0
+        };
+        ",
+        Severity::Warning,
+        "unreachable pattern",
+    );
+}
+
+#[test]
+fn test_typeck_match_builtin_option_unreachable_after_complete_coverage() {
+    assert_has_diagnostic(
+        "
+        import std.option as option;
+        let x = match option.some(1) {
+            Some(_) | None -> 1,
+            Some(value) -> value
         };
         ",
         Severity::Warning,

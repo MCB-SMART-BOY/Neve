@@ -6,6 +6,7 @@ use crate::{
     GenericParam, ImplDef, ImplItem, Import, ImportKind, ImportPathPrefix, Item, ItemKind, Literal,
     LocalId, MatchArm, Module, ModuleId, ModuleLoader, Param, Pattern, PatternKind, Stmt, StmtKind,
     StringPart, StructDef, TraitDef, TraitItem, Ty, TyKind, TypeAlias, UnaryOp, VariantDef,
+    builtin_constructor_id,
 };
 use neve_syntax::{self as ast, SourceFile};
 use std::collections::{HashMap, HashSet};
@@ -1576,6 +1577,13 @@ impl Resolver {
                 let def_id = path
                     .first()
                     .and_then(|p| self.lookup_global(&p.name))
+                    .or_else(|| {
+                        if path.len() == 1 {
+                            builtin_constructor_id(&path[0].name)
+                        } else {
+                            None
+                        }
+                    })
                     .unwrap_or(DefId(u32::MAX));
                 let args = args
                     .iter()
