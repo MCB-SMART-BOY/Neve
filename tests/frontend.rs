@@ -229,3 +229,21 @@ fn test_frontend_accepts_std_io_and_fetch_builtins() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_std_map_and_set_builtins() {
+    let result = analyze_source(
+        r#"
+            import std.Map;
+            import std.Set;
+            let map = Map.insert("a", 1, Map.empty);
+            let set = Set.insert(1, Set.empty);
+            let value = Map.getWithDefault("a", 0, map) + Set.size(set);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

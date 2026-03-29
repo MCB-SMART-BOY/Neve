@@ -388,6 +388,38 @@ fn test_typeck_std_fetch_builtins_reject_wrong_use() {
     );
 }
 
+#[test]
+fn test_typeck_std_map_and_set_builtins_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.Map;
+            import std.Set;
+            let map = Map.insert("a", 1, Map.empty);
+            let value: Int = Map.getWithDefault("a", 0, map);
+            let present: Bool = Map.contains("a", map);
+            let set = Set.insert(1, Set.empty);
+            let count: Int = Set.size(set);
+            let hasOne: Bool = Set.contains(1, set);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_map_and_set_builtins_reject_wrong_use() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.Map;
+            import std.Set;
+            let map = Map.insert("a", 1, Map.empty);
+            let set = Set.insert(1, Set.empty);
+            let wrong = expectInt(Map.contains("a", map)) + expectInt(Set.isEmpty(set));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
 // ============================================================================
 // 逻辑运算
 // ============================================================================

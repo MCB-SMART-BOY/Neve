@@ -169,6 +169,21 @@ fn test_eval_hir_std_io_builtins() {
 }
 
 #[test]
+fn test_eval_hir_std_map_and_set_builtins() {
+    let source = r#"
+        import std.Map;
+        import std.Set;
+        let map = Map.insert("a", 41, Map.empty);
+        let set = Set.insert(1, Set.empty);
+        let result = Map.getWithDefault("a", 0, map) + Set.size(set);
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(42)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_import_std_root() {
     let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {

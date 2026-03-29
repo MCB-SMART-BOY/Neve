@@ -374,3 +374,17 @@ fn test_end_to_end_std_io_builtin_runtime_parity() {
         ),
     );
 }
+
+#[test]
+fn test_end_to_end_std_map_and_set_builtin_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.Map;
+        import std.Set;
+        let map = Map.insert(\"a\", 41, Map.empty);
+        let set = Set.insert(1, Set.empty);
+        let x = Map.getWithDefault(\"a\", 0, map) + Set.size(set);
+        ",
+        Value::Int(int(42)),
+    );
+}
