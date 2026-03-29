@@ -104,6 +104,15 @@ fn test_eval_hir_std_module_import() {
 }
 
 #[test]
+fn test_eval_hir_std_glob_import() {
+    let source = "import std.list (*); let result = len([1, 2, 3]);";
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(3)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_import_std_root() {
     let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {

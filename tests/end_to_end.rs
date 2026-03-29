@@ -310,3 +310,14 @@ fn test_end_to_end_std_module_import_runtime_parity() {
         Value::Int(int(4)),
     );
 }
+
+#[test]
+fn test_end_to_end_std_glob_import_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.list (*);
+        let x = len([1, 2, 3, 4]);
+        ",
+        Value::Int(int(4)),
+    );
+}

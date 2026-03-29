@@ -161,3 +161,18 @@ fn test_frontend_accepts_std_item_and_module_imports() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_std_glob_imports() {
+    let result = analyze_source(
+        r#"
+            import std.list (*);
+            let x = len([1, 2, 3]);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

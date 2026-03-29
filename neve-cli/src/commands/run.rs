@@ -6,7 +6,7 @@ use neve_diagnostic::{Severity, emit};
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_hir::{ModuleId, ModuleLoadError, ModuleLoader};
 use neve_std::{std_module_overrides, stdlib};
-use neve_syntax::{ImportDef, ImportItems, ItemKind, SourceFile};
+use neve_syntax::{ImportDef, ItemKind, SourceFile};
 use neve_typeck::TypeChecker;
 use std::collections::HashMap;
 use std::fs;
@@ -307,7 +307,7 @@ fn import_requires_ast_fallback(import: &ImportDef) -> bool {
         return false;
     }
 
-    !is_supported_std_import(import) || matches!(import.items, ImportItems::All)
+    !is_supported_std_import(import)
 }
 
 fn is_supported_std_import(import: &ImportDef) -> bool {
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn run_value_falls_back_to_ast_for_std_glob_imports() {
+    fn run_value_prefers_frontend_hir_for_std_glob_imports() {
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
 
@@ -409,7 +409,7 @@ mod tests {
         );
 
         let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
-        assert_eq!(backend, RunBackend::AstFallback);
+        assert_eq!(backend, RunBackend::FrontendHir);
         assert_eq!(value, Value::Int(2.into()));
     }
 }

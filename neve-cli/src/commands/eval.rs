@@ -8,7 +8,7 @@ use neve_frontend::analyze_ast;
 use neve_hir::ModuleLoader;
 use neve_parser::parse;
 use neve_std::{std_module_overrides, stdlib};
-use neve_syntax::{ImportDef, ImportItems, ItemKind, SourceFile};
+use neve_syntax::{ImportDef, ItemKind, SourceFile};
 use std::path::{Path, PathBuf};
 
 /// Run the eval command.
@@ -159,11 +159,7 @@ fn source_file_requires_ast_fallback(file: &SourceFile) -> bool {
 }
 
 fn import_requires_ast_fallback(import: &ImportDef) -> bool {
-    if !is_supported_std_import(import) {
-        return true;
-    }
-
-    matches!(import.items, ImportItems::All)
+    !is_supported_std_import(import)
 }
 
 fn is_supported_std_import(import: &ImportDef) -> bool {
@@ -275,5 +271,20 @@ mod tests {
         let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
         assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(2.into()));
+    }
+
+    #[test]
+    fn eval_value_prefers_frontend_hir_for_std_glob_imports() {
+        let source = prepare_source("import std.list (*); let result = len([1, 2, 3])");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        assert_eq!(backend, EvalBackend::FrontendHir);
+        assert_eq!(value, Value::Int(3.into()));
     }
 }

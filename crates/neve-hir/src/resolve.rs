@@ -493,6 +493,154 @@ impl Resolver {
         }
     }
 
+    fn std_builtin_exports(module_prefix: &str) -> Option<&'static [&'static str]> {
+        const FETCH: &[&str] = &[
+            "git",
+            "gitWithHash",
+            "path",
+            "pathWithHash",
+            "url",
+            "urlWithHash",
+        ];
+        const IO: &[&str] = &[
+            "appendFile",
+            "createDirAll",
+            "currentDir",
+            "currentSystem",
+            "exec",
+            "execShell",
+            "execWith",
+            "getEnv",
+            "hashFile",
+            "hashString",
+            "homeDir",
+            "isDir",
+            "isFile",
+            "pathExists",
+            "readDir",
+            "readFile",
+            "removeDirAll",
+            "writeFile",
+        ];
+        const LIST: &[&str] = &[
+            "append",
+            "cons",
+            "contains",
+            "drop",
+            "empty",
+            "filter",
+            "fold",
+            "foldRight",
+            "get",
+            "head",
+            "indexOf",
+            "init",
+            "isEmpty",
+            "last",
+            "len",
+            "map",
+            "max",
+            "min",
+            "product",
+            "range",
+            "replicate",
+            "reverse",
+            "singleton",
+            "sort",
+            "sum",
+            "tail",
+            "take",
+            "unzip",
+            "zip",
+        ];
+        const MAP: &[&str] = &[
+            "contains",
+            "difference",
+            "empty",
+            "filter",
+            "filterWithKey",
+            "fold",
+            "foldWithKey",
+            "fromList",
+            "get",
+            "getWithDefault",
+            "insert",
+            "intersection",
+            "isEmpty",
+            "keys",
+            "map",
+            "mapWithKey",
+            "remove",
+            "singleton",
+            "size",
+            "toList",
+            "union",
+            "update",
+            "values",
+        ];
+        const MATH: &[&str] = &[
+            "abs", "ceil", "clamp", "cos", "e", "exp", "floor", "inf", "isInf", "isNan", "log",
+            "log10", "max", "min", "nan", "pi", "pow", "round", "sin", "sqrt", "tan", "toFloat",
+            "toInt",
+        ];
+        const OPTION: &[&str] = &["is_none", "is_some", "none", "some", "unwrap", "unwrap_or"];
+        const PATH: &[&str] = &["extension", "filename", "is_absolute", "join", "parent"];
+        const RESULT: &[&str] = &["err", "is_err", "is_ok", "ok", "unwrap", "unwrap_err"];
+        const SET: &[&str] = &[
+            "contains",
+            "difference",
+            "empty",
+            "filter",
+            "fold",
+            "fromList",
+            "insert",
+            "intersection",
+            "isDisjoint",
+            "isEmpty",
+            "isSubset",
+            "isSuperset",
+            "map",
+            "partition",
+            "remove",
+            "singleton",
+            "size",
+            "symmetricDifference",
+            "toList",
+            "union",
+        ];
+        const STRING: &[&str] = &[
+            "chars",
+            "contains",
+            "endsWith",
+            "isEmpty",
+            "join",
+            "len",
+            "lines",
+            "lower",
+            "repeat",
+            "replace",
+            "split",
+            "startsWith",
+            "substring",
+            "trim",
+            "upper",
+        ];
+
+        match module_prefix {
+            "fetch" => Some(FETCH),
+            "io" => Some(IO),
+            "list" => Some(LIST),
+            "Map" => Some(MAP),
+            "math" => Some(MATH),
+            "option" => Some(OPTION),
+            "path" => Some(PATH),
+            "result" => Some(RESULT),
+            "Set" => Some(SET),
+            "string" => Some(STRING),
+            _ => None,
+        }
+    }
+
     fn try_register_std_import(&mut self, import: &Import) -> bool {
         let Some(module_prefix) = Self::std_builtin_module_prefix(&import.path) else {
             return false;
@@ -515,7 +663,16 @@ impl Resolver {
                     false
                 }
             }
-            ImportKind::All => false,
+            ImportKind::All => {
+                let Some(names) = Self::std_builtin_exports(&module_prefix) else {
+                    return false;
+                };
+                for name in names {
+                    self.imported_builtin_items
+                        .insert((*name).to_string(), format!("{module_prefix}.{name}"));
+                }
+                true
+            }
         }
     }
 
