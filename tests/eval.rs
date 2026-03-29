@@ -871,6 +871,38 @@ fn test_eval_lazy_function_call() {
 }
 
 #[test]
+fn test_eval_hir_lazy_basic() {
+    let result = eval_source(
+        "
+        let thunk = lazy 42;
+        let x = force(thunk);
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
+fn test_eval_hir_lazy_predicates() {
+    let result = eval_source(
+        "
+        let thunk = lazy 42;
+        let before = isEvaluated(thunk);
+        let _ = force(thunk);
+        let x = (isLazy(thunk), before, isEvaluated(thunk));
+    ",
+    );
+    match result {
+        Ok(Value::Tuple(items)) => {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(&items[0], Value::Bool(true)));
+            assert!(matches!(&items[1], Value::Bool(false)));
+            assert!(matches!(&items[2], Value::Bool(true)));
+        }
+        other => panic!("expected lazy predicate tuple, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_record_multiple_fields() {
     match eval_source("let x = #{ a = 1, b = 2, c = 3 };") {
         Ok(Value::Record(fields)) => {

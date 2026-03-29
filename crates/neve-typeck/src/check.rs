@@ -7,12 +7,12 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::errors::{
-    format_type, missing_assoc_type, missing_method, unbound_variable, unused_variable,
-    TypeMismatchError,
+    TypeMismatchError, format_type, missing_assoc_type, missing_method, unbound_variable,
+    unused_variable,
 };
 use crate::infer::InferContext;
 use crate::traits::{ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
-use crate::unify::{free_type_vars, generalize, instantiate, unify, Substitution};
+use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{
@@ -424,6 +424,52 @@ impl TypeChecker {
         self.subst.apply(ty)
     }
 
+    fn builtin_type(&mut self, name: &str, span: Span) -> Option<Ty> {
+        let polymorphic = match name {
+            "force" => Ty {
+                kind: TyKind::Forall(
+                    vec!["a".to_string()],
+                    Box::new(Ty {
+                        kind: TyKind::Fn(
+                            vec![Ty {
+                                kind: TyKind::Param(0, "a".to_string()),
+                                span,
+                            }],
+                            Box::new(Ty {
+                                kind: TyKind::Param(0, "a".to_string()),
+                                span,
+                            }),
+                        ),
+                        span,
+                    }),
+                ),
+                span,
+            },
+            "isLazy" | "isEvaluated" => Ty {
+                kind: TyKind::Forall(
+                    vec!["a".to_string()],
+                    Box::new(Ty {
+                        kind: TyKind::Fn(
+                            vec![Ty {
+                                kind: TyKind::Param(0, "a".to_string()),
+                                span,
+                            }],
+                            Box::new(Ty {
+                                kind: TyKind::Bool,
+                                span,
+                            }),
+                        ),
+                        span,
+                    }),
+                ),
+                span,
+            },
+            _ => return None,
+        };
+
+        Some(instantiate(&polymorphic, &mut || self.fresh_var()))
+    }
+
     /// Check if a type variable has been resolved.
     /// 检查类型变量是否已被解析。
     pub fn is_resolved(&self, var: u32) -> bool {
@@ -801,6 +847,11 @@ impl TypeChecker {
                     self.fresh_var()
                 }
             }
+
+            ExprKind::Builtin(name) => self.builtin_type(name, span).unwrap_or_else(|| {
+                self.error(span, format!("unknown builtin: {name}"));
+                self.fresh_var()
+            }),
 
             ExprKind::List(items) => {
                 let elem_ty = self.fresh_var();

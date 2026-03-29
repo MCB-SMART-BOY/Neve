@@ -975,7 +975,7 @@ impl AstEvaluator {
 
             ExprKind::Lazy(inner) => {
                 // Create a thunk that captures the expression and current environment
-                let thunk = Thunk::new((**inner).clone(), self.env.clone());
+                let thunk = Thunk::new_ast((**inner).clone(), self.env.clone());
                 Ok(Value::Thunk(thunk))
             }
 
@@ -1106,8 +1106,13 @@ impl AstEvaluator {
                         "infinite recursion in lazy evaluation".to_string(),
                     ));
                 }
-                ThunkState::Unevaluated { .. } => {
+                ThunkState::AstUnevaluated { .. } => {
                     // Will evaluate below
+                }
+                ThunkState::HirUnevaluated { .. } => {
+                    return Err(EvalError::TypeError(
+                        "cannot force HIR thunk in AST evaluator".to_string(),
+                    ));
                 }
             }
         }
@@ -1116,7 +1121,7 @@ impl AstEvaluator {
         let (expr, env) = {
             let mut state = thunk.state_mut();
             match std::mem::replace(&mut *state, ThunkState::Evaluating) {
-                ThunkState::Unevaluated { expr, env } => (expr, env),
+                ThunkState::AstUnevaluated { expr, env } => (expr, env),
                 _ => unreachable!(),
             }
         };
@@ -2137,7 +2142,9 @@ impl AstEvaluator {
             Value::Thunk(thunk) => match &*thunk.state() {
                 ThunkState::Evaluated(v) => Self::value_to_string(v),
                 ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
-                ThunkState::Unevaluated { .. } => "<thunk>".to_string(),
+                ThunkState::AstUnevaluated { .. } | ThunkState::HirUnevaluated { .. } => {
+                    "<thunk>".to_string()
+                }
             },
         }
     }

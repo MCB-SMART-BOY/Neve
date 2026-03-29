@@ -8,7 +8,7 @@
 use neve_common::Int;
 use neve_diagnostic::DiagnosticKind;
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
-use neve_frontend::{analyze_source, AnalysisResult};
+use neve_frontend::{AnalysisResult, analyze_source};
 
 fn int(value: i64) -> Int {
     value.into()
@@ -139,20 +139,12 @@ fn test_end_to_end_recursive_fibonacci_runtime_parity() {
 }
 
 #[test]
-fn test_known_gap_lazy_only_works_on_ast_runtime() {
-    let analysis = analyze_without_diagnostics("let x = lazy 42;");
-
-    let ast_value = eval_ast(&analysis).expect("AST evaluator should support lazy");
-    assert!(matches!(ast_value, Value::Thunk(_)));
-
-    let hir_error = eval_hir(&analysis).expect_err("HIR evaluator should reject lazy for now");
-    match hir_error {
-        EvalError::TypeError(message) => {
-            assert!(
-                message.contains("lazy is not supported"),
-                "unexpected HIR lazy error: {message}"
-            );
-        }
-        other => panic!("expected lazy support gap, got {other:?}"),
-    }
+fn test_end_to_end_lazy_force_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let thunk = lazy 42;
+        let x = force(thunk);
+        ",
+        Value::Int(int(42)),
+    );
 }
