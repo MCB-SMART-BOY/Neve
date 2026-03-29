@@ -234,3 +234,14 @@ fn test_end_to_end_try_error_runtime_parity() {
         "boom",
     );
 }
+
+#[test]
+fn test_end_to_end_method_call_fallback_runtime_parity() {
+    assert_runtime_parity(
+        "
+        fn twice(x: Int) -> Int = x + x;
+        let y = 21.twice();
+        ",
+        Value::Int(int(42)),
+    );
+}

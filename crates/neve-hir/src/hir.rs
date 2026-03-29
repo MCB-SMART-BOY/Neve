@@ -562,6 +562,8 @@ pub struct AssocTypeImpl {
 /// 实现项（方法实现）。
 #[derive(Debug, Clone)]
 pub struct ImplItem {
+    /// Synthetic definition ID for the method body. / 方法体的合成定义 ID。
+    pub id: DefId,
     /// Method name. / 方法名称。
     pub name: String,
     /// Generic parameters. / 泛型参数。
@@ -610,6 +612,18 @@ pub enum ExprKind {
     Lambda(Vec<Param>, Box<Expr>),
     /// Function call. / 函数调用。
     Call(Box<Expr>, Vec<Expr>),
+    /// Method call `x.foo(y)`. / 方法调用 `x.foo(y)`。
+    MethodCall {
+        /// Receiver expression. / 接收者表达式。
+        receiver: Box<Expr>,
+        /// Method name as written in source. / 源码中的方法名。
+        method: String,
+        /// Fallback callable target used by extension-function syntax.
+        /// 用于扩展函数语法的回退可调用目标。
+        target: Box<Expr>,
+        /// Explicit call arguments excluding the receiver. / 不含接收者的显式参数。
+        args: Vec<Expr>,
+    },
     /// Field access. / 字段访问。
     Field(Box<Expr>, String),
     /// Safe field access `x?.field`. / 安全字段访问 `x?.field`。

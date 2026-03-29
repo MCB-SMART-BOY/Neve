@@ -971,6 +971,57 @@ impl TypeChecker {
                 self.apply(&ret_ty)
             }
 
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                target,
+                args,
+            } => {
+                let receiver_ty = self.infer_expr(receiver);
+                let applied_receiver_ty = self.apply(&receiver_ty);
+
+                if let Some(resolution) = self
+                    .trait_resolver
+                    .resolve_method(&applied_receiver_ty, method)
+                {
+                    if let Some(self_param_ty) = resolution.params.first() {
+                        self.unify(&receiver_ty, self_param_ty, receiver.span);
+                    }
+
+                    if args.len() + 1 != resolution.params.len() {
+                        self.error(
+                            span,
+                            format!(
+                                "method '{}' expects {} arguments, got {}",
+                                method,
+                                resolution.params.len().saturating_sub(1),
+                                args.len()
+                            ),
+                        );
+                    }
+
+                    for (arg, param_ty) in args.iter().zip(resolution.params.iter().skip(1)) {
+                        let arg_ty = self.infer_expr(arg);
+                        self.unify(&arg_ty, param_ty, arg.span);
+                    }
+
+                    resolution.return_ty
+                } else {
+                    let func_ty = self.infer_expr(target);
+                    let mut arg_tys = vec![receiver_ty];
+                    arg_tys.extend(args.iter().map(|arg| self.infer_expr(arg)));
+
+                    let ret_ty = self.fresh_var();
+                    let expected_fn_ty = Ty {
+                        kind: TyKind::Fn(arg_tys, Box::new(ret_ty.clone())),
+                        span,
+                    };
+
+                    self.unify(&func_ty, &expected_fn_ty, span);
+                    self.apply(&ret_ty)
+                }
+            }
+
             ExprKind::Field(base, field) => {
                 let base_ty = self.infer_expr(base);
                 let base_ty = self.apply(&base_ty);

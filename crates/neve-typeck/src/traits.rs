@@ -120,6 +120,7 @@ pub struct TraitRef {
 /// 实现块中的方法。
 #[derive(Debug, Clone)]
 pub struct ImplMethod {
+    pub def_id: DefId,
     pub name: String,
     pub params: Vec<Ty>,
     pub return_ty: Ty,
@@ -213,6 +214,7 @@ impl TraitResolver {
             .items
             .iter()
             .map(|item| ImplMethod {
+                def_id: item.id,
                 name: item.name.clone(),
                 params: item.params.iter().map(|p| p.ty.clone()).collect(),
                 return_ty: item.return_ty.clone(),
@@ -376,6 +378,7 @@ impl TraitResolver {
                     if method.name == method_name {
                         return Some(MethodResolution {
                             impl_id,
+                            method_def_id: method.def_id,
                             method_name: method_name.to_string(),
                             self_ty: info.self_ty.clone(),
                             params: method.params.clone(),
@@ -402,6 +405,7 @@ impl TraitResolver {
                                 if method.name == method_name {
                                     return Some(MethodResolution {
                                         impl_id: *impl_id,
+                                        method_def_id: method.def_id,
                                         method_name: method_name.to_string(),
                                         self_ty: info.self_ty.clone(),
                                         params: method.params.clone(),
@@ -568,6 +572,7 @@ impl ImplCompleteness {
 #[derive(Debug, Clone)]
 pub struct MethodResolution {
     pub impl_id: ImplId,
+    pub method_def_id: DefId,
     pub method_name: String,
     pub self_ty: Ty,
     pub params: Vec<Ty>,

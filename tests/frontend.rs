@@ -109,3 +109,21 @@ fn test_frontend_accepts_try_on_option_and_result_like_enums() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_trait_method_call_analysis() {
+    let result = analyze_source(
+        r#"
+            trait Show { fn show(self) -> String; };
+            impl Show for Int {
+                fn show(self) -> String = toString(self);
+            };
+            let x = 1.show();
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

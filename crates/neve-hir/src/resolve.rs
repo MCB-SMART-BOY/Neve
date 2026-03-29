@@ -756,6 +756,7 @@ impl Resolver {
     /// 降级 impl 项（方法实现）。
     fn lower_impl_item(&mut self, item: &ast::ImplItem) -> Option<ImplItem> {
         self.push_scope();
+        let id = self.fresh_def_id();
 
         let generics = self.lower_generics(&item.generics);
         let params: Vec<Param> = item.params.iter().map(|p| self.lower_param(p)).collect();
@@ -772,6 +773,7 @@ impl Resolver {
         self.pop_scope();
 
         Some(ImplItem {
+            id,
             name: item.name.name.clone(),
             generics,
             params,
@@ -978,17 +980,12 @@ impl Resolver {
                 receiver,
                 method,
                 args,
-            } => {
-                // Desugar method call to function call: receiver.method(args) -> method(receiver, args)
-                // 将方法调用解糖为函数调用：receiver.method(args) -> method(receiver, args)
-                let recv = self.lower_expr(receiver);
-                let mut all_args = vec![recv];
-                all_args.extend(args.iter().map(|e| self.lower_expr(e)));
-
-                let func = self.lower_name_expr(&method.name, span);
-
-                ExprKind::Call(Box::new(func), all_args)
-            }
+            } => ExprKind::MethodCall {
+                receiver: Box::new(self.lower_expr(receiver)),
+                method: method.name.clone(),
+                target: Box::new(self.lower_name_expr(&method.name, span)),
+                args: args.iter().map(|e| self.lower_expr(e)).collect(),
+            },
 
             ast::ExprKind::Field { base, field } => {
                 let base = self.lower_expr(base);
