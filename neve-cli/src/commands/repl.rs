@@ -2,15 +2,27 @@
 //! `neve repl` 命令。
 
 use crate::output;
+use neve_common::Span;
 use neve_diagnostic::emit;
 use neve_eval::{AstEnv, AstEvaluator, Value, builtins};
+use neve_hir::{DefId, ItemKind as HirItemKind, Resolver, Ty, TyKind};
 use neve_parser::parse;
 use neve_std::std_module_overrides;
 use neve_syntax::PatternKind;
+use neve_typeck::TypeChecker;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+
+const REPL_LIST_TYPE_ID: DefId = DefId(u32::MAX - 1);
+const REPL_OPTION_TYPE_ID: DefId = DefId(u32::MAX - 2);
+const REPL_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 3);
+const REPL_MAP_TYPE_ID: DefId = DefId(u32::MAX - 4);
+const REPL_SET_TYPE_ID: DefId = DefId(u32::MAX - 5);
+const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 6);
+const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 7);
 
 /// Run the REPL.
 /// 运行 REPL。
@@ -134,8 +146,20 @@ pub fn run() -> Result<(), String> {
                                 continue;
                             }
                             let expr_str = parts[1..].join(" ");
-                            println!("(Type inference not yet implemented for: {})", expr_str);
-                            println!("Hint: Full type checking will be available soon!");
+                            match infer_repl_type(&expr_str, &env.borrow()) {
+                                Ok(ty) => println!("{ty}"),
+                                Err(TypeQueryError::Diagnostics {
+                                    source,
+                                    diagnostics,
+                                }) => {
+                                    for diag in &diagnostics {
+                                        emit(&source, "<repl:type>", diag);
+                                    }
+                                }
+                                Err(TypeQueryError::Message(message)) => {
+                                    eprintln!("{message}");
+                                }
+                            }
                             input_buffer.clear();
                             continue;
                         }
@@ -386,5 +410,299 @@ fn prepare_repl_input(input: &str) -> String {
         // It's an expression, wrap it as a let binding
         // 是一个表达式，将其包装为 let 绑定
         format!("let __expr__ = {trimmed};")
+    }
+}
+
+#[derive(Debug)]
+enum TypeQueryError {
+    Diagnostics {
+        source: String,
+        diagnostics: Vec<neve_diagnostic::Diagnostic>,
+    },
+    Message(String),
+}
+
+struct ReplTypeEnv {
+    global_types: HashMap<DefId, Ty>,
+    global_spans: HashMap<DefId, Span>,
+    global_names: HashMap<DefId, String>,
+    next_def_id: u32,
+}
+
+fn infer_repl_type(expr: &str, env: &AstEnv) -> Result<String, TypeQueryError> {
+    let source = prepare_repl_type_input(expr);
+    let (ast, diagnostics) = parse(&source);
+    if !diagnostics.is_empty() {
+        return Err(TypeQueryError::Diagnostics {
+            source,
+            diagnostics,
+        });
+    }
+
+    let mut resolver = Resolver::new();
+    let repl_env = repl_type_env(env);
+    for (&def_id, name) in &repl_env.global_names {
+        resolver.register_import(name.clone(), def_id);
+    }
+    resolver.set_def_id_counter(repl_env.next_def_id);
+
+    let hir = resolver.resolve(&ast);
+    let query_def_id = find_repl_type_binding(&hir).ok_or_else(|| {
+        TypeQueryError::Message("internal error: missing type query binding".to_string())
+    })?;
+
+    let mut checker = TypeChecker::with_global_env(repl_env.global_types, repl_env.global_spans);
+    checker.check(&hir);
+    if !checker.diagnostics_ref().is_empty() {
+        return Err(TypeQueryError::Diagnostics {
+            source,
+            diagnostics: checker.diagnostics_ref().to_vec(),
+        });
+    }
+
+    let ty = checker.global_type(query_def_id).ok_or_else(|| {
+        TypeQueryError::Message("internal error: failed to infer queried type".to_string())
+    })?;
+    Ok(format_repl_type(&ty))
+}
+
+fn prepare_repl_type_input(expr: &str) -> String {
+    let trimmed = expr.trim();
+    if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("let __type__ = {trimmed};")
+    }
+}
+
+fn repl_type_env(env: &AstEnv) -> ReplTypeEnv {
+    let bindings = env.all_bindings();
+    let mut repl_env = ReplTypeEnv {
+        global_types: HashMap::new(),
+        global_spans: HashMap::new(),
+        global_names: HashMap::new(),
+        next_def_id: 1_000_000u32,
+    };
+    let mut next_def_id = 1_000_000u32;
+
+    let mut entries: Vec<_> = bindings.into_iter().collect();
+    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+    for (name, value) in entries {
+        let def_id = DefId(next_def_id);
+        next_def_id += 1;
+        repl_env
+            .global_types
+            .insert(def_id, type_from_value(&value));
+        repl_env.global_spans.insert(def_id, Span::DUMMY);
+        repl_env.global_names.insert(def_id, name);
+    }
+
+    repl_env.next_def_id = next_def_id;
+    repl_env
+}
+
+fn find_repl_type_binding(module: &neve_hir::Module) -> Option<DefId> {
+    module.items.iter().find_map(|item| match &item.kind {
+        HirItemKind::Fn(def) if def.name == "__type__" => Some(item.id),
+        _ => None,
+    })
+}
+
+fn unknown_ty() -> Ty {
+    Ty {
+        kind: TyKind::Unknown,
+        span: Span::DUMMY,
+    }
+}
+
+fn named_repl_ty(def_id: DefId, args: Vec<Ty>) -> Ty {
+    Ty {
+        kind: TyKind::Named(def_id, args),
+        span: Span::DUMMY,
+    }
+}
+
+fn fn_repl_ty(arity: usize) -> Ty {
+    Ty {
+        kind: TyKind::Fn(vec![unknown_ty(); arity], Box::new(unknown_ty())),
+        span: Span::DUMMY,
+    }
+}
+
+fn type_from_value(value: &Value) -> Ty {
+    match value {
+        Value::Int(_) => Ty {
+            kind: TyKind::Int,
+            span: Span::DUMMY,
+        },
+        Value::Float(_) => Ty {
+            kind: TyKind::Float,
+            span: Span::DUMMY,
+        },
+        Value::Bool(_) => Ty {
+            kind: TyKind::Bool,
+            span: Span::DUMMY,
+        },
+        Value::Char(_) => Ty {
+            kind: TyKind::Char,
+            span: Span::DUMMY,
+        },
+        Value::String(_) => Ty {
+            kind: TyKind::String,
+            span: Span::DUMMY,
+        },
+        Value::Unit => Ty {
+            kind: TyKind::Unit,
+            span: Span::DUMMY,
+        },
+        Value::List(items) => {
+            named_repl_ty(REPL_LIST_TYPE_ID, vec![common_runtime_type(items.iter())])
+        }
+        Value::Tuple(items) => Ty {
+            kind: TyKind::Tuple(items.iter().map(type_from_value).collect()),
+            span: Span::DUMMY,
+        },
+        Value::Record(fields) => Ty {
+            kind: TyKind::Record(
+                fields
+                    .iter()
+                    .map(|(name, value)| (name.clone(), type_from_value(value)))
+                    .collect(),
+            ),
+            span: Span::DUMMY,
+        },
+        Value::Some(value) => named_repl_ty(REPL_OPTION_TYPE_ID, vec![type_from_value(value)]),
+        Value::None => named_repl_ty(REPL_OPTION_TYPE_ID, vec![unknown_ty()]),
+        Value::Ok(value) => named_repl_ty(
+            REPL_RESULT_TYPE_ID,
+            vec![type_from_value(value), unknown_ty()],
+        ),
+        Value::Err(value) => named_repl_ty(
+            REPL_RESULT_TYPE_ID,
+            vec![unknown_ty(), type_from_value(value)],
+        ),
+        Value::Map(_) => named_repl_ty(REPL_MAP_TYPE_ID, vec![unknown_ty(), unknown_ty()]),
+        Value::Set(_) => named_repl_ty(REPL_SET_TYPE_ID, vec![unknown_ty()]),
+        Value::Thunk(_) => named_repl_ty(REPL_LAZY_TYPE_ID, vec![unknown_ty()]),
+        Value::Builtin(builtin) => fn_repl_ty(builtin.arity),
+        Value::BuiltinFn(_, _) => named_repl_ty(REPL_FN_TYPE_ID, Vec::new()),
+        Value::Closure { params, .. } => fn_repl_ty(params.len()),
+        Value::AstClosure(closure) => fn_repl_ty(closure.params.len()),
+        Value::VariantCtor { arity, .. } => fn_repl_ty(*arity),
+        Value::Variant(name, payload) => match name.as_str() {
+            "Some" => named_repl_ty(REPL_OPTION_TYPE_ID, vec![type_from_value(payload)]),
+            "None" => named_repl_ty(REPL_OPTION_TYPE_ID, vec![unknown_ty()]),
+            "Ok" => named_repl_ty(
+                REPL_RESULT_TYPE_ID,
+                vec![type_from_value(payload), unknown_ty()],
+            ),
+            "Err" => named_repl_ty(
+                REPL_RESULT_TYPE_ID,
+                vec![unknown_ty(), type_from_value(payload)],
+            ),
+            _ => unknown_ty(),
+        },
+    }
+}
+
+fn common_runtime_type<'a>(values: impl Iterator<Item = &'a Value>) -> Ty {
+    let mut iter = values;
+    let Some(first) = iter.next() else {
+        return unknown_ty();
+    };
+    let first_ty = type_from_value(first);
+    let first_fmt = format_repl_type(&first_ty);
+    if iter.all(|value| format_repl_type(&type_from_value(value)) == first_fmt) {
+        first_ty
+    } else {
+        unknown_ty()
+    }
+}
+
+fn format_repl_type(ty: &Ty) -> String {
+    match &ty.kind {
+        TyKind::Int => "Int".to_string(),
+        TyKind::Float => "Float".to_string(),
+        TyKind::Bool => "Bool".to_string(),
+        TyKind::Char => "Char".to_string(),
+        TyKind::String => "String".to_string(),
+        TyKind::Unit => "()".to_string(),
+        TyKind::Var(id) => format!("?{}", id),
+        TyKind::Param(_, name) => name.clone(),
+        TyKind::Tuple(items) => {
+            let parts: Vec<_> = items.iter().map(format_repl_type).collect();
+            format!("({})", parts.join(", "))
+        }
+        TyKind::Record(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|(name, ty)| format!("{name}: {}", format_repl_type(ty)))
+                .collect();
+            format!("{{ {} }}", parts.join(", "))
+        }
+        TyKind::Fn(params, ret) => {
+            let params: Vec<_> = params.iter().map(format_repl_type).collect();
+            format!("({}) -> {}", params.join(", "), format_repl_type(ret))
+        }
+        TyKind::Forall(params, inner) => {
+            format!("forall {}. {}", params.join(", "), format_repl_type(inner))
+        }
+        TyKind::Named(def_id, args) if *def_id == REPL_LIST_TYPE_ID => {
+            format!("List[{}]", format_repl_type(&args[0]))
+        }
+        TyKind::Named(def_id, args) if *def_id == REPL_OPTION_TYPE_ID => {
+            format!("Option[{}]", format_repl_type(&args[0]))
+        }
+        TyKind::Named(def_id, args) if *def_id == REPL_RESULT_TYPE_ID => {
+            format!(
+                "Result[{}, {}]",
+                format_repl_type(&args[0]),
+                format_repl_type(&args[1])
+            )
+        }
+        TyKind::Named(def_id, args) if *def_id == REPL_MAP_TYPE_ID => {
+            format!(
+                "Map[{}, {}]",
+                format_repl_type(&args[0]),
+                format_repl_type(&args[1])
+            )
+        }
+        TyKind::Named(def_id, args) if *def_id == REPL_SET_TYPE_ID => {
+            format!("Set[{}]", format_repl_type(&args[0]))
+        }
+        TyKind::Named(def_id, _) if *def_id == REPL_FN_TYPE_ID => "Fn".to_string(),
+        TyKind::Named(def_id, args) if *def_id == REPL_LAZY_TYPE_ID => {
+            format!("Lazy[{}]", format_repl_type(&args[0]))
+        }
+        TyKind::Named(_, _) => neve_typeck::format_type(ty),
+        TyKind::Unknown => "_".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{format_repl_type, infer_repl_type, type_from_value};
+    use neve_eval::{AstEnv, Value};
+
+    #[test]
+    fn repl_type_infers_basic_expression() {
+        let env = AstEnv::with_builtins();
+        let ty = infer_repl_type("1 + 2", &env).expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_persistent_bindings() {
+        let mut env = AstEnv::with_builtins();
+        env.define("x".to_string(), Value::Int(41.into()));
+        let ty = infer_repl_type("x + 1", &env).expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_is_readable() {
+        let ty = type_from_value(&Value::List(std::rc::Rc::new(vec![Value::Int(1.into())])));
+        assert_eq!(format_repl_type(&ty), "List[Int]");
     }
 }
