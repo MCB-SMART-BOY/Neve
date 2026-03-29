@@ -131,8 +131,8 @@ Tests the trustworthy smoke path: Frontend(parse → lower → typecheck) + Runt
 - ✅ 前端 parse 错误真实上报 / Real parser diagnostics through the frontend
 - ✅ 前端 type 错误真实上报 / Real type diagnostics through the frontend
 - ✅ AST/HIR 在已支持子集上的结果一致性 / AST/HIR parity on the supported subset
-- ✅ 算术、递归、管道、列表匹配、枚举匹配等 smoke coverage
-- ✅ 当前已知分叉的显式哨兵测试（如 `lazy`、记录字段访问）
+- ✅ 算术、记录字段访问、递归、管道、列表匹配、枚举匹配等 smoke coverage
+- ✅ 当前已知分叉的显式哨兵测试（如 `lazy`）
 
 ## 运行测试 / Running Tests
 

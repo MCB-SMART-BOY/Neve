@@ -27,3 +27,18 @@ fn test_frontend_reports_type_errors() {
         "expected type diagnostics"
     );
 }
+
+#[test]
+fn test_frontend_accepts_record_field_access_after_record_binding() {
+    let result = analyze_source(
+        r#"
+            let config = #{ port = 40, host = "localhost" };
+            let x = config.port;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

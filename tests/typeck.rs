@@ -389,6 +389,16 @@ fn test_typeck_record_with_expressions() {
     check_no_errors("let x = #{ sum = 1 + 2, product = 3 * 4 };");
 }
 
+#[test]
+fn test_typeck_record_field_access_after_record_binding() {
+    check_no_errors(
+        r#"
+            let config = #{ port = 40, host = "localhost" };
+            let x = config.port;
+        "#,
+    );
+}
+
 // ============================================================================
 // 函数定义
 // ============================================================================

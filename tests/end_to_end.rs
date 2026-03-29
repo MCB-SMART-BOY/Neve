@@ -8,7 +8,7 @@
 use neve_common::Int;
 use neve_diagnostic::DiagnosticKind;
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
-use neve_frontend::{AnalysisResult, analyze_source};
+use neve_frontend::{analyze_source, AnalysisResult};
 
 fn int(value: i64) -> Int {
     value.into()
@@ -88,30 +88,14 @@ fn test_end_to_end_pipe_runtime_parity() {
 }
 
 #[test]
-fn test_known_gap_frontend_rejects_record_field_access() {
-    let analysis = analyze_source(
+fn test_end_to_end_record_field_runtime_parity() {
+    assert_runtime_parity(
         "
         let config = #{ port = 40, host = \"localhost\" };
         let x = config.port;
         ",
+        Value::Int(int(40)),
     );
-
-    assert!(
-        analysis
-            .diagnostics
-            .iter()
-            .any(|diag| diag.kind == DiagnosticKind::Type),
-        "expected frontend type diagnostics for record field access, got {:?}",
-        analysis.diagnostics
-    );
-
-    let ast_value =
-        eval_ast(&analysis).expect("AST runtime should still handle record field access");
-    let hir_value =
-        eval_hir(&analysis).expect("HIR runtime should still handle record field access");
-
-    assert_eq!(ast_value, Value::Int(int(40)));
-    assert_eq!(hir_value, Value::Int(int(40)));
 }
 
 #[test]
