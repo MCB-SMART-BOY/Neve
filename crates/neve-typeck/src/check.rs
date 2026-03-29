@@ -437,6 +437,15 @@ impl TypeChecker {
     }
 
     fn builtin_type(&mut self, name: &str, span: Span) -> Option<Ty> {
+        if name.contains('.') {
+            // Std/module-qualified builtins are lowered into `Builtin(...)` but do not yet
+            // have canonical signature metadata. Keep the type checker permissive here so
+            // frontend/HIR can execute them while tighter builtin typing is added later.
+            // 标准库/模块限定 builtin 目前还没有统一签名元数据，这里先保守放宽，
+            // 让 frontend/HIR 主路径可以执行，后续再补精确类型。
+            return Some(self.fresh_var());
+        }
+
         let polymorphic = match name {
             "force" => Ty {
                 kind: TyKind::Forall(
@@ -556,7 +565,9 @@ impl TypeChecker {
             PatternKind::Wildcard | PatternKind::Var(_, _) => true,
             PatternKind::Binding(_, _, inner) => self.pattern_covers_unit(inner),
             PatternKind::Literal(Literal::Unit) => true,
-            PatternKind::Or(patterns) => patterns.iter().any(|pattern| self.pattern_covers_unit(pattern)),
+            PatternKind::Or(patterns) => patterns
+                .iter()
+                .any(|pattern| self.pattern_covers_unit(pattern)),
             _ => false,
         }
     }
@@ -753,8 +764,14 @@ impl TypeChecker {
                     };
 
                     for variant_name in enum_info.variants.keys() {
-                        if !covered_variants.iter().any(|covered| covered == variant_name)
-                            && self.pattern_covers_enum_variant(&arm.pattern, *enum_id, variant_name)
+                        if !covered_variants
+                            .iter()
+                            .any(|covered| covered == variant_name)
+                            && self.pattern_covers_enum_variant(
+                                &arm.pattern,
+                                *enum_id,
+                                variant_name,
+                            )
                         {
                             covered_variants.push(variant_name.clone());
                         }

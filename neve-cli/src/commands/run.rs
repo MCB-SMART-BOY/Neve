@@ -5,8 +5,8 @@ use crate::{commands::module_graph, output};
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_hir::{ModuleId, ModuleLoadError, ModuleLoader};
-use neve_std::std_module_overrides;
-use neve_syntax::{ItemKind, SourceFile};
+use neve_std::{std_module_overrides, stdlib};
+use neve_syntax::{ImportDef, ImportItems, ItemKind, SourceFile};
 use neve_typeck::TypeChecker;
 use std::collections::HashMap;
 use std::fs;
@@ -61,7 +61,7 @@ fn run_value(file: &Path, verbose: bool) -> Result<(RunBackend, Value), String> 
     let parsed_modules = collect_parsed_modules(&loader, &root_dir, verbose)?;
     if parsed_modules
         .iter()
-        .any(|module| source_file_uses_std_imports(&module.ast))
+        .any(|module| source_file_requires_ast_fallback(&module.ast))
     {
         let value = eval_modules_via_ast(&parsed_modules, root_id, &root_dir)?;
         return Ok((RunBackend::AstFallback, value));
@@ -225,7 +225,7 @@ fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Valu
         return Err("type error".to_string());
     }
 
-    let mut evaluator = Evaluator::new();
+    let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
     let mut root_value = Value::Unit;
 
     for module_id in loader.load_order() {
@@ -295,18 +295,34 @@ fn run_direct_value(
     Ok((RunBackend::AstFallback, value))
 }
 
-fn source_file_uses_std_imports(file: &SourceFile) -> bool {
-    file.items.iter().any(|item| {
-        matches!(
-            &item.kind,
-            ItemKind::Import(import_def)
-                if import_def
-                    .path
-                    .first()
-                    .map(|segment| segment.name.as_str())
-                    == Some("std")
-        )
+fn source_file_requires_ast_fallback(file: &SourceFile) -> bool {
+    file.items.iter().any(|item| match &item.kind {
+        ItemKind::Import(import) => import_requires_ast_fallback(import),
+        _ => false,
     })
+}
+
+fn import_requires_ast_fallback(import: &ImportDef) -> bool {
+    if !is_std_import(import) {
+        return false;
+    }
+
+    !is_supported_std_import(import) || matches!(import.items, ImportItems::All)
+}
+
+fn is_supported_std_import(import: &ImportDef) -> bool {
+    import.path.len() == 2
+        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+}
+
+fn is_std_import(import: &ImportDef) -> bool {
+    import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+}
+
+fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
+    stdlib()
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
 }
 
 fn is_std_module_path(path: &[String]) -> bool {
@@ -350,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn run_value_falls_back_to_ast_for_std_imports() {
+    fn run_value_prefers_frontend_hir_for_std_item_imports() {
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
 
@@ -358,6 +374,38 @@ mod tests {
             root,
             &["main"],
             "import std.list (len); let result = len([1, 2]);",
+        );
+
+        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        assert_eq!(backend, RunBackend::FrontendHir);
+        assert_eq!(value, Value::Int(2.into()));
+    }
+
+    #[test]
+    fn run_value_prefers_frontend_hir_for_std_module_imports() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(
+            root,
+            &["main"],
+            "import std.list; let result = list.len([1, 2, 3]);",
+        );
+
+        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        assert_eq!(backend, RunBackend::FrontendHir);
+        assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn run_value_falls_back_to_ast_for_std_glob_imports() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(
+            root,
+            &["main"],
+            "import std.list (*); let result = len([1, 2]);",
         );
 
         let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
