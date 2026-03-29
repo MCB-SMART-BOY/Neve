@@ -33,6 +33,7 @@ Welcome to the Neve language documentation. 欢迎来到 Neve 语言的文档中
 | [philosophy.md](philosophy.md) | Design philosophy & roadmap | 设计哲学与路线图 |
 | [roadmap.md](roadmap.md) | Project roadmap | 项目路线图 |
 | [language-roadmap.md](language-roadmap.md) | Language completion roadmap | 语言完备化与系统脚本化路线图 |
+| [feature-matrix.md](feature-matrix.md) | Real support matrix | 真实功能支持矩阵 |
 | [install.md](install.md) | Installation guide | 安装指南 |
 | [architecture.md](architecture.md) | Internal architecture | 内部架构 |
 | [changelog.md](changelog.md) | Version changelog | 版本更新日志 |
@@ -101,16 +102,19 @@ Int -> Int                    -- Function / 函数
 
 ## Project Status / 项目进度
 
+项目状态按“真实集成度”标记，不按 parser 表面支持数量标记。
+更细粒度的现状请看 [feature-matrix.md](feature-matrix.md)。
+
 | Component | Status | Description |
 |-----------|--------|-------------|
-| Lexer & Parser | ✅ Complete | Full syntax support |
-| Type Checker | ✅ Complete | Hindley-Milner + Traits |
-| Evaluator | ✅ Complete | Lazy evaluation + TCO |
-| REPL | ✅ Complete | Interactive development |
-| Formatter | ✅ Complete | Opinionated formatting |
-| LSP | 🚧 In Progress | Editor integration |
-| Package Manager | 🚧 In Progress | Dependency management |
-| System Config | 📋 Planned | NixOS-style configuration |
+| Lexer & Parser | ⚠️ Surface mostly implemented | Parser surface is broad, but semantic closure is incomplete |
+| Type Checker | ⚠️ Core working | Core HM + trait checks exist, compiler-grade semantics still in progress |
+| Evaluator | ⚠️ Divergent runtimes | AST and HIR evaluation paths are not fully converged |
+| REPL | ⚠️ Usable, not complete | Interactive flow works, semantic tooling still has gaps |
+| Formatter | ⚠️ Usable | Practical formatter exists, still being hardened |
+| LSP | 🚧 In Progress | Editor tooling is converging on the frontend pipeline |
+| Package Manager | 🚧 In Progress | Core package pieces exist, full dependency/product story is unfinished |
+| System Config | ⚠️ Prototype | Module/generation/activation pieces exist, product boundary is not yet stable |
 
 ---
 

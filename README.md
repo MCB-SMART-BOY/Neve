@@ -258,16 +258,19 @@ Built-in documentation is available via `neve doc`:
 
 ### Project Status / 项目进度
 
+当前状态以“真实集成度”为准，不以 parser 表面支持为准。
+更细的支持情况请看 `docs/feature-matrix.md`。
+
 | Component / 模块 | Status | Description / 说明 |
 |:-----------------|:-------|:-------------------|
-| Lexer & Parser / 词法与语法 | ✅ Complete | Full syntax support / 完整语法支持 |
-| Type Checker / 类型检查 | ✅ Complete | Hindley-Milner + Traits / HM + Traits |
-| Evaluator / 求值器 | ✅ Complete | Lazy evaluation + TCO / 惰性求值 + TCO |
-| REPL / 交互式 | ✅ Complete | Interactive development / 交互开发 |
-| Formatter / 格式化 | ✅ Complete | Opinionated formatting / 统一风格格式化 |
-| LSP / 编辑器 | 🚧 In Progress | Editor integration / 编辑器集成 |
-| Package Manager / 包管理 | 🚧 In Progress | Dependency management / 依赖管理 |
-| System Config / 系统配置 | 📋 Planned | NixOS-style configuration / 类 NixOS 配置 |
+| Lexer & Parser / 词法与语法 | ⚠️ 语法表面较完整 | 语法入口较多，但并不代表 lowering/typeck/eval 全部闭环 / Broad parser surface, semantic closure still incomplete |
+| Type Checker / 类型检查 | ⚠️ 核心可用 | HM + traits 基本可用，但编译器级诊断与语义闭环仍在补 / Core HM + traits work, compiler-grade closure still in progress |
+| Evaluator / 求值器 | ⚠️ 双路径未收敛 | AST 与 HIR 运行时并存，尚未形成单一规范语义 / AST and HIR runtimes have not fully converged |
+| REPL / 交互式 | ⚠️ 可用但未闭环 | 基本交互可用，但 `:type` 等能力仍是占位 / Basic REPL works, semantic tooling still incomplete |
+| Formatter / 格式化 | ⚠️ 基本可用 | 日常格式化可用，但仍以稳定化和一致性为目标 / Usable, still being hardened for stability |
+| LSP / 编辑器 | 🚧 进行中 | 诊断、悬停、跳转等正在持续收敛到同一前端语义 / Still converging on one frontend semantic model |
+| Package Manager / 包管理 | 🚧 进行中 | fetch/store/derive/builder 已有基础，但生态闭环未完成 / Core package pieces exist, ecosystem closure not finished |
+| System Config / 系统配置 | ⚠️ 原型阶段 | 已有模块/生成/激活原型，但语义边界和产品形态未稳定 / Prototype exists, semantics and UX not yet stable |
 
 ### Logo Assets / Logo 资源
 
