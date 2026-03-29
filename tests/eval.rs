@@ -141,6 +141,19 @@ fn test_eval_hir_std_result_builtins() {
 }
 
 #[test]
+fn test_eval_hir_std_path_builtins() {
+    let source = r#"
+        import std.path as path;
+        let parent = path.parent("/tmp/file.txt") ?? "/";
+        let result = if path.is_absolute("/tmp/file.txt") then parent else "nope";
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "/tmp"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_import_std_root() {
     let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {

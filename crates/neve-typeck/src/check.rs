@@ -809,6 +809,24 @@ impl TypeChecker {
                 )
             }
             "math.pi" | "math.e" | "math.inf" | "math.nan" => builtin_ty(TyKind::Float, span),
+            "path.join" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "path.parent" | "path.filename" | "path.extension" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_option(builtin_ty(TyKind::String, span), span),
+                span,
+            ),
+            "path.is_absolute" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
             _ if name.contains('.') => return Some(self.fresh_var()),
             _ => return None,
         };

@@ -347,3 +347,15 @@ fn test_end_to_end_std_result_builtin_runtime_parity() {
         Value::Int(int(42)),
     );
 }
+
+#[test]
+fn test_end_to_end_std_path_builtin_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.path as path;
+        let parent = path.parent(\"/tmp/file.txt\") ?? \"/\";
+        let x = if path.is_absolute(\"/tmp/file.txt\") then parent else \"nope\";
+        ",
+        Value::String("/tmp".to_string().into()),
+    );
+}
