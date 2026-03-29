@@ -22,6 +22,8 @@ pub fn format_type(ty: &Ty) -> String {
         TyKind::Unit => "()".to_string(),
         TyKind::Var(id) => format!("?{}", id),
         TyKind::Param(_, name) => name.clone(),
+        TyKind::SelfType => "Self".to_string(),
+        TyKind::SelfAssoc(name) => format!("Self.{name}"),
         TyKind::Named(def_id, args) => {
             if let Some(formatted) = format_builtin_named_type(*def_id, args, &format_type) {
                 formatted

@@ -46,6 +46,11 @@ impl Substitution {
                     ty.clone()
                 }
             }
+            TyKind::SelfType => ty.clone(),
+            TyKind::SelfAssoc(name) => Ty {
+                kind: TyKind::SelfAssoc(name.clone()),
+                span: ty.span,
+            },
             TyKind::Fn(params, ret) => Ty {
                 kind: TyKind::Fn(
                     params.iter().map(|t| self.apply(t)).collect(),
@@ -210,6 +215,8 @@ pub fn unify(t1: &Ty, t2: &Ty, subst: &mut Substitution) -> Result<(), String> {
             // Unify the bodies (parameters are already bound)
             unify(body1, body2, subst)
         }
+        (TyKind::SelfType, TyKind::SelfType) => Ok(()),
+        (TyKind::SelfAssoc(left), TyKind::SelfAssoc(right)) if left == right => Ok(()),
 
         // Unknown types match anything (placeholder)
         (TyKind::Unknown, _) | (_, TyKind::Unknown) => Ok(()),
@@ -224,6 +231,7 @@ fn occurs_check(var: u32, ty: &Ty) -> bool {
     match &ty.kind {
         TyKind::Var(v) => *v == var,
         TyKind::Param(_, _) => false,
+        TyKind::SelfType | TyKind::SelfAssoc(_) => false,
         TyKind::Fn(params, ret) => {
             params.iter().any(|t| occurs_check(var, t)) || occurs_check(var, ret)
         }
@@ -283,6 +291,7 @@ pub fn free_type_vars(ty: &Ty) -> Vec<u32> {
 fn collect_free_vars(ty: &Ty, vars: &mut Vec<u32>) {
     match &ty.kind {
         TyKind::Var(v) => vars.push(*v),
+        TyKind::SelfType | TyKind::SelfAssoc(_) => {}
         TyKind::Fn(params, ret) => {
             for p in params {
                 collect_free_vars(p, vars);

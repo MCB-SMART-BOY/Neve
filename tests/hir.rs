@@ -2,7 +2,7 @@
 
 use neve_hir::{
     BUILTIN_OPTION_NONE_CTOR_ID, BUILTIN_OPTION_SOME_CTOR_ID, BinOp, ExprKind, ItemKind,
-    PatternKind, lower,
+    PatternKind, TyKind, lower,
 };
 use neve_parser::parse;
 
@@ -255,6 +255,32 @@ fn test_lower_builtin_option_constructor_patterns_use_reserved_ids() {
             other => panic!("expected Match, got {:?}", other),
         },
         _ => panic!("expected function"),
+    }
+}
+
+#[test]
+fn test_lower_self_and_assoc_type_use_sites() {
+    let source = r#"
+        trait Iterator {
+            type Item;
+            fn first(self) -> Self.Item;
+        };
+    "#;
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Trait(trait_def) => {
+            assert_eq!(trait_def.items.len(), 1);
+            assert!(matches!(trait_def.items[0].params[0].kind, TyKind::Unknown));
+            assert!(matches!(
+                trait_def.items[0].return_ty.kind,
+                TyKind::SelfAssoc(ref name) if name == "Item"
+            ));
+        }
+        other => panic!("expected trait item, got {:?}", other),
     }
 }
 

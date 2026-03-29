@@ -1475,6 +1475,57 @@ fn test_typeck_trait_impl_method_signature_param_mismatch() {
     );
 }
 
+#[test]
+fn test_typeck_trait_self_type_signature_support() {
+    check_no_errors(
+        "
+        trait Eq {
+            fn eq(self, other: Self) -> Bool;
+        };
+        struct Counter {};
+        impl Eq for Counter {
+            fn eq(self, other: Self) -> Bool = true;
+        };
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_trait_assoc_type_use_site_support() {
+    check_no_errors(
+        "
+        trait Iterator {
+            type Item;
+            fn first(self) -> Self.Item;
+        };
+        struct Counter {};
+        impl Iterator for Counter {
+            type Item = Int;
+            fn first(self) -> Self.Item = 1;
+        };
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_trait_assoc_type_use_site_body_mismatch() {
+    assert_has_diagnostic(
+        "
+        trait Iterator {
+            type Item;
+            fn first(self) -> Self.Item;
+        };
+        struct Counter {};
+        impl Iterator for Counter {
+            type Item = Int;
+            fn first(self) -> Self.Item = true;
+        };
+        ",
+        Severity::Error,
+        "impl method `first` return type",
+    );
+}
+
 // ============================================================================
 // 错误检测测试
 // ============================================================================

@@ -1645,6 +1645,7 @@ impl Resolver {
                         "Char" => TyKind::Char,
                         "String" => TyKind::String,
                         "Unit" => TyKind::Unit,
+                        "Self" => TyKind::SelfType,
                         _ => {
                             if let Some(def_id) = self.lookup_global(name) {
                                 TyKind::Named(def_id, Vec::new())
@@ -1653,6 +1654,8 @@ impl Resolver {
                             }
                         }
                     }
+                } else if path.len() == 2 && args.is_empty() && path[0].name == "Self" {
+                    TyKind::SelfAssoc(path[1].name.clone())
                 } else if let Some(first) = path.first() {
                     if let Some(def_id) = self.lookup_global(&first.name) {
                         let lowered_args = args.iter().map(|t| self.lower_type(t)).collect();

@@ -309,6 +309,8 @@ impl TypeChecker {
     }
 
     fn check_impl_method_signatures(&mut self, trait_info: &TraitInfo, impl_info: &ImplInfo) {
+        let assoc_types = self.impl_signature_assoc_types(trait_info, impl_info);
+
         for trait_method in &trait_info.methods {
             let Some(impl_method) = impl_info
                 .methods
@@ -318,25 +320,34 @@ impl TypeChecker {
                 continue;
             };
 
-            let params_match = trait_method.params.len() == impl_method.params.len()
-                && trait_method
-                    .params
+            let expected_params: Vec<Ty> = trait_method
+                .params
+                .iter()
+                .map(|ty| self.resolve_impl_signature_type(ty, &impl_info.self_ty, &assoc_types))
+                .collect();
+            let actual_params: Vec<Ty> = impl_method
+                .params
+                .iter()
+                .map(|ty| self.resolve_impl_signature_type(ty, &impl_info.self_ty, &assoc_types))
+                .collect();
+            let expected_return =
+                self.resolve_impl_signature_type(&trait_method.return_ty, &impl_info.self_ty, &assoc_types);
+            let actual_return =
+                self.resolve_impl_signature_type(&impl_method.return_ty, &impl_info.self_ty, &assoc_types);
+
+            let params_match = expected_params.len() == actual_params.len()
+                && expected_params
                     .iter()
-                    .zip(impl_method.params.iter())
+                    .zip(actual_params.iter())
                     .all(|(expected, actual)| self.method_signature_ty_compatible(expected, actual));
-            let return_match = self.method_signature_ty_compatible(
-                &trait_method.return_ty,
-                &impl_method.return_ty,
-            );
+            let return_match = self.method_signature_ty_compatible(&expected_return, &actual_return);
 
             if params_match && return_match {
                 continue;
             }
 
-            let expected_signature =
-                Self::format_method_signature(&trait_method.params, &trait_method.return_ty);
-            let actual_signature =
-                Self::format_method_signature(&impl_method.params, &impl_method.return_ty);
+            let expected_signature = Self::format_method_signature(&expected_params, &expected_return);
+            let actual_signature = Self::format_method_signature(&actual_params, &actual_return);
             self.diagnostics.push(
                 Diagnostic::error(
                     DiagnosticKind::Type,
@@ -352,6 +363,91 @@ impl TypeChecker {
         }
     }
 
+    fn impl_signature_assoc_types(
+        &self,
+        trait_info: &TraitInfo,
+        impl_info: &ImplInfo,
+    ) -> HashMap<String, Ty> {
+        let mut assoc_types: HashMap<String, Ty> = impl_info
+            .assoc_types
+            .iter()
+            .map(|assoc| (assoc.name.clone(), assoc.ty.clone()))
+            .collect();
+
+        for assoc in &trait_info.assoc_types {
+            if assoc_types.contains_key(&assoc.name) {
+                continue;
+            }
+            if let Some(default) = &assoc.default {
+                assoc_types.insert(assoc.name.clone(), default.clone());
+            }
+        }
+
+        assoc_types
+    }
+
+    fn resolve_impl_signature_type(
+        &self,
+        ty: &Ty,
+        self_ty: &Ty,
+        assoc_types: &HashMap<String, Ty>,
+    ) -> Ty {
+        match &ty.kind {
+            TyKind::SelfType => self_ty.clone(),
+            TyKind::SelfAssoc(name) => assoc_types.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            TyKind::Named(id, args) => Ty {
+                kind: TyKind::Named(
+                    *id,
+                    args.iter()
+                        .map(|arg| self.resolve_impl_signature_type(arg, self_ty, assoc_types))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Fn(params, ret) => Ty {
+                kind: TyKind::Fn(
+                    params
+                        .iter()
+                        .map(|param| self.resolve_impl_signature_type(param, self_ty, assoc_types))
+                        .collect(),
+                    Box::new(self.resolve_impl_signature_type(ret, self_ty, assoc_types)),
+                ),
+                span: ty.span,
+            },
+            TyKind::Tuple(items) => Ty {
+                kind: TyKind::Tuple(
+                    items
+                        .iter()
+                        .map(|item| self.resolve_impl_signature_type(item, self_ty, assoc_types))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Record(fields) => Ty {
+                kind: TyKind::Record(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                self.resolve_impl_signature_type(field_ty, self_ty, assoc_types),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Forall(params, body) => Ty {
+                kind: TyKind::Forall(
+                    params.clone(),
+                    Box::new(self.resolve_impl_signature_type(body, self_ty, assoc_types)),
+                ),
+                span: ty.span,
+            },
+            _ => ty.clone(),
+        }
+    }
+
     fn method_signature_ty_compatible(&self, expected: &Ty, actual: &Ty) -> bool {
         let expected = self.apply(expected);
         let actual = self.apply(actual);
@@ -360,6 +456,8 @@ impl TypeChecker {
             (TyKind::Unknown, _) | (_, TyKind::Unknown) => true,
             (TyKind::Var(_), _) | (_, TyKind::Var(_)) => true,
             (TyKind::Param(_, _), _) | (_, TyKind::Param(_, _)) => true,
+            (TyKind::SelfType, TyKind::SelfType) => true,
+            (TyKind::SelfAssoc(left), TyKind::SelfAssoc(right)) => left == right,
             (TyKind::Int, TyKind::Int)
             | (TyKind::Float, TyKind::Float)
             | (TyKind::Bool, TyKind::Bool)
@@ -1884,6 +1982,14 @@ impl TypeChecker {
                     span: ty.span,
                 }
             }
+            TyKind::SelfType => Ty {
+                kind: TyKind::SelfType,
+                span: ty.span,
+            },
+            TyKind::SelfAssoc(name) => Ty {
+                kind: TyKind::SelfAssoc(name.clone()),
+                span: ty.span,
+            },
             TyKind::Named(id, args) => {
                 let resolved_args: Vec<Ty> = args.iter().map(|a| self.resolve_type(a)).collect();
                 Ty {
@@ -1993,9 +2099,10 @@ impl TypeChecker {
     fn check_impl_methods(&mut self, impl_def: &ImplDef) {
         let generic_vars = self.fresh_generic_bindings(&impl_def.generics);
         let self_ty = self.resolve_type_with_generics(&impl_def.self_ty, &generic_vars);
+        let assoc_types = self.impl_assoc_type_bindings(impl_def, &generic_vars, &self_ty);
 
         for item in &impl_def.items {
-            self.check_impl_item(item, &self_ty, &generic_vars);
+            self.check_impl_item(item, &self_ty, &generic_vars, &assoc_types);
         }
     }
 
@@ -2004,6 +2111,7 @@ impl TypeChecker {
         item: &neve_hir::ImplItem,
         self_ty: &Ty,
         impl_generics: &HashMap<String, Ty>,
+        assoc_types: &HashMap<String, Ty>,
     ) {
         let mut generic_vars = impl_generics.clone();
         for param in &item.generics {
@@ -2016,7 +2124,7 @@ impl TypeChecker {
             {
                 self_ty.clone()
             } else {
-                self.resolve_type_with_generics(&param.ty, &generic_vars)
+                self.resolve_type_with_context(&param.ty, &generic_vars, Some(self_ty), assoc_types)
             };
             param_tys.push(ty.clone());
             self.locals.insert(
@@ -2031,7 +2139,8 @@ impl TypeChecker {
         }
 
         let body_ty = self.infer_expr(&item.body);
-        let ret_ty = self.resolve_type_with_generics(&item.return_ty, &generic_vars);
+        let ret_ty =
+            self.resolve_type_with_context(&item.return_ty, &generic_vars, Some(self_ty), assoc_types);
         if !self.unify(&body_ty, &ret_ty, item.body.span) {
             self.emit(
                 TypeMismatchError::new(ret_ty.clone(), body_ty.clone(), item.body.span)
@@ -2072,16 +2181,34 @@ impl TypeChecker {
     /// Resolve a type, substituting generic parameters with their bound types.
     /// 解析类型，将泛型参数替换为其绑定的类型。
     fn resolve_type_with_generics(&mut self, ty: &Ty, generics: &HashMap<String, Ty>) -> Ty {
+        self.resolve_type_with_context(ty, generics, None, &HashMap::new())
+    }
+
+    fn resolve_type_with_context(
+        &mut self,
+        ty: &Ty,
+        generics: &HashMap<String, Ty>,
+        self_ty: Option<&Ty>,
+        assoc_types: &HashMap<String, Ty>,
+    ) -> Ty {
         match &ty.kind {
             TyKind::Unknown => self.fresh_var(),
             TyKind::Param(_idx, name) => generics.get(name).cloned().unwrap_or_else(|| {
                 self.error(ty.span, format!("unknown generic parameter: {}", name));
                 self.fresh_var()
             }),
+            TyKind::SelfType => self_ty.cloned().unwrap_or(Ty {
+                kind: TyKind::SelfType,
+                span: ty.span,
+            }),
+            TyKind::SelfAssoc(name) => assoc_types.get(name).cloned().unwrap_or_else(|| {
+                self.error(ty.span, format!("unknown associated type `Self.{name}`"));
+                self.fresh_var()
+            }),
             TyKind::Named(id, args) => {
                 let resolved_args: Vec<Ty> = args
                     .iter()
-                    .map(|a| self.resolve_type_with_generics(a, generics))
+                    .map(|a| self.resolve_type_with_context(a, generics, self_ty, assoc_types))
                     .collect();
                 Ty {
                     kind: TyKind::Named(*id, resolved_args),
@@ -2091,12 +2218,12 @@ impl TypeChecker {
             TyKind::Fn(params, ret) => {
                 let resolved_params: Vec<Ty> = params
                     .iter()
-                    .map(|p| self.resolve_type_with_generics(p, generics))
+                    .map(|p| self.resolve_type_with_context(p, generics, self_ty, assoc_types))
                     .collect();
                 Ty {
                     kind: TyKind::Fn(
                         resolved_params,
-                        Box::new(self.resolve_type_with_generics(ret, generics)),
+                        Box::new(self.resolve_type_with_context(ret, generics, self_ty, assoc_types)),
                     ),
                     span: ty.span,
                 }
@@ -2104,15 +2231,69 @@ impl TypeChecker {
             TyKind::Tuple(elems) => {
                 let resolved_elems: Vec<Ty> = elems
                     .iter()
-                    .map(|e| self.resolve_type_with_generics(e, generics))
+                    .map(|e| self.resolve_type_with_context(e, generics, self_ty, assoc_types))
                     .collect();
                 Ty {
                     kind: TyKind::Tuple(resolved_elems),
                     span: ty.span,
                 }
             }
+            TyKind::Record(fields) => {
+                let resolved_fields = fields
+                    .iter()
+                    .map(|(name, field_ty)| {
+                        (
+                            name.clone(),
+                            self.resolve_type_with_context(field_ty, generics, self_ty, assoc_types),
+                        )
+                    })
+                    .collect();
+                Ty {
+                    kind: TyKind::Record(resolved_fields),
+                    span: ty.span,
+                }
+            }
             _ => ty.clone(),
         }
+    }
+
+    fn impl_assoc_type_bindings(
+        &mut self,
+        impl_def: &ImplDef,
+        generics: &HashMap<String, Ty>,
+        self_ty: &Ty,
+    ) -> HashMap<String, Ty> {
+        let mut assoc_types = HashMap::new();
+
+        for assoc in &impl_def.assoc_type_impls {
+            let resolved =
+                self.resolve_type_with_context(&assoc.ty, generics, Some(self_ty), &assoc_types);
+            assoc_types.insert(assoc.name.clone(), resolved);
+        }
+
+        if let Some(trait_ref) = &impl_def.trait_ref
+            && let TyKind::Named(def_id, _) = trait_ref.kind
+            && let Some(trait_id) = self.trait_ids.get(&def_id).copied()
+            && let Some(trait_info) = self.trait_resolver.get_trait(trait_id)
+        {
+            let defaults: Vec<(String, Ty)> = trait_info
+                .assoc_types
+                .iter()
+                .filter_map(|assoc| {
+                    assoc.default.as_ref().map(|default| (assoc.name.clone(), default.clone()))
+                })
+                .collect();
+            for (name, default) in defaults {
+                if assoc_types.contains_key(&name) {
+                    continue;
+                }
+                let resolved =
+                    self.resolve_type_with_context(&default, generics, Some(self_ty), &assoc_types);
+                assoc_types.insert(name, resolved);
+            }
+        }
+
+        assoc_types
     }
 
     fn infer_expr(&mut self, expr: &Expr) -> Ty {
