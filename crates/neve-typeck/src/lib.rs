@@ -14,12 +14,18 @@
 //! - Associated types / 关联类型
 //! - Generic parameters with bounds / 带约束的泛型参数
 
+mod builtin_types;
 mod check;
 pub mod errors;
 mod infer;
 mod traits;
 mod unify;
 
+pub use builtin_types::{
+    LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, builtin_list,
+    builtin_map, builtin_option, builtin_result, builtin_set, builtin_type_name,
+    format_builtin_named_type, is_builtin_option_type, is_builtin_result_type,
+};
 pub use check::TypeChecker;
 pub use errors::format_type;
 pub use traits::{

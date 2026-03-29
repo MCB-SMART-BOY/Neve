@@ -5,6 +5,7 @@
 //! diagnostics with helpful context and suggestions.
 //! 本模块提供构建器，用于构造带有上下文信息和建议的类型错误诊断。
 
+use crate::format_builtin_named_type;
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{BinOp, Ty, TyKind, UnaryOp};
@@ -22,7 +23,9 @@ pub fn format_type(ty: &Ty) -> String {
         TyKind::Var(id) => format!("?{}", id),
         TyKind::Param(_, name) => name.clone(),
         TyKind::Named(def_id, args) => {
-            if args.is_empty() {
+            if let Some(formatted) = format_builtin_named_type(*def_id, args, &format_type) {
+                formatted
+            } else if args.is_empty() {
                 format!("Type#{}", def_id.0)
             } else {
                 let args_str: Vec<_> = args.iter().map(format_type).collect();
