@@ -336,6 +336,58 @@ fn test_typeck_std_path_builtins_reject_wrong_use() {
     );
 }
 
+#[test]
+fn test_typeck_std_io_builtins_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.io as io;
+            let digest: String = io.hashString("abc");
+            let cwd: String = io.currentDir();
+            let env = io.getEnv("HOME") ?? "";
+            let code: Int = io.execShell("printf neve").code;
+            let output: String = io.exec("printf", ["neve"]).stdout;
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_io_builtins_reject_wrong_use() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.io as io;
+            let wrong = expectInt(io.pathExists("."));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_fetch_builtins_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.fetch as fetch;
+            let path: String = fetch.path("Cargo.toml").path;
+            let hash: String = fetch.urlWithHash("https://example.com/archive.tar.gz", "0000000000000000000000000000000000000000000000000000000000000000").hash;
+            let cached: Bool = fetch.git("https://example.com/repo.git", "main").cached;
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_fetch_builtins_reject_wrong_use() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.fetch as fetch;
+            let wrong = expectInt(fetch.path("Cargo.toml").cached);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
 // ============================================================================
 // 逻辑运算
 // ============================================================================
