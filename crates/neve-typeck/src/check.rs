@@ -296,10 +296,22 @@ impl TypeChecker {
         self.diagnostics
     }
 
+    /// Borrow collected diagnostics without consuming the checker.
+    /// 在不消费检查器的前提下借用已收集的诊断。
+    pub fn diagnostics_ref(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
     /// Get resolved method call targets.
     /// 获取已解析的方法调用目标。
     pub fn method_resolutions(&self) -> &HashMap<Span, DefId> {
         &self.method_resolutions
+    }
+
+    /// Look up the inferred type of a global definition.
+    /// 查询某个全局定义推断出的类型。
+    pub fn global_type(&self, def_id: DefId) -> Option<Ty> {
+        self.globals.get(&def_id).map(|ty| self.apply(ty))
     }
 
     fn format_trait_bound(&self, bound: &TraitBound) -> String {
