@@ -21,7 +21,7 @@ struct ParsedModule {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RunBackend {
+pub(crate) enum RunBackend {
     FrontendHir,
     AstFallback,
 }
@@ -46,7 +46,7 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn run_value(file: &Path, verbose: bool) -> Result<(RunBackend, Value), String> {
+pub(crate) fn run_value(file: &Path, verbose: bool) -> Result<(RunBackend, Value), String> {
     let (root_dir, module_path) = module_graph::resolve_module_path(file)?;
 
     let mut loader = ModuleLoader::new(&root_dir);

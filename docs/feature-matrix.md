@@ -83,7 +83,7 @@
 | Area / 领域 | 现状 | 主要问题 |
 |-------------|------|----------|
 | `neve check` | ⚠️ 可用 | 类型检查能跑，但还不是编译器级闭环 |
-| `neve eval` | ⚠️ 可用 | 无 `import` 输入、以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；非 `std` 导入仍会回退 AST |
+| `neve eval` | ⚠️ 可用 | 无 `import` 输入、本地模块导入，以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；仅少数仍未收敛的导入/运行时边缘场景会回退 AST |
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，但当前类型查询仍依赖保守的临时类型环境，不是完整编译器级语义镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |

@@ -1,15 +1,17 @@
 //! The `neve eval` command.
 //! `neve eval` 命令。
 
+use crate::commands::run::{RunBackend, run_value as run_file_value};
 use crate::output;
 use neve_diagnostic::{Severity, emit};
-use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
+use neve_eval::{Evaluator, Value};
 use neve_frontend::analyze_ast;
-use neve_hir::ModuleLoader;
 use neve_parser::parse;
-use neve_std::{std_module_overrides, stdlib};
+use neve_std::stdlib;
 use neve_syntax::{ImportDef, ItemKind, SourceFile};
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Run the eval command.
 /// 运行 eval 命令。
@@ -116,9 +118,8 @@ fn eval_value(
     source: &str,
     root_dir: &Path,
 ) -> Result<(EvalBackend, Value), String> {
-    if source_file_requires_ast_fallback(file) {
-        let value = eval_via_ast(file, root_dir)?;
-        return Ok((EvalBackend::AstFallback, value));
+    if source_file_requires_module_graph(file) {
+        return eval_via_module_graph(source, root_dir);
     }
 
     let analysis = analyze_ast(file);
@@ -142,23 +143,59 @@ fn eval_value(
         .map_err(format_hir_eval_error)
 }
 
-fn eval_via_ast(file: &SourceFile, root_dir: &Path) -> Result<Value, String> {
-    let mut evaluator = AstEvaluator::new()
-        .with_module_overrides(std_module_overrides())
-        .with_base_path(root_dir.to_path_buf())
-        .with_module_loader(ModuleLoader::new(root_dir));
-
-    evaluator.eval_file(file).map_err(format_ast_eval_error)
+fn eval_via_module_graph(source: &str, root_dir: &Path) -> Result<(EvalBackend, Value), String> {
+    let temp_module = TempEvalModule::create(source, root_dir)?;
+    let (backend, value) = run_file_value(temp_module.path(), false)?;
+    Ok((map_run_backend(backend), value))
 }
 
-fn source_file_requires_ast_fallback(file: &SourceFile) -> bool {
+fn map_run_backend(backend: RunBackend) -> EvalBackend {
+    match backend {
+        RunBackend::FrontendHir => EvalBackend::FrontendHir,
+        RunBackend::AstFallback => EvalBackend::AstFallback,
+    }
+}
+
+struct TempEvalModule {
+    path: PathBuf,
+}
+
+impl TempEvalModule {
+    fn create(source: &str, root_dir: &Path) -> Result<Self, String> {
+        let path = temp_eval_module_path(root_dir);
+        fs::write(&path, source)
+            .map_err(|e| format!("cannot write eval temp file '{}': {}", path.display(), e))?;
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempEvalModule {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn temp_eval_module_path(root_dir: &Path) -> PathBuf {
+    let pid = std::process::id();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    root_dir.join(format!("__neve_eval_{pid}_{nanos}.neve"))
+}
+
+fn source_file_requires_module_graph(file: &SourceFile) -> bool {
     file.items.iter().any(|item| match &item.kind {
-        ItemKind::Import(import) => import_requires_ast_fallback(import),
+        ItemKind::Import(import) => import_requires_module_graph(import),
         _ => false,
     })
 }
 
-fn import_requires_ast_fallback(import: &ImportDef) -> bool {
+fn import_requires_module_graph(import: &ImportDef) -> bool {
     !is_supported_std_import(import)
 }
 
@@ -173,27 +210,7 @@ fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
         .map(|(name, value)| (name.to_string(), value))
 }
 
-fn format_ast_eval_error(err: EvalError) -> String {
-    match err {
-        EvalError::ParseDiagnostics {
-            path,
-            source_text,
-            diagnostics,
-            ..
-        } => {
-            for diag in diagnostics {
-                emit(&source_text, &path.display().to_string(), &diag);
-            }
-            "parse error".to_string()
-        }
-        other => {
-            output::error(&format!("{other:?}"));
-            "evaluation error".to_string()
-        }
-    }
-}
-
-fn format_hir_eval_error(err: EvalError) -> String {
+fn format_hir_eval_error(err: neve_eval::EvalError) -> String {
     output::error(&format!("{err:?}"));
     "evaluation error".to_string()
 }
@@ -222,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_value_falls_back_to_ast_for_imports() {
+    fn eval_value_prefers_frontend_hir_for_local_imports() {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
             temp_dir.path().join("math.neve"),
@@ -239,7 +256,7 @@ mod tests {
         );
 
         let (backend, value) = eval_value(&file, &source, temp_dir.path()).unwrap();
-        assert_eq!(backend, EvalBackend::AstFallback);
+        assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
     }
 
