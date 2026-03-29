@@ -16,24 +16,142 @@
 
 ---
 
-This document is the focused roadmap for turning Neve into:
+这份文档只回答一件事：
 
-- a complete standalone programming language
-- a system-level scripting language that can replace most shell usage
+**接下来怎样把 Neve 从“语法很多的原型”做成“真正独立可用的语言”，以及怎样把它做成能替代大部分 shell 工作的系统级语言。**
 
-这份文档专门回答两个目标：
+这不是宣传文档，也不是泛泛路线图。
+它是工程执行文档，所以会直接回答：
 
-- 把 Neve 做成一个独立完备的编程语言
-- 把 Neve 做成一个能替代大部分 shell 用途的系统级脚本语言
+- 现在到底缺什么
+- 先做什么，后做什么
+- 哪些事情现在不能碰
+- 做到什么程度才算“真的完成”
 
-It is intentionally stricter than the general project roadmap.
-The main rule is simple:
+这份文档比总路线图更严格，核心原则只有一句：
 
-**Do not keep adding surface syntax until the existing syntax has one coherent semantic pipeline.**
+**在现有语法还没有形成单一、闭环、可验证的语义管线之前，不再继续优先扩张表面语法。**
 
-核心约束也很简单：
+## 一页读懂 / Quick Read
 
-**在现有语法没有形成单一、闭环、可验证的语义管线之前，不再继续优先扩张表面语法。**
+如果你只想先看最重要的内容，看这一节就够了。
+
+### 1. 当前最真实的问题
+
+Neve 现在最大的问题，不是“语法还不够多”，而是“同一门语言在不同路径上的语义还不一致”。
+
+具体来说：
+
+- parser 支持的东西，比 lowering 和 typeck 真正稳住的东西多
+- AST evaluator 和 HIR evaluator 不是同一套语义
+- 有些测试看起来很多，但端到端测试里仍有占位实现
+- 文档里有些 `Complete` 声明高于真实状态
+- 系统能力已经开始加了，但 effect boundary 还没有正式定下来
+
+### 2. 这份路线图的核心判断
+
+- 第一，不要继续优先加语法，要先做语义收敛
+- 第二，不要把“加几个 `exec` builtin”误当成“能替代 Bash”
+- 第三，Neve 不需要兼容 Bash 语法，但必须覆盖 Bash 的主要能力
+- 第四，Neve 不需要先做成“交互式 shell”，先做成“强类型系统脚本语言”更重要
+- 第五，Neve 要先成为“自洽语言”，再成为“生态系统”
+
+### 3. 真正的开工顺序
+
+1. 先做现实校准
+   把所有 feature 的真实支持情况列清楚，把假的完整度去掉。
+2. 再做语义收敛
+   统一 parser -> HIR -> typeck -> eval 这条链。
+3. 再做编译器级类型语义
+   补齐 exhaustiveness、unreachable pattern、trait method 语义。
+4. 再做运行时与 effect boundary
+   引入 `Path`、`Command`、`ProcessResult` 等真实运行时对象。
+5. 再做 shell 替代能力
+   管道、重定向、超时、取消、信号、shebang、脚本入口。
+6. 最后做生态闭环
+   lockfile、registry、包元数据、兼容性和发布策略。
+
+### 4. 这份文档最重要的结论
+
+在 Phase 0 和 Phase 1 完成前，Neve 不应该继续把主要精力放在：
+
+- 新语法
+- 宏系统
+- HKT
+- FFI
+- 全 POSIX 兼容
+- 交互式 shell 替代
+
+### 5. 你应该怎么用这份文档
+
+- 如果你要判断大方向：看 `一页读懂`、`决策门`、`阶段计划`
+- 如果你要安排开发顺序：看 `工作包目录`、`执行顺序`
+- 如果你要直接开工：看 `当前立即优先级`、`下一执行批次`
+
+## 怎么读 / How To Read
+
+为了让中文读者更容易使用，这份文档按三层来组织：
+
+### 第一层：决策层
+
+回答“项目接下来到底该往哪走”：
+
+- `一页读懂`
+- `决策门`
+- `阶段计划`
+
+### 第二层：管理层
+
+回答“这些工作之间有什么依赖关系”：
+
+- `能力矩阵`
+- `工作包目录`
+- `执行顺序`
+- `延后项`
+
+### 第三层：执行层
+
+回答“下一步到底改哪些文件、做哪些 PR”：
+
+- `当前立即优先级`
+- `下一执行批次`
+
+## 这份文档的写法 / Why It Looks Like This
+
+这份文档故意不用“很漂亮但没法执行”的路线图写法。
+它要像施工图，而不是宣传册。
+
+所以你会看到很多：
+
+- 工作包编号
+- 决策门
+- 进入条件
+- 验收条件
+- 非目标
+
+这是为了避免后面再次出现：
+
+- 目标说得很大，但不知道第一刀砍哪里
+- 做了很多事，但没有证明做到了
+- 新增功能越来越多，但核心语义一直没收敛
+
+## 术语对照 / Glossary
+
+这份文档里有些术语如果不先约定，中文读者会读得很别扭。
+下面统一解释一次。
+
+| Term | 中文建议理解 | 在本文里的意思 |
+|------|--------------|----------------|
+| canonical pipeline | 规范执行管线 | 项目最终承认的唯一语义主链路 |
+| semantic convergence | 语义收敛 | parser、lowering、typeck、eval 不再各说各话 |
+| lowering | 降级 / 降到 HIR | 把 AST 变成 HIR 的那一步 |
+| effect boundary | 副作用边界 | 纯表达式和 I/O/进程/系统修改的分界线 |
+| shell replacement | shell 替代 | 不是兼容 Bash 语法，而是覆盖主要 shell 工作 |
+| structured runtime | 结构化运行时 | 用 `Path`、`Command` 这类类型，而不是字符串乱传 |
+| feature matrix | 能力矩阵 / 支持矩阵 | 逐项标注功能在哪些层真正支持 |
+| validation corpus | 验证语料 | 用来证明路线图阶段真的完成的一组真实样本 |
+| work package | 工作包 | 比阶段更小、可以直接开 issue 和 PR 的任务单元 |
+| decision gate | 决策门 | 不先定下来就会导致后面返工的关键选择 |
 
 ## Targets / 目标
 
