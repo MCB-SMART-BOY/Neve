@@ -113,6 +113,34 @@ fn test_eval_hir_std_glob_import() {
 }
 
 #[test]
+fn test_eval_hir_std_option_builtins() {
+    let source = r#"
+        import std.option as option;
+        let a = option.some(41)? + 1;
+        let b = option.none ?? 5;
+        let result = a + b;
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(47)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_result_builtins() {
+    let source = r#"
+        import std.result as result;
+        let a = result.ok(41)? + 1;
+        let resultValue = result.unwrap_err(result.err("boom"));
+        let answer = if resultValue == "boom" then a else 0;
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(42)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_import_std_root() {
     let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {

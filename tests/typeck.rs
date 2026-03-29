@@ -237,6 +237,80 @@ fn test_typeck_std_string_builtin_signatures_reject_wrong_annotation() {
     );
 }
 
+#[test]
+fn test_typeck_std_option_builtins_allow_try_and_coalesce() {
+    check_no_errors(
+        r#"
+            import std.option as option;
+            let a = option.some(41)? + 1;
+            let b = option.none ?? 5;
+            let c = option.unwrap_or(option.some(3), 0);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_option_builtin_signatures_reject_wrong_use() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.option as option;
+            let wrong = expectInt(option.is_some(option.some(1)));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_result_builtins_allow_try_and_unwrap() {
+    check_no_errors(
+        r#"
+            import std.result as result;
+            let a = result.ok(41)? + 1;
+            let b = result.unwrap(result.ok(7));
+            let c = result.unwrap_err(result.err("boom"));
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_result_builtin_signatures_reject_wrong_use() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.result as result;
+            let wrong = expectInt(result.is_ok(result.ok(1)));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_constants_have_float_type() {
+    check_no_errors(
+        r#"
+            import std.math as math;
+            let pi: Float = math.pi;
+            let e: Float = math.e;
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_math_constants_reject_wrong_annotation() {
+    assert_has_diagnostic(
+        r#"
+            fn expectInt(x: Int) -> Int = x;
+            import std.math as math;
+            let wrong = expectInt(math.pi);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
 // ============================================================================
 // 逻辑运算
 // ============================================================================

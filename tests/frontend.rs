@@ -176,3 +176,21 @@ fn test_frontend_accepts_std_glob_imports() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_std_option_and_result_builtins() {
+    let result = analyze_source(
+        r#"
+            import std.option as option;
+            import std.result as result;
+            let a = option.some(41)? + 1;
+            let b = option.none ?? 5;
+            let c = result.ok(1)? + 1;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
