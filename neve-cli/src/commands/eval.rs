@@ -2,12 +2,14 @@
 //! `neve eval` 命令。
 
 use crate::output;
-use neve_diagnostic::emit;
-use neve_eval::{AstEvaluator, EvalError};
+use neve_diagnostic::{emit, Severity};
+use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
+use neve_frontend::analyze_ast;
 use neve_hir::ModuleLoader;
 use neve_parser::parse;
 use neve_std::std_module_overrides;
-use std::path::PathBuf;
+use neve_syntax::{ItemKind, SourceFile};
+use std::path::{Path, PathBuf};
 
 /// Run the eval command.
 /// 运行 eval 命令。
@@ -29,6 +31,12 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
     }
 
     eval_and_print(&file, &source, verbose)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EvalBackend {
+    FrontendHir,
+    AstFallback,
 }
 
 /// Prepare the source for parsing by wrapping expressions appropriately.
@@ -85,38 +93,136 @@ fn eval_and_print(
     }
 
     let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (backend, value) = eval_value(file, source, &root_dir)?;
 
-    // Evaluate using the AST evaluator
-    // 使用 AST 求值器进行求值
+    if verbose {
+        output::info(match backend {
+            EvalBackend::FrontendHir => "Eval backend: frontend/HIR",
+            EvalBackend::AstFallback => "Eval backend: AST fallback",
+        });
+    }
+
+    // Don't print Unit for statements that don't return values
+    // 对于不返回值的语句，不打印 Unit
+    if !matches!(value, Value::Unit) || source.starts_with("let __result__") {
+        output::success(&format!("{value:?}"));
+    }
+
+    Ok(())
+}
+
+fn eval_value(
+    file: &SourceFile,
+    source: &str,
+    root_dir: &Path,
+) -> Result<(EvalBackend, Value), String> {
+    if has_imports(file) {
+        let value = eval_via_ast(file, root_dir)?;
+        return Ok((EvalBackend::AstFallback, value));
+    }
+
+    let analysis = analyze_ast(file);
+    for diag in &analysis.diagnostics {
+        emit(source, "<eval>", diag);
+    }
+    if analysis
+        .diagnostics
+        .iter()
+        .any(|diag| diag.severity == Severity::Error)
+    {
+        return Err("type error".to_string());
+    }
+
+    let mut evaluator =
+        Evaluator::new().with_method_resolutions(analysis.method_resolutions.clone());
+    evaluator
+        .eval_module(&analysis.hir)
+        .map(|value| (EvalBackend::FrontendHir, value))
+        .map_err(format_hir_eval_error)
+}
+
+fn eval_via_ast(file: &SourceFile, root_dir: &Path) -> Result<Value, String> {
     let mut evaluator = AstEvaluator::new()
         .with_module_overrides(std_module_overrides())
-        .with_base_path(root_dir.clone())
-        .with_module_loader(ModuleLoader::new(&root_dir));
+        .with_base_path(root_dir.to_path_buf())
+        .with_module_loader(ModuleLoader::new(root_dir));
 
-    match evaluator.eval_file(file) {
-        Ok(value) => {
-            // Don't print Unit for statements that don't return values
-            // 对于不返回值的语句，不打印 Unit
-            if !matches!(value, neve_eval::Value::Unit) || source.starts_with("let __result__") {
-                output::success(&format!("{value:?}"));
-            }
-        }
-        Err(EvalError::ParseDiagnostics {
+    evaluator.eval_file(file).map_err(format_ast_eval_error)
+}
+
+fn has_imports(file: &SourceFile) -> bool {
+    file.items
+        .iter()
+        .any(|item| matches!(item.kind, ItemKind::Import(_)))
+}
+
+fn format_ast_eval_error(err: EvalError) -> String {
+    match err {
+        EvalError::ParseDiagnostics {
             path,
             source_text,
             diagnostics,
             ..
-        }) => {
+        } => {
             for diag in diagnostics {
                 emit(&source_text, &path.display().to_string(), &diag);
             }
-            return Err("parse error".to_string());
+            "parse error".to_string()
         }
-        Err(e) => {
-            output::error(&format!("{e:?}"));
-            return Err("evaluation error".to_string());
+        other => {
+            output::error(&format!("{other:?}"));
+            "evaluation error".to_string()
         }
     }
+}
 
-    Ok(())
+fn format_hir_eval_error(err: EvalError) -> String {
+    output::error(&format!("{err:?}"));
+    "evaluation error".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{eval_value, prepare_source, EvalBackend};
+    use neve_eval::Value;
+    use neve_parser::parse;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn eval_value_prefers_frontend_hir_without_imports() {
+        let source = prepare_source("1 + 2");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        assert_eq!(backend, EvalBackend::FrontendHir);
+        assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn eval_value_falls_back_to_ast_for_imports() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("math.neve"),
+            "pub fn add(x, y) = x + y;",
+        )
+        .unwrap();
+
+        let source = prepare_source("import math (add); let result = add(1, 2)");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) = eval_value(&file, &source, temp_dir.path()).unwrap();
+        assert_eq!(backend, EvalBackend::AstFallback);
+        assert_eq!(value, Value::Int(3.into()));
+    }
 }

@@ -83,7 +83,7 @@
 | Area / 领域 | 现状 | 主要问题 |
 |-------------|------|----------|
 | `neve check` | ⚠️ 可用 | 类型检查能跑，但还不是编译器级闭环 |
-| `neve eval` | ⚠️ 可用 | 主要走 AST evaluator，不是长期 canonical path |
+| `neve eval` | ⚠️ 可用 | 无 `import` 输入已默认走 frontend/HIR；含模块导入时仍回退 AST，所以还不是完全统一的 canonical path |
 | `neve run` | ⚠️ 可用 | 运行路径与类型/语义主线还未完全统一 |
 | REPL | ⚠️ 可用 | 交互有了，但类型查询和语义一致性不足 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |

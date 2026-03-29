@@ -1311,6 +1311,7 @@ dependencies = [
  "neve-eval",
  "neve-fetch",
  "neve-fmt",
+ "neve-frontend",
  "neve-hir",
  "neve-lexer",
  "neve-parser",
@@ -1321,6 +1322,7 @@ dependencies = [
  "rustyline",
  "serde",
  "serde_json",
+ "tempfile",
  "termimad",
 ]
 
