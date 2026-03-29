@@ -1441,6 +1441,40 @@ fn test_typeck_to_string_builtin() {
     check_no_errors("let x = toString(42);");
 }
 
+#[test]
+fn test_typeck_trait_impl_method_signature_return_mismatch() {
+    assert_has_diagnostic(
+        "
+        trait Show {
+            fn show(self) -> Int;
+        };
+        struct Counter {};
+        impl Show for Counter {
+            fn show(self) -> String = \"counter\";
+        };
+        ",
+        Severity::Error,
+        "does not match trait `Show` signature",
+    );
+}
+
+#[test]
+fn test_typeck_trait_impl_method_signature_param_mismatch() {
+    assert_has_diagnostic(
+        "
+        trait Add {
+            fn add(self, x: Int) -> Int;
+        };
+        struct Counter {};
+        impl Add for Counter {
+            fn add(self) -> Int = 0;
+        };
+        ",
+        Severity::Error,
+        "does not match trait `Add` signature",
+    );
+}
+
 // ============================================================================
 // 错误检测测试
 // ============================================================================

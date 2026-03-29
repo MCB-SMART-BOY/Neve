@@ -114,6 +114,27 @@ fn test_frontend_reports_impl_method_type_errors() {
 }
 
 #[test]
+fn test_frontend_reports_trait_impl_signature_mismatch() {
+    let result = analyze_source(
+        r#"
+            trait Show { fn show(self) -> Int; };
+            struct Counter {};
+            impl Show for Counter {
+                fn show(self) -> String = "counter";
+            };
+        "#,
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type),
+        "expected trait impl signature diagnostics, got {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_try_on_option_and_result_like_enums() {
     let result = analyze_source(
         r#"
