@@ -92,6 +92,9 @@ pub struct Evaluator {
     /// Resolved method call targets keyed by expression span.
     /// 按表达式 span 存储的方法调用解析结果。
     method_resolutions: HashMap<Span, DefId>,
+    /// Additional builtin bindings injected by the caller.
+    /// 调用方注入的额外内置绑定。
+    extra_builtins: HashMap<String, Value>,
 }
 
 /// A global definition.
@@ -121,6 +124,7 @@ impl Evaluator {
             globals: HashMap::new(),
             variant_ctors: HashMap::new(),
             method_resolutions: HashMap::new(),
+            extra_builtins: HashMap::new(),
         }
     }
 
@@ -135,6 +139,16 @@ impl Evaluator {
     /// 替换静态解析得到的方法调用目标。
     pub fn set_method_resolutions(&mut self, method_resolutions: HashMap<Span, DefId>) {
         self.method_resolutions = method_resolutions;
+    }
+
+    /// Attach additional builtin bindings.
+    /// 绑定额外的内置值。
+    pub fn with_extra_builtins<I>(mut self, builtins: I) -> Self
+    where
+        I: IntoIterator<Item = (String, Value)>,
+    {
+        self.extra_builtins.extend(builtins);
+        self
     }
 
     /// Create an evaluator with built-in functions.
@@ -587,9 +601,11 @@ impl Evaluator {
     }
 
     fn builtin_value(&self, name: &str) -> Option<Value> {
-        crate::builtins()
-            .into_iter()
-            .find_map(|(builtin_name, value)| (builtin_name == name).then_some(value))
+        self.extra_builtins.get(name).cloned().or_else(|| {
+            crate::builtins()
+                .into_iter()
+                .find_map(|(builtin_name, value)| (builtin_name == name).then_some(value))
+        })
     }
 
     fn eval_literal(&self, lit: &Literal) -> Value {
@@ -955,6 +971,7 @@ impl Evaluator {
             globals: self.globals.clone(),
             variant_ctors: self.variant_ctors.clone(),
             method_resolutions: self.method_resolutions.clone(),
+            extra_builtins: self.extra_builtins.clone(),
         };
         let result = eval.eval(&expr);
 

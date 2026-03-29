@@ -26,6 +26,12 @@ pub struct Resolver {
     scopes: Vec<HashMap<String, LocalId>>,
     /// Imported names from other modules. / 从其他模块导入的名称。
     imported: HashMap<String, DefId>,
+    /// Imported std builtin items keyed by in-scope name.
+    /// 作用域内名称到 std builtin 全名的映射。
+    imported_builtin_items: HashMap<String, String>,
+    /// Imported std builtin modules keyed by namespace alias.
+    /// 命名空间别名到 std builtin 模块前缀的映射。
+    imported_builtin_modules: HashMap<String, String>,
     /// Imported module aliases (namespace roots). / 导入的模块别名（命名空间根）。
     imported_modules: HashSet<String>,
     /// Current module path (for relative imports). / 当前模块路径（用于相对导入）。
@@ -45,6 +51,8 @@ impl Resolver {
             globals: HashMap::new(),
             scopes: Vec::new(),
             imported: HashMap::new(),
+            imported_builtin_items: HashMap::new(),
+            imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: None,
@@ -61,6 +69,8 @@ impl Resolver {
             globals: HashMap::new(),
             scopes: Vec::new(),
             imported: HashMap::new(),
+            imported_builtin_items: HashMap::new(),
+            imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: Some(ModuleLoader::new(root_dir)),
@@ -204,6 +214,9 @@ impl Resolver {
     fn process_imports(&mut self, imports: &[Import]) {
         for import in imports {
             self.record_import_alias(import);
+            if self.try_register_std_import(import) {
+                continue;
+            }
             if let Some(ref loader) = self.module_loader {
                 // Use the module loader to resolve the import
                 // 使用模块加载器解析导入
@@ -472,6 +485,40 @@ impl Resolver {
         }
     }
 
+    fn std_builtin_module_prefix(path: &[String]) -> Option<String> {
+        if path.len() == 2 && path.first().map(|segment| segment.as_str()) == Some("std") {
+            Some(path[1].clone())
+        } else {
+            None
+        }
+    }
+
+    fn try_register_std_import(&mut self, import: &Import) -> bool {
+        let Some(module_prefix) = Self::std_builtin_module_prefix(&import.path) else {
+            return false;
+        };
+
+        match &import.kind {
+            ImportKind::Items(names) => {
+                for name in names {
+                    self.imported_builtin_items
+                        .insert(name.clone(), format!("{module_prefix}.{name}"));
+                }
+                true
+            }
+            ImportKind::Module => {
+                let alias = import.alias.clone().or_else(|| import.path.last().cloned());
+                if let Some(alias) = alias {
+                    self.imported_builtin_modules.insert(alias, module_prefix);
+                    true
+                } else {
+                    false
+                }
+            }
+            ImportKind::All => false,
+        }
+    }
+
     fn is_supported_builtin(name: &str) -> bool {
         matches!(name, "force" | "isLazy" | "isEvaluated")
     }
@@ -481,6 +528,8 @@ impl Resolver {
             ExprKind::Var(local_id)
         } else if let Some(def_id) = self.lookup_global(name) {
             ExprKind::Global(def_id)
+        } else if let Some(builtin_name) = self.imported_builtin_items.get(name) {
+            ExprKind::Builtin(builtin_name.clone())
         } else if Self::is_supported_builtin(name) {
             ExprKind::Builtin(name.to_string())
         } else {
@@ -833,48 +882,30 @@ impl Resolver {
                 } else {
                     let first = &parts[0];
 
-                    let base_kind = self
-                        .lookup_local(&first.name)
-                        .map(ExprKind::Var)
-                        .or_else(|| self.lookup_global(&first.name).map(ExprKind::Global))
-                        .or_else(|| {
-                            Self::is_supported_builtin(&first.name)
-                                .then(|| ExprKind::Builtin(first.name.clone()))
-                        });
-
-                    if let Some(mut result_kind) = base_kind {
-                        // Chain field accesses for remaining parts
-                        // 为剩余部分链接字段访问
-                        for part in &parts[1..] {
-                            let base_expr = Expr {
-                                kind: result_kind,
-                                ty: Self::unknown_ty(span),
-                                span,
-                            };
-                            result_kind = ExprKind::Field(Box::new(base_expr), part.name.clone());
-                        }
-                        result_kind
-                    } else {
-                        let full_name = parts
+                    if parts.len() > 1
+                        && self.lookup_local(&first.name).is_none()
+                        && self.lookup_global(&first.name).is_none()
+                        && let Some(module_prefix) = self.imported_builtin_modules.get(&first.name)
+                    {
+                        let suffix = parts[1..]
                             .iter()
                             .map(|part| part.name.as_str())
                             .collect::<Vec<_>>()
                             .join(".");
+                        ExprKind::Builtin(format!("{module_prefix}.{suffix}"))
+                    } else {
+                        let base_kind = self
+                            .lookup_local(&first.name)
+                            .map(ExprKind::Var)
+                            .or_else(|| self.lookup_global(&first.name).map(ExprKind::Global))
+                            .or_else(|| {
+                                Self::is_supported_builtin(&first.name)
+                                    .then(|| ExprKind::Builtin(first.name.clone()))
+                            });
 
-                        if let Some(def_id) = self.lookup_global(&full_name) {
-                            ExprKind::Global(def_id)
-                        } else if self.imported_modules.contains(&first.name) {
-                            let def_id = match self.imported.get(&full_name).copied() {
-                                Some(def_id) => def_id,
-                                None => {
-                                    let def_id = self.fresh_def_id();
-                                    self.imported.insert(full_name, def_id);
-                                    def_id
-                                }
-                            };
-                            ExprKind::Global(def_id)
-                        } else {
-                            let mut result_kind = ExprKind::Global(DefId(u32::MAX));
+                        if let Some(mut result_kind) = base_kind {
+                            // Chain field accesses for remaining parts
+                            // 为剩余部分链接字段访问
                             for part in &parts[1..] {
                                 let base_expr = Expr {
                                     kind: result_kind,
@@ -885,6 +916,38 @@ impl Resolver {
                                     ExprKind::Field(Box::new(base_expr), part.name.clone());
                             }
                             result_kind
+                        } else {
+                            let full_name = parts
+                                .iter()
+                                .map(|part| part.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(".");
+
+                            if let Some(def_id) = self.lookup_global(&full_name) {
+                                ExprKind::Global(def_id)
+                            } else if self.imported_modules.contains(&first.name) {
+                                let def_id = match self.imported.get(&full_name).copied() {
+                                    Some(def_id) => def_id,
+                                    None => {
+                                        let def_id = self.fresh_def_id();
+                                        self.imported.insert(full_name, def_id);
+                                        def_id
+                                    }
+                                };
+                                ExprKind::Global(def_id)
+                            } else {
+                                let mut result_kind = ExprKind::Global(DefId(u32::MAX));
+                                for part in &parts[1..] {
+                                    let base_expr = Expr {
+                                        kind: result_kind,
+                                        ty: Self::unknown_ty(span),
+                                        span,
+                                    };
+                                    result_kind =
+                                        ExprKind::Field(Box::new(base_expr), part.name.clone());
+                                }
+                                result_kind
+                            }
                         }
                     }
                 }

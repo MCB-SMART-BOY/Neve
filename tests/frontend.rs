@@ -144,3 +144,20 @@ fn test_frontend_accepts_trait_method_call_analysis() {
         result.diagnostics
     );
 }
+
+#[test]
+fn test_frontend_accepts_std_item_and_module_imports() {
+    let result = analyze_source(
+        r#"
+            import std.list (len);
+            import std.string as string;
+            let a = len([1, 2, 3]);
+            let b = string.len("abc");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}

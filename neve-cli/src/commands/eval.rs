@@ -2,13 +2,13 @@
 //! `neve eval` 命令。
 
 use crate::output;
-use neve_diagnostic::{emit, Severity};
+use neve_diagnostic::{Severity, emit};
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_frontend::analyze_ast;
 use neve_hir::ModuleLoader;
 use neve_parser::parse;
-use neve_std::std_module_overrides;
-use neve_syntax::{ItemKind, SourceFile};
+use neve_std::{std_module_overrides, stdlib};
+use neve_syntax::{ImportDef, ImportItems, ItemKind, SourceFile};
 use std::path::{Path, PathBuf};
 
 /// Run the eval command.
@@ -116,7 +116,7 @@ fn eval_value(
     source: &str,
     root_dir: &Path,
 ) -> Result<(EvalBackend, Value), String> {
-    if has_imports(file) {
+    if source_file_requires_ast_fallback(file) {
         let value = eval_via_ast(file, root_dir)?;
         return Ok((EvalBackend::AstFallback, value));
     }
@@ -133,8 +133,9 @@ fn eval_value(
         return Err("type error".to_string());
     }
 
-    let mut evaluator =
-        Evaluator::new().with_method_resolutions(analysis.method_resolutions.clone());
+    let mut evaluator = Evaluator::new()
+        .with_method_resolutions(analysis.method_resolutions.clone())
+        .with_extra_builtins(std_builtin_values());
     evaluator
         .eval_module(&analysis.hir)
         .map(|value| (EvalBackend::FrontendHir, value))
@@ -150,10 +151,30 @@ fn eval_via_ast(file: &SourceFile, root_dir: &Path) -> Result<Value, String> {
     evaluator.eval_file(file).map_err(format_ast_eval_error)
 }
 
-fn has_imports(file: &SourceFile) -> bool {
-    file.items
-        .iter()
-        .any(|item| matches!(item.kind, ItemKind::Import(_)))
+fn source_file_requires_ast_fallback(file: &SourceFile) -> bool {
+    file.items.iter().any(|item| match &item.kind {
+        ItemKind::Import(import) => import_requires_ast_fallback(import),
+        _ => false,
+    })
+}
+
+fn import_requires_ast_fallback(import: &ImportDef) -> bool {
+    if !is_supported_std_import(import) {
+        return true;
+    }
+
+    matches!(import.items, ImportItems::All)
+}
+
+fn is_supported_std_import(import: &ImportDef) -> bool {
+    import.path.len() == 2
+        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+}
+
+fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
+    stdlib()
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
 }
 
 fn format_ast_eval_error(err: EvalError) -> String {
@@ -183,7 +204,7 @@ fn format_hir_eval_error(err: EvalError) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{eval_value, prepare_source, EvalBackend};
+    use super::{EvalBackend, eval_value, prepare_source};
     use neve_eval::Value;
     use neve_parser::parse;
     use std::fs;
@@ -224,5 +245,35 @@ mod tests {
         let (backend, value) = eval_value(&file, &source, temp_dir.path()).unwrap();
         assert_eq!(backend, EvalBackend::AstFallback);
         assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn eval_value_prefers_frontend_hir_for_std_item_imports() {
+        let source = prepare_source("import std.list (len); let result = len([1, 2, 3])");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        assert_eq!(backend, EvalBackend::FrontendHir);
+        assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn eval_value_prefers_frontend_hir_for_std_module_imports() {
+        let source = prepare_source("import std.list; let result = list.len([1, 2])");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        assert_eq!(backend, EvalBackend::FrontendHir);
+        assert_eq!(value, Value::Int(2.into()));
     }
 }

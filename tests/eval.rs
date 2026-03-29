@@ -7,7 +7,7 @@ use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
-use neve_std::std_module_overrides;
+use neve_std::{std_module_overrides, stdlib};
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
@@ -26,7 +26,13 @@ fn eval_checked_hir(source: &str) -> Result<Value, EvalError> {
         "unexpected frontend diagnostics: {:?}",
         analysis.diagnostics
     );
-    let mut eval = Evaluator::new().with_method_resolutions(analysis.method_resolutions.clone());
+    let mut eval = Evaluator::new()
+        .with_method_resolutions(analysis.method_resolutions.clone())
+        .with_extra_builtins(
+            stdlib()
+                .into_iter()
+                .map(|(name, value)| (name.to_string(), value)),
+        );
     eval.eval_module(&analysis.hir)
 }
 
@@ -75,6 +81,24 @@ fn test_eval_import_std_list_module() {
     let source = "import std.list; let xs = list.range(1, 4); let n = list.len(xs);";
     match eval_with_std(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(3)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_item_import() {
+    let source = "import std.list (len); let result = len([1, 2, 3, 4]);";
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(4)),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_module_import() {
+    let source = "import std.list as listOps; let result = listOps.len([1, 2]);";
+    match eval_checked_hir(source) {
+        Ok(Value::Int(n)) => assert_eq!(n, int(2)),
         other => panic!("expected int, got {:?}", other),
     }
 }

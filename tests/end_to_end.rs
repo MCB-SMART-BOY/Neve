@@ -9,6 +9,7 @@ use neve_common::Int;
 use neve_diagnostic::DiagnosticKind;
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
 use neve_frontend::{AnalysisResult, analyze_source};
+use neve_std::{std_module_overrides, stdlib};
 
 fn int(value: i64) -> Int {
     value.into()
@@ -25,12 +26,18 @@ fn analyze_without_diagnostics(source: &str) -> AnalysisResult {
 }
 
 fn eval_ast(analysis: &AnalysisResult) -> Result<Value, EvalError> {
-    let mut evaluator = AstEvaluator::new();
+    let mut evaluator = AstEvaluator::new().with_module_overrides(std_module_overrides());
     evaluator.eval_file(&analysis.ast)
 }
 
 fn eval_hir(analysis: &AnalysisResult) -> Result<Value, EvalError> {
-    let mut evaluator = Evaluator::new().with_method_resolutions(analysis.method_resolutions.clone());
+    let mut evaluator = Evaluator::new()
+        .with_method_resolutions(analysis.method_resolutions.clone())
+        .with_extra_builtins(
+            stdlib()
+                .into_iter()
+                .map(|(name, value)| (name.to_string(), value)),
+        );
     evaluator.eval_module(&analysis.hir)
 }
 
@@ -279,5 +286,27 @@ fn test_end_to_end_trait_method_runtime_parity() {
         let x = 21.twice();
         ",
         Value::Int(int(42)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_item_import_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.list (len);
+        let x = len([1, 2, 3]);
+        ",
+        Value::Int(int(3)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_module_import_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.string as string;
+        let x = string.len(\"abcd\");
+        ",
+        Value::Int(int(4)),
     );
 }
