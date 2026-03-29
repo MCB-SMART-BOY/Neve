@@ -1244,6 +1244,17 @@ impl TypeChecker {
                     Self::pattern_binding_ids(pattern, bindings);
                 }
             }
+            PatternKind::ListRest { init, rest, tail } => {
+                for pattern in init {
+                    Self::pattern_binding_ids(pattern, bindings);
+                }
+                if let Some(pattern) = rest {
+                    Self::pattern_binding_ids(pattern, bindings);
+                }
+                for pattern in tail {
+                    Self::pattern_binding_ids(pattern, bindings);
+                }
+            }
             PatternKind::Record(fields) => {
                 for (_, pattern) in fields {
                     Self::pattern_binding_ids(pattern, bindings);
@@ -1291,9 +1302,31 @@ impl TypeChecker {
             },
 
             PatternKind::List(patterns) => {
-                // Infer element type
                 let elem_ty = self.fresh_var();
+                let list_ty = Ty {
+                    kind: TyKind::Named(DefId(u32::MAX), vec![elem_ty.clone()]),
+                    span: pattern.span,
+                };
+                self.unify(&list_ty, expected, pattern.span);
                 for pat in patterns {
+                    self.check_pattern(pat, &elem_ty);
+                }
+            }
+
+            PatternKind::ListRest { init, rest, tail } => {
+                let elem_ty = self.fresh_var();
+                let list_ty = Ty {
+                    kind: TyKind::Named(DefId(u32::MAX), vec![elem_ty.clone()]),
+                    span: pattern.span,
+                };
+                self.unify(&list_ty, expected, pattern.span);
+                for pat in init {
+                    self.check_pattern(pat, &elem_ty);
+                }
+                if let Some(pattern) = rest {
+                    self.check_pattern(pattern, &list_ty);
+                }
+                for pat in tail {
                     self.check_pattern(pat, &elem_ty);
                 }
             }

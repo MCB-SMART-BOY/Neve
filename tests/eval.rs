@@ -915,6 +915,22 @@ fn test_eval_hir_binding_pattern() {
 }
 
 #[test]
+fn test_eval_hir_list_rest_pattern() {
+    let result = eval_source(
+        "
+        let x = match [1, 2, 3, 4] {
+            [first, ..middle, last] -> match middle {
+                [a, b] -> first + a + b + last,
+                _ -> 0,
+            },
+            _ -> 0,
+        };
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(10)));
+}
+
+#[test]
 fn test_eval_record_multiple_fields() {
     match eval_source("let x = #{ a = 1, b = 2, c = 3 };") {
         Ok(Value::Record(fields)) => {

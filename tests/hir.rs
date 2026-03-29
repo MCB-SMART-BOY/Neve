@@ -221,3 +221,33 @@ fn test_lower_binding_pattern_preserves_inner_pattern() {
         _ => panic!("expected function"),
     }
 }
+
+#[test]
+fn test_lower_list_rest_pattern_preserves_segments() {
+    let source = "let x = match [1, 2, 3, 4] { [first, ..middle, last] -> first, _ -> 0 };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Match(_, arms) => match &arms[0].pattern.kind {
+                PatternKind::ListRest { init, rest, tail } => {
+                    assert_eq!(init.len(), 1);
+                    assert_eq!(tail.len(), 1);
+                    match rest.as_deref() {
+                        Some(neve_hir::Pattern {
+                            kind: PatternKind::Var(_, name),
+                            ..
+                        }) => assert_eq!(name, "middle"),
+                        other => panic!("expected middle rest binding, got {:?}", other),
+                    }
+                }
+                other => panic!("expected ListRest pattern, got {:?}", other),
+            },
+            other => panic!("expected Match, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}

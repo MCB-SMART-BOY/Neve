@@ -1926,11 +1926,15 @@ impl AstEvaluator {
                 PatternKind::Tuple(patterns) | PatternKind::List(patterns) => {
                     patterns.iter().map(estimate_bindings).sum()
                 }
+                PatternKind::ListRest { init, rest, tail } => {
+                    init.iter().map(estimate_bindings).sum::<usize>()
+                        + rest.as_deref().map(estimate_bindings).unwrap_or(0)
+                        + tail.iter().map(estimate_bindings).sum::<usize>()
+                }
                 PatternKind::Record { fields, .. } => fields.len(),
                 PatternKind::Constructor { args, .. } => args.iter().map(estimate_bindings).sum(),
                 PatternKind::Or(patterns) => patterns.first().map(estimate_bindings).unwrap_or(0),
                 PatternKind::Binding { pattern, .. } => 1 + estimate_bindings(pattern),
-                _ => 0,
             }
         }
 
@@ -1979,6 +1983,40 @@ impl AstEvaluator {
                     for (p, v) in patterns.iter().zip(values.iter()) {
                         bindings.extend(Self::match_pattern(p, v)?);
                     }
+                    Some(bindings)
+                } else {
+                    None
+                }
+            }
+            PatternKind::ListRest { init, rest, tail } => {
+                if let Value::List(values) = value {
+                    let min_len = init.len() + tail.len();
+                    if values.len() < min_len {
+                        return None;
+                    }
+
+                    let capacity = init.iter().map(estimate_bindings).sum::<usize>()
+                        + rest.as_deref().map(estimate_bindings).unwrap_or(0)
+                        + tail.iter().map(estimate_bindings).sum::<usize>();
+                    let mut bindings = Vec::with_capacity(capacity);
+
+                    for (pattern, value) in init.iter().zip(values.iter()) {
+                        bindings.extend(Self::match_pattern(pattern, value)?);
+                    }
+
+                    if let Some(pattern) = rest {
+                        let middle_start = init.len();
+                        let middle_end = values.len() - tail.len();
+                        let middle =
+                            Value::List(Rc::new(values[middle_start..middle_end].to_vec()));
+                        bindings.extend(Self::match_pattern(pattern, &middle)?);
+                    }
+
+                    let tail_start = values.len() - tail.len();
+                    for (pattern, value) in tail.iter().zip(values[tail_start..].iter()) {
+                        bindings.extend(Self::match_pattern(pattern, value)?);
+                    }
+
                     Some(bindings)
                 } else {
                     None
@@ -2052,7 +2090,6 @@ impl AstEvaluator {
                 bindings.push((name.name.clone(), value.clone()));
                 Some(bindings)
             }
-            _ => None,
         }
     }
 
