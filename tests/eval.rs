@@ -4,6 +4,7 @@
 
 use neve_common::Int;
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
+use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
 use neve_std::std_module_overrides;
@@ -13,6 +14,17 @@ fn eval_source(source: &str) -> Result<Value, EvalError> {
     let hir = lower(&ast);
     let mut eval = Evaluator::new();
     eval.eval_module(&hir)
+}
+
+fn eval_checked_hir(source: &str) -> Result<Value, EvalError> {
+    let analysis = analyze_source(source);
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "unexpected frontend diagnostics: {:?}",
+        analysis.diagnostics
+    );
+    let mut eval = Evaluator::new().with_method_resolutions(analysis.method_resolutions.clone());
+    eval.eval_module(&analysis.hir)
 }
 
 /// Evaluate source with builtins available (using AstEvaluator).
@@ -978,6 +990,20 @@ fn test_eval_hir_try_on_result_like_enum_error() {
         }
         other => panic!("expected propagated error, got {:?}", other),
     }
+}
+
+#[test]
+fn test_eval_hir_trait_method_runtime_dispatch() {
+    let result = eval_checked_hir(
+        "
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let x = 21.twice();
+    ",
+    );
+    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 
 #[test]

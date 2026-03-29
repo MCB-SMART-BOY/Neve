@@ -1426,6 +1426,7 @@ dependencies = [
 name = "neve-frontend"
 version = "1.0.1"
 dependencies = [
+ "neve-common",
  "neve-diagnostic",
  "neve-hir",
  "neve-parser",

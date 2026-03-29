@@ -7,12 +7,15 @@
 //! 便于 LSP 和 CLI 等工具复用。
 
 pub use neve_diagnostic::Diagnostic;
+use neve_hir::DefId;
 pub use neve_hir::Module;
 pub use neve_syntax::SourceFile;
 
 use neve_hir::lower;
 use neve_parser::parse;
-use neve_typeck::check;
+use neve_typeck::TypeChecker;
+use neve_common::Span;
+use std::collections::HashMap;
 
 /// Result of analyzing a single source string.
 /// 单个源文本的分析结果。
@@ -22,6 +25,9 @@ pub struct AnalysisResult {
     pub ast: SourceFile,
     /// Lowered HIR. / 降级后的 HIR。
     pub hir: Module,
+    /// Resolved method call targets for HIR evaluation.
+    /// 用于 HIR 求值的方法调用解析结果。
+    pub method_resolutions: HashMap<Span, DefId>,
     /// Diagnostics from parse + type check. / 解析与类型检查诊断。
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -34,11 +40,15 @@ pub fn analyze_source(source: &str) -> AnalysisResult {
     let (ast, mut diagnostics) = parse(source);
 
     let hir = lower(&ast);
-    diagnostics.extend(check(&hir));
+    let mut checker = TypeChecker::new();
+    checker.check(&hir);
+    let method_resolutions = checker.method_resolutions().clone();
+    diagnostics.extend(checker.diagnostics());
 
     AnalysisResult {
         ast,
         hir,
+        method_resolutions,
         diagnostics,
     }
 }
@@ -47,11 +57,15 @@ pub fn analyze_source(source: &str) -> AnalysisResult {
 /// 分析已解析的 AST。
 pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
     let hir = lower(ast);
-    let diagnostics = check(&hir);
+    let mut checker = TypeChecker::new();
+    checker.check(&hir);
+    let method_resolutions = checker.method_resolutions().clone();
+    let diagnostics = checker.diagnostics();
 
     AnalysisResult {
         ast: ast.clone(),
         hir,
+        method_resolutions,
         diagnostics,
     }
 }

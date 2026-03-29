@@ -30,7 +30,7 @@ fn eval_ast(analysis: &AnalysisResult) -> Result<Value, EvalError> {
 }
 
 fn eval_hir(analysis: &AnalysisResult) -> Result<Value, EvalError> {
-    let mut evaluator = Evaluator::new();
+    let mut evaluator = Evaluator::new().with_method_resolutions(analysis.method_resolutions.clone());
     evaluator.eval_module(&analysis.hir)
 }
 

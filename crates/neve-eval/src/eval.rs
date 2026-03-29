@@ -7,7 +7,7 @@
 //! 它提供了一个带有尾调用优化的树遍历解释器。
 
 use crate::{Environment, Value};
-use neve_common::{int_is_negative, int_is_zero, int_to_f64, int_to_u32};
+use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32};
 use neve_diagnostic::Diagnostic;
 use neve_hir::{
     BinOp, DefId, Expr, ExprKind, FnDef, Generator, Item, ItemKind, Literal, LocalId, Module,
@@ -89,6 +89,9 @@ pub struct Evaluator {
     globals: HashMap<DefId, GlobalDef>,
     /// Variant constructors by DefId. / 按 DefId 存储的变体构造器。
     variant_ctors: HashMap<DefId, VariantCtor>,
+    /// Resolved method call targets keyed by expression span.
+    /// 按表达式 span 存储的方法调用解析结果。
+    method_resolutions: HashMap<Span, DefId>,
 }
 
 /// A global definition.
@@ -117,7 +120,15 @@ impl Evaluator {
             env: Environment::new(),
             globals: HashMap::new(),
             variant_ctors: HashMap::new(),
+            method_resolutions: HashMap::new(),
         }
+    }
+
+    /// Attach statically resolved method call targets.
+    /// 绑定静态解析得到的方法调用目标。
+    pub fn with_method_resolutions(mut self, method_resolutions: HashMap<Span, DefId>) -> Self {
+        self.method_resolutions = method_resolutions;
+        self
     }
 
     /// Create an evaluator with built-in functions.
@@ -171,6 +182,20 @@ impl Evaluator {
                     );
                 }
             }
+            ItemKind::Impl(impl_def) => {
+                for item in &impl_def.items {
+                    self.globals.insert(
+                        item.id,
+                        GlobalDef::Function(FnDef {
+                            name: item.name.clone(),
+                            generics: item.generics.clone(),
+                            params: item.params.clone(),
+                            return_ty: item.return_ty.clone(),
+                            body: item.body.clone(),
+                        }),
+                    );
+                }
+            }
             _ => {}
         }
     }
@@ -190,6 +215,18 @@ impl Evaluator {
                 }
             }
             _ => Ok(Value::Unit),
+        }
+    }
+
+    fn global_callable(&self, def_id: DefId) -> Option<Value> {
+        match self.globals.get(&def_id).cloned() {
+            Some(GlobalDef::Value(value)) => Some(value),
+            Some(GlobalDef::Function(fn_def)) => Some(Value::Closure {
+                params: fn_def.params,
+                body: fn_def.body,
+                env: self.env.clone(),
+            }),
+            None => None,
         }
     }
 
@@ -266,13 +303,20 @@ impl Evaluator {
                 args,
                 ..
             } => {
-                let func_val = self.eval(target)?;
                 let recv_val = self.eval(receiver)?;
                 let mut arg_vals = vec![recv_val];
                 for arg in args {
                     arg_vals.push(self.eval(arg)?);
                 }
-                self.apply(func_val, arg_vals)
+
+                if let Some(method_def_id) = self.method_resolutions.get(&expr.span).copied()
+                    && let Some(func_val) = self.global_callable(method_def_id)
+                {
+                    self.apply(func_val, arg_vals)
+                } else {
+                    let func_val = self.eval(target)?;
+                    self.apply(func_val, arg_vals)
+                }
             }
 
             ExprKind::Field(base, field) => {
@@ -904,6 +948,7 @@ impl Evaluator {
             env,
             globals: self.globals.clone(),
             variant_ctors: self.variant_ctors.clone(),
+            method_resolutions: self.method_resolutions.clone(),
         };
         let result = eval.eval(&expr);
 
