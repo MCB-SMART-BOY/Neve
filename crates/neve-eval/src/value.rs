@@ -591,6 +591,8 @@ impl KeyCtx {
             TyKind::Unit => "Unit".to_string(),
             TyKind::Var(id) => format!("Var({id})"),
             TyKind::Param(id, name) => format!("Param({id},{})", escape_string(name)),
+            TyKind::SelfType => "Self".to_string(),
+            TyKind::SelfAssoc(name) => format!("SelfAssoc({})", escape_string(name)),
             TyKind::Named(def, args) => {
                 let args_key: Vec<String> = args.iter().map(|t| self.ty_key(t)).collect();
                 format!("Named({:?},[{}])", def, args_key.join(","))

@@ -135,6 +135,28 @@ fn test_frontend_reports_trait_impl_signature_mismatch() {
 }
 
 #[test]
+fn test_frontend_accepts_self_and_assoc_type_use_sites() {
+    let result = analyze_source(
+        r#"
+            trait Iterator {
+                type Item;
+                fn first(self) -> Self.Item;
+            };
+            struct Counter {};
+            impl Iterator for Counter {
+                type Item = Int;
+                fn first(self) -> Self.Item = 1;
+            };
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_try_on_option_and_result_like_enums() {
     let result = analyze_source(
         r#"

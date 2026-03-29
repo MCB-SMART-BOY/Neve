@@ -306,6 +306,8 @@ impl TraitResolver {
             TyKind::Fn(_, _) => "Fn".to_string(),
             TyKind::Var(v) => format!("Var({})", v),
             TyKind::Param(idx, name) => format!("Param({}, {})", idx, name),
+            TyKind::SelfType => "Self".to_string(),
+            TyKind::SelfAssoc(name) => format!("SelfAssoc({name})"),
             TyKind::Forall(params, _) => format!("Forall({})", params.len()),
             TyKind::Unknown => "Unknown".to_string(),
         }
@@ -362,6 +364,8 @@ impl TraitResolver {
             (TyKind::Char, TyKind::Char) => true,
             (TyKind::String, TyKind::String) => true,
             (TyKind::Unit, TyKind::Unit) => true,
+            (TyKind::SelfType, TyKind::SelfType) => true,
+            (TyKind::SelfAssoc(left), TyKind::SelfAssoc(right)) => left == right,
             (TyKind::Named(id1, _), TyKind::Named(id2, _)) => id1 == id2,
             (TyKind::Var(_), _) | (_, TyKind::Var(_)) => true, // Type vars match anything
             _ => false,

@@ -901,6 +901,12 @@ pub enum TyKind {
     /// Generic type parameter reference (e.g., `T` in `fn foo<T>(x: T)`). / 泛型类型参数引用（例如 `fn foo<T>(x: T)` 中的 `T`）。
     Param(u32, String),
 
+    /// The `Self` type inside trait/impl signatures. / trait/impl 签名中的 `Self` 类型。
+    SelfType,
+
+    /// An associated type projected from `Self` (e.g., `Self.Item`). / 从 `Self` 投影出的关联类型（例如 `Self.Item`）。
+    SelfAssoc(String),
+
     /// Named type with arguments (e.g., `List<Int>`). / 带参数的命名类型（例如 `List<Int>`）。
     Named(DefId, Vec<Ty>),
 
