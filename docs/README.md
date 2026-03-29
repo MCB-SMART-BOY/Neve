@@ -32,6 +32,7 @@ Welcome to the Neve language documentation. 欢迎来到 Neve 语言的文档中
 | [diagnostics.md](diagnostics.md) | Diagnostic codes | 诊断错误码 |
 | [philosophy.md](philosophy.md) | Design philosophy & roadmap | 设计哲学与路线图 |
 | [roadmap.md](roadmap.md) | Project roadmap | 项目路线图 |
+| [language-roadmap.md](language-roadmap.md) | Language completion roadmap | 语言完备化与系统脚本化路线图 |
 | [install.md](install.md) | Installation guide | 安装指南 |
 | [architecture.md](architecture.md) | Internal architecture | 内部架构 |
 | [changelog.md](changelog.md) | Version changelog | 版本更新日志 |

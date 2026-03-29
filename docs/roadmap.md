@@ -21,6 +21,12 @@ Neve is a from-scratch language. Syntax decisions are not constrained by Nix com
 这份路线图把“继承并超越”的愿景落实为分阶段的执行计划。
 Neve 是一门从头设计的语言，语法决策不受 Nix 兼容性约束。
 
+For the focused roadmap on making Neve a complete standalone language and a system-level scripting language,
+see [language-roadmap.md](language-roadmap.md).
+
+如果你关心的是“把 Neve 做成独立完备语言”和“做成系统级脚本语言”的专项路线图，
+请直接看 [language-roadmap.md](language-roadmap.md)。
+
 ## Guiding Constraints / 指导约束
 
 - From-scratch syntax: no compatibility targets with nixpkgs or Nix expressions. / 从头设计语法：不以兼容 nixpkgs 或 Nix 表达式为目标。
