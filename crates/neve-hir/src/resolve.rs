@@ -678,7 +678,7 @@ impl Resolver {
     }
 
     fn is_supported_builtin(name: &str) -> bool {
-        matches!(name, "force" | "isLazy" | "isEvaluated")
+        matches!(name, "force" | "isLazy" | "isEvaluated" | "toString")
     }
 
     fn lower_name_kind(&self, name: &str) -> ExprKind {
