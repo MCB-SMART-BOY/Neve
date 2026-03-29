@@ -64,7 +64,7 @@
 | 安全字段访问 `?.` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | 运行时可用，但类型语义仍偏弱 |
 | 路径字面量 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 目前本质上仍被当成 `String`，不是独立 `Path` |
 | 惰性表达式 `lazy` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `lazy/force/isLazy/isEvaluated` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
-| 空值合并 `??` | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 运行路径可用，但语义与类型规则还没正式收敛 |
+| 空值合并 `??` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 已对齐并支持 Option-like enum 与 safe-field fallback；完整 optionality 类型模型仍需继续收敛 |
 | 错误传播 `?` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 已对齐并支持 Option/Result-like enum；完整类型与 effect 语义仍需继续收敛 |
 | Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明和部分完整性检查存在，但还不能视为完全闭环 |
 | 关联类型（声明与完整性） | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明层有，真实 use-site 语义仍需补完 |

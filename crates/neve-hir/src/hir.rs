@@ -636,6 +636,13 @@ pub enum ExprKind {
     Unary(UnaryOp, Box<Expr>),
     /// Conditional expression. / 条件表达式。
     If(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// Null/option coalescing (`value ?? default`). / 空值合并（`value ?? default`）。
+    Coalesce {
+        /// Value to inspect. / 待检查的值。
+        value: Box<Expr>,
+        /// Default expression used when the value is empty. / 值为空时使用的默认表达式。
+        default: Box<Expr>,
+    },
     /// Error propagation (`expr?`). / 错误传播（`expr?`）。
     Try(Box<Expr>),
     /// Pattern matching. / 模式匹配。

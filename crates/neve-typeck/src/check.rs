@@ -509,6 +509,23 @@ impl TypeChecker {
         }
     }
 
+    fn coalesce_result_type(&mut self, value_ty: Ty, default_ty: Ty, span: Span) -> Ty {
+        let value_ty = self.apply(&value_ty);
+        match value_ty.kind {
+            TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Some", "None"]) => {
+                let payload_ty = self
+                    .try_payload_type(def_id, "Some", span)
+                    .unwrap_or_else(|| self.fresh_var());
+                self.unify(&payload_ty, &default_ty, span);
+                self.apply(&payload_ty)
+            }
+            _ => {
+                self.unify(&value_ty, &default_ty, span);
+                self.apply(&value_ty)
+            }
+        }
+    }
+
     /// Check if a type variable has been resolved.
     /// 检查类型变量是否已被解析。
     pub fn is_resolved(&self, var: u32) -> bool {
@@ -1088,6 +1105,12 @@ impl TypeChecker {
                 self.unify(&then_ty, &else_ty, span);
 
                 self.apply(&then_ty)
+            }
+
+            ExprKind::Coalesce { value, default } => {
+                let value_ty = self.infer_expr(value);
+                let default_ty = self.infer_expr(default);
+                self.coalesce_result_type(value_ty, default_ty, span)
             }
 
             ExprKind::Match(scrutinee, arms) => {

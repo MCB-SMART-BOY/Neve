@@ -912,6 +912,14 @@ impl AstEvaluator {
                 match val {
                     Value::None => self.eval_expr(default),
                     Value::Some(v) => Ok((*v).clone()),
+                    Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
+                        self.eval_expr(default)
+                    }
+                    Value::Variant(tag, payload) => match tag.as_str() {
+                        "None" => self.eval_expr(default),
+                        "Some" => Ok((*payload).clone()),
+                        _ => Ok(Value::Variant(tag, payload)),
+                    },
                     other => Ok(other),
                 }
             }

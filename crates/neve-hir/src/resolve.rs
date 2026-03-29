@@ -1110,47 +1110,10 @@ impl Resolver {
                 }
             }
 
-            ast::ExprKind::Coalesce { value, default } => {
-                // Desugar value ?? default to match
-                // 将 value ?? default 解糖为 match
-                let value = self.lower_expr(value);
-                let default = self.lower_expr(default);
-
-                // match value { Some(x) => x, None => default }
-                let x_id = self.fresh_local_id();
-                let arms = vec![
-                    MatchArm {
-                        pattern: Pattern {
-                            kind: PatternKind::Constructor(
-                                DefId(u32::MAX),
-                                vec![Pattern {
-                                    kind: PatternKind::Var(x_id, "x".to_string()),
-                                    span,
-                                }],
-                            ),
-                            span,
-                        },
-                        guard: None,
-                        body: Expr {
-                            kind: ExprKind::Var(x_id),
-                            ty: Self::unknown_ty(span),
-                            span,
-                        },
-                        span,
-                    },
-                    MatchArm {
-                        pattern: Pattern {
-                            kind: PatternKind::Wildcard,
-                            span,
-                        },
-                        guard: None,
-                        body: default,
-                        span,
-                    },
-                ];
-
-                ExprKind::Match(Box::new(value), arms)
-            }
+            ast::ExprKind::Coalesce { value, default } => ExprKind::Coalesce {
+                value: Box::new(self.lower_expr(value)),
+                default: Box::new(self.lower_expr(default)),
+            },
 
             ast::ExprKind::Try(inner) => ExprKind::Try(Box::new(self.lower_expr(inner))),
 

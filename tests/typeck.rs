@@ -455,6 +455,26 @@ fn test_typeck_try_on_result_like_enum() {
 }
 
 #[test]
+fn test_typeck_coalesce_on_option_like_enum() {
+    check_no_errors(
+        "
+        enum Option { Some(Int), None };
+        let x = Some(41) ?? 0;
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_safe_field_coalesce_defaults_to_string() {
+    check_no_errors(
+        "
+        let r = #{ name = \"test\" };
+        let x = r?.missing ?? \"default\";
+        ",
+    );
+}
+
+#[test]
 fn test_typeck_method_call_falls_back_to_function_call_semantics() {
     check_no_errors(
         "
