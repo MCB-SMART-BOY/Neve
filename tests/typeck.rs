@@ -5,7 +5,7 @@
 use neve_diagnostic::{Diagnostic, Severity};
 use neve_hir::lower;
 use neve_parser::parse;
-use neve_typeck::TypeChecker;
+use neve_typeck::{TypeChecker, format_type};
 
 fn check_source(source: &str) -> Vec<Diagnostic> {
     let (ast, parse_diags) = parse(source);
@@ -1285,6 +1285,33 @@ fn test_typeck_polymorphic_identity() {
         let a = id(42);
     ",
     );
+}
+
+#[test]
+fn test_typeck_global_type_preserves_explicit_generic_params() {
+    let source = "fn id<T>(x: T) -> T = x;";
+    let (ast, parse_diags) = parse(source);
+    assert!(
+        parse_diags.is_empty(),
+        "unexpected parse errors: {:?}",
+        parse_diags
+    );
+
+    let hir = lower(&ast);
+    let def_id = hir.items[0].id;
+
+    let mut checker = TypeChecker::new();
+    checker.check(&hir);
+    assert!(
+        checker.diagnostics_ref().is_empty(),
+        "unexpected type errors: {:?}",
+        checker.diagnostics_ref()
+    );
+
+    let ty = checker
+        .global_type(def_id)
+        .expect("global type should exist");
+    assert_eq!(format_type(&ty), "forall T. (T) -> T");
 }
 
 #[test]

@@ -330,23 +330,31 @@ impl TypeChecker {
                 .iter()
                 .map(|ty| self.resolve_impl_signature_type(ty, &impl_info.self_ty, &assoc_types))
                 .collect();
-            let expected_return =
-                self.resolve_impl_signature_type(&trait_method.return_ty, &impl_info.self_ty, &assoc_types);
-            let actual_return =
-                self.resolve_impl_signature_type(&impl_method.return_ty, &impl_info.self_ty, &assoc_types);
+            let expected_return = self.resolve_impl_signature_type(
+                &trait_method.return_ty,
+                &impl_info.self_ty,
+                &assoc_types,
+            );
+            let actual_return = self.resolve_impl_signature_type(
+                &impl_method.return_ty,
+                &impl_info.self_ty,
+                &assoc_types,
+            );
 
-            let params_match = expected_params.len() == actual_params.len()
-                && expected_params
-                    .iter()
-                    .zip(actual_params.iter())
-                    .all(|(expected, actual)| self.method_signature_ty_compatible(expected, actual));
-            let return_match = self.method_signature_ty_compatible(&expected_return, &actual_return);
+            let params_match =
+                expected_params.len() == actual_params.len()
+                    && expected_params.iter().zip(actual_params.iter()).all(
+                        |(expected, actual)| self.method_signature_ty_compatible(expected, actual),
+                    );
+            let return_match =
+                self.method_signature_ty_compatible(&expected_return, &actual_return);
 
             if params_match && return_match {
                 continue;
             }
 
-            let expected_signature = Self::format_method_signature(&expected_params, &expected_return);
+            let expected_signature =
+                Self::format_method_signature(&expected_params, &expected_return);
             let actual_signature = Self::format_method_signature(&actual_params, &actual_return);
             self.diagnostics.push(
                 Diagnostic::error(
@@ -504,7 +512,11 @@ impl TypeChecker {
     }
 
     fn format_method_signature(params: &[Ty], ret: &Ty) -> String {
-        let params = params.iter().map(format_type).collect::<Vec<_>>().join(", ");
+        let params = params
+            .iter()
+            .map(format_type)
+            .collect::<Vec<_>>()
+            .join(", ");
         format!("({params}) -> {}", format_type(ret))
     }
 
@@ -1516,11 +1528,16 @@ impl TypeChecker {
                 self.pattern_covers_builtin_variant(inner, variant_name, payload_ty)
             }
             PatternKind::Constructor(def_id, patterns) => {
-                match (builtin_constructor_name(*def_id), variant_name, patterns.as_slice()) {
+                match (
+                    builtin_constructor_name(*def_id),
+                    variant_name,
+                    patterns.as_slice(),
+                ) {
                     (Some("Some"), "Some", [pattern])
                     | (Some("Ok"), "Ok", [pattern])
-                    | (Some("Err"), "Err", [pattern]) => payload_ty
-                        .is_some_and(|ty| self.pattern_is_irrefutable_for(pattern, ty)),
+                    | (Some("Err"), "Err", [pattern]) => {
+                        payload_ty.is_some_and(|ty| self.pattern_is_irrefutable_for(pattern, ty))
+                    }
                     (Some("None"), "None", []) => true,
                     _ => false,
                 }
@@ -1655,8 +1672,7 @@ impl TypeChecker {
                         "Some",
                         payload_ty.as_ref(),
                     );
-                    covers_none |=
-                        self.pattern_covers_builtin_variant(&arm.pattern, "None", None);
+                    covers_none |= self.pattern_covers_builtin_variant(&arm.pattern, "None", None);
 
                     if covers_some && covers_none {
                         coverage_complete_span = Some(arm.span);
@@ -1697,16 +1713,10 @@ impl TypeChecker {
                         continue;
                     }
 
-                    covers_ok |= self.pattern_covers_builtin_variant(
-                        &arm.pattern,
-                        "Ok",
-                        ok_ty.as_ref(),
-                    );
-                    covers_err |= self.pattern_covers_builtin_variant(
-                        &arm.pattern,
-                        "Err",
-                        err_ty.as_ref(),
-                    );
+                    covers_ok |=
+                        self.pattern_covers_builtin_variant(&arm.pattern, "Ok", ok_ty.as_ref());
+                    covers_err |=
+                        self.pattern_covers_builtin_variant(&arm.pattern, "Err", err_ty.as_ref());
 
                     if covers_ok && covers_err {
                         coverage_complete_span = Some(arm.span);
@@ -2078,6 +2088,8 @@ impl TypeChecker {
                 span: Span::DUMMY,
             }
         };
+        let refined_global_ty =
+            self.reify_named_generics(refined_global_ty, &fn_def.generics, &generic_vars);
         let refined_global_ty = if fn_def.generics.is_empty() {
             refined_global_ty
         } else {
@@ -2120,7 +2132,9 @@ impl TypeChecker {
 
         let mut param_tys = Vec::with_capacity(item.params.len());
         for (index, param) in item.params.iter().enumerate() {
-            let ty = if index == 0 && param.name == "self" && matches!(param.ty.kind, TyKind::Unknown)
+            let ty = if index == 0
+                && param.name == "self"
+                && matches!(param.ty.kind, TyKind::Unknown)
             {
                 self_ty.clone()
             } else {
@@ -2139,8 +2153,12 @@ impl TypeChecker {
         }
 
         let body_ty = self.infer_expr(&item.body);
-        let ret_ty =
-            self.resolve_type_with_context(&item.return_ty, &generic_vars, Some(self_ty), assoc_types);
+        let ret_ty = self.resolve_type_with_context(
+            &item.return_ty,
+            &generic_vars,
+            Some(self_ty),
+            assoc_types,
+        );
         if !self.unify(&body_ty, &ret_ty, item.body.span) {
             self.emit(
                 TypeMismatchError::new(ret_ty.clone(), body_ty.clone(), item.body.span)
@@ -2155,6 +2173,7 @@ impl TypeChecker {
             kind: TyKind::Fn(refined_param_tys, Box::new(refined_ret_ty)),
             span: Span::DUMMY,
         };
+        let method_ty = self.reify_named_generics(method_ty, &item.generics, &generic_vars);
         let method_ty = if item.generics.is_empty() {
             method_ty
         } else {
@@ -2170,12 +2189,102 @@ impl TypeChecker {
         self.locals.clear();
     }
 
-    fn fresh_generic_bindings(&mut self, generics: &[neve_hir::GenericParam]) -> HashMap<String, Ty> {
+    fn fresh_generic_bindings(
+        &mut self,
+        generics: &[neve_hir::GenericParam],
+    ) -> HashMap<String, Ty> {
         let mut generic_vars = HashMap::new();
         for param in generics {
             generic_vars.insert(param.name.clone(), self.fresh_var());
         }
         generic_vars
+    }
+
+    fn reify_named_generics(
+        &self,
+        ty: Ty,
+        generics: &[neve_hir::GenericParam],
+        generic_vars: &HashMap<String, Ty>,
+    ) -> Ty {
+        let var_to_param: HashMap<u32, (u32, String)> = generics
+            .iter()
+            .enumerate()
+            .filter_map(|(index, param)| {
+                match generic_vars.get(&param.name).map(|ty| self.apply(ty)) {
+                    Some(Ty {
+                        kind: TyKind::Var(var),
+                        ..
+                    }) => Some((var, (index as u32, param.name.clone()))),
+                    _ => None,
+                }
+            })
+            .collect();
+        Self::replace_generic_vars_with_params(&ty, &var_to_param)
+    }
+
+    fn replace_generic_vars_with_params(ty: &Ty, var_to_param: &HashMap<u32, (u32, String)>) -> Ty {
+        match &ty.kind {
+            TyKind::Var(var) => {
+                if let Some((index, name)) = var_to_param.get(var) {
+                    Ty {
+                        kind: TyKind::Param(*index, name.clone()),
+                        span: ty.span,
+                    }
+                } else {
+                    ty.clone()
+                }
+            }
+            TyKind::Named(id, args) => Ty {
+                kind: TyKind::Named(
+                    *id,
+                    args.iter()
+                        .map(|arg| Self::replace_generic_vars_with_params(arg, var_to_param))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Fn(params, ret) => Ty {
+                kind: TyKind::Fn(
+                    params
+                        .iter()
+                        .map(|param| Self::replace_generic_vars_with_params(param, var_to_param))
+                        .collect(),
+                    Box::new(Self::replace_generic_vars_with_params(ret, var_to_param)),
+                ),
+                span: ty.span,
+            },
+            TyKind::Tuple(items) => Ty {
+                kind: TyKind::Tuple(
+                    items
+                        .iter()
+                        .map(|item| Self::replace_generic_vars_with_params(item, var_to_param))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Record(fields) => Ty {
+                kind: TyKind::Record(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                Self::replace_generic_vars_with_params(field_ty, var_to_param),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Forall(params, inner) => Ty {
+                kind: TyKind::Forall(
+                    params.clone(),
+                    Box::new(Self::replace_generic_vars_with_params(inner, var_to_param)),
+                ),
+                span: ty.span,
+            },
+            _ => ty.clone(),
+        }
     }
 
     /// Resolve a type, substituting generic parameters with their bound types.
@@ -2223,7 +2332,12 @@ impl TypeChecker {
                 Ty {
                     kind: TyKind::Fn(
                         resolved_params,
-                        Box::new(self.resolve_type_with_context(ret, generics, self_ty, assoc_types)),
+                        Box::new(self.resolve_type_with_context(
+                            ret,
+                            generics,
+                            self_ty,
+                            assoc_types,
+                        )),
                     ),
                     span: ty.span,
                 }
@@ -2244,7 +2358,12 @@ impl TypeChecker {
                     .map(|(name, field_ty)| {
                         (
                             name.clone(),
-                            self.resolve_type_with_context(field_ty, generics, self_ty, assoc_types),
+                            self.resolve_type_with_context(
+                                field_ty,
+                                generics,
+                                self_ty,
+                                assoc_types,
+                            ),
                         )
                     })
                     .collect();
@@ -2280,7 +2399,10 @@ impl TypeChecker {
                 .assoc_types
                 .iter()
                 .filter_map(|assoc| {
-                    assoc.default.as_ref().map(|default| (assoc.name.clone(), default.clone()))
+                    assoc
+                        .default
+                        .as_ref()
+                        .map(|default| (assoc.name.clone(), default.clone()))
                 })
                 .collect();
             for (name, default) in defaults {
@@ -2880,7 +3002,10 @@ impl TypeChecker {
                     let result_ctor = matches!(name, "Ok" | "Err");
                     if matches!(expected.kind, TyKind::Named(def_id, _) if option_ctor && is_builtin_result_type(def_id) || result_ctor && is_builtin_option_type(def_id))
                     {
-                        self.error(pattern.span, "constructor does not match expected builtin type");
+                        self.error(
+                            pattern.span,
+                            "constructor does not match expected builtin type",
+                        );
                         return;
                     }
 
@@ -2994,7 +3119,10 @@ impl TypeChecker {
                     let expected = self.apply(expected);
                     if matches!(expected.kind, TyKind::Named(def_id, _) if is_builtin_option_type(def_id) || is_builtin_result_type(def_id))
                     {
-                        self.error(pattern.span, "constructor does not match expected builtin type");
+                        self.error(
+                            pattern.span,
+                            "constructor does not match expected builtin type",
+                        );
                         return;
                     }
                     // Unknown constructor, use fresh type variables

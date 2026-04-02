@@ -31,17 +31,23 @@ impl Substitution {
     /// Apply substitution to a type.
     /// 将替换应用到类型上。
     pub fn apply(&self, ty: &Ty) -> Ty {
+        self.apply_with_shadowed_params(ty, &[])
+    }
+
+    fn apply_with_shadowed_params(&self, ty: &Ty, shadowed_params: &[u32]) -> Ty {
         match &ty.kind {
             TyKind::Var(v) => {
                 if let Some(t) = self.map.get(v) {
-                    self.apply(t)
+                    self.apply_with_shadowed_params(t, shadowed_params)
                 } else {
                     ty.clone()
                 }
             }
             TyKind::Param(idx, _name) => {
-                if let Some(t) = self.params.get(idx) {
-                    self.apply(t)
+                if shadowed_params.contains(idx) {
+                    ty.clone()
+                } else if let Some(t) = self.params.get(idx) {
+                    self.apply_with_shadowed_params(t, shadowed_params)
                 } else {
                     ty.clone()
                 }
@@ -53,32 +59,59 @@ impl Substitution {
             },
             TyKind::Fn(params, ret) => Ty {
                 kind: TyKind::Fn(
-                    params.iter().map(|t| self.apply(t)).collect(),
-                    Box::new(self.apply(ret)),
+                    params
+                        .iter()
+                        .map(|t| self.apply_with_shadowed_params(t, shadowed_params))
+                        .collect(),
+                    Box::new(self.apply_with_shadowed_params(ret, shadowed_params)),
                 ),
                 span: ty.span,
             },
             TyKind::Tuple(elems) => Ty {
-                kind: TyKind::Tuple(elems.iter().map(|t| self.apply(t)).collect()),
+                kind: TyKind::Tuple(
+                    elems
+                        .iter()
+                        .map(|t| self.apply_with_shadowed_params(t, shadowed_params))
+                        .collect(),
+                ),
                 span: ty.span,
             },
             TyKind::Named(id, args) => Ty {
-                kind: TyKind::Named(*id, args.iter().map(|t| self.apply(t)).collect()),
+                kind: TyKind::Named(
+                    *id,
+                    args.iter()
+                        .map(|t| self.apply_with_shadowed_params(t, shadowed_params))
+                        .collect(),
+                ),
                 span: ty.span,
             },
             TyKind::Record(fields) => Ty {
                 kind: TyKind::Record(
                     fields
                         .iter()
-                        .map(|(n, t)| (n.clone(), self.apply(t)))
+                        .map(|(n, t)| {
+                            (
+                                n.clone(),
+                                self.apply_with_shadowed_params(t, shadowed_params),
+                            )
+                        })
                         .collect(),
                 ),
                 span: ty.span,
             },
-            TyKind::Forall(params, body) => Ty {
-                kind: TyKind::Forall(params.clone(), Box::new(self.apply(body))),
-                span: ty.span,
-            },
+            TyKind::Forall(params, body) => {
+                let mut inner_shadowed = shadowed_params.to_vec();
+                inner_shadowed.extend(params.iter().enumerate().map(|(idx, _)| idx as u32));
+                inner_shadowed.sort_unstable();
+                inner_shadowed.dedup();
+                Ty {
+                    kind: TyKind::Forall(
+                        params.clone(),
+                        Box::new(self.apply_with_shadowed_params(body, &inner_shadowed)),
+                    ),
+                    span: ty.span,
+                }
+            }
             _ => ty.clone(),
         }
     }

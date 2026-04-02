@@ -25,6 +25,13 @@ pub struct Resolver {
     globals: HashMap<String, DefId>,
     /// Stack of local scopes. / 局部作用域栈。
     scopes: Vec<HashMap<String, LocalId>>,
+    /// Stack of in-scope generic parameters (name -> param index).
+    /// 当前可见泛型参数栈（名称 -> 参数索引）。
+    generic_scopes: Vec<HashMap<String, u32>>,
+    /// Monotonic index source for outer generic scopes that should not be
+    /// captured by inner `forall` binders.
+    /// 为外层泛型作用域分配不会被内层 `forall` 误捕获的参数索引。
+    next_outer_generic_idx: u32,
     /// Imported names from other modules. / 从其他模块导入的名称。
     imported: HashMap<String, DefId>,
     /// Imported std builtin items keyed by in-scope name.
@@ -51,6 +58,8 @@ impl Resolver {
             next_module_id: 0,
             globals: HashMap::new(),
             scopes: Vec::new(),
+            generic_scopes: Vec::new(),
+            next_outer_generic_idx: 1_000_000,
             imported: HashMap::new(),
             imported_builtin_items: HashMap::new(),
             imported_builtin_modules: HashMap::new(),
@@ -69,6 +78,8 @@ impl Resolver {
             next_module_id: 0,
             globals: HashMap::new(),
             scopes: Vec::new(),
+            generic_scopes: Vec::new(),
+            next_outer_generic_idx: 1_000_000,
             imported: HashMap::new(),
             imported_builtin_items: HashMap::new(),
             imported_builtin_modules: HashMap::new(),
@@ -379,6 +390,45 @@ impl Resolver {
     /// 从栈中弹出顶部的局部作用域。
     fn pop_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    /// Push a generic scope whose parameters are bound by the current item.
+    /// 压入由当前项绑定的泛型作用域。
+    fn push_bound_generic_scope(&mut self, generics: &[ast::GenericParam]) {
+        let mut scope = HashMap::new();
+        for (idx, param) in generics.iter().enumerate() {
+            scope.insert(param.name.name.clone(), idx as u32);
+        }
+        self.generic_scopes.push(scope);
+    }
+
+    /// Push a generic scope inherited from an outer item.
+    /// 压入来自外层项的泛型作用域。
+    fn push_outer_generic_scope(&mut self, generics: &[ast::GenericParam]) {
+        let mut scope = HashMap::new();
+        for param in generics {
+            let idx = self.next_outer_generic_idx;
+            self.next_outer_generic_idx += 1;
+            scope.insert(param.name.name.clone(), idx);
+        }
+        self.generic_scopes.push(scope);
+    }
+
+    /// Pop the top generic scope from the stack.
+    /// 从栈中弹出顶部的泛型作用域。
+    fn pop_generic_scope(&mut self) {
+        self.generic_scopes.pop();
+    }
+
+    /// Look up an in-scope generic parameter by name.
+    /// 按名称查找当前作用域中的泛型参数。
+    fn lookup_generic(&self, name: &str) -> Option<u32> {
+        for scope in self.generic_scopes.iter().rev() {
+            if let Some(&idx) = scope.get(name) {
+                return Some(idx);
+            }
+        }
+        None
     }
 
     /// Define a new local variable in the current scope.
@@ -736,6 +786,7 @@ impl Resolver {
                 let id = self.lookup_global(&def.name.name)?;
 
                 self.push_scope();
+                self.push_bound_generic_scope(&def.generics);
 
                 let generics = self.lower_generics(&def.generics);
                 let params: Vec<Param> = def.params.iter().map(|p| self.lower_param(p)).collect();
@@ -748,6 +799,7 @@ impl Resolver {
 
                 let body = self.lower_expr(&def.body);
 
+                self.pop_generic_scope();
                 self.pop_scope();
 
                 Some(Item {
@@ -764,6 +816,7 @@ impl Resolver {
             }
             ast::ItemKind::Struct(def) => {
                 let id = self.lookup_global(&def.name.name)?;
+                self.push_bound_generic_scope(&def.generics);
                 let generics = self.lower_generics(&def.generics);
                 let fields = def
                     .fields
@@ -774,6 +827,7 @@ impl Resolver {
                         span: f.span,
                     })
                     .collect();
+                self.pop_generic_scope();
 
                 Some(Item {
                     id,
@@ -787,6 +841,7 @@ impl Resolver {
             }
             ast::ItemKind::Enum(def) => {
                 let id = self.lookup_global(&def.name.name)?;
+                self.push_bound_generic_scope(&def.generics);
                 let generics = self.lower_generics(&def.generics);
                 let variants = def
                     .variants
@@ -811,6 +866,7 @@ impl Resolver {
                         }
                     })
                     .collect();
+                self.pop_generic_scope();
 
                 Some(Item {
                     id,
@@ -824,8 +880,10 @@ impl Resolver {
             }
             ast::ItemKind::TypeAlias(def) => {
                 let id = self.lookup_global(&def.name.name)?;
+                self.push_bound_generic_scope(&def.generics);
                 let generics = self.lower_generics(&def.generics);
                 let ty = self.lower_type(&def.ty);
+                self.pop_generic_scope();
 
                 Some(Item {
                     id,
@@ -839,6 +897,7 @@ impl Resolver {
             }
             ast::ItemKind::Trait(def) => {
                 let id = self.lookup_global(&def.name.name)?;
+                self.push_outer_generic_scope(&def.generics);
                 let generics = self.lower_generics(&def.generics);
 
                 let items = def
@@ -852,6 +911,7 @@ impl Resolver {
                     .iter()
                     .map(|at| self.lower_assoc_type_def(at))
                     .collect();
+                self.pop_generic_scope();
 
                 Some(Item {
                     id,
@@ -866,6 +926,7 @@ impl Resolver {
             }
             ast::ItemKind::Impl(def) => {
                 let id = self.fresh_def_id();
+                self.push_outer_generic_scope(&def.generics);
                 let generics = self.lower_generics(&def.generics);
 
                 let trait_ref = def.trait_.as_ref().map(|t| self.lower_type(t));
@@ -883,6 +944,7 @@ impl Resolver {
                     .iter()
                     .map(|ati| self.lower_assoc_type_impl(ati))
                     .collect();
+                self.pop_generic_scope();
 
                 Some(Item {
                     id,
@@ -934,6 +996,7 @@ impl Resolver {
     /// 降级 trait 项（方法声明）。
     fn lower_trait_item(&mut self, item: &ast::TraitItem) -> Option<TraitItem> {
         self.push_scope();
+        self.push_bound_generic_scope(&item.generics);
 
         let generics = self.lower_generics(&item.generics);
         let params = item.params.iter().map(|p| self.lower_type(&p.ty)).collect();
@@ -947,6 +1010,7 @@ impl Resolver {
             });
         let default = item.default.as_ref().map(|e| self.lower_expr(e));
 
+        self.pop_generic_scope();
         self.pop_scope();
 
         Some(TraitItem {
@@ -963,6 +1027,7 @@ impl Resolver {
     /// 降级 impl 项（方法实现）。
     fn lower_impl_item(&mut self, item: &ast::ImplItem) -> Option<ImplItem> {
         self.push_scope();
+        self.push_bound_generic_scope(&item.generics);
         let id = self.fresh_def_id();
 
         let generics = self.lower_generics(&item.generics);
@@ -977,6 +1042,7 @@ impl Resolver {
             });
         let body = self.lower_expr(&item.body);
 
+        self.pop_generic_scope();
         self.pop_scope();
 
         Some(ImplItem {
@@ -1647,7 +1713,9 @@ impl Resolver {
                         "Unit" => TyKind::Unit,
                         "Self" => TyKind::SelfType,
                         _ => {
-                            if let Some(def_id) = self.lookup_global(name) {
+                            if let Some(param_idx) = self.lookup_generic(name) {
+                                TyKind::Param(param_idx, name.clone())
+                            } else if let Some(def_id) = self.lookup_global(name) {
                                 TyKind::Named(def_id, Vec::new())
                             } else {
                                 TyKind::Unknown

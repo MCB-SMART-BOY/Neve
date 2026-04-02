@@ -5,10 +5,11 @@ use crate::output;
 use neve_common::Span;
 use neve_diagnostic::emit;
 use neve_eval::{AstEnv, AstEvaluator, Value, builtins};
-use neve_hir::{DefId, ItemKind as HirItemKind, Resolver, Ty, TyKind};
+use neve_frontend::analyze_source;
+use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind};
 use neve_parser::parse;
 use neve_std::std_module_overrides;
-use neve_syntax::PatternKind;
+use neve_syntax::{ImportItems, Item, ItemKind, PatternKind, SourceFile};
 use neve_typeck::{
     LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, TypeChecker,
     builtin_list, builtin_map, builtin_option, builtin_result, builtin_set,
@@ -17,7 +18,6 @@ use neve_typeck::{
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 5);
@@ -37,6 +37,7 @@ pub fn run() -> Result<(), String> {
     // Using RefCell allows interior mutability while maintaining Rc sharing
     // 使用 RefCell 允许内部可变性，同时保持 Rc 共享
     let env = Rc::new(RefCell::new(AstEnv::with_builtins()));
+    let mut semantic_state = ReplSemanticState::default();
     let std_overrides = std_module_overrides();
 
     // Buffer for multi-line input
@@ -145,7 +146,7 @@ pub fn run() -> Result<(), String> {
                                 continue;
                             }
                             let expr_str = parts[1..].join(" ");
-                            match infer_repl_type(&expr_str, &env.borrow()) {
+                            match infer_repl_type(&expr_str, &semantic_state) {
                                 Ok(ty) => println!("{ty}"),
                                 Err(TypeQueryError::Diagnostics {
                                     source,
@@ -179,6 +180,17 @@ pub fn run() -> Result<(), String> {
                                         continue;
                                     }
 
+                                    let semantic_source =
+                                        semantic_state.combined_source_with(&content);
+                                    let analysis = analyze_source(&semantic_source);
+                                    if !analysis.diagnostics.is_empty() {
+                                        for diag in &analysis.diagnostics {
+                                            emit(&semantic_source, "<repl:load>", diag);
+                                        }
+                                        input_buffer.clear();
+                                        continue;
+                                    }
+
                                     // Evaluate the file in current environment
                                     // 在当前环境中求值文件
                                     let current_env = env.borrow().clone();
@@ -190,9 +202,7 @@ pub fn run() -> Result<(), String> {
                                             // Extract and store new bindings
                                             // 提取并存储新绑定
                                             for item in &ast.items {
-                                                if let neve_syntax::ItemKind::Let(let_def) =
-                                                    &item.kind
-                                                {
+                                                if let ItemKind::Let(let_def) = &item.kind {
                                                     if let PatternKind::Var(ident) =
                                                         &let_def.pattern.kind
                                                     {
@@ -216,9 +226,7 @@ pub fn run() -> Result<(), String> {
                                                                 );
                                                         }
                                                     }
-                                                } else if let neve_syntax::ItemKind::Fn(fn_def) =
-                                                    &item.kind
-                                                {
+                                                } else if let ItemKind::Fn(fn_def) = &item.kind {
                                                     let current_env = env.borrow().clone();
                                                     let mut temp_eval = AstEvaluator::with_env(
                                                         Rc::new(current_env),
@@ -237,6 +245,7 @@ pub fn run() -> Result<(), String> {
                                                     }
                                                 }
                                             }
+                                            semantic_state.record_source(&content, &ast);
                                             println!("Loaded: {}", file_path);
                                         }
                                         Err(e) => {
@@ -253,6 +262,7 @@ pub fn run() -> Result<(), String> {
                         }
                         ":clear" => {
                             *env.borrow_mut() = AstEnv::with_builtins();
+                            semantic_state.clear();
                             println!("Environment cleared");
                             input_buffer.clear();
                             continue;
@@ -283,6 +293,16 @@ pub fn run() -> Result<(), String> {
                     continue;
                 }
 
+                let semantic_source = semantic_state.combined_source_with(&prepared_input);
+                let analysis = analyze_source(&semantic_source);
+                if !analysis.diagnostics.is_empty() {
+                    for diag in &analysis.diagnostics {
+                        emit(&semantic_source, "<repl>", diag);
+                    }
+                    input_buffer.clear();
+                    continue;
+                }
+
                 // Evaluate with the persistent environment
                 // 使用持久环境进行求值
                 // We need to evaluate in a temporary scope to capture new bindings
@@ -301,10 +321,12 @@ pub fn run() -> Result<(), String> {
                         // After successful evaluation, we need to extract new bindings
                         // from the AST and add them to our persistent environment
                         for item in &ast.items {
-                            if let neve_syntax::ItemKind::Let(let_def) = &item.kind {
+                            if let ItemKind::Let(let_def) = &item.kind {
                                 // Extract the binding name from the pattern
                                 // 从模式中提取绑定名称
-                                if let PatternKind::Var(ident) = &let_def.pattern.kind {
+                                if let PatternKind::Var(ident) = &let_def.pattern.kind
+                                    && ident.name != "__expr__"
+                                {
                                     // Re-evaluate just this binding in the persistent env
                                     // 仅在持久环境中重新求值此绑定
                                     let current_env = env.borrow().clone();
@@ -322,7 +344,7 @@ pub fn run() -> Result<(), String> {
                                         );
                                     }
                                 }
-                            } else if let neve_syntax::ItemKind::Fn(fn_def) = &item.kind {
+                            } else if let ItemKind::Fn(fn_def) = &item.kind {
                                 // Store function definitions
                                 // 存储函数定义
                                 let current_env = env.borrow().clone();
@@ -341,6 +363,10 @@ pub fn run() -> Result<(), String> {
                                     );
                                 }
                             }
+                        }
+
+                        if !is_expr_wrapped {
+                            semantic_state.record_source(&prepared_input, &ast);
                         }
 
                         // Print non-unit results, or always print for wrapped expressions
@@ -421,45 +447,76 @@ enum TypeQueryError {
     Message(String),
 }
 
-struct ReplTypeEnv {
-    global_types: HashMap<DefId, Ty>,
-    global_spans: HashMap<DefId, Span>,
-    global_names: HashMap<DefId, String>,
-    next_def_id: u32,
+#[derive(Debug, Clone, Default)]
+struct ReplSemanticState {
+    entries: Vec<ReplSemanticEntry>,
 }
 
-fn infer_repl_type(expr: &str, env: &AstEnv) -> Result<String, TypeQueryError> {
-    let source = prepare_repl_type_input(expr);
-    let (ast, diagnostics) = parse(&source);
-    if !diagnostics.is_empty() {
-        return Err(TypeQueryError::Diagnostics {
-            source,
-            diagnostics,
+#[derive(Debug, Clone)]
+struct ReplSemanticEntry {
+    source: String,
+    defined_names: Vec<String>,
+}
+
+impl ReplSemanticState {
+    fn combined_source_with(&self, current: &str) -> String {
+        let mut parts: Vec<&str> = self
+            .entries
+            .iter()
+            .map(|entry| entry.source.as_str())
+            .collect();
+        parts.push(current);
+        parts.join("\n")
+    }
+
+    fn record_source(&mut self, source: &str, ast: &SourceFile) {
+        for entry in semantic_entries_from_ast(source, ast) {
+            self.replace_conflicting_entries(&entry.defined_names);
+            self.entries.push(entry);
+        }
+    }
+
+    fn replace_conflicting_entries(&mut self, names: &[String]) {
+        if names.is_empty() {
+            return;
+        }
+
+        self.entries.retain(|entry| {
+            entry
+                .defined_names
+                .iter()
+                .all(|existing| !names.iter().any(|name| name == existing))
         });
     }
 
-    let mut resolver = Resolver::new();
-    let repl_env = repl_type_env(env);
-    for (&def_id, name) in &repl_env.global_names {
-        resolver.register_import(name.clone(), def_id);
+    fn clear(&mut self) {
+        self.entries.clear();
     }
-    resolver.set_def_id_counter(repl_env.next_def_id);
+}
 
-    let hir = resolver.resolve(&ast);
-    let query_def_id = find_repl_type_binding(&hir).ok_or_else(|| {
+fn infer_repl_type(expr: &str, state: &ReplSemanticState) -> Result<String, TypeQueryError> {
+    let source = state.combined_source_with(&prepare_repl_type_input(expr));
+    let analysis = analyze_source(&source);
+    if !analysis.diagnostics.is_empty() {
+        return Err(TypeQueryError::Diagnostics {
+            source,
+            diagnostics: analysis.diagnostics,
+        });
+    }
+
+    let query_def_id = find_repl_type_binding(&analysis.hir).ok_or_else(|| {
         TypeQueryError::Message("internal error: missing type query binding".to_string())
     })?;
 
-    let mut checker = TypeChecker::with_global_env(repl_env.global_types, repl_env.global_spans);
-    checker.check(&hir);
-    if !checker.diagnostics_ref().is_empty() {
-        return Err(TypeQueryError::Diagnostics {
-            source,
-            diagnostics: checker.diagnostics_ref().to_vec(),
-        });
-    }
+    let mut checker = TypeChecker::new();
+    checker.check(&analysis.hir);
 
-    let ty = checker.global_type(query_def_id).ok_or_else(|| {
+    let ty = if let Some(target_def_id) = find_repl_type_target(&analysis.hir) {
+        checker.global_type(target_def_id)
+    } else {
+        checker.global_type(query_def_id)
+    }
+    .ok_or_else(|| {
         TypeQueryError::Message("internal error: failed to infer queried type".to_string())
     })?;
     Ok(format_repl_type(&ty))
@@ -474,36 +531,75 @@ fn prepare_repl_type_input(expr: &str) -> String {
     }
 }
 
-fn repl_type_env(env: &AstEnv) -> ReplTypeEnv {
-    let bindings = env.all_bindings();
-    let mut repl_env = ReplTypeEnv {
-        global_types: HashMap::new(),
-        global_spans: HashMap::new(),
-        global_names: HashMap::new(),
-        next_def_id: 1_000_000u32,
-    };
-    let mut next_def_id = 1_000_000u32;
+fn semantic_entries_from_ast(source: &str, ast: &SourceFile) -> Vec<ReplSemanticEntry> {
+    ast.items
+        .iter()
+        .filter_map(|item| {
+            let snippet = normalize_repl_item_source(&source[item.span.range()]);
+            if snippet.is_empty() {
+                None
+            } else {
+                Some(ReplSemanticEntry {
+                    source: snippet,
+                    defined_names: item_defined_names(item),
+                })
+            }
+        })
+        .collect()
+}
 
-    let mut entries: Vec<_> = bindings.into_iter().collect();
-    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
-
-    for (name, value) in entries {
-        let def_id = DefId(next_def_id);
-        next_def_id += 1;
-        repl_env
-            .global_types
-            .insert(def_id, type_from_value(&value));
-        repl_env.global_spans.insert(def_id, Span::DUMMY);
-        repl_env.global_names.insert(def_id, name);
+fn normalize_repl_item_source(source: &str) -> String {
+    let trimmed = source.trim();
+    if trimmed.is_empty() {
+        String::new()
+    } else if trimmed.ends_with(';') {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed};")
     }
+}
 
-    repl_env.next_def_id = next_def_id;
-    repl_env
+fn item_defined_names(item: &Item) -> Vec<String> {
+    match &item.kind {
+        ItemKind::Let(let_def) => match &let_def.pattern.kind {
+            PatternKind::Var(ident) if ident.name != "__expr__" && ident.name != "__type__" => {
+                vec![ident.name.clone()]
+            }
+            _ => Vec::new(),
+        },
+        ItemKind::Fn(fn_def) if fn_def.name.name != "__type__" => vec![fn_def.name.name.clone()],
+        ItemKind::TypeAlias(def) => vec![def.name.name.clone()],
+        ItemKind::Struct(def) => vec![def.name.name.clone()],
+        ItemKind::Enum(def) => vec![def.name.name.clone()],
+        ItemKind::Trait(def) => vec![def.name.name.clone()],
+        ItemKind::Import(import) => match &import.items {
+            ImportItems::Module => import
+                .alias
+                .as_ref()
+                .map(|alias| vec![alias.name.clone()])
+                .or_else(|| import.path.last().map(|name| vec![name.name.clone()]))
+                .unwrap_or_default(),
+            ImportItems::Items(items) => items.iter().map(|item| item.name.clone()).collect(),
+            ImportItems::All => Vec::new(),
+        },
+        ItemKind::Impl(_) => Vec::new(),
+        ItemKind::Fn(_) => Vec::new(),
+    }
 }
 
 fn find_repl_type_binding(module: &neve_hir::Module) -> Option<DefId> {
     module.items.iter().find_map(|item| match &item.kind {
         HirItemKind::Fn(def) if def.name == "__type__" => Some(item.id),
+        _ => None,
+    })
+}
+
+fn find_repl_type_target(module: &neve_hir::Module) -> Option<DefId> {
+    module.items.iter().find_map(|item| match &item.kind {
+        HirItemKind::Fn(def) if def.name == "__type__" => match &def.body.kind {
+            neve_hir::ExprKind::Global(def_id) => Some(*def_id),
+            _ => None,
+        },
         _ => None,
     })
 }
@@ -615,6 +711,8 @@ fn format_repl_type(ty: &Ty) -> String {
         TyKind::Unit => "()".to_string(),
         TyKind::Var(id) => format!("?{}", id),
         TyKind::Param(_, name) => name.clone(),
+        TyKind::SelfType => "Self".to_string(),
+        TyKind::SelfAssoc(name) => format!("Self.{name}"),
         TyKind::Tuple(items) => {
             let parts: Vec<_> = items.iter().map(format_repl_type).collect();
             format!("({})", parts.join(", "))
@@ -657,22 +755,63 @@ fn format_repl_type(ty: &Ty) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_repl_type, infer_repl_type, type_from_value};
-    use neve_eval::{AstEnv, Value};
+    use super::{
+        ReplSemanticState, format_repl_type, infer_repl_type, semantic_entries_from_ast,
+        type_from_value,
+    };
+    use neve_eval::Value;
+    use neve_parser::parse;
 
     #[test]
     fn repl_type_infers_basic_expression() {
-        let env = AstEnv::with_builtins();
-        let ty = infer_repl_type("1 + 2", &env).expect("type inference should succeed");
+        let state = ReplSemanticState::default();
+        let ty = infer_repl_type("1 + 2", &state).expect("type inference should succeed");
         assert_eq!(ty, "Int");
     }
 
     #[test]
     fn repl_type_uses_persistent_bindings() {
-        let mut env = AstEnv::with_builtins();
-        env.define("x".to_string(), Value::Int(41.into()));
-        let ty = infer_repl_type("x + 1", &env).expect("type inference should succeed");
+        let source = "let x = 41;";
+        let (ast, diagnostics) = parse(source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse diagnostics: {diagnostics:?}"
+        );
+
+        let mut state = ReplSemanticState::default();
+        state.record_source(source, &ast);
+
+        let ty = infer_repl_type("x + 1", &state).expect("type inference should succeed");
         assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_preserves_checked_function_signature() {
+        let source = "fn id<T>(x: T) -> T = x;";
+        let (ast, diagnostics) = parse(source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse diagnostics: {diagnostics:?}"
+        );
+
+        let mut state = ReplSemanticState::default();
+        state.record_source(source, &ast);
+
+        let ty = infer_repl_type("id", &state).expect("type inference should succeed");
+        assert_eq!(ty, "forall T. (T) -> T");
+    }
+
+    #[test]
+    fn semantic_state_skips_hidden_expr_bindings() {
+        let source = "let __expr__ = 1 + 2;";
+        let (ast, diagnostics) = parse(source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse diagnostics: {diagnostics:?}"
+        );
+
+        let entries = semantic_entries_from_ast(source, &ast);
+        assert!(entries.iter().all(|entry| entry.defined_names.is_empty()));
     }
 
     #[test]
