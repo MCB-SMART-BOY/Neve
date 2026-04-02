@@ -23,6 +23,28 @@ fn test_document_parse_error() {
 }
 
 #[test]
+fn test_document_builds_semantic_hover_for_generic_function() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "fn id<T>(x: T) -> T = x;".to_string(),
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("id")
+        .and_then(|defs| defs.first())
+        .expect("function definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "fn id: forall T. (T) -> T");
+}
+
+#[test]
 fn test_position_at() {
     let doc = Document::new(
         "file:///test.neve".to_string(),

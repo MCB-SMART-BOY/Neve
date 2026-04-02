@@ -9,10 +9,12 @@ repository.workspace = true
 [dependencies]
 neve-common.workspace = true
 neve-diagnostic.workspace = true
+neve-hir.workspace = true
 neve-lexer.workspace = true
 neve-syntax.workspace = true
 neve-frontend.workspace = true
 neve-fmt.workspace = true
+neve-typeck.workspace = true
 
 tower-lsp.workspace = true
 tokio.workspace = true
