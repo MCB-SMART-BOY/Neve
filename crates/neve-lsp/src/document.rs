@@ -7,10 +7,10 @@
 use std::collections::HashMap;
 
 use neve_common::Span;
-use neve_frontend::{Diagnostic, Module, SourceFile, analyze_source};
+use neve_frontend::{Diagnostic, Module, SourceFile, analyze_source, format_type_in_module};
 use neve_hir::{ItemKind as HirItemKind, Ty, TyKind};
 use neve_syntax::{self as ast, PatternKind as AstPatternKind};
-use neve_typeck::{TypeChecker, format_type};
+use neve_typeck::TypeChecker;
 
 use crate::symbol_index::SymbolIndex;
 
@@ -148,7 +148,7 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
                 {
                     hovers.insert(
                         ident.span,
-                        format!("let {}: {}", ident.name, format_type(&ty)),
+                        format!("let {}: {}", ident.name, format_type_in_module(&ty, hir)),
                     );
                 }
             }
@@ -156,7 +156,7 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
                 if let Some(ty) = checker.global_type(hir_item.id) {
                     hovers.insert(
                         def.name.span,
-                        format!("fn {}: {}", def.name.name, format_type(&ty)),
+                        format!("fn {}: {}", def.name.name, format_type_in_module(&ty, hir)),
                     );
                 }
             }
@@ -168,6 +168,7 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
                             "fn {}: {}",
                             ast_item.name.name,
                             callable_type_string(
+                                hir,
                                 &hir_item.generics,
                                 &hir_item.params,
                                 &hir_item.return_ty
@@ -181,7 +182,11 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
                     if let Some(ty) = checker.global_type(hir_item.id) {
                         hovers.insert(
                             ast_item.name.span,
-                            format!("fn {}: {}", ast_item.name.name, format_type(&ty)),
+                            format!(
+                                "fn {}: {}",
+                                ast_item.name.name,
+                                format_type_in_module(&ty, hir)
+                            ),
                         );
                     }
                 }
@@ -193,7 +198,12 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
     hovers
 }
 
-fn callable_type_string(generics: &[neve_hir::GenericParam], params: &[Ty], ret: &Ty) -> String {
+fn callable_type_string(
+    module: &Module,
+    generics: &[neve_hir::GenericParam],
+    params: &[Ty],
+    ret: &Ty,
+) -> String {
     let mut ty = Ty {
         kind: TyKind::Fn(params.to_vec(), Box::new(ret.clone())),
         span: Span::DUMMY,
@@ -209,5 +219,5 @@ fn callable_type_string(generics: &[neve_hir::GenericParam], params: &[Ty], ret:
         };
     }
 
-    format_type(&ty)
+    format_type_in_module(&ty, module)
 }

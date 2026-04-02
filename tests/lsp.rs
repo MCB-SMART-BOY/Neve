@@ -45,6 +45,28 @@ fn test_document_builds_semantic_hover_for_generic_function() {
 }
 
 #[test]
+fn test_document_hover_uses_local_type_names() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "struct User {}; fn id(x: User) -> User = x;".to_string(),
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("id")
+        .and_then(|defs| defs.first())
+        .expect("function definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "fn id: (User) -> User");
+}
+
+#[test]
 fn test_position_at() {
     let doc = Document::new(
         "file:///test.neve".to_string(),

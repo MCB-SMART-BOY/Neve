@@ -5,7 +5,7 @@ use crate::output;
 use neve_common::Span;
 use neve_diagnostic::emit;
 use neve_eval::{AstEnv, AstEvaluator, Value, builtins};
-use neve_frontend::analyze_source;
+use neve_frontend::{analyze_source, format_type_in_module};
 use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind};
 use neve_parser::parse;
 use neve_std::std_module_overrides;
@@ -519,7 +519,7 @@ fn infer_repl_type(expr: &str, state: &ReplSemanticState) -> Result<String, Type
     .ok_or_else(|| {
         TypeQueryError::Message("internal error: failed to infer queried type".to_string())
     })?;
-    Ok(format_repl_type(&ty))
+    Ok(format_repl_semantic_type(&ty, &analysis.hir))
 }
 
 fn prepare_repl_type_input(expr: &str) -> String {
@@ -753,13 +753,19 @@ fn format_repl_type(ty: &Ty) -> String {
     }
 }
 
+fn format_repl_semantic_type(ty: &Ty, module: &neve_hir::Module) -> String {
+    format_type_in_module(ty, module)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ReplSemanticState, format_repl_type, infer_repl_type, semantic_entries_from_ast,
-        type_from_value,
+        ReplSemanticState, format_repl_semantic_type, format_repl_type, infer_repl_type,
+        semantic_entries_from_ast, type_from_value,
     };
+    use neve_common::Span;
     use neve_eval::Value;
+    use neve_hir::{ItemKind as HirItemKind, Ty, TyKind, lower};
     use neve_parser::parse;
 
     #[test]
@@ -799,6 +805,30 @@ mod tests {
 
         let ty = infer_repl_type("id", &state).expect("type inference should succeed");
         assert_eq!(ty, "forall T. (T) -> T");
+    }
+
+    #[test]
+    fn repl_type_formats_local_named_types_readably() {
+        let source = "struct User {}; fn id(x: User) -> User = x;";
+        let (ast, diagnostics) = parse(source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse diagnostics: {diagnostics:?}"
+        );
+
+        let hir = lower(&ast);
+        let ty = match &hir.items[1].kind {
+            HirItemKind::Fn(fn_def) => Ty {
+                kind: TyKind::Fn(
+                    fn_def.params.iter().map(|param| param.ty.clone()).collect(),
+                    Box::new(fn_def.return_ty.clone()),
+                ),
+                span: Span::DUMMY,
+            },
+            other => panic!("expected function item, got {other:?}"),
+        };
+
+        assert_eq!(format_repl_semantic_type(&ty, &hir), "(User) -> User");
     }
 
     #[test]
