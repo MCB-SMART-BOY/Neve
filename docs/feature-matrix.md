@@ -75,7 +75,7 @@
 | 记录模式匹配 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 语言形态存在，编译器级检查不足 |
 | Match 穷尽性检查 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已接入 typecheck 主流程，支持 `Bool`、`Unit`、用户枚举，以及 builtin `Option/Result`；列表、记录和更复杂子模式仍需继续扩展 |
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
-| REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 已可查询常见表达式与当前 REPL 绑定的类型；对 builtin 精度和完整语义环境的支持仍需继续补强 |
+| REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 已可复用当前 REPL 会话中成功输入的源码片段，经过 frontend/typecheck 语义分析后查询表达式与全局定义类型；但导入边缘场景、运行时状态与工具链镜像仍需继续补齐 |
 | 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ❌ | 当前 `tests/end_to_end.rs` 还存在占位 helper |
 
 ## 工具链一致性矩阵 / Tooling Fidelity Matrix
@@ -85,7 +85,7 @@
 | `neve check` | ⚠️ 可用 | 类型检查能跑，但还不是编译器级闭环 |
 | `neve eval` | ⚠️ 可用 | 无 `import` 输入、本地模块导入，以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；仅少数仍未收敛的导入/运行时边缘场景会回退 AST |
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
-| REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，但当前类型查询仍依赖保守的临时类型环境，不是完整编译器级语义镜像 |
+| REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询已改为复用会话源码并走 frontend/HIR/typecheck；但求值主路径仍是 AST runtime，导入/重定义等边缘语义还没完全收敛 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，但功能完整性与一致性仍在补 |
 | End-to-end tests | ❌ 不可信 | 还不能作为“语言已闭环”的证据 |

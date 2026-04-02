@@ -44,6 +44,32 @@ fn test_lower_function() {
 }
 
 #[test]
+fn test_lower_function_preserves_explicit_generic_param_types() {
+    let source = "fn id<T>(x: T) -> T = x;";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+    assert_eq!(hir.items.len(), 1);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => {
+            assert_eq!(fn_def.generics.len(), 1);
+            assert_eq!(fn_def.generics[0].name, "T");
+            assert!(matches!(
+                fn_def.params[0].ty.kind,
+                TyKind::Param(0, ref name) if name == "T"
+            ));
+            assert!(matches!(
+                fn_def.return_ty.kind,
+                TyKind::Param(0, ref name) if name == "T"
+            ));
+        }
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
 fn test_lower_binary_expr() {
     let source = "let result = 1 + 2 * 3;";
     let (ast, diagnostics) = parse(source);
