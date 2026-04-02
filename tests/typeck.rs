@@ -1263,6 +1263,33 @@ fn test_typeck_lambda_multiple_params() {
 }
 
 #[test]
+fn test_typeck_lambda_preserves_explicit_param_types() {
+    let source = "let f = fn(x: Int) x;";
+    let (ast, parse_diags) = parse(source);
+    assert!(
+        parse_diags.is_empty(),
+        "unexpected parse errors: {:?}",
+        parse_diags
+    );
+
+    let hir = lower(&ast);
+    let def_id = hir.items[0].id;
+
+    let mut checker = TypeChecker::new();
+    checker.check(&hir);
+    assert!(
+        checker.diagnostics_ref().is_empty(),
+        "unexpected type errors: {:?}",
+        checker.diagnostics_ref()
+    );
+
+    let ty = checker
+        .global_type(def_id)
+        .expect("global type should exist");
+    assert_eq!(format_type(&ty), "(Int) -> Int");
+}
+
+#[test]
 fn test_typeck_closure_in_function() {
     // 在函数内定义闭包
     check_no_errors(

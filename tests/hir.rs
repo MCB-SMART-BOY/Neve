@@ -146,6 +146,27 @@ fn test_lower_lambda() {
 }
 
 #[test]
+fn test_lower_lambda_preserves_explicit_param_types() {
+    let source = "let f = fn(x: Int) x;";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+    assert_eq!(hir.items.len(), 1);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Lambda(params, _) => {
+                assert_eq!(params.len(), 1);
+                assert!(matches!(params[0].ty.kind, TyKind::Int));
+            }
+            other => panic!("expected Lambda, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
 fn test_lower_list() {
     let source = "let xs = [1, 2, 3];";
     let (ast, diagnostics) = parse(source);

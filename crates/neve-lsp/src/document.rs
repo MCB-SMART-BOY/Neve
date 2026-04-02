@@ -146,7 +146,7 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
         };
 
         match (&ast_item.kind, &hir_item.kind) {
-            (ast::ItemKind::Let(def), HirItemKind::Fn(_)) => {
+            (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => {
                 if let AstPatternKind::Var(ident) = &def.pattern.kind
                     && let Some(ty) = checker.global_type(hir_item.id)
                 {
@@ -155,6 +155,7 @@ fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, Stri
                         format!("let {}: {}", ident.name, format_type_in_module(&ty, hir)),
                     );
                 }
+                collect_expr_definition_hovers(&def.value, &hir_fn.body, &checker, hir, &mut hovers);
             }
             (ast::ItemKind::Fn(def), HirItemKind::Fn(_)) => {
                 if let Some(ty) = checker.global_type(hir_item.id) {
