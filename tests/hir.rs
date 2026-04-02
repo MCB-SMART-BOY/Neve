@@ -2,7 +2,7 @@
 
 use neve_hir::{
     BUILTIN_OPTION_NONE_CTOR_ID, BUILTIN_OPTION_SOME_CTOR_ID, BinOp, ExprKind, ItemKind,
-    PatternKind, TyKind, lower,
+    PatternKind, StmtKind, TyKind, lower,
 };
 use neve_parser::parse;
 
@@ -161,6 +161,30 @@ fn test_lower_lambda_preserves_explicit_param_types() {
                 assert!(matches!(params[0].ty.kind, TyKind::Int));
             }
             other => panic!("expected Lambda, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
+fn test_lower_block_let_preserves_tuple_pattern() {
+    let source = "fn sum_pair() = { let (x, y) = (1, 2); x + y };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+    assert_eq!(hir.items.len(), 1);
+
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Block(stmts, _) => match &stmts[0].kind {
+                StmtKind::Let { pattern, .. } => match &pattern.kind {
+                    PatternKind::Tuple(items) => assert_eq!(items.len(), 2),
+                    other => panic!("expected tuple pattern, got {:?}", other),
+                },
+                other => panic!("expected let stmt, got {:?}", other),
+            },
+            other => panic!("expected block, got {:?}", other),
         },
         _ => panic!("expected function"),
     }

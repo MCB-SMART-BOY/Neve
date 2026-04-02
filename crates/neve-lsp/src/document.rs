@@ -488,18 +488,14 @@ fn collect_stmt_definition_hovers(
     match (&ast_stmt.kind, &hir_stmt.kind) {
         (
             ast::StmtKind::Let { pattern, value, .. },
-            HirStmtKind::Let(local_id, name, _, hir_value),
+            HirStmtKind::Let {
+                pattern: hir_pattern,
+                value: hir_value,
+                ..
+            },
         ) => {
             collect_expr_definition_hovers(value, hir_value, checker, module, hovers);
-            match &pattern.kind {
-                AstPatternKind::Var(ident) if ident.name == *name => {
-                    insert_local_hover(ident.span, &ident.name, *local_id, checker, module, hovers);
-                }
-                AstPatternKind::Binding { name: ident, .. } if ident.name == *name => {
-                    insert_local_hover(ident.span, &ident.name, *local_id, checker, module, hovers);
-                }
-                _ => {}
-            }
+            collect_pattern_definition_hovers(pattern, hir_pattern, checker, module, hovers);
         }
         (ast::StmtKind::Expr(ast_expr), HirStmtKind::Expr(hir_expr)) => {
             collect_expr_definition_hovers(ast_expr, hir_expr, checker, module, hovers);

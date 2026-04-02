@@ -3180,20 +3180,32 @@ impl TypeChecker {
 
     fn check_stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
-            StmtKind::Let(local_id, name, ty, value) => {
+            StmtKind::Let { pattern, ty, value } => {
                 let value_ty = self.infer_expr(value);
-                let declared_ty = self.resolve_type(ty);
+                let declared_ty = ty
+                    .as_ref()
+                    .map(|ty| self.resolve_type(ty))
+                    .unwrap_or_else(|| value_ty.clone());
                 self.unify(&value_ty, &declared_ty, value.span);
 
-                // Generalize the type for let-polymorphism
-                // Collect environment type variables that shouldn't be generalized
+                let binding_ids = Self::pattern_binding_signature(pattern);
                 let env_vars: Vec<u32> = self
                     .locals
                     .values()
                     .flat_map(|info| free_type_vars(&info.ty))
                     .collect();
-                let generalized_ty = generalize(&self.apply(&declared_ty), &env_vars);
-                self.define_local(*local_id, name.clone(), generalized_ty, stmt.span);
+                self.check_pattern(pattern, &declared_ty);
+
+                for binding_id in binding_ids {
+                    let local_id = LocalId(binding_id);
+                    if let Some(local_ty) = self.locals.get(&local_id).map(|local| local.ty.clone()) {
+                        let generalized_ty = generalize(&self.apply(&local_ty), &env_vars);
+                        if let Some(local) = self.locals.get_mut(&local_id) {
+                            local.ty = generalized_ty.clone();
+                        }
+                        self.local_definitions.insert(local_id, generalized_ty);
+                    }
+                }
             }
             StmtKind::Expr(e) => {
                 self.infer_expr(e);

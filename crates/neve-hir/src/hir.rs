@@ -862,7 +862,11 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     /// Let binding. / let 绑定。
-    Let(LocalId, String, Ty, Expr),
+    Let {
+        pattern: Pattern,
+        ty: Option<Ty>,
+        value: Expr,
+    },
     /// Expression statement. / 表达式语句。
     Expr(Expr),
 }
