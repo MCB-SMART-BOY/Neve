@@ -67,6 +67,38 @@ fn test_document_hover_uses_local_type_names() {
 }
 
 #[test]
+fn test_document_hover_includes_local_parameters_and_lets() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "fn add(x: Int, y: Int) -> Int = { let sum = x + y; sum };".to_string(),
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+
+    let x_symbol = index
+        .get_definitions("x")
+        .and_then(|defs| defs.first())
+        .expect("parameter definition should be indexed");
+    let x_hover = doc
+        .definition_hovers
+        .get(&x_symbol.def_span)
+        .expect("parameter semantic hover should exist");
+    assert_eq!(x_hover, "x: Int");
+
+    let sum_symbol = index
+        .get_definitions("sum")
+        .and_then(|defs| defs.first())
+        .expect("local let definition should be indexed");
+    let sum_hover = doc
+        .definition_hovers
+        .get(&sum_symbol.def_span)
+        .expect("local let semantic hover should exist");
+    assert_eq!(sum_hover, "sum: Int");
+}
+
+#[test]
 fn test_position_at() {
     let doc = Document::new(
         "file:///test.neve".to_string(),

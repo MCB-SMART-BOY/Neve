@@ -159,6 +159,9 @@ pub struct TypeChecker {
     /// Types of local variables with usage tracking.
     /// 局部变量的类型及使用情况跟踪。
     locals: HashMap<LocalId, LocalInfo>,
+    /// Final inferred types for local definitions keyed by LocalId.
+    /// 按 LocalId 存储的局部定义最终推断类型。
+    local_definitions: HashMap<LocalId, Ty>,
     /// Trait resolver for trait/impl handling.
     /// 用于处理 trait/impl 的特征解析器。
     trait_resolver: TraitResolver,
@@ -192,6 +195,7 @@ impl TypeChecker {
             globals: HashMap::new(),
             global_spans: HashMap::new(),
             locals: HashMap::new(),
+            local_definitions: HashMap::new(),
             trait_resolver: TraitResolver::new(),
             trait_ids: HashMap::new(),
             structs: HashMap::new(),
@@ -596,6 +600,14 @@ impl TypeChecker {
         self.globals.get(&def_id).map(|ty| self.apply(ty))
     }
 
+    /// Look up the inferred type of a local definition.
+    /// 查询某个局部定义推断出的类型。
+    pub fn local_type(&self, local_id: LocalId) -> Option<Ty> {
+        self.local_definitions
+            .get(&local_id)
+            .map(|ty| self.apply(ty))
+    }
+
     fn format_trait_bound(&self, bound: &TraitBound) -> String {
         let trait_name = self
             .trait_resolver
@@ -705,6 +717,7 @@ impl TypeChecker {
     /// Define a local variable.
     /// 定义局部变量。
     fn define_local(&mut self, local_id: LocalId, name: String, ty: Ty, span: Span) {
+        self.local_definitions.insert(local_id, ty.clone());
         self.locals.insert(
             local_id,
             LocalInfo {
@@ -2051,6 +2064,7 @@ impl TypeChecker {
         for param in &fn_def.params {
             let ty = self.resolve_type_with_generics(&param.ty, &generic_vars);
             param_tys.push(ty.clone());
+            self.local_definitions.insert(param.id, ty.clone());
             self.locals.insert(
                 param.id,
                 LocalInfo {
@@ -2141,6 +2155,7 @@ impl TypeChecker {
                 self.resolve_type_with_context(&param.ty, &generic_vars, Some(self_ty), assoc_types)
             };
             param_tys.push(ty.clone());
+            self.local_definitions.insert(param.id, ty.clone());
             self.locals.insert(
                 param.id,
                 LocalInfo {
@@ -2482,6 +2497,7 @@ impl TypeChecker {
                     .iter()
                     .map(|p| {
                         let ty = self.resolve_type(&p.ty);
+                        self.local_definitions.insert(p.id, ty.clone());
                         self.locals.insert(
                             p.id,
                             LocalInfo {
