@@ -276,10 +276,18 @@ impl LanguageServer for Backend {
                     symbol.name.clone()
                 };
 
-                let hover_text = format!(
-                    "**{}** `{}`\n\n```neve\n{}\n```",
-                    kind_str, symbol.name, definition_text
-                );
+                let hover_text =
+                    if let Some(type_info) = doc.definition_hovers.get(&symbol.def_span) {
+                        format!(
+                            "**{}** `{}`\n\nType: `{}`\n\n```neve\n{}\n```",
+                            kind_str, symbol.name, type_info, definition_text
+                        )
+                    } else {
+                        format!(
+                            "**{}** `{}`\n\n```neve\n{}\n```",
+                            kind_str, symbol.name, definition_text
+                        )
+                    };
 
                 let start: usize = symbol.def_span.start.into();
                 let end: usize = symbol.def_span.end.into();

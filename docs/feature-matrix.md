@@ -87,7 +87,7 @@
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询已改为复用会话源码并走 frontend/HIR/typecheck；但求值主路径仍是 AST runtime，导入/重定义等边缘语义还没完全收敛 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
-| LSP | ⚠️ 持续收敛中 | 前端管线已接入，但功能完整性与一致性仍在补 |
+| LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 已开始显示全局定义与方法定义的真实类型签名；但局部变量、named type 友好显示与更多 IDE 语义功能仍在补 |
 | End-to-end tests | ❌ 不可信 | 还不能作为“语言已闭环”的证据 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix

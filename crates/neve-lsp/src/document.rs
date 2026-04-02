@@ -4,7 +4,13 @@
 //! Handles parsing, analysis, and diagnostics for open documents.
 //! 处理打开文档的解析、分析和诊断。
 
+use std::collections::HashMap;
+
+use neve_common::Span;
 use neve_frontend::{Diagnostic, Module, SourceFile, analyze_source};
+use neve_hir::{ItemKind as HirItemKind, Ty, TyKind};
+use neve_syntax::{self as ast, PatternKind as AstPatternKind};
+use neve_typeck::{TypeChecker, format_type};
 
 use crate::symbol_index::SymbolIndex;
 
@@ -22,6 +28,9 @@ pub struct Document {
     pub hir: Option<Module>,
     /// Symbol index for navigation features. / 用于导航功能的符号索引。
     pub symbol_index: Option<SymbolIndex>,
+    /// Semantic hover content keyed by definition span.
+    /// 按定义 span 存储的语义悬停内容。
+    pub definition_hovers: HashMap<Span, String>,
     /// Diagnostics for this document. / 此文档的诊断信息。
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -36,6 +45,7 @@ impl Document {
             ast: None,
             hir: None,
             symbol_index: None,
+            definition_hovers: HashMap::new(),
             diagnostics: Vec::new(),
         };
         doc.analyze();
@@ -58,6 +68,7 @@ impl Document {
         let analysis = analyze_source(&self.content);
 
         self.symbol_index = Some(SymbolIndex::from_ast(&analysis.ast));
+        self.definition_hovers = build_definition_hovers(&analysis.ast, &analysis.hir);
         self.ast = Some(analysis.ast);
         self.hir = Some(analysis.hir);
         self.diagnostics = analysis.diagnostics;
@@ -112,4 +123,91 @@ impl Document {
 
         (line, 0)
     }
+}
+
+fn build_definition_hovers(ast: &SourceFile, hir: &Module) -> HashMap<Span, String> {
+    let mut checker = TypeChecker::new();
+    checker.check(hir);
+
+    let mut hovers = HashMap::new();
+    let mut hir_items = hir.items.iter();
+
+    for ast_item in &ast.items {
+        let hir_item = match &ast_item.kind {
+            ast::ItemKind::Import(_) => continue,
+            _ => match hir_items.next() {
+                Some(item) => item,
+                None => break,
+            },
+        };
+
+        match (&ast_item.kind, &hir_item.kind) {
+            (ast::ItemKind::Let(def), HirItemKind::Fn(_)) => {
+                if let AstPatternKind::Var(ident) = &def.pattern.kind
+                    && let Some(ty) = checker.global_type(hir_item.id)
+                {
+                    hovers.insert(
+                        ident.span,
+                        format!("let {}: {}", ident.name, format_type(&ty)),
+                    );
+                }
+            }
+            (ast::ItemKind::Fn(def), HirItemKind::Fn(_)) => {
+                if let Some(ty) = checker.global_type(hir_item.id) {
+                    hovers.insert(
+                        def.name.span,
+                        format!("fn {}: {}", def.name.name, format_type(&ty)),
+                    );
+                }
+            }
+            (ast::ItemKind::Trait(def), HirItemKind::Trait(hir_trait)) => {
+                for (ast_item, hir_item) in def.items.iter().zip(&hir_trait.items) {
+                    hovers.insert(
+                        ast_item.name.span,
+                        format!(
+                            "fn {}: {}",
+                            ast_item.name.name,
+                            callable_type_string(
+                                &hir_item.generics,
+                                &hir_item.params,
+                                &hir_item.return_ty
+                            )
+                        ),
+                    );
+                }
+            }
+            (ast::ItemKind::Impl(def), HirItemKind::Impl(hir_impl)) => {
+                for (ast_item, hir_item) in def.items.iter().zip(&hir_impl.items) {
+                    if let Some(ty) = checker.global_type(hir_item.id) {
+                        hovers.insert(
+                            ast_item.name.span,
+                            format!("fn {}: {}", ast_item.name.name, format_type(&ty)),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    hovers
+}
+
+fn callable_type_string(generics: &[neve_hir::GenericParam], params: &[Ty], ret: &Ty) -> String {
+    let mut ty = Ty {
+        kind: TyKind::Fn(params.to_vec(), Box::new(ret.clone())),
+        span: Span::DUMMY,
+    };
+
+    if !generics.is_empty() {
+        ty = Ty {
+            kind: TyKind::Forall(
+                generics.iter().map(|param| param.name.clone()).collect(),
+                Box::new(ty),
+            ),
+            span: Span::DUMMY,
+        };
+    }
+
+    format_type(&ty)
 }
