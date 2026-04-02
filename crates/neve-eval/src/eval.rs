@@ -444,15 +444,7 @@ impl Evaluator {
                 self.env = self.env.child();
 
                 for stmt in stmts {
-                    match &stmt.kind {
-                        neve_hir::StmtKind::Let(id, _, _, value) => {
-                            let val = self.eval(value)?;
-                            self.env.define(*id, val);
-                        }
-                        neve_hir::StmtKind::Expr(e) => {
-                            self.eval(e)?;
-                        }
-                    }
+                    self.eval_stmt(stmt)?;
                 }
 
                 let result = if let Some(e) = expr {
@@ -993,9 +985,12 @@ impl Evaluator {
 
     fn eval_stmt(&mut self, stmt: &neve_hir::Stmt) -> Result<(), EvalError> {
         match &stmt.kind {
-            neve_hir::StmtKind::Let(id, _name, _ty, expr) => {
-                let val = self.eval(expr)?;
-                self.env.define(*id, val);
+            neve_hir::StmtKind::Let { pattern, value, .. } => {
+                let val = self.eval(value)?;
+                let bindings = self
+                    .match_pattern(pattern, &val)
+                    .ok_or(EvalError::PatternMatchFailed)?;
+                self.env.define_many(bindings);
                 Ok(())
             }
             neve_hir::StmtKind::Expr(expr) => {

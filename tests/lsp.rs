@@ -121,6 +121,38 @@ fn test_document_hover_includes_typed_lambda_parameters() {
 }
 
 #[test]
+fn test_document_hover_includes_block_pattern_bindings() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "fn sum_pair() = { let (x, y) = (1, 2); x + y };".to_string(),
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+
+    let x_symbol = index
+        .get_definitions("x")
+        .and_then(|defs| defs.first())
+        .expect("tuple binding x should be indexed");
+    let x_hover = doc
+        .definition_hovers
+        .get(&x_symbol.def_span)
+        .expect("tuple binding x hover should exist");
+    assert_eq!(x_hover, "x: Int");
+
+    let y_symbol = index
+        .get_definitions("y")
+        .and_then(|defs| defs.first())
+        .expect("tuple binding y should be indexed");
+    let y_hover = doc
+        .definition_hovers
+        .get(&y_symbol.def_span)
+        .expect("tuple binding y hover should exist");
+    assert_eq!(y_hover, "y: Int");
+}
+
+#[test]
 fn test_position_at() {
     let doc = Document::new(
         "file:///test.neve".to_string(),

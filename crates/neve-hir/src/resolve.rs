@@ -1434,16 +1434,10 @@ impl Resolver {
         let span = stmt.span;
         let kind = match &stmt.kind {
             ast::StmtKind::Let { pattern, ty, value } => {
-                let name = self
-                    .pattern_name(pattern)
-                    .unwrap_or_else(|| "_".to_string());
-                let id = self.define_local(name.clone());
-                let ty = ty
-                    .as_ref()
-                    .map(|t| self.lower_type(t))
-                    .unwrap_or_else(|| Self::unknown_ty(span));
                 let value = self.lower_expr(value);
-                StmtKind::Let(id, name, ty, value)
+                let pattern = self.lower_pattern(pattern);
+                let ty = ty.as_ref().map(|t| self.lower_type(t));
+                StmtKind::Let { pattern, ty, value }
             }
             ast::StmtKind::Expr(e) => {
                 let expr = self.lower_expr(e);

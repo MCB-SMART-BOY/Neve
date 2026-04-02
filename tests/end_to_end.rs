@@ -179,6 +179,19 @@ fn test_end_to_end_lazy_force_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_block_let_pattern_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let result = {
+            let (x, y) = (1, 2);
+            x + y
+        };
+        ",
+        Value::Int(int(3)),
+    );
+}
+
+#[test]
 fn test_end_to_end_or_pattern_runtime_parity() {
     assert_runtime_parity(
         "
