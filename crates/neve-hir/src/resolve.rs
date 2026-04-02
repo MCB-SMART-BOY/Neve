@@ -8,6 +8,7 @@ use crate::{
     StringPart, StructDef, TraitDef, TraitItem, Ty, TyKind, TypeAlias, UnaryOp, VariantDef,
     builtin_constructor_id,
 };
+use neve_common::Span;
 use neve_syntax::{self as ast, SourceFile};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -978,17 +979,28 @@ impl Resolver {
     /// Lower a function parameter.
     /// 降级函数参数。
     fn lower_param(&mut self, param: &ast::Param) -> Param {
+        self.lower_param_parts(&param.pattern, Some(&param.ty), param.span)
+    }
+
+    fn lower_param_parts(
+        &mut self,
+        pattern: &ast::Pattern,
+        ty: Option<&ast::Type>,
+        span: Span,
+    ) -> Param {
         let name = self
-            .pattern_name(&param.pattern)
+            .pattern_name(pattern)
             .unwrap_or_else(|| "_".to_string());
         let id = self.define_local(name.clone());
-        let ty = self.lower_type(&param.ty);
+        let ty = ty
+            .map(|ty| self.lower_type(ty))
+            .unwrap_or_else(|| Self::unknown_ty(span));
 
         Param {
             id,
             name,
             ty,
-            span: param.span,
+            span,
         }
     }
 
@@ -1239,18 +1251,7 @@ impl Resolver {
                 self.push_scope();
                 let params: Vec<Param> = params
                     .iter()
-                    .map(|p| {
-                        let name = self
-                            .pattern_name(&p.pattern)
-                            .unwrap_or_else(|| "_".to_string());
-                        let id = self.define_local(name.clone());
-                        Param {
-                            id,
-                            name,
-                            ty: Self::unknown_ty(p.span),
-                            span: p.span,
-                        }
-                    })
+                    .map(|p| self.lower_param_parts(&p.pattern, p.ty.as_ref(), p.span))
                     .collect();
                 let body = self.lower_expr(body);
                 self.pop_scope();

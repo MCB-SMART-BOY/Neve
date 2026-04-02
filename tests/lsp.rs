@@ -99,6 +99,28 @@ fn test_document_hover_includes_local_parameters_and_lets() {
 }
 
 #[test]
+fn test_document_hover_includes_typed_lambda_parameters() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let f = fn(x: Int) x;".to_string(),
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+
+    let x_symbol = index
+        .get_definitions("x")
+        .and_then(|defs| defs.first())
+        .expect("lambda parameter definition should be indexed");
+    let x_hover = doc
+        .definition_hovers
+        .get(&x_symbol.def_span)
+        .expect("lambda parameter semantic hover should exist");
+    assert_eq!(x_hover, "x: Int");
+}
+
+#[test]
 fn test_position_at() {
     let doc = Document::new(
         "file:///test.neve".to_string(),
