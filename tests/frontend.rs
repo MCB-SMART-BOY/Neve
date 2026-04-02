@@ -29,6 +29,54 @@ fn test_frontend_reports_type_errors() {
 }
 
 #[test]
+fn test_frontend_formats_named_types_readably_in_diagnostics() {
+    let result = analyze_source(
+        r#"
+            struct User {};
+            fn broken(x: User) -> Int = x.name;
+        "#,
+    );
+
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type),
+        "expected type diagnostics, got {:?}",
+        result.diagnostics
+    );
+
+    for diagnostic in &result.diagnostics {
+        assert!(
+            !diagnostic.message.contains("Type#"),
+            "unexpected raw type placeholder in message: {:?}",
+            diagnostic
+        );
+        for label in &diagnostic.labels {
+            assert!(
+                !label.message.contains("Type#"),
+                "unexpected raw type placeholder in label: {:?}",
+                diagnostic
+            );
+        }
+        for note in &diagnostic.notes {
+            assert!(
+                !note.contains("Type#"),
+                "unexpected raw type placeholder in note: {:?}",
+                diagnostic
+            );
+        }
+        if let Some(help) = &diagnostic.help {
+            assert!(
+                !help.contains("Type#"),
+                "unexpected raw type placeholder in help: {:?}",
+                diagnostic
+            );
+        }
+    }
+}
+
+#[test]
 fn test_frontend_accepts_record_field_access_after_record_binding() {
     let result = analyze_source(
         r#"

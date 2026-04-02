@@ -4,6 +4,7 @@
 use crate::{commands::module_graph, output};
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
+use neve_frontend::rewrite_diagnostics_with_module_names;
 use neve_hir::{ModuleId, ModuleLoadError, ModuleLoader};
 use neve_std::{std_module_overrides, stdlib};
 use neve_syntax::{ImportDef, ItemKind, SourceFile};
@@ -209,7 +210,7 @@ fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Valu
         let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
         checker.check(module);
         let method_resolutions = checker.method_resolutions().clone();
-        let diagnostics = checker.diagnostics();
+        let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), module);
 
         for diag in diagnostics {
             emit(&source, &info.file_path.display().to_string(), &diag);
