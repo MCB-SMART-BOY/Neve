@@ -3,6 +3,7 @@
 
 use crate::{commands::module_graph, output};
 use neve_diagnostic::emit;
+use neve_frontend::rewrite_diagnostics_with_module_names;
 use neve_hir::ModuleLoader;
 use neve_typeck::TypeChecker;
 use std::fs;
@@ -79,7 +80,7 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         // 使用共享全局签名进行类型检查
         let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
         checker.check(module);
-        let diagnostics = checker.diagnostics();
+        let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), module);
 
         for diag in &diagnostics {
             emit(&source, &file_path.display().to_string(), diag);

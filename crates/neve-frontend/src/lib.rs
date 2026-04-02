@@ -43,7 +43,10 @@ pub fn analyze_source(source: &str) -> AnalysisResult {
     let mut checker = TypeChecker::new();
     checker.check(&hir);
     let method_resolutions = checker.method_resolutions().clone();
-    diagnostics.extend(checker.diagnostics());
+    diagnostics.extend(rewrite_diagnostics_with_module_names(
+        checker.diagnostics(),
+        &hir,
+    ));
 
     AnalysisResult {
         ast,
@@ -60,7 +63,7 @@ pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
     let mut checker = TypeChecker::new();
     checker.check(&hir);
     let method_resolutions = checker.method_resolutions().clone();
-    let diagnostics = checker.diagnostics();
+    let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), &hir);
 
     AnalysisResult {
         ast: ast.clone(),
@@ -73,6 +76,46 @@ pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
 /// Format a type using names available in the given module.
 /// 使用给定模块中可见的名称格式化类型。
 pub fn format_type_in_module(ty: &Ty, module: &Module) -> String {
+    let names = collect_item_names(module);
+    format_type_with_names(ty, &names)
+}
+
+/// Rewrite diagnostics so local named types are rendered readably.
+/// 重写诊断文本，使当前模块内的命名类型以可读名称显示。
+pub fn rewrite_diagnostics_with_module_names(
+    diagnostics: Vec<Diagnostic>,
+    module: &Module,
+) -> Vec<Diagnostic> {
+    let names = collect_item_names(module);
+    if names.is_empty() {
+        return diagnostics;
+    }
+
+    let mut replacements: Vec<_> = names
+        .into_iter()
+        .map(|(def_id, name)| (format!("Type#{}", def_id.0), name))
+        .collect();
+    replacements.sort_by(|(left, _), (right, _)| right.len().cmp(&left.len()));
+
+    diagnostics
+        .into_iter()
+        .map(|mut diagnostic| {
+            diagnostic.message = replace_type_placeholders(&diagnostic.message, &replacements);
+            for label in &mut diagnostic.labels {
+                label.message = replace_type_placeholders(&label.message, &replacements);
+            }
+            for note in &mut diagnostic.notes {
+                *note = replace_type_placeholders(note, &replacements);
+            }
+            if let Some(help) = &mut diagnostic.help {
+                *help = replace_type_placeholders(help, &replacements);
+            }
+            diagnostic
+        })
+        .collect()
+}
+
+fn collect_item_names(module: &Module) -> HashMap<DefId, String> {
     let mut names = HashMap::new();
     for item in &module.items {
         match &item.kind {
@@ -97,8 +140,15 @@ pub fn format_type_in_module(ty: &Ty, module: &Module) -> String {
             HirItemKind::Impl(_) => {}
         }
     }
+    names
+}
 
-    format_type_with_names(ty, &names)
+fn replace_type_placeholders(input: &str, replacements: &[(String, String)]) -> String {
+    let mut output = input.to_string();
+    for (needle, replacement) in replacements {
+        output = output.replace(needle, replacement);
+    }
+    output
 }
 
 fn format_type_with_names(ty: &Ty, names: &HashMap<DefId, String>) -> String {
