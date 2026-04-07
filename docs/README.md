@@ -9,9 +9,9 @@
 <p>
   <strong><a href="../README.md">Home</a></strong> ·
   <strong><a href="./">Docs</a></strong> ·
-  <strong><a href="quickstart.md">Quickstart</a></strong> ·
-  <strong><a href="spec.md">Spec</a></strong> ·
-  <strong><a href="api.md">API</a></strong>
+  <strong><a href="user/quickstart.md">Quickstart</a></strong> ·
+  <strong><a href="reference/spec.md">Spec</a></strong> ·
+  <strong><a href="reference/api.md">API</a></strong>
 </p>
 
 </div>
@@ -23,11 +23,11 @@ Welcome to the Neve documentation hub. Start from your current goal instead of r
 
 ## Start Here / 从这里开始
 
-- New user / 初次上手: [install.md](install.md), [quickstart.md](quickstart.md), [tutorial.md](tutorial.md)
-- Language reference / 语言参考: [spec.md](spec.md), [api.md](api.md), [diagnostics.md](diagnostics.md)
-- Contributor / 贡献者: [contributing.md](contributing.md), [onboarding.md](onboarding.md), [architecture.md](architecture.md)
-- Project status / 项目现状: [feature-matrix.md](feature-matrix.md), [roadmap.md](roadmap.md), [language-roadmap.md](language-roadmap.md), [changelog.md](changelog.md)
-- Bootstrap examples / bootstrap 示例: [bootstrap.md](bootstrap.md), [examples/bootstrap](../examples/bootstrap)
+- New user / 初次上手: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
+- Language reference / 语言参考: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
+- Contributor / 贡献者: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
+- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/roadmap.md](project/roadmap.md), [project/language-roadmap.md](project/language-roadmap.md), [project/changelog.md](project/changelog.md)
+- Bootstrap examples / bootstrap 示例: [contributor/bootstrap.md](contributor/bootstrap.md), [examples/bootstrap](../examples/bootstrap)
 
 ---
 
@@ -35,29 +35,29 @@ Welcome to the Neve documentation hub. Start from your current goal instead of r
 
 ### I want to use Neve / 我想直接开始用
 
-- [install.md](install.md): installation, platform notes, binary cache setup
-- [quickstart.md](quickstart.md): quickest path to first expression and file
-- [tutorial.md](tutorial.md): learn the language surface systematically
+- [user/install.md](user/install.md): installation, platform notes, binary cache setup
+- [user/quickstart.md](user/quickstart.md): quickest path to first expression and file
+- [user/tutorial.md](user/tutorial.md): learn the language surface systematically
 
 ### I want exact language truth / 我想看严格定义
 
-- [spec.md](spec.md): syntax and semantic rules
-- [api.md](api.md): standard library reference
-- [diagnostics.md](diagnostics.md): diagnostic code index
+- [reference/spec.md](reference/spec.md): syntax and semantic rules
+- [reference/api.md](reference/api.md): standard library reference
+- [reference/diagnostics.md](reference/diagnostics.md): diagnostic code index
 
 ### I want to understand project reality / 我想看项目真实完成度
 
-- [feature-matrix.md](feature-matrix.md): real support matrix
-- [roadmap.md](roadmap.md): product-level roadmap
-- [language-roadmap.md](language-roadmap.md): language-completion and shell-replacement roadmap
-- [changelog.md](changelog.md): released changes only
+- [project/feature-matrix.md](project/feature-matrix.md): real support matrix
+- [project/roadmap.md](project/roadmap.md): product-level roadmap
+- [project/language-roadmap.md](project/language-roadmap.md): language-completion and shell-replacement roadmap
+- [project/changelog.md](project/changelog.md): released changes only
 
 ### I want to contribute / 我想参与开发
 
-- [contributing.md](contributing.md): setup, workflow, style
-- [onboarding.md](onboarding.md): codebase reading order
-- [architecture.md](architecture.md): crate responsibilities and pipeline
-- [bootstrap.md](bootstrap.md): bootstrap package examples now kept under `examples/bootstrap/`
+- [contributor/contributing.md](contributor/contributing.md): setup, workflow, style
+- [contributor/onboarding.md](contributor/onboarding.md): codebase reading order
+- [contributor/architecture.md](contributor/architecture.md): crate responsibilities and pipeline
+- [contributor/bootstrap.md](contributor/bootstrap.md): bootstrap package examples now kept under `examples/bootstrap/`
 
 ---
 

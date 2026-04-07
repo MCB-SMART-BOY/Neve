@@ -10,21 +10,21 @@ use termimad::MadSkin;
 // Embed documentation at compile time
 // 在编译时嵌入文档
 const DOC_INDEX: &str = include_str!("../../../docs/README.md");
-const DOC_QUICKSTART: &str = include_str!("../../../docs/quickstart.md");
-const DOC_TUTORIAL: &str = include_str!("../../../docs/tutorial.md");
-const DOC_SPEC: &str = include_str!("../../../docs/spec.md");
-const DOC_API: &str = include_str!("../../../docs/api.md");
-const DOC_DIAGNOSTICS: &str = include_str!("../../../docs/diagnostics.md");
-const DOC_PHILOSOPHY: &str = include_str!("../../../docs/philosophy.md");
-const DOC_INSTALL: &str = include_str!("../../../docs/install.md");
-const DOC_ARCHITECTURE: &str = include_str!("../../../docs/architecture.md");
-const DOC_ONBOARDING: &str = include_str!("../../../docs/onboarding.md");
-const DOC_CONTRIBUTING: &str = include_str!("../../../docs/contributing.md");
-const DOC_BOOTSTRAP: &str = include_str!("../../../docs/bootstrap.md");
-const DOC_ROADMAP: &str = include_str!("../../../docs/roadmap.md");
-const DOC_LANGUAGE_ROADMAP: &str = include_str!("../../../docs/language-roadmap.md");
-const DOC_FEATURE_MATRIX: &str = include_str!("../../../docs/feature-matrix.md");
-const DOC_CHANGELOG: &str = include_str!("../../../docs/changelog.md");
+const DOC_QUICKSTART: &str = include_str!("../../../docs/user/quickstart.md");
+const DOC_TUTORIAL: &str = include_str!("../../../docs/user/tutorial.md");
+const DOC_SPEC: &str = include_str!("../../../docs/reference/spec.md");
+const DOC_API: &str = include_str!("../../../docs/reference/api.md");
+const DOC_DIAGNOSTICS: &str = include_str!("../../../docs/reference/diagnostics.md");
+const DOC_PHILOSOPHY: &str = include_str!("../../../docs/project/philosophy.md");
+const DOC_INSTALL: &str = include_str!("../../../docs/user/install.md");
+const DOC_ARCHITECTURE: &str = include_str!("../../../docs/contributor/architecture.md");
+const DOC_ONBOARDING: &str = include_str!("../../../docs/contributor/onboarding.md");
+const DOC_CONTRIBUTING: &str = include_str!("../../../docs/contributor/contributing.md");
+const DOC_BOOTSTRAP: &str = include_str!("../../../docs/contributor/bootstrap.md");
+const DOC_ROADMAP: &str = include_str!("../../../docs/project/roadmap.md");
+const DOC_LANGUAGE_ROADMAP: &str = include_str!("../../../docs/project/language-roadmap.md");
+const DOC_FEATURE_MATRIX: &str = include_str!("../../../docs/project/feature-matrix.md");
+const DOC_CHANGELOG: &str = include_str!("../../../docs/project/changelog.md");
 
 /// Available documentation topics.
 /// 可用的文档主题。
@@ -90,6 +90,9 @@ fn resolve_topic(input: &str) -> Option<&'static str> {
         ("quick", "quickstart"),
         ("getting-started", "quickstart"),
         ("intro", "quickstart"),
+        ("start", "quickstart"),
+        ("use", "quickstart"),
+        ("learn", "tutorial"),
         ("ref", "spec"),
         ("reference", "spec"),
         ("stdlib", "api"),
@@ -104,6 +107,9 @@ fn resolve_topic(input: &str) -> Option<&'static str> {
         ("boot", "bootstrap"),
         ("matrix", "feature-matrix"),
         ("features", "feature-matrix"),
+        ("status", "feature-matrix"),
+        ("project", "roadmap"),
+        ("contribute", "contributing"),
         ("lang-roadmap", "language-roadmap"),
         ("change", "changelog"),
         ("changes", "changelog"),
@@ -157,24 +163,38 @@ pub fn list() -> Result<(), String> {
     let skin = create_skin();
     let mut content = String::new();
     content.push_str("# NEVE DOCUMENTATION / 文档导航\n\n");
-    content.push_str("## Available topics / 可用主题:\n\n");
-    content.push_str("| Topic | Description |\n|-------|-------------|\n");
-    for (name, _, desc) in TOPICS {
-        content.push_str(&format!("| {} | {} |\n", name, desc));
-    }
-    content.push_str("\n## Usage / 用法:\n\n");
+    content.push_str("## Usage / 用法\n\n");
     content.push_str("```\n");
     content.push_str("neve doc <topic>          View a topic / 查看主题\n");
     content.push_str("neve doc --list           List all topics / 列出主题\n");
     content.push_str("neve doc                 List topics (same as --list) / 同上\n");
     content.push_str("```\n\n");
-    content.push_str("## Examples / 示例:\n\n");
+    content.push_str("## Start Here / 从这里开始\n\n");
     content.push_str("```\n");
     content.push_str("neve doc index            Documentation hub / 文档首页\n");
+    content.push_str("neve doc install          Installation guide / 安装指南\n");
     content.push_str("neve doc quickstart       Full quickstart guide / 完整快速入门\n");
+    content.push_str("neve doc tutorial         Complete tutorial / 完整教程\n");
+    content.push_str("```\n\n");
+    content.push_str("## Reference / 参考\n\n");
+    content.push_str("```\n");
+    content.push_str("neve doc spec             Language spec / 语言规范\n");
     content.push_str("neve doc api              API reference / 标准库 API\n");
+    content.push_str("neve doc diagnostics      Diagnostic codes / 诊断错误码\n");
+    content.push_str("```\n\n");
+    content.push_str("## Project / 项目现状\n\n");
+    content.push_str("```\n");
     content.push_str("neve doc feature-matrix   Real support matrix / 真实功能矩阵\n");
+    content.push_str("neve doc roadmap          Product roadmap / 项目路线图\n");
+    content.push_str("neve doc language-roadmap Language completion roadmap / 语言完备化路线图\n");
+    content.push_str("neve doc changelog        Released changes / 更新日志\n");
+    content.push_str("```\n\n");
+    content.push_str("## Contributor / 贡献者\n\n");
+    content.push_str("```\n");
     content.push_str("neve doc contributing     Contributor guide / 贡献指南\n");
+    content.push_str("neve doc onboarding       Codebase onboarding / 贡献者入门\n");
+    content.push_str("neve doc architecture     Internal architecture / 内部架构\n");
+    content.push_str("neve doc bootstrap        Bootstrap examples / bootstrap 示例\n");
     content.push_str("```\n");
 
     println!("{}", skin.term_text(&content));

@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Changelog</h1>
 
 <p><em>更新日志</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -111,7 +111,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.6.2] - 2025-12-30
 
 ### Added / 新增
-- **Architecture documentation**: Comprehensive guide for contributors (`docs/architecture.md`) / **架构文档**: 为贡献者提供的全面指南 (`docs/architecture.md`)
+- **Architecture documentation**: Comprehensive guide for contributors (`docs/contributor/architecture.md`) / **架构文档**: 为贡献者提供的全面指南 (`docs/contributor/architecture.md`)
 - **CONTRIBUTING.md**: Bilingual contribution guidelines with setup instructions / **CONTRIBUTING.md**: 中英双语贡献指南，包含环境配置说明
 - **Security audit in CI**: Added `cargo audit` for dependency vulnerability scanning / **CI 安全审计**: 添加 `cargo audit` 检测依赖漏洞
 - **Incremental compilation cache**: ModuleCache with content-hash validation and dirty tracking / **增量编译缓存**: ModuleCache 支持内容哈希验证和脏标记跟踪

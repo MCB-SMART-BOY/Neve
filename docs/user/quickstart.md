@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>5-Minute Quick Start</h1>
 
 <p><em>5 分钟快速上手</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -125,8 +125,8 @@ fn sum(list) = match list {
 ## Next / 接下来
 
 - [Tutorial](tutorial.md) — deeper dive / 深入学习
-- [Spec](spec.md) — language reference / 语言规范
-- [API](api.md) — standard library / 标准库参考
+- [Spec](../reference/spec.md) — language reference / 语言规范
+- [API](../reference/api.md) — standard library / 标准库参考
 
 ---
 

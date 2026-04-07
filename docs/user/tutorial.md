@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Complete Tutorial</h1>
 
 <p><em>完整教程</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -512,16 +512,16 @@ let result = data
 ## Next / 接下来
 
 
-- [Spec](spec.md) — full language reference
-- [API](api.md) — standard library
-- [Philosophy](philosophy.md) — why these design choices
+- [Spec](../reference/spec.md) — full language reference
+- [API](../reference/api.md) — standard library
+- [Philosophy](../project/philosophy.md) — why these design choices
 
 ---
 
 
-- [语言规范](spec.md) — 完整语法参考
-- [标准库](api.md) — API 文档
-- [设计哲学](philosophy.md) — 为什么这样设计
+- [语言规范](../reference/spec.md) — 完整语法参考
+- [标准库](../reference/api.md) — API 文档
+- [设计哲学](../project/philosophy.md) — 为什么这样设计
 
 ---
 

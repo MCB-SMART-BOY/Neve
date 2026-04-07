@@ -167,7 +167,7 @@ jobs:
 
             ### What's New
 
-            See [CHANGELOG.md](docs/changelog.md) for details.
+            See [CHANGELOG.md](docs/project/changelog.md) for details.
 
             ---
 
@@ -208,6 +208,6 @@ jobs:
 
             ### 更新内容
 
-            详见 [CHANGELOG.md](docs/changelog.md)。
+            详见 [CHANGELOG.md](docs/project/changelog.md)。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

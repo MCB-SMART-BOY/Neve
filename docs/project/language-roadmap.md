@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Neve Language Completion Roadmap</h1>
 
 <p><em>语言完备化与系统脚本化路线图</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong> ·
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong> ·
   <strong><a href="roadmap.md">Project Roadmap</a></strong>
 </p>
 
@@ -338,29 +338,29 @@ These are the units that should be tracked in issues, milestones, and PRs.
 | WP-0B | Real end-to-end harness | `tests`, `neve-frontend`, `neve-eval`, `neve-cli` | WP-0A | Real full-pipeline tests |
 | WP-0C | Documentation status correction | `README`, `docs` | WP-0A | Honest project status |
 | WP-1A | Pattern lowering fidelity | `neve-hir`, `neve-parser`, `neve-typeck`, `neve-eval` | WP-0A | No silent pattern loss |
-| WP-1B | `Try` / `Option` / `Result` semantic unification | `neve-hir`, `neve-typeck`, `neve-eval`, `docs/spec.md` | WP-0A | One failure-propagation model |
+| WP-1B | `Try` / `Option` / `Result` semantic unification | `neve-hir`, `neve-typeck`, `neve-eval`, `docs/reference/spec.md` | WP-0A | One failure-propagation model |
 | WP-1C | Method call and trait dispatch unification | `neve-typeck`, `neve-hir`, `neve-eval` | WP-0A | One method semantics story |
 | WP-1D | HIR evaluator parity for canonical language features | `neve-eval`, `neve-hir` | WP-1A, WP-1B, WP-1C | Canonical HIR runtime |
 | WP-1E | Remove sentinel and placeholder semantic hacks | `neve-hir`, `neve-eval`, `neve-typeck` | WP-1D | Cleaner canonical runtime |
-| WP-2A | Exhaustiveness checking | `neve-typeck`, `neve-eval/pattern`, `docs/diagnostics.md` | WP-1A | Compiler-grade `match` coverage |
-| WP-2B | Unreachable pattern analysis | `neve-typeck`, `docs/diagnostics.md` | WP-2A | Reliable reachability warnings |
+| WP-2A | Exhaustiveness checking | `neve-typeck`, `neve-eval/pattern`, `docs/reference/diagnostics.md` | WP-1A | Compiler-grade `match` coverage |
+| WP-2B | Unreachable pattern analysis | `neve-typeck`, `docs/reference/diagnostics.md` | WP-2A | Reliable reachability warnings |
 | WP-2C | Associated type use-site resolution | `neve-typeck`, `neve-hir`, `tests` | WP-1C | Traits usable beyond declaration checks |
 | WP-2D | REPL and LSP semantic fidelity | `neve-cli`, `neve-lsp`, `neve-frontend` | WP-1D, WP-2A | Tooling matches language |
 | WP-3A | Introduce `Path` runtime type | `neve-syntax`, `neve-hir`, `neve-typeck`, `neve-eval`, `neve-std` | WP-1D | Paths stop being strings |
-| WP-3B | Introduce `Bytes` runtime type | `neve-eval`, `neve-std`, `docs/api.md` | WP-3A | Binary-safe system APIs |
-| WP-3C | Introduce `Command` and `ProcessResult` types | `neve-eval`, `neve-std`, `docs/api.md` | WP-3A, WP-3B | Structured process model |
+| WP-3B | Introduce `Bytes` runtime type | `neve-eval`, `neve-std`, `docs/reference/api.md` | WP-3A | Binary-safe system APIs |
+| WP-3C | Introduce `Command` and `ProcessResult` types | `neve-eval`, `neve-std`, `docs/reference/api.md` | WP-3A, WP-3B | Structured process model |
 | WP-3D | Introduce pipeline and stream handles | `neve-eval`, `neve-std` | WP-3C | First-class process plumbing |
-| WP-4A | Effect boundary design record | `docs/spec.md`, `docs/architecture.md`, `docs` | WP-1D | Chosen effect model |
+| WP-4A | Effect boundary design record | `docs/reference/spec.md`, `docs/contributor/architecture.md`, `docs` | WP-1D | Chosen effect model |
 | WP-4B | Separate pure evaluation from task execution | `neve-eval`, `neve-cli`, `neve-config` | WP-4A | Pure/effectful split enforced |
-| WP-4C | Audit and classify stdlib effects | `neve-std`, `docs/api.md` | WP-4A | Stable effect taxonomy |
+| WP-4C | Audit and classify stdlib effects | `neve-std`, `docs/reference/api.md` | WP-4A | Stable effect taxonomy |
 | WP-5A | First-class redirection runtime | `neve-std`, `neve-eval` | WP-3D, WP-4B | stdin/stdout/stderr composition |
 | WP-5B | Scoped env/cwd and command context | `neve-std`, `neve-eval` | WP-3C, WP-4B | Safer script execution |
 | WP-5C | Timeout, retry, cancellation, background jobs | `neve-std`, `neve-eval`, `neve-cli` | WP-5A, WP-5B | CI/service-grade scripting |
-| WP-5D | Signal, TTY, and shebang entrypoint model | `neve-cli`, `neve-std`, `docs/spec.md` | WP-5C | Real script replacement |
+| WP-5D | Signal, TTY, and shebang entrypoint model | `neve-cli`, `neve-std`, `docs/reference/spec.md` | WP-5C | Real script replacement |
 | WP-5E | Port validation corpus scripts to Neve | `scripts`, `examples`, `tests` | WP-5D | Proof of shell replacement |
 | WP-6A | Lockfile and resolver integration | `neve-derive`, `neve-cli`, `docs` | WP-1D | Reproducible dependency story |
 | WP-6B | Registry and package metadata standard | `neve-derive`, `neve-fetch`, `docs` | WP-6A | Shareable package ecosystem |
-| WP-6C | Stdlib layering and stability policy | `neve-std`, `docs/api.md`, `docs/changelog.md` | WP-4C | Stable language platform |
+| WP-6C | Stdlib layering and stability policy | `neve-std`, `docs/reference/api.md`, `docs/project/changelog.md` | WP-4C | Stable language platform |
 | WP-6D | Compatibility and release policy | `docs`, `README`, `release` workflow | WP-6B, WP-6C | Language lifecycle defined |
 
 ### Work Package Notes / 工作包注记
@@ -868,14 +868,14 @@ If work starts immediately after this roadmap, the first batch should be:
 
 | Task | Work package | Likely files | Expected output |
 |------|--------------|--------------|-----------------|
-| Create support matrix document | `WP-0A` | `docs/feature-matrix.md`, `docs/language-roadmap.md` | One table per feature across parser/lowering/typeck/eval/tooling |
-| Enumerate syntax sources of truth | `WP-0A` | `crates/neve-syntax/src/*.rs`, `docs/spec.md` | Canonical feature inventory |
+| Create support matrix document | `WP-0A` | `docs/project/feature-matrix.md`, `docs/project/language-roadmap.md` | One table per feature across parser/lowering/typeck/eval/tooling |
+| Enumerate syntax sources of truth | `WP-0A` | `crates/neve-syntax/src/*.rs`, `docs/reference/spec.md` | Canonical feature inventory |
 | Record current implementation coverage | `WP-0A` | `crates/neve-parser`, `crates/neve-hir`, `crates/neve-typeck`, `crates/neve-eval`, `crates/neve-lsp`, `neve-cli` | Honest support classification |
 | Replace placeholder E2E helper | `WP-0B` | `tests/end_to_end.rs` | Real executable full-pipeline helper |
 | Add real corpus programs to E2E tests | `WP-0B` | `tests/end_to_end.rs`, possibly `tests/common.rs` | Executed language corpus instead of placeholders |
-| Correct public status claims | `WP-0C` | `README.md`, `docs/README.md`, `docs/philosophy.md`, `tests/README.md` | Status labels aligned with reality |
+| Correct public status claims | `WP-0C` | `README.md`, `docs/README.md`, `docs/project/philosophy.md`, `tests/README.md` | Status labels aligned with reality |
 | Preserve pattern semantics in lowering | `WP-1A` | `crates/neve-hir/src/resolve.rs`, `crates/neve-hir/src/hir.rs`, `tests/parser.rs`, `tests/typeck.rs`, `tests/eval.rs` | No lossy fallback for pattern forms |
-| Decide and document `?` semantics | `WP-1B` | `docs/spec.md`, `crates/neve-hir/src/resolve.rs`, `crates/neve-eval`, `crates/neve-typeck` | One rule for `Try`/`Option`/`Result` |
+| Decide and document `?` semantics | `WP-1B` | `docs/reference/spec.md`, `crates/neve-hir/src/resolve.rs`, `crates/neve-eval`, `crates/neve-typeck` | One rule for `Try`/`Option`/`Result` |
 | Unify method call semantics | `WP-1C` | `crates/neve-typeck/src/traits.rs`, `crates/neve-typeck/src/check.rs`, `crates/neve-eval/src/ast_eval.rs`, `crates/neve-hir/src/resolve.rs` | Method syntax no longer ambiguous semantically |
 | Bring HIR runtime to parity | `WP-1D` | `crates/neve-eval/src/eval.rs`, `neve-cli/src/commands/eval.rs`, `neve-cli/src/commands/run.rs` | Canonical runtime path for CLI execution |
 

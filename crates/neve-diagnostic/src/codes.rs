@@ -199,7 +199,7 @@ impl ErrorCode {
     /// 获取此错误代码的文档链接。
     pub fn doc_url(&self) -> String {
         const BASE_URL: &str =
-            "https://github.com/MCB-SMART-BOY/Neve/blob/master/docs/diagnostics.md#";
+            "https://github.com/MCB-SMART-BOY/Neve/blob/master/docs/reference/diagnostics.md#";
         format!("{BASE_URL}{}", self.as_str())
     }
 }
