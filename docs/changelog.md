@@ -29,6 +29,25 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [1.1.0] - 2026-04-07
+
+### Added / 新增
+- **Incremental HIR REPL**: REPL execution now keeps persistent HIR session state, including cross-input method dispatch, top-level redefinition, project-local module imports, relative module loading via `:load`, imported-module diagnostics, and safe root switching after `:clear`. / **增量 HIR REPL**: REPL 现在保留持久 HIR 会话状态，支持跨输入方法派发、顶层重定义、项目内模块导入、通过 `:load` 的相对模块加载、导入模块诊断，以及 `:clear` 后的安全根目录切换。
+- **LSP semantic tooling**: Added semantic hover for references/expressions and scope-aware navigation for definition/reference/rename flows. / **LSP 语义工具**: 新增引用点与表达式级 hover，并让 definition/reference/rename 的导航开始按真实作用域解析。
+- **System stdlib primitives**: Added structured `std.io` process execution, configurable execution, file writes/appends, and recursive directory lifecycle helpers. / **系统标准库原语**: 新增结构化 `std.io` 进程执行、可配置执行、文件写入/追加，以及递归目录生命周期辅助函数。
+
+### Improved / 改进
+- **Canonical HIR path coverage**: `neve eval`/`neve run` now prefer frontend/HIR across local imports and common `std` item/module/glob imports, reducing AST fallback on the main CLI paths. / **规范 HIR 主路径覆盖**: `neve eval`/`neve run` 现在在本地导入和常见 `std` item/module/glob 导入场景下优先走 frontend/HIR，减少主 CLI 路径上的 AST 回退。
+- **Semantic convergence**: HIR lowering/runtime now preserve `lazy`, `?`, `??`, method calls, `or`/binding/list-rest patterns, block `let` patterns, and more associated-type use sites with better AST/HIR parity. / **语义收敛**: HIR lowering/runtime 现已更完整保留 `lazy`、`?`、`??`、方法调用、`or`/绑定/list-rest 模式、块级 `let` 模式，以及更多关联类型 use-site，AST/HIR 一致性更好。
+- **Type system coverage**: Expanded typed stdlib coverage for `list`/`string`/`option`/`result`/`path`/`io`/`fetch`/`map`/`set`, trait impl checking, builtin `Option/Result` pattern analysis, and REPL/tooling type queries. / **类型系统覆盖**: 扩展了 `list`/`string`/`option`/`result`/`path`/`io`/`fetch`/`map`/`set` 的类型化覆盖，并强化了 trait impl 检查、内置 `Option/Result` 模式分析，以及 REPL/工具链类型查询。
+- **Tooling readability**: Diagnostics and type displays now render imported named types readably across `check`/`run`/REPL, instead of leaking raw `Type#...` placeholders. / **工具链可读性**: `check`/`run`/REPL 的诊断和类型展示现在能把导入类型显示成人类可读名称，不再泄漏 `Type#...` 占位符。
+- **Project truthfulness**: Added a feature matrix and a more explicit language roadmap so documented project status better matches the real compiler/runtime state. / **项目状态透明度**: 新增 feature matrix 和更明确的语言路线图，让文档中的项目状态更接近真实编译器/运行时现状。
+
+### Fixed / 修复
+- **AST recursion regression**: Restored self-recursive AST function evaluation. / **AST 递归回归**: 修复 AST 路径下自递归函数失效的问题。
+- **Top-level type refinement**: Fixed type checker refinement for top-level bound values such as record field access after binding. / **顶层类型细化**: 修复顶层绑定值的类型细化问题，例如绑定后记录字段访问。
+- **Placeholder test coverage**: Replaced placeholder end-to-end coverage with real runtime-parity tests. / **占位测试覆盖**: 将原先的占位端到端测试替换为真实运行时一致性测试。
+
 ## [1.0.1] - 2026-03-20
 
 ### Added / 新增
