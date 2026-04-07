@@ -370,7 +370,7 @@ impl ReplHirState {
     fn build_module(&self, ast: &SourceFile) -> (neve_hir::Module, Resolver) {
         let mut resolver = Resolver::new();
         resolver.set_def_id_counter(self.next_def_id);
-        resolver.register_imports(
+        resolver.register_existing_globals(
             self.globals
                 .iter()
                 .map(|(name, def_id)| (name.clone(), *def_id))
@@ -478,8 +478,8 @@ fn evaluate_repl_input(
 
 fn unsupported_repl_hir_reason(
     ast: &SourceFile,
-    runtime_state: &ReplHirState,
-    persist_defs: bool,
+    _runtime_state: &ReplHirState,
+    _persist_defs: bool,
 ) -> Option<String> {
     if let Some(message) = ast.items.iter().find_map(|item| match &item.kind {
         ItemKind::Import(import) if repl_std_module_prefix(import).is_none() => Some(
@@ -488,20 +488,6 @@ fn unsupported_repl_hir_reason(
         _ => None,
     }) {
         return Some(message);
-    }
-
-    if persist_defs {
-        let redefined_names: Vec<_> = item_bindings(ast)
-            .into_iter()
-            .map(|(name, _)| name)
-            .filter(|name| runtime_state.user_bindings.contains_key(name))
-            .collect();
-        if !redefined_names.is_empty() {
-            return Some(
-                "REPL HIR backend does not yet support redefining existing top-level bindings"
-                    .to_string(),
-            );
-        }
     }
 
     None
@@ -1047,18 +1033,22 @@ mod tests {
     }
 
     #[test]
-    fn repl_hir_runtime_rejects_redefinition_for_now() {
+    fn repl_hir_runtime_preserves_redefinition_across_inputs() {
         let mut runtime = ReplHirState::new();
         let mut semantic = ReplSemanticState::default();
 
         evaluate_repl_input("let x = 1;", true, &mut runtime, &mut semantic)
             .expect("first definition should evaluate");
-        let err = evaluate_repl_input("let x = x + 1;", true, &mut runtime, &mut semantic)
-            .expect_err("redefinition should be rejected");
-        assert!(matches!(
-            err,
-            super::ReplEvalError::Message(message)
-                if message.contains("redefining existing top-level bindings")
-        ));
+        let value = evaluate_repl_input("let x = x + 1;", true, &mut runtime, &mut semantic)
+            .expect("redefinition should evaluate");
+        assert_eq!(value, Value::Int(2.into()));
+
+        let expr = prepare_repl_input("x");
+        let value = evaluate_repl_input(&expr, false, &mut runtime, &mut semantic)
+            .expect("latest binding should evaluate");
+        assert_eq!(value, Value::Int(2.into()));
+
+        let ty = infer_repl_type("x", &semantic).expect("type query should succeed");
+        assert_eq!(ty, "Int");
     }
 }
