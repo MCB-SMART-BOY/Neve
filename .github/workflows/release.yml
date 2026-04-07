@@ -162,7 +162,7 @@ jobs:
 
             ### Platform Notes
 
-            - **All platforms**: Language features (eval, check, repl, fmt) are fully supported
+            - **All platforms**: Core language tooling (`eval`, `check`, `repl`, `fmt`) is available; semantic convergence is still ongoing
             - **Unix only**: Package management and system configuration features require Linux/macOS
 
             ### What's New
@@ -203,7 +203,7 @@ jobs:
 
             ### 平台说明
 
-            - **全部平台**: 语言功能（eval/check/repl/fmt）完整可用
+            - **全部平台**: 核心语言工具链（`eval`/`check`/`repl`/`fmt`）可用，但语义闭环仍在持续收敛
             - **仅 Unix**: 包管理与系统配置功能需要 Linux/macOS
 
             ### 更新内容
