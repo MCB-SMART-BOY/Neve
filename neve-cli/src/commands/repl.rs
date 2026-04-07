@@ -4,12 +4,12 @@
 use crate::output;
 use neve_common::Span;
 use neve_diagnostic::emit;
-use neve_eval::{AstEnv, AstEvaluator, Value, builtins};
+use neve_eval::{Evaluator, Value, builtins};
 use neve_frontend::{analyze_source, format_type_in_module};
-use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind};
+use neve_hir::{DefId, ItemKind as HirItemKind, Resolver, Ty, TyKind};
 use neve_parser::parse;
-use neve_std::std_module_overrides;
-use neve_syntax::{ImportItems, Item, ItemKind, PatternKind, SourceFile};
+use neve_std::stdlib;
+use neve_syntax::{ImportDef, ImportItems, Item, ItemKind, PatternKind, SourceFile, Visibility};
 use neve_typeck::{
     LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, TypeChecker,
     builtin_list, builtin_map, builtin_option, builtin_result, builtin_set,
@@ -17,8 +17,7 @@ use neve_typeck::{
 };
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::collections::HashMap;
 
 const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 5);
 const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 6);
@@ -31,14 +30,8 @@ pub fn run() -> Result<(), String> {
     println!();
 
     let mut rl = DefaultEditor::new().map_err(|e| e.to_string())?;
-
-    // Create a persistent mutable environment for the REPL session
-    // 为 REPL 会话创建持久的可变环境
-    // Using RefCell allows interior mutability while maintaining Rc sharing
-    // 使用 RefCell 允许内部可变性，同时保持 Rc 共享
-    let env = Rc::new(RefCell::new(AstEnv::with_builtins()));
+    let mut runtime_state = ReplHirState::new();
     let mut semantic_state = ReplSemanticState::default();
-    let std_overrides = std_module_overrides();
 
     // Buffer for multi-line input
     // 多行输入缓冲区
@@ -107,26 +100,16 @@ pub fn run() -> Result<(), String> {
                             continue;
                         }
                         ":env" => {
-                            let env_ref = env.borrow();
-                            let bindings = env_ref.all_bindings();
-
-                            // Separate builtins from user-defined
-                            // 将内置函数与用户定义的分开
                             let builtins_count = builtins().len();
-                            let user_bindings: Vec<_> = bindings
-                                .keys()
-                                .filter(|k| !builtins().iter().any(|(b, _)| b == *k))
-                                .collect();
+                            let user_bindings = runtime_state.user_bindings();
+                            let user_binding_count = user_bindings.len();
 
                             if user_bindings.is_empty() {
                                 println!("(no user-defined bindings)");
                             } else {
                                 println!("User-defined bindings:");
-                                let mut sorted = user_bindings.clone();
-                                sorted.sort();
-                                for name in sorted {
-                                    let is_pub = env_ref.is_public(name);
-                                    let vis = if is_pub { "pub" } else { "   " };
+                                for (name, is_pub) in &user_bindings {
+                                    let vis = if *is_pub { "pub" } else { "   " };
                                     println!("  {} {}", vis, name);
                                 }
                             }
@@ -134,7 +117,7 @@ pub fn run() -> Result<(), String> {
                             println!(
                                 "({} builtins, {} user-defined)",
                                 builtins_count,
-                                user_bindings.len()
+                                user_binding_count
                             );
                             input_buffer.clear();
                             continue;
@@ -171,88 +154,25 @@ pub fn run() -> Result<(), String> {
                             }
                             let file_path = parts[1];
                             match std::fs::read_to_string(file_path) {
-                                Ok(content) => {
-                                    let (ast, diagnostics) = parse(&content);
-                                    if !diagnostics.is_empty() {
+                                Ok(content) => match evaluate_repl_input(
+                                    &content,
+                                    true,
+                                    &mut runtime_state,
+                                    &mut semantic_state,
+                                ) {
+                                    Ok(_) => println!("Loaded: {}", file_path),
+                                    Err(ReplEvalError::Diagnostics {
+                                        source,
+                                        diagnostics,
+                                    }) => {
                                         for diag in &diagnostics {
-                                            emit(&content, file_path, diag);
-                                        }
-                                        continue;
-                                    }
-
-                                    let semantic_source =
-                                        semantic_state.combined_source_with(&content);
-                                    let analysis = analyze_source(&semantic_source);
-                                    if !analysis.diagnostics.is_empty() {
-                                        for diag in &analysis.diagnostics {
-                                            emit(&semantic_source, "<repl:load>", diag);
-                                        }
-                                        input_buffer.clear();
-                                        continue;
-                                    }
-
-                                    // Evaluate the file in current environment
-                                    // 在当前环境中求值文件
-                                    let current_env = env.borrow().clone();
-                                    let mut evaluator =
-                                        AstEvaluator::with_env(Rc::new(current_env))
-                                            .with_module_overrides(std_overrides.clone());
-                                    match evaluator.eval_file(&ast) {
-                                        Ok(_) => {
-                                            // Extract and store new bindings
-                                            // 提取并存储新绑定
-                                            for item in &ast.items {
-                                                if let ItemKind::Let(let_def) = &item.kind {
-                                                    if let PatternKind::Var(ident) =
-                                                        &let_def.pattern.kind
-                                                    {
-                                                        let current_env = env.borrow().clone();
-                                                        let mut temp_eval = AstEvaluator::with_env(
-                                                            Rc::new(current_env),
-                                                        )
-                                                        .with_module_overrides(
-                                                            std_overrides.clone(),
-                                                        );
-                                                        if let Ok(val) =
-                                                            temp_eval.eval_expr(&let_def.value)
-                                                        {
-                                                            let is_pub = let_def.visibility
-                                                                != neve_syntax::Visibility::Private;
-                                                            env.borrow_mut()
-                                                                .define_with_visibility(
-                                                                    ident.name.clone(),
-                                                                    val,
-                                                                    is_pub,
-                                                                );
-                                                        }
-                                                    }
-                                                } else if let ItemKind::Fn(fn_def) = &item.kind {
-                                                    let current_env = env.borrow().clone();
-                                                    let mut temp_eval = AstEvaluator::with_env(
-                                                        Rc::new(current_env),
-                                                    )
-                                                    .with_module_overrides(std_overrides.clone());
-                                                    if let Ok(fn_value) =
-                                                        temp_eval.eval_fn_def(fn_def)
-                                                    {
-                                                        let is_pub = fn_def.visibility
-                                                            != neve_syntax::Visibility::Private;
-                                                        env.borrow_mut().define_with_visibility(
-                                                            fn_def.name.name.clone(),
-                                                            fn_value,
-                                                            is_pub,
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                            semantic_state.record_source(&content, &ast);
-                                            println!("Loaded: {}", file_path);
-                                        }
-                                        Err(e) => {
-                                            eprintln!("Error loading file: {:?}", e);
+                                            emit(&source, file_path, diag);
                                         }
                                     }
-                                }
+                                    Err(ReplEvalError::Message(message)) => {
+                                        eprintln!("{message}");
+                                    }
+                                },
                                 Err(e) => {
                                     eprintln!("Cannot read file '{}': {}", file_path, e);
                                 }
@@ -261,7 +181,7 @@ pub fn run() -> Result<(), String> {
                             continue;
                         }
                         ":clear" => {
-                            *env.borrow_mut() = AstEnv::with_builtins();
+                            runtime_state.clear();
                             semantic_state.clear();
                             println!("Environment cleared");
                             input_buffer.clear();
@@ -281,102 +201,27 @@ pub fn run() -> Result<(), String> {
                 let prepared_input = prepare_repl_input(input);
                 let is_expr_wrapped = prepared_input.starts_with("let __expr__ = ");
 
-                // Parse the input
-                // 解析输入
-                let (ast, diagnostics) = parse(&prepared_input);
-
-                if !diagnostics.is_empty() {
-                    for diag in &diagnostics {
-                        emit(input, "<repl>", diag);
-                    }
-                    input_buffer.clear();
-                    continue;
-                }
-
-                let semantic_source = semantic_state.combined_source_with(&prepared_input);
-                let analysis = analyze_source(&semantic_source);
-                if !analysis.diagnostics.is_empty() {
-                    for diag in &analysis.diagnostics {
-                        emit(&semantic_source, "<repl>", diag);
-                    }
-                    input_buffer.clear();
-                    continue;
-                }
-
-                // Evaluate with the persistent environment
-                // 使用持久环境进行求值
-                // We need to evaluate in a temporary scope to capture new bindings
-                // 我们需要在临时作用域中求值以捕获新绑定
-                let result = {
-                    // Clone the current environment for evaluation
-                    // 克隆当前环境用于求值
-                    let current_env = env.borrow().clone();
-                    let mut evaluator = AstEvaluator::with_env(Rc::new(current_env))
-                        .with_module_overrides(std_overrides.clone());
-                    evaluator.eval_file(&ast)
-                };
-
-                match result {
+                match evaluate_repl_input(
+                    &prepared_input,
+                    !is_expr_wrapped,
+                    &mut runtime_state,
+                    &mut semantic_state,
+                ) {
                     Ok(value) => {
-                        // After successful evaluation, we need to extract new bindings
-                        // from the AST and add them to our persistent environment
-                        for item in &ast.items {
-                            if let ItemKind::Let(let_def) = &item.kind {
-                                // Extract the binding name from the pattern
-                                // 从模式中提取绑定名称
-                                if let PatternKind::Var(ident) = &let_def.pattern.kind
-                                    && ident.name != "__expr__"
-                                {
-                                    // Re-evaluate just this binding in the persistent env
-                                    // 仅在持久环境中重新求值此绑定
-                                    let current_env = env.borrow().clone();
-                                    let mut temp_eval =
-                                        AstEvaluator::with_env(Rc::new(current_env))
-                                            .with_module_overrides(std_overrides.clone());
-
-                                    if let Ok(val) = temp_eval.eval_expr(&let_def.value) {
-                                        let is_pub =
-                                            let_def.visibility != neve_syntax::Visibility::Private;
-                                        env.borrow_mut().define_with_visibility(
-                                            ident.name.clone(),
-                                            val,
-                                            is_pub,
-                                        );
-                                    }
-                                }
-                            } else if let ItemKind::Fn(fn_def) = &item.kind {
-                                // Store function definitions
-                                // 存储函数定义
-                                let current_env = env.borrow().clone();
-                                let mut temp_eval = AstEvaluator::with_env(Rc::new(current_env))
-                                    .with_module_overrides(std_overrides.clone());
-
-                                // Create a closure value for the function
-                                // 为函数创建闭包值
-                                if let Ok(fn_value) = temp_eval.eval_fn_def(fn_def) {
-                                    let is_pub =
-                                        fn_def.visibility != neve_syntax::Visibility::Private;
-                                    env.borrow_mut().define_with_visibility(
-                                        fn_def.name.name.clone(),
-                                        fn_value,
-                                        is_pub,
-                                    );
-                                }
-                            }
-                        }
-
-                        if !is_expr_wrapped {
-                            semantic_state.record_source(&prepared_input, &ast);
-                        }
-
-                        // Print non-unit results, or always print for wrapped expressions
-                        // 打印非 unit 结果，或对于包装的表达式始终打印
                         if is_expr_wrapped || !matches!(value, Value::Unit) {
                             println!("{:?}", value);
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Error: {:?}", e);
+                    Err(ReplEvalError::Diagnostics {
+                        source,
+                        diagnostics,
+                    }) => {
+                        for diag in &diagnostics {
+                            emit(&source, "<repl>", diag);
+                        }
+                    }
+                    Err(ReplEvalError::Message(message)) => {
+                        eprintln!("{message}");
                     }
                 }
 
@@ -439,6 +284,316 @@ fn prepare_repl_input(input: &str) -> String {
 }
 
 #[derive(Debug)]
+enum ReplEvalError {
+    Diagnostics {
+        source: String,
+        diagnostics: Vec<neve_diagnostic::Diagnostic>,
+    },
+    Message(String),
+}
+
+#[derive(Clone)]
+struct ReplHirState {
+    evaluator: Evaluator,
+    next_def_id: u32,
+    globals: HashMap<String, DefId>,
+    user_bindings: HashMap<String, bool>,
+    builtin_item_imports: HashMap<String, String>,
+    builtin_module_imports: HashMap<String, String>,
+    has_trait_or_impl_items: bool,
+}
+
+impl Default for ReplHirState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReplHirState {
+    fn new() -> Self {
+        Self {
+            evaluator: Evaluator::new().with_extra_builtins(std_builtin_values()),
+            next_def_id: 0,
+            globals: HashMap::new(),
+            user_bindings: HashMap::new(),
+            builtin_item_imports: HashMap::new(),
+            builtin_module_imports: HashMap::new(),
+            has_trait_or_impl_items: false,
+        }
+    }
+
+    fn clear(&mut self) {
+        *self = Self::new();
+    }
+
+    fn user_bindings(&self) -> Vec<(&str, bool)> {
+        let mut bindings: Vec<_> = self
+            .user_bindings
+            .iter()
+            .map(|(name, is_pub)| (name.as_str(), *is_pub))
+            .collect();
+        bindings.sort_by(|(left, _), (right, _)| left.cmp(right));
+        bindings
+    }
+
+    fn eval_persistent(
+        &mut self,
+        ast: &SourceFile,
+        method_resolutions: HashMap<Span, DefId>,
+    ) -> Result<Value, String> {
+        let (module, resolver) = self.build_module(ast);
+        self.evaluator.set_method_resolutions(method_resolutions);
+        let value = self
+            .evaluator
+            .eval_module(&module)
+            .map_err(|e| format!("evaluation error: {e:?}"))?;
+        self.next_def_id = resolver.next_def_id();
+        for (name, def_id) in resolver.global_defs() {
+            self.globals.insert(name.clone(), *def_id);
+        }
+        self.record_user_bindings(ast);
+        self.record_std_imports(ast);
+        self.has_trait_or_impl_items |= ast
+            .items
+            .iter()
+            .any(|item| matches!(item.kind, ItemKind::Trait(_) | ItemKind::Impl(_)));
+        Ok(value)
+    }
+
+    fn eval_ephemeral(
+        &self,
+        ast: &SourceFile,
+        method_resolutions: HashMap<Span, DefId>,
+    ) -> Result<Value, String> {
+        let (module, _) = self.build_module(ast);
+        let mut evaluator = self.evaluator.clone();
+        evaluator.set_method_resolutions(method_resolutions);
+        evaluator
+            .eval_module(&module)
+            .map_err(|e| format!("evaluation error: {e:?}"))
+    }
+
+    fn build_module(&self, ast: &SourceFile) -> (neve_hir::Module, Resolver) {
+        let mut resolver = Resolver::new();
+        resolver.set_def_id_counter(self.next_def_id);
+        resolver.register_imports(
+            self.globals
+                .iter()
+                .map(|(name, def_id)| (name.clone(), *def_id))
+                .collect(),
+        );
+        for (name, builtin_name) in &self.builtin_item_imports {
+            resolver.register_builtin_item_import(name.clone(), builtin_name.clone());
+        }
+        for (alias, module_prefix) in &self.builtin_module_imports {
+            resolver.register_builtin_module_import(alias.clone(), module_prefix.clone());
+        }
+        let module = resolver.resolve_with_name(ast, "repl".to_string());
+        (module, resolver)
+    }
+
+    fn record_user_bindings(&mut self, ast: &SourceFile) {
+        for (name, is_pub) in item_bindings(ast) {
+            self.user_bindings.insert(name, is_pub);
+        }
+    }
+
+    fn record_std_imports(&mut self, ast: &SourceFile) {
+        for item in &ast.items {
+            let ItemKind::Import(import) = &item.kind else {
+                continue;
+            };
+            let Some(module_prefix) = repl_std_module_prefix(import) else {
+                continue;
+            };
+
+            match &import.items {
+                ImportItems::Module => {
+                    let alias = import
+                        .alias
+                        .as_ref()
+                        .map(|alias| alias.name.clone())
+                        .or_else(|| import.path.last().map(|segment| segment.name.clone()));
+                    if let Some(alias) = alias {
+                        self.builtin_module_imports
+                            .insert(alias, module_prefix.to_string());
+                    }
+                }
+                ImportItems::Items(items) => {
+                    for item in items {
+                        self.builtin_item_imports.insert(
+                            item.name.clone(),
+                            format!("{module_prefix}.{}", item.name),
+                        );
+                    }
+                }
+                ImportItems::All => {
+                    for export in std_module_exports(module_prefix) {
+                        self.builtin_item_imports
+                            .insert(export.clone(), format!("{module_prefix}.{export}"));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn evaluate_repl_input(
+    current_source: &str,
+    persist_defs: bool,
+    runtime_state: &mut ReplHirState,
+    semantic_state: &mut ReplSemanticState,
+) -> Result<Value, ReplEvalError> {
+    let (ast, diagnostics) = parse(current_source);
+    if !diagnostics.is_empty() {
+        return Err(ReplEvalError::Diagnostics {
+            source: current_source.to_string(),
+            diagnostics,
+        });
+    }
+
+    if let Some(message) = unsupported_repl_hir_reason(&ast, runtime_state, persist_defs) {
+        return Err(ReplEvalError::Message(message));
+    }
+
+    let (semantic_source, current_offset) = semantic_state.combined_source_with_offset(current_source);
+    let analysis = analyze_source(&semantic_source);
+    if !analysis.diagnostics.is_empty() {
+        return Err(ReplEvalError::Diagnostics {
+            source: semantic_source,
+            diagnostics: analysis.diagnostics,
+        });
+    }
+
+    let method_resolutions =
+        current_method_resolutions(&analysis, current_offset, current_source.len());
+
+    if !method_resolutions.is_empty() && runtime_state.has_trait_or_impl_items {
+        return Err(ReplEvalError::Message(
+            "REPL HIR backend does not yet support method dispatch across separate trait/impl inputs"
+                .to_string(),
+        ));
+    }
+
+    let value = if persist_defs {
+        runtime_state.eval_persistent(&ast, method_resolutions)
+    } else {
+        runtime_state.eval_ephemeral(&ast, method_resolutions)
+    }
+    .map_err(ReplEvalError::Message)?;
+
+    if persist_defs {
+        semantic_state.record_source(current_source, &ast);
+    }
+
+    Ok(value)
+}
+
+fn unsupported_repl_hir_reason(
+    ast: &SourceFile,
+    runtime_state: &ReplHirState,
+    persist_defs: bool,
+) -> Option<String> {
+    if let Some(message) = ast.items.iter().find_map(|item| match &item.kind {
+        ItemKind::Import(import) if repl_std_module_prefix(import).is_none() => Some(
+            "REPL HIR backend currently supports only `import std.<module>` imports".to_string(),
+        ),
+        _ => None,
+    }) {
+        return Some(message);
+    }
+
+    if persist_defs {
+        let redefined_names: Vec<_> = item_bindings(ast)
+            .into_iter()
+            .map(|(name, _)| name)
+            .filter(|name| runtime_state.user_bindings.contains_key(name))
+            .collect();
+        if !redefined_names.is_empty() {
+            return Some(
+                "REPL HIR backend does not yet support redefining existing top-level bindings"
+                    .to_string(),
+            );
+        }
+    }
+
+    None
+}
+
+fn current_method_resolutions(
+    analysis: &neve_frontend::AnalysisResult,
+    offset: usize,
+    current_len: usize,
+) -> HashMap<Span, DefId> {
+    let current_end = offset + current_len;
+    analysis
+        .method_resolutions
+        .iter()
+        .filter_map(|(span, def_id)| {
+            let start = usize::from(span.start);
+            let end = usize::from(span.end);
+            if start < offset || end > current_end {
+                return None;
+            }
+            Some((Span::from_usize(start - offset, end - offset), *def_id))
+        })
+        .collect()
+}
+
+fn item_bindings(ast: &SourceFile) -> Vec<(String, bool)> {
+    ast.items
+        .iter()
+        .flat_map(|item| {
+            let is_pub = item_visibility(item) != Visibility::Private;
+            item_defined_names(item)
+                .into_iter()
+                .map(move |name| (name, is_pub))
+        })
+        .collect()
+}
+
+fn item_visibility(item: &Item) -> Visibility {
+    match &item.kind {
+        ItemKind::Let(def) => def.visibility,
+        ItemKind::Fn(def) => def.visibility,
+        ItemKind::TypeAlias(def) => def.visibility,
+        ItemKind::Struct(def) => def.visibility,
+        ItemKind::Enum(def) => def.visibility,
+        ItemKind::Trait(def) => def.visibility,
+        ItemKind::Import(def) => def.visibility,
+        ItemKind::Impl(_) => Visibility::Private,
+    }
+}
+
+fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
+    stdlib()
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
+}
+
+fn repl_std_module_prefix(import: &ImportDef) -> Option<&str> {
+    if import.path.len() == 2
+        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+    {
+        Some(import.path[1].name.as_str())
+    } else {
+        None
+    }
+}
+
+fn std_module_exports(module_prefix: &str) -> Vec<String> {
+    let prefix = format!("{module_prefix}.");
+    let mut exports: Vec<_> = stdlib()
+        .into_iter()
+        .filter_map(|(name, _)| name.strip_prefix(&prefix).map(str::to_string))
+        .filter(|name| !name.contains('.'))
+        .collect();
+    exports.sort();
+    exports.dedup();
+    exports
+}
+
+#[derive(Debug)]
 enum TypeQueryError {
     Diagnostics {
         source: String,
@@ -460,33 +615,28 @@ struct ReplSemanticEntry {
 
 impl ReplSemanticState {
     fn combined_source_with(&self, current: &str) -> String {
+        self.combined_source_with_offset(current).0
+    }
+
+    fn combined_source_with_offset(&self, current: &str) -> (String, usize) {
         let mut parts: Vec<&str> = self
             .entries
             .iter()
             .map(|entry| entry.source.as_str())
             .collect();
+        let offset = if parts.is_empty() {
+            0
+        } else {
+            parts.iter().map(|part| part.len()).sum::<usize>() + parts.len()
+        };
         parts.push(current);
-        parts.join("\n")
+        (parts.join("\n"), offset)
     }
 
     fn record_source(&mut self, source: &str, ast: &SourceFile) {
         for entry in semantic_entries_from_ast(source, ast) {
-            self.replace_conflicting_entries(&entry.defined_names);
             self.entries.push(entry);
         }
-    }
-
-    fn replace_conflicting_entries(&mut self, names: &[String]) {
-        if names.is_empty() {
-            return;
-        }
-
-        self.entries.retain(|entry| {
-            entry
-                .defined_names
-                .iter()
-                .all(|existing| !names.iter().any(|name| name == existing))
-        });
     }
 
     fn clear(&mut self) {
@@ -760,8 +910,9 @@ fn format_repl_semantic_type(ty: &Ty, module: &neve_hir::Module) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ReplSemanticState, format_repl_semantic_type, format_repl_type, infer_repl_type,
-        semantic_entries_from_ast, type_from_value,
+        ReplHirState, ReplSemanticState, evaluate_repl_input, format_repl_semantic_type,
+        format_repl_type, infer_repl_type, prepare_repl_input, semantic_entries_from_ast,
+        type_from_value,
     };
     use neve_common::Span;
     use neve_eval::Value;
@@ -848,5 +999,83 @@ mod tests {
     fn repl_runtime_value_type_formatting_is_readable() {
         let ty = type_from_value(&Value::List(std::rc::Rc::new(vec![Value::Int(1.into())])));
         assert_eq!(format_repl_type(&ty), "List[Int]");
+    }
+
+    #[test]
+    fn repl_hir_runtime_persists_bindings_across_inputs() {
+        let mut runtime = ReplHirState::new();
+        let mut semantic = ReplSemanticState::default();
+
+        let value = evaluate_repl_input("let x = 41;", true, &mut runtime, &mut semantic)
+            .expect("definition should evaluate");
+        assert_eq!(value, Value::Int(41.into()));
+
+        let expr = prepare_repl_input("x + 1");
+        let value = evaluate_repl_input(&expr, false, &mut runtime, &mut semantic)
+            .expect("expression should evaluate");
+        assert_eq!(value, Value::Int(42.into()));
+    }
+
+    #[test]
+    fn repl_hir_runtime_rejects_cross_input_method_dispatch_for_now() {
+        let mut runtime = ReplHirState::new();
+        let mut semantic = ReplSemanticState::default();
+
+        evaluate_repl_input(
+            r#"
+            trait Twice { fn twice(self) -> Int; };
+            impl Twice for Int {
+                fn twice(self) -> Int = self + self;
+            };
+            "#,
+            true,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("trait definition should evaluate");
+
+        let expr = prepare_repl_input("21.twice()");
+        let err = evaluate_repl_input(&expr, false, &mut runtime, &mut semantic)
+            .expect_err("cross-input method call should be rejected");
+        assert!(matches!(
+            err,
+            super::ReplEvalError::Message(message)
+                if message.contains("method dispatch across separate trait/impl inputs")
+        ));
+    }
+
+    #[test]
+    fn repl_hir_runtime_preserves_std_imports_across_inputs() {
+        let mut runtime = ReplHirState::new();
+        let mut semantic = ReplSemanticState::default();
+
+        evaluate_repl_input(
+            "import std.string as string;",
+            true,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("import should evaluate");
+
+        let expr = prepare_repl_input(r#"string.len("abcd")"#);
+        let value = evaluate_repl_input(&expr, false, &mut runtime, &mut semantic)
+            .expect("stdlib call should evaluate");
+        assert_eq!(value, Value::Int(4.into()));
+    }
+
+    #[test]
+    fn repl_hir_runtime_rejects_redefinition_for_now() {
+        let mut runtime = ReplHirState::new();
+        let mut semantic = ReplSemanticState::default();
+
+        evaluate_repl_input("let x = 1;", true, &mut runtime, &mut semantic)
+            .expect("first definition should evaluate");
+        let err = evaluate_repl_input("let x = x + 1;", true, &mut runtime, &mut semantic)
+            .expect_err("redefinition should be rejected");
+        assert!(matches!(
+            err,
+            super::ReplEvalError::Message(message)
+                if message.contains("redefining existing top-level bindings")
+        ));
     }
 }
