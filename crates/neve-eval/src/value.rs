@@ -30,8 +30,8 @@ pub use crate::ast_eval::AstClosure;
 ///   已求值：包含缓存的结果
 #[derive(Clone)]
 pub struct Thunk {
-    /// The inner state of the thunk, wrapped in Rc<RefCell> for shared mutable access.
-    /// Thunk 的内部状态，用 Rc<RefCell> 包装以实现共享可变访问。
+    /// The inner state of the thunk, wrapped in `Rc<RefCell>` for shared mutable access.
+    /// Thunk 的内部状态，用 `Rc<RefCell>` 包装以实现共享可变访问。
     inner: Rc<RefCell<ThunkState>>,
 }
 

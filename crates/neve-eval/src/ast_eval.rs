@@ -49,9 +49,9 @@ struct Binding {
 /// Environment for AST evaluation.
 /// AST 求值环境。
 ///
-/// Note: For REPL usage, AstEnv can be wrapped in Rc<RefCell<AstEnv>>
+/// Note: For REPL usage, `AstEnv` can be wrapped in `Rc<RefCell<AstEnv>>`
 /// to allow persistent state across evaluations.
-/// 注意：对于 REPL 使用，可以将 AstEnv 包装在 Rc<RefCell<AstEnv>> 中
+/// 注意：对于 REPL 使用，可以将 `AstEnv` 包装在 `Rc<RefCell<AstEnv>>` 中
 /// 以便在多次求值之间保持持久状态。
 #[derive(Clone, Default)]
 pub struct AstEnv {
