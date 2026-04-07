@@ -497,6 +497,12 @@ impl Resolver {
         }
     }
 
+    /// Register a namespace root introduced by `import foo` or `import foo as bar`.
+    /// 注册由 `import foo` 或 `import foo as bar` 引入的命名空间根。
+    pub fn register_module_import_alias(&mut self, alias: String) {
+        self.imported_modules.insert(alias);
+    }
+
     /// Register a std builtin item import for resolution.
     /// 注册 std 内置项导入以供解析。
     pub fn register_builtin_item_import(&mut self, name: String, builtin_name: String) {
@@ -1066,12 +1072,7 @@ impl Resolver {
             .map(|ty| self.lower_type(ty))
             .unwrap_or_else(|| Self::unknown_ty(span));
 
-        Param {
-            id,
-            name,
-            ty,
-            span,
-        }
+        Param { id, name, ty, span }
     }
 
     /// Lower a trait item (method declaration).
