@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Neve Roadmap</h1>
 
 <p><em>路线图</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -106,7 +106,7 @@ All syntax changes must:
 
 所有语法变更必须：
 
-- Update `docs/spec.md` first. / 先更新 `docs/spec.md`。
+- Update `docs/reference/spec.md` first. / 先更新 `docs/reference/spec.md`。
 - Pass parser ambiguity and golden syntax tests. / 通过解析歧义与语法金样测试。
 - Update formatter, LSP tokens, and diagnostics together. / 同步更新格式化器、LSP 语义 token、诊断。
 - Avoid "compatibility" hacks that increase ambiguity. / 避免引入增加歧义的“兼容性补丁”。

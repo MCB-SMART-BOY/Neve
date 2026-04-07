@@ -30,7 +30,7 @@
 Neve is a pure functional programming language designed for system configuration and package management. It takes the powerful concepts from Nix—reproducibility, declarative configuration, and functional purity—while providing a cleaner, more intuitive syntax and compile-time type checking.
 Neve 是一门纯函数式编程语言，专为系统配置与包管理而设计。它继承了 Nix 的强大理念，同时提供更清晰、更直观的语法与编译期类型检查。
 
-**Quick Links / 快速链接** · [Docs](docs/) · [Changelog](docs/changelog.md) · [Issues](https://github.com/MCB-SMART-BOY/neve/issues)
+**Quick Links / 快速链接** · [Docs](docs/) · [Changelog](docs/project/changelog.md) · [Issues](https://github.com/MCB-SMART-BOY/neve/issues)
 
 ### Highlights / 亮点
 
@@ -259,7 +259,7 @@ Built-in documentation is available via `neve doc`:
 ### Project Status / 项目进度
 
 当前状态以“真实集成度”为准，不以 parser 表面支持为准。
-更细的支持情况请看 `docs/feature-matrix.md`。
+更细的支持情况请看 `docs/project/feature-matrix.md`。
 
 | Component / 模块 | Status | Description / 说明 |
 |:-----------------|:-------|:-------------------|
@@ -282,8 +282,8 @@ Built-in documentation is available via `neve doc`:
 
 ### Contributing / 贡献
 
-Contributions are welcome! Please see [docs/contributing.md](docs/contributing.md) for guidelines.
-欢迎贡献！请查看 [docs/contributing.md](docs/contributing.md)。
+Contributions are welcome! Please see [docs/contributor/contributing.md](docs/contributor/contributing.md) for guidelines.
+欢迎贡献！请查看 [docs/contributor/contributing.md](docs/contributor/contributing.md)。
 
 ```bash
 # Development setup

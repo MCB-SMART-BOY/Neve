@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Contributing to Neve</h1>
 
 <p><em>贡献指南</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./README.md">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>

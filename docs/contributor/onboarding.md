@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Contributor Onboarding</h1>
 
 <p><em>贡献者入门</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -28,8 +28,8 @@ Recommended first steps:
 
 推荐的入门步骤：
 
-- Read `docs/architecture.md` for the high-level flow.
-- 阅读 `docs/architecture.md` 了解整体流程。
+- Read `docs/contributor/architecture.md` for the high-level flow.
+- 阅读 `docs/contributor/architecture.md` 了解整体流程。
 - Pick one module from the map below and read its `src/lib.rs` first.
 - 从下面的模块地图中选一个模块，先阅读其 `src/lib.rs`。
 
@@ -172,8 +172,8 @@ Tooling (LSP, CLI) should prefer `neve-frontend` so diagnostics stay consistent.
 
 ## Common Tasks / 常见任务
 
-- Add new syntax: update `docs/spec.md` → parser → formatter → LSP tokens.
-- 新增语法：先改 `docs/spec.md` → 再改解析器 → 格式化器 → LSP tokens。
+- Add new syntax: update `docs/reference/spec.md` → parser → formatter → LSP tokens.
+- 新增语法：先改 `docs/reference/spec.md` → 再改解析器 → 格式化器 → LSP tokens。
 
 - Add new type rules: update `neve-typeck` and add `tests/typeck.rs` cases.
 - 新增类型规则：修改 `neve-typeck`，并补 `tests/typeck.rs` 用例。

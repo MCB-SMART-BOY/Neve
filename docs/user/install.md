@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Installation Guide</h1>
 
 <p><em>安装指南</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -150,7 +150,7 @@ xattr -d com.apple.quarantine neve  # Remove quarantine flag
 
 - [Quick Start](quickstart.md) — 5 minutes to first code / 5 分钟写出第一段代码
 - [Tutorial](tutorial.md) — Complete walkthrough / 从头到尾带你过一遍
-- [Spec](spec.md) — Language reference / 语言规范
+- [Spec](../reference/spec.md) — Language reference / 语言规范
 
 ---
 

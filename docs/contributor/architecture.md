@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="Neve logo">
 
 <h1>Neve Architecture</h1>
 
 <p><em>架构设计</em></p>
 
 <p>
-  <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="./">Docs</a></strong>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
 </p>
 
 </div>
@@ -341,7 +341,7 @@ Release profile settings:
 
 ## Further Reading / 延伸阅读
 
-- [Language Specification](spec.md)
-- [API Reference](api.md)
-- [Tutorial](tutorial.md)
-- [Philosophy](philosophy.md)
+- [Language Specification](../reference/spec.md)
+- [API Reference](../reference/api.md)
+- [Tutorial](../user/tutorial.md)
+- [Philosophy](../project/philosophy.md)
