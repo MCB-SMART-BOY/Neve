@@ -822,10 +822,8 @@ impl AstEvaluator {
                     all_args.push(self.eval_expr(arg)?);
                 }
 
-                let dispatch_key = method_dispatch_key(
-                    &runtime_type_key(&all_args[0]),
-                    &method.name,
-                );
+                let dispatch_key =
+                    method_dispatch_key(&runtime_type_key(&all_args[0]), &method.name);
 
                 if let Some(func) = self.env.get_method(&dispatch_key) {
                     self.apply(func, all_args)
@@ -2317,9 +2315,10 @@ fn runtime_type_key(value: &Value) -> String {
         Value::Record(_) => "Record".to_string(),
         Value::Map(_) => "Map".to_string(),
         Value::Set(_) => "Set".to_string(),
-        Value::Closure { .. } | Value::AstClosure(_) | Value::Builtin(_) | Value::BuiltinFn(_, _) => {
-            "Fn".to_string()
-        }
+        Value::Closure { .. }
+        | Value::AstClosure(_)
+        | Value::Builtin(_)
+        | Value::BuiltinFn(_, _) => "Fn".to_string(),
         Value::Variant(name, _) | Value::VariantCtor { name, .. } => match name.as_str() {
             "Some" | "None" => "Option".to_string(),
             "Ok" | "Err" => "Result".to_string(),

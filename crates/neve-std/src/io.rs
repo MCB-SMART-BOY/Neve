@@ -75,15 +75,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "io.appendFile",
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
-                    (Value::String(path), Value::String(content)) => {
-                        std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(path.as_str())
-                            .and_then(|mut f| f.write_all(content.as_bytes()))
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.appendFile: {e}"))
-                    }
+                    (Value::String(path), Value::String(content)) => std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path.as_str())
+                        .and_then(|mut f| f.write_all(content.as_bytes()))
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("io.appendFile: {e}")),
                     _ => Err("io.appendFile expects (String, String)".to_string()),
                 },
             }),
@@ -401,7 +399,9 @@ fn record_string_list_optional(
     fn_name: &str,
 ) -> Result<Option<Vec<String>>, String> {
     match options.get(key) {
-        Some(Value::List(items)) => list_to_string_vec(items, &format!("{fn_name}.{key}")).map(Some),
+        Some(Value::List(items)) => {
+            list_to_string_vec(items, &format!("{fn_name}.{key}")).map(Some)
+        }
         Some(_) => Err(format!("{fn_name}.{key} must be List<String>")),
         None => Ok(None),
     }

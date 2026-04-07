@@ -153,7 +153,8 @@ impl SymbolIndex {
                 .references
                 .iter()
                 .filter(|r| {
-                    r.target_def_span == Some(symbol.def_span) && (include_declaration || !r.is_write)
+                    r.target_def_span == Some(symbol.def_span)
+                        && (include_declaration || !r.is_write)
                 })
                 .collect();
         }
@@ -166,7 +167,10 @@ impl SymbolIndex {
     pub fn find_name_at(&self, offset: usize) -> Option<String> {
         self.find_reference_at(offset)
             .map(|r| r.name.clone())
-            .or_else(|| self.find_definition_site_at(offset).map(|sym| sym.name.clone()))
+            .or_else(|| {
+                self.find_definition_site_at(offset)
+                    .map(|sym| sym.name.clone())
+            })
     }
 
     /// Find the reference whose span directly contains the offset.
@@ -348,7 +352,8 @@ impl SymbolIndex {
                     ident.name.clone(),
                     ident.span,
                     false,
-                    self.lookup_symbol(&ident.name).map(|symbol| symbol.def_span),
+                    self.lookup_symbol(&ident.name)
+                        .map(|symbol| symbol.def_span),
                 );
             }
             ExprKind::Path(parts) => {
@@ -418,7 +423,8 @@ impl SymbolIndex {
                             field.name.name.clone(),
                             field.name.span,
                             false,
-                            self.lookup_symbol(&field.name.name).map(|symbol| symbol.def_span),
+                            self.lookup_symbol(&field.name.name)
+                                .map(|symbol| symbol.def_span),
                         );
                     }
                 }
@@ -599,7 +605,8 @@ impl SymbolIndex {
                             ident.name.clone(),
                             ident.span,
                             false,
-                            self.lookup_symbol(&ident.name).map(|symbol| symbol.def_span),
+                            self.lookup_symbol(&ident.name)
+                                .map(|symbol| symbol.def_span),
                         );
                     }
                 }
@@ -634,7 +641,8 @@ impl SymbolIndex {
                                 field.name.name.clone(),
                                 field.name.span,
                                 false,
-                                self.lookup_symbol(&field.name.name).map(|symbol| symbol.def_span),
+                                self.lookup_symbol(&field.name.name)
+                                    .map(|symbol| symbol.def_span),
                             );
                         }
                     }
@@ -714,7 +722,11 @@ impl SymbolIndex {
             .iter()
             .rev()
             .find_map(|scope| scope.get(name))
-            .or_else(|| self.definitions.get(name).and_then(|symbols| symbols.first()))
+            .or_else(|| {
+                self.definitions
+                    .get(name)
+                    .and_then(|symbols| symbols.first())
+            })
     }
 
     fn add_definition(&mut self, symbol: Symbol) {
@@ -729,7 +741,12 @@ impl SymbolIndex {
             self.add_to_scope(symbol.clone());
         }
         self.add_definition(symbol.clone());
-        self.add_named_reference(symbol.name.clone(), symbol.def_span, true, Some(symbol.def_span));
+        self.add_named_reference(
+            symbol.name.clone(),
+            symbol.def_span,
+            true,
+            Some(symbol.def_span),
+        );
     }
 
     fn add_named_reference(

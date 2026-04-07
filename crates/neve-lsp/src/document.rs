@@ -149,7 +149,10 @@ impl Document {
     }
 }
 
-fn build_hover_maps(ast: &SourceFile, hir: &Module) -> (HashMap<Span, String>, HashMap<Span, String>) {
+fn build_hover_maps(
+    ast: &SourceFile,
+    hir: &Module,
+) -> (HashMap<Span, String>, HashMap<Span, String>) {
     let mut checker = TypeChecker::new();
     checker.check(hir);
 
@@ -318,7 +321,13 @@ fn collect_expr_hovers(
     definition_hovers: &mut HashMap<Span, String>,
     semantic_hovers: &mut HashMap<Span, String>,
 ) {
-    insert_expression_hover(ast_expr.span, hir_expr.span, checker, module, semantic_hovers);
+    insert_expression_hover(
+        ast_expr.span,
+        hir_expr.span,
+        checker,
+        module,
+        semantic_hovers,
+    );
 
     match (&ast_expr.kind, &hir_expr.kind) {
         (ast::ExprKind::Var(ident), HirExprKind::Var(local_id)) => {
@@ -531,7 +540,14 @@ fn collect_expr_hovers(
                 ..
             },
         ) => {
-            insert_method_hover(method.span, &method.name, hir_expr.span, checker, module, semantic_hovers);
+            insert_method_hover(
+                method.span,
+                &method.name,
+                hir_expr.span,
+                checker,
+                module,
+                semantic_hovers,
+            );
             collect_expr_hovers(
                 receiver,
                 hir_receiver,

@@ -296,7 +296,10 @@ fn test_io_exec_with_returns_structured_result() {
     let builtin = get_builtin("io.execWith").expect("io.execWith builtin should exist");
 
     let mut options = HashMap::new();
-    options.insert("program".to_string(), Value::String(Rc::new("rustc".to_string())));
+    options.insert(
+        "program".to_string(),
+        Value::String(Rc::new("rustc".to_string())),
+    );
     options.insert(
         "args".to_string(),
         Value::List(Rc::new(vec![Value::String(Rc::new(
