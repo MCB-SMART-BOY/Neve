@@ -51,7 +51,7 @@
 当前项目的总体情况可以用三句话概括：
 
 1. **语法表面比语义闭环走得更快。**
-2. **AST 路径比 HIR 路径更完整，但长期不能以 AST 路径为唯一真相。**
+2. **AST 路径历史上补过更多缺口，但主 CLI 路径已经开始优先收敛到 HIR。**
 3. **系统脚本能力已经起步，但离“替代 Bash”还差命令模型、管道模型和 effect boundary。**
 
 ## 语言高风险特性矩阵 / High-Risk Language Features
@@ -59,7 +59,7 @@
 | Feature / 特性 | Parser | HIR Lowering | Type Check | AST Runtime | HIR Runtime | Tooling | 当前判断 |
 |----------------|--------|--------------|------------|-------------|-------------|---------|----------|
 | 基础字面量、算术、记录、列表、元组 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 核心表达式基本可用，但端到端与工具链统一性还不足 |
-| 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，但 CLI 运行主路径仍偏 AST |
+| 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，主 CLI 路径在常见本地导入与 `std` 导入场景下已优先走 HIR，但边缘场景仍会回退 |
 | 列表推导 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 语言层基本可用，工具链覆盖不足 |
 | 安全字段访问 `?.` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | 运行时可用，但类型语义仍偏弱 |
 | 路径字面量 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 目前本质上仍被当成 `String`，不是独立 `Path` |
@@ -76,7 +76,7 @@
 | Match 穷尽性检查 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已接入 typecheck 主流程，支持 `Bool`、`Unit`、用户枚举，以及 builtin `Option/Result`；列表、记录和更复杂子模式仍需继续扩展 |
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
-| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ❌ | 当前 `tests/end_to_end.rs` 还存在占位 helper |
+| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 已替换为真实 frontend/runtime smoke tests，但覆盖广度还不足以单独代表语言完备度 |
 
 ## 工具链一致性矩阵 / Tooling Fidelity Matrix
 
@@ -88,7 +88,7 @@
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 现在既能显示定义点类型，也能在局部变量引用、全局函数引用、方法名和一般表达式位置显示真实语义类型；函数参数、lambda 参数和块级 `let` 的 pattern 绑定也已闭环。`goto definition` / `references` / `rename` 对局部遮蔽场景已开始按实际绑定解析。跨模块命名类型显示与更多 IDE 语义功能仍在补 |
-| End-to-end tests | ❌ 不可信 | 还不能作为“语言已闭环”的证据 |
+| End-to-end tests | ⚠️ 可信 smoke baseline | 已经覆盖真实 frontend/runtime 路径与 AST/HIR 一致性烟雾测试，但覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
@@ -158,7 +158,7 @@
 1. 继续把这份矩阵扩成更完整的 feature inventory。
 2. 先修矩阵里最红的语义项，而不是继续加新语法。
 3. 用这份矩阵反向修正文档里的 `Complete` 表述。
-4. 把 `tests/end_to_end.rs` 从占位逻辑替换成真实执行路径。
+4. 继续扩展 `tests/end_to_end.rs` 的语料和工具链覆盖，而不是把现有 smoke baseline 误当成完整闭环。
 
 ## 当前结论 / Bottom Line
 

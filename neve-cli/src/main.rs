@@ -11,7 +11,12 @@ use clap::{Parser, Subcommand};
 /// 主 CLI 结构体。
 #[derive(Parser)]
 #[command(name = "neve")]
-#[command(author, version, about = "Neve - A pure functional language for system configuration", long_about = None)]
+#[command(
+    author,
+    version,
+    about = "Neve - A standalone language for system configuration and structured shell automation",
+    long_about = None
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
