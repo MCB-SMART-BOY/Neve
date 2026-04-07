@@ -5,6 +5,7 @@
 //! 提供类似 man 的嵌入式文档访问，带有终端渲染。
 
 use std::io::Write;
+use std::path::Path;
 use termimad::MadSkin;
 
 // Embed documentation at compile time
@@ -289,33 +290,99 @@ fn clean_markdown(content: &str) -> String {
 /// Try to display content using a pager (less, more, etc.).
 /// 尝试使用分页器（less、more 等）显示内容。
 fn try_pager(content: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Try to find a pager
-    // 尝试查找分页器
-    let pager = std::env::var("PAGER").unwrap_or_else(|_| "less".to_string());
-
-    // Try 'less' with some nice options for colored output
-    // 尝试使用带有彩色输出选项的 'less'
-    let pagers = [
-        (pager.as_str(), vec!["-R", "-S"]),
-        ("less", vec!["-R", "-S"]),
-        ("more", vec![]),
-    ];
-
-    for (cmd, args) in pagers {
-        if let Ok(mut child) = std::process::Command::new(cmd)
+    for (cmd, args) in pager_candidates() {
+        if let Ok(mut child) = std::process::Command::new(&cmd)
             .args(&args)
             .stdin(std::process::Stdio::piped())
             .spawn()
         {
+            let mut write_ok = true;
             if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(content.as_bytes());
+                write_ok = stdin.write_all(content.as_bytes()).is_ok();
             }
-            let _ = child.wait();
-            return Ok(());
+            if let Ok(status) = child.wait()
+                && write_ok
+                && status.success()
+            {
+                return Ok(());
+            }
         }
     }
 
     // No pager found, return error to trigger fallback
     // 未找到分页器，返回错误以触发回退
     Err("No pager available".into())
+}
+
+fn pager_candidates() -> Vec<(String, Vec<String>)> {
+    let mut pagers = Vec::new();
+
+    if let Ok(pager) = std::env::var("PAGER")
+        && let Some(spec) = parse_pager_spec(&pager)
+    {
+        pagers.push(spec);
+    }
+
+    for fallback in ["less", "more"] {
+        if let Some(spec) = parse_pager_spec(fallback)
+            && !pagers.contains(&spec)
+        {
+            pagers.push(spec);
+        }
+    }
+
+    pagers
+}
+
+fn parse_pager_spec(raw: &str) -> Option<(String, Vec<String>)> {
+    let mut parts = raw.split_whitespace();
+    let cmd = parts.next()?.to_string();
+    let mut args = parts.map(str::to_string).collect::<Vec<_>>();
+
+    if pager_uses_less_flags(&cmd) {
+        if !args.iter().any(|arg| arg == "-R" || arg == "-r") {
+            args.push("-R".to_string());
+        }
+        if !args.iter().any(|arg| arg == "-S") {
+            args.push("-S".to_string());
+        }
+    }
+
+    Some((cmd, args))
+}
+
+fn pager_uses_less_flags(cmd: &str) -> bool {
+    Path::new(cmd).file_name().and_then(|name| name.to_str()) == Some("less")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_pager_spec, resolve_topic};
+
+    #[test]
+    fn resolve_topic_supports_alias_and_prefix() {
+        assert_eq!(resolve_topic("qs"), Some("quickstart"));
+        assert_eq!(resolve_topic("feature"), Some("feature-matrix"));
+    }
+
+    #[test]
+    fn parse_pager_spec_does_not_force_less_flags_on_cat() {
+        let (cmd, args) = parse_pager_spec("cat").unwrap();
+        assert_eq!(cmd, "cat");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn parse_pager_spec_adds_less_defaults() {
+        let (cmd, args) = parse_pager_spec("less").unwrap();
+        assert_eq!(cmd, "less");
+        assert_eq!(args, vec!["-R", "-S"]);
+    }
+
+    #[test]
+    fn parse_pager_spec_keeps_existing_less_args() {
+        let (cmd, args) = parse_pager_spec("less -F").unwrap();
+        assert_eq!(cmd, "less");
+        assert_eq!(args, vec!["-F", "-R", "-S"]);
+    }
 }

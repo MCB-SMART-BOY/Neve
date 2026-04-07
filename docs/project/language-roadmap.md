@@ -44,7 +44,7 @@ Neve 现在最大的问题，不是“语法还不够多”，而是“同一门
 
 - parser 支持的东西，比 lowering 和 typeck 真正稳住的东西多
 - AST evaluator 和 HIR evaluator 不是同一套语义
-- 有些测试看起来很多，但端到端测试里仍有占位实现
+- 端到端测试基线已经换成真实执行路径，但覆盖深度仍小于语言表面
 - 文档里有些 `Complete` 声明高于真实状态
 - 系统能力已经开始加了，但 effect boundary 还没有正式定下来
 
@@ -306,8 +306,8 @@ Neve 要成为可信的系统级语言，做到 L1-L3 就够了，不需要追�
 | Error propagation | `Try`, `Option`, `Result`, and non-local failure rules are explicit and stable | Current handling differs by path |
 | Path semantics | Path literals are typed values with stable operations | Paths still collapse into `String` |
 | Match diagnostics | Exhaustiveness and unreachable arms are compiler-grade | Diagnostic hooks exist but are not wired in |
-| Tooling fidelity | REPL `:type`, LSP, formatter, CLI all match the language | Tooling still contains placeholders |
-| Real end-to-end tests | Full pipeline tests execute the real runtime | Current end-to-end tests are placeholders |
+| Tooling fidelity | REPL `:type`, LSP, formatter, CLI all match the language | Tooling still contains partial semantic mismatches |
+| Real end-to-end tests | Full pipeline tests execute the real runtime | Smoke baseline exists, but corpus breadth is still limited |
 
 ### Bash Replacement Matrix / Bash 替代能力矩阵
 
@@ -590,7 +590,7 @@ Detailed scope / 详细范围:
 
 - enumerate every syntax form and semantic feature from spec, parser, AST, HIR, evaluator, stdlib, REPL, LSP, and tests
 - build a matrix with columns: parse, lower, typeck, HIR eval, AST eval, fmt, LSP, tests, docs
-- replace placeholder full-pipeline tests with real executable tests
+- keep expanding the real executable full-pipeline tests so they track the language surface
 - correct optimistic status labels in docs and README
 
 Validation / 验证:
@@ -838,7 +838,7 @@ Each phase should be tracked with concrete metrics, not only narrative progress.
 ## What Must Not Happen Next / 接下来不该做的事
 
 - Do not keep adding new syntax while current lowering is lossy.
-- Do not claim language completion while end-to-end tests are placeholder-based.
+- Do not claim language completion just because a smoke E2E baseline exists.
 - Do not treat shell replacement as just "add `exec` builtins".
 - Do not let pure configuration evaluation silently become an effectful scripting runtime.
 - Do not keep both AST and HIR semantics drifting independently.
@@ -846,7 +846,7 @@ Each phase should be tracked with concrete metrics, not only narrative progress.
 ## Immediate Priority Order / 当前立即优先级
 
 1. `WP-0A` Feature support matrix
-2. `WP-0B` Real end-to-end harness
+2. `WP-0B` Expand the real end-to-end harness corpus
 3. `WP-0C` Documentation status correction
 4. `WP-1A` Pattern lowering fidelity
 5. `WP-1B` Canonical `Try` / `Option` / `Result` semantics
@@ -871,8 +871,8 @@ If work starts immediately after this roadmap, the first batch should be:
 | Create support matrix document | `WP-0A` | `docs/project/feature-matrix.md`, `docs/project/language-roadmap.md` | One table per feature across parser/lowering/typeck/eval/tooling |
 | Enumerate syntax sources of truth | `WP-0A` | `crates/neve-syntax/src/*.rs`, `docs/reference/spec.md` | Canonical feature inventory |
 | Record current implementation coverage | `WP-0A` | `crates/neve-parser`, `crates/neve-hir`, `crates/neve-typeck`, `crates/neve-eval`, `crates/neve-lsp`, `neve-cli` | Honest support classification |
-| Replace placeholder E2E helper | `WP-0B` | `tests/end_to_end.rs` | Real executable full-pipeline helper |
-| Add real corpus programs to E2E tests | `WP-0B` | `tests/end_to_end.rs`, possibly `tests/common.rs` | Executed language corpus instead of placeholders |
+| Expand real E2E helper coverage | `WP-0B` | `tests/end_to_end.rs` | Broader executable full-pipeline helper coverage |
+| Add more real corpus programs to E2E tests | `WP-0B` | `tests/end_to_end.rs`, possibly `tests/common.rs` | Executed language corpus that tracks feature growth |
 | Correct public status claims | `WP-0C` | `README.md`, `docs/README.md`, `docs/project/philosophy.md`, `tests/README.md` | Status labels aligned with reality |
 | Preserve pattern semantics in lowering | `WP-1A` | `crates/neve-hir/src/resolve.rs`, `crates/neve-hir/src/hir.rs`, `tests/parser.rs`, `tests/typeck.rs`, `tests/eval.rs` | No lossy fallback for pattern forms |
 | Decide and document `?` semantics | `WP-1B` | `docs/reference/spec.md`, `crates/neve-hir/src/resolve.rs`, `crates/neve-eval`, `crates/neve-typeck` | One rule for `Try`/`Option`/`Result` |

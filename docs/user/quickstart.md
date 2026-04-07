@@ -29,7 +29,7 @@ sudo mv neve /usr/local/bin/
 yay -S neve-git
 
 # Or from source
-git clone https://github.com/MCB-SMART-BOY/neve.git && cd neve
+git clone https://github.com/MCB-SMART-BOY/Neve.git && cd Neve
 cargo build --release
 ```
 

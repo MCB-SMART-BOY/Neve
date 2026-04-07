@@ -38,22 +38,41 @@
 
 ## Quick Install / 快速安装
 
-### Pre-built Binary / 预编译包
+### Linux / macOS Script / Linux / macOS 脚本安装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
+```
+
+### Windows Script / Windows 脚本安装
+
+```powershell
+irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
+```
+
+### Manual Release Install / 手动安装发行版
 
 ```bash
 # Linux x86_64
-wget https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz
-tar xzf neve-*.tar.gz
-sudo mv neve /usr/local/bin/
+curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz
+tar xzf neve-x86_64-unknown-linux-gnu.tar.gz
+sudo install -m 755 neve /usr/local/bin/neve
 
 # Linux aarch64
-wget https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-unknown-linux-gnu.tar.gz
 
-# macOS
-wget https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz
+# macOS Intel
+curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz
 
-# Verify installation / 验证一下
-neve --version
+# macOS Apple Silicon
+curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-apple-darwin.tar.gz
+```
+
+Windows release asset / Windows 发行文件：
+
+```powershell
+Invoke-WebRequest https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-pc-windows-msvc.zip -OutFile neve.zip
+Expand-Archive neve.zip -DestinationPath $env:LOCALAPPDATA\neve\bin -Force
 ```
 
 ### Arch Linux / Arch Linux 用户
@@ -66,10 +85,15 @@ yay -S neve-git
 
 ```bash
 # Requires Rust 1.85+ / 需要 Rust 1.85 以上
-git clone https://github.com/MCB-SMART-BOY/neve.git
-cd neve
+git clone https://github.com/MCB-SMART-BOY/Neve.git
+cd Neve
+
+# Install into Cargo bin dir / 安装到 Cargo bin 目录
+cargo install --path neve-cli --locked
+
+# Or build a release binary / 或仅构建 release 二进制
 cargo build --release
-sudo cp target/release/neve /usr/local/bin/
+sudo install -m 755 target/release/neve /usr/local/bin/neve
 ```
 
 ## Verify Installation / 验证安装

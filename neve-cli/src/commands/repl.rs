@@ -18,8 +18,6 @@ use neve_typeck::{
     LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, TypeChecker,
     format_builtin_named_type,
 };
-#[cfg(test)]
-use neve_typeck::{builtin_list, builtin_map, builtin_option, builtin_result, builtin_set};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::collections::{HashMap, HashSet};
@@ -1053,41 +1051,6 @@ fn prepare_repl_type_input(expr: &str) -> String {
     }
 }
 
-#[cfg(test)]
-#[derive(Debug, Clone)]
-struct ReplSemanticEntry {
-    defined_names: Vec<String>,
-}
-
-#[cfg(test)]
-fn semantic_entries_from_ast(source: &str, ast: &SourceFile) -> Vec<ReplSemanticEntry> {
-    ast.items
-        .iter()
-        .filter_map(|item| {
-            let snippet = normalize_repl_item_source(&source[item.span.range()]);
-            if snippet.is_empty() {
-                None
-            } else {
-                Some(ReplSemanticEntry {
-                    defined_names: item_defined_names(item),
-                })
-            }
-        })
-        .collect()
-}
-
-#[cfg(test)]
-fn normalize_repl_item_source(source: &str) -> String {
-    let trimmed = source.trim();
-    if trimmed.is_empty() {
-        String::new()
-    } else if trimmed.ends_with(';') {
-        trimmed.to_string()
-    } else {
-        format!("{trimmed};")
-    }
-}
-
 fn item_defined_names(item: &Item) -> Vec<String> {
     match &item.kind {
         ItemKind::Let(let_def) => match &let_def.pattern.kind {
@@ -1131,161 +1094,6 @@ fn find_repl_type_target(module: &neve_hir::Module) -> Option<DefId> {
         },
         _ => None,
     })
-}
-
-#[cfg(test)]
-fn unknown_ty() -> Ty {
-    Ty {
-        kind: TyKind::Unknown,
-        span: Span::DUMMY,
-    }
-}
-
-#[cfg(test)]
-fn named_repl_ty(def_id: DefId, args: Vec<Ty>) -> Ty {
-    Ty {
-        kind: TyKind::Named(def_id, args),
-        span: Span::DUMMY,
-    }
-}
-
-#[cfg(test)]
-fn fn_repl_ty(arity: usize) -> Ty {
-    Ty {
-        kind: TyKind::Fn(vec![unknown_ty(); arity], Box::new(unknown_ty())),
-        span: Span::DUMMY,
-    }
-}
-
-#[cfg(test)]
-fn type_from_value(value: &Value) -> Ty {
-    match value {
-        Value::Int(_) => Ty {
-            kind: TyKind::Int,
-            span: Span::DUMMY,
-        },
-        Value::Float(_) => Ty {
-            kind: TyKind::Float,
-            span: Span::DUMMY,
-        },
-        Value::Bool(_) => Ty {
-            kind: TyKind::Bool,
-            span: Span::DUMMY,
-        },
-        Value::Char(_) => Ty {
-            kind: TyKind::Char,
-            span: Span::DUMMY,
-        },
-        Value::String(_) => Ty {
-            kind: TyKind::String,
-            span: Span::DUMMY,
-        },
-        Value::Unit => Ty {
-            kind: TyKind::Unit,
-            span: Span::DUMMY,
-        },
-        Value::List(items) => builtin_list(common_runtime_type(items.iter()), Span::DUMMY),
-        Value::Tuple(items) => Ty {
-            kind: TyKind::Tuple(items.iter().map(type_from_value).collect()),
-            span: Span::DUMMY,
-        },
-        Value::Record(fields) => Ty {
-            kind: TyKind::Record(
-                fields
-                    .iter()
-                    .map(|(name, value)| (name.clone(), type_from_value(value)))
-                    .collect(),
-            ),
-            span: Span::DUMMY,
-        },
-        Value::Some(value) => builtin_option(type_from_value(value), Span::DUMMY),
-        Value::None => builtin_option(unknown_ty(), Span::DUMMY),
-        Value::Ok(value) => builtin_result(type_from_value(value), unknown_ty(), Span::DUMMY),
-        Value::Err(value) => builtin_result(unknown_ty(), type_from_value(value), Span::DUMMY),
-        Value::Map(_) => builtin_map(unknown_ty(), unknown_ty(), Span::DUMMY),
-        Value::Set(_) => builtin_set(unknown_ty(), Span::DUMMY),
-        Value::Thunk(_) => named_repl_ty(REPL_LAZY_TYPE_ID, vec![unknown_ty()]),
-        Value::Builtin(builtin) => fn_repl_ty(builtin.arity),
-        Value::BuiltinFn(_, _) => named_repl_ty(REPL_FN_TYPE_ID, Vec::new()),
-        Value::Closure { params, .. } => fn_repl_ty(params.len()),
-        Value::AstClosure(closure) => fn_repl_ty(closure.params.len()),
-        Value::VariantCtor { arity, .. } => fn_repl_ty(*arity),
-        Value::Variant(name, payload) => match name.as_str() {
-            "Some" => builtin_option(type_from_value(payload), Span::DUMMY),
-            "None" => builtin_option(unknown_ty(), Span::DUMMY),
-            "Ok" => builtin_result(type_from_value(payload), unknown_ty(), Span::DUMMY),
-            "Err" => builtin_result(unknown_ty(), type_from_value(payload), Span::DUMMY),
-            _ => unknown_ty(),
-        },
-    }
-}
-
-#[cfg(test)]
-fn common_runtime_type<'a>(values: impl Iterator<Item = &'a Value>) -> Ty {
-    let mut iter = values;
-    let Some(first) = iter.next() else {
-        return unknown_ty();
-    };
-    let first_ty = type_from_value(first);
-    let first_fmt = format_repl_type(&first_ty);
-    if iter.all(|value| format_repl_type(&type_from_value(value)) == first_fmt) {
-        first_ty
-    } else {
-        unknown_ty()
-    }
-}
-
-#[cfg(test)]
-fn format_repl_type(ty: &Ty) -> String {
-    match &ty.kind {
-        TyKind::Int => "Int".to_string(),
-        TyKind::Float => "Float".to_string(),
-        TyKind::Bool => "Bool".to_string(),
-        TyKind::Char => "Char".to_string(),
-        TyKind::String => "String".to_string(),
-        TyKind::Unit => "()".to_string(),
-        TyKind::Var(id) => format!("?{}", id),
-        TyKind::Param(_, name) => name.clone(),
-        TyKind::SelfType => "Self".to_string(),
-        TyKind::SelfAssoc(name) => format!("Self.{name}"),
-        TyKind::Tuple(items) => {
-            let parts: Vec<_> = items.iter().map(format_repl_type).collect();
-            format!("({})", parts.join(", "))
-        }
-        TyKind::Record(fields) => {
-            let parts: Vec<_> = fields
-                .iter()
-                .map(|(name, ty)| format!("{name}: {}", format_repl_type(ty)))
-                .collect();
-            format!("{{ {} }}", parts.join(", "))
-        }
-        TyKind::Fn(params, ret) => {
-            let params: Vec<_> = params.iter().map(format_repl_type).collect();
-            format!("({}) -> {}", params.join(", "), format_repl_type(ret))
-        }
-        TyKind::Forall(params, inner) => {
-            format!("forall {}. {}", params.join(", "), format_repl_type(inner))
-        }
-        TyKind::Named(def_id, args)
-            if [
-                LIST_TYPE_ID,
-                OPTION_TYPE_ID,
-                RESULT_TYPE_ID,
-                MAP_TYPE_ID,
-                SET_TYPE_ID,
-            ]
-            .contains(def_id) =>
-        {
-            format_builtin_named_type(*def_id, args, &format_repl_type)
-                .unwrap_or_else(|| neve_typeck::format_type(ty))
-        }
-        TyKind::Named(def_id, _) if *def_id == REPL_FN_TYPE_ID => "Fn".to_string(),
-        TyKind::Named(def_id, args) if *def_id == REPL_LAZY_TYPE_ID => {
-            format!("Lazy[{}]", format_repl_type(&args[0]))
-        }
-        TyKind::Named(_, _) => neve_typeck::format_type(ty),
-        TyKind::Unknown => "_".to_string(),
-    }
 }
 
 fn format_repl_semantic_type(
@@ -1405,17 +1213,203 @@ fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>)
 #[cfg(test)]
 mod tests {
     use super::{
-        ReplEvalError, ReplHirState, ReplInputContext, ReplSemanticState, evaluate_repl_input,
-        format_repl_semantic_type, format_repl_type, infer_repl_type, prepare_repl_input,
-        semantic_entries_from_ast, type_from_value,
+        REPL_FN_TYPE_ID, REPL_LAZY_TYPE_ID, ReplEvalError, ReplHirState, ReplInputContext,
+        ReplSemanticState, evaluate_repl_input, format_repl_semantic_type, infer_repl_type,
+        prepare_repl_input,
     };
     use neve_common::Span;
     use neve_diagnostic::Severity;
     use neve_eval::Value;
-    use neve_hir::{ItemKind as HirItemKind, Ty, TyKind, lower};
+    use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind, lower};
     use neve_parser::parse;
+    use neve_syntax::SourceFile;
+    use neve_typeck::{
+        LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, builtin_list,
+        builtin_map, builtin_option, builtin_result, builtin_set, format_builtin_named_type,
+    };
     use std::fs;
     use tempfile::TempDir;
+
+    #[derive(Debug, Clone)]
+    struct ReplSemanticEntry {
+        defined_names: Vec<String>,
+    }
+
+    fn semantic_entries_from_ast(source: &str, ast: &SourceFile) -> Vec<ReplSemanticEntry> {
+        ast.items
+            .iter()
+            .filter_map(|item| {
+                let snippet = normalize_repl_item_source(&source[item.span.range()]);
+                if snippet.is_empty() {
+                    None
+                } else {
+                    Some(ReplSemanticEntry {
+                        defined_names: super::item_defined_names(item),
+                    })
+                }
+            })
+            .collect()
+    }
+
+    fn normalize_repl_item_source(source: &str) -> String {
+        let trimmed = source.trim();
+        if trimmed.is_empty() {
+            String::new()
+        } else if trimmed.ends_with(';') {
+            trimmed.to_string()
+        } else {
+            format!("{trimmed};")
+        }
+    }
+
+    fn unknown_ty() -> Ty {
+        Ty {
+            kind: TyKind::Unknown,
+            span: Span::DUMMY,
+        }
+    }
+
+    fn named_repl_ty(def_id: DefId, args: Vec<Ty>) -> Ty {
+        Ty {
+            kind: TyKind::Named(def_id, args),
+            span: Span::DUMMY,
+        }
+    }
+
+    fn fn_repl_ty(arity: usize) -> Ty {
+        Ty {
+            kind: TyKind::Fn(vec![unknown_ty(); arity], Box::new(unknown_ty())),
+            span: Span::DUMMY,
+        }
+    }
+
+    fn type_from_value(value: &Value) -> Ty {
+        match value {
+            Value::Int(_) => Ty {
+                kind: TyKind::Int,
+                span: Span::DUMMY,
+            },
+            Value::Float(_) => Ty {
+                kind: TyKind::Float,
+                span: Span::DUMMY,
+            },
+            Value::Bool(_) => Ty {
+                kind: TyKind::Bool,
+                span: Span::DUMMY,
+            },
+            Value::Char(_) => Ty {
+                kind: TyKind::Char,
+                span: Span::DUMMY,
+            },
+            Value::String(_) => Ty {
+                kind: TyKind::String,
+                span: Span::DUMMY,
+            },
+            Value::Unit => Ty {
+                kind: TyKind::Unit,
+                span: Span::DUMMY,
+            },
+            Value::List(items) => builtin_list(common_runtime_type(items.iter()), Span::DUMMY),
+            Value::Tuple(items) => Ty {
+                kind: TyKind::Tuple(items.iter().map(type_from_value).collect()),
+                span: Span::DUMMY,
+            },
+            Value::Record(fields) => Ty {
+                kind: TyKind::Record(
+                    fields
+                        .iter()
+                        .map(|(name, value)| (name.clone(), type_from_value(value)))
+                        .collect(),
+                ),
+                span: Span::DUMMY,
+            },
+            Value::Some(value) => builtin_option(type_from_value(value), Span::DUMMY),
+            Value::None => builtin_option(unknown_ty(), Span::DUMMY),
+            Value::Ok(value) => builtin_result(type_from_value(value), unknown_ty(), Span::DUMMY),
+            Value::Err(value) => builtin_result(unknown_ty(), type_from_value(value), Span::DUMMY),
+            Value::Map(_) => builtin_map(unknown_ty(), unknown_ty(), Span::DUMMY),
+            Value::Set(_) => builtin_set(unknown_ty(), Span::DUMMY),
+            Value::Thunk(_) => named_repl_ty(REPL_LAZY_TYPE_ID, vec![unknown_ty()]),
+            Value::Builtin(builtin) => fn_repl_ty(builtin.arity),
+            Value::BuiltinFn(_, _) => named_repl_ty(REPL_FN_TYPE_ID, Vec::new()),
+            Value::Closure { params, .. } => fn_repl_ty(params.len()),
+            Value::AstClosure(closure) => fn_repl_ty(closure.params.len()),
+            Value::VariantCtor { arity, .. } => fn_repl_ty(*arity),
+            Value::Variant(name, payload) => match name.as_str() {
+                "Some" => builtin_option(type_from_value(payload), Span::DUMMY),
+                "None" => builtin_option(unknown_ty(), Span::DUMMY),
+                "Ok" => builtin_result(type_from_value(payload), unknown_ty(), Span::DUMMY),
+                "Err" => builtin_result(unknown_ty(), type_from_value(payload), Span::DUMMY),
+                _ => unknown_ty(),
+            },
+        }
+    }
+
+    fn common_runtime_type<'a>(values: impl Iterator<Item = &'a Value>) -> Ty {
+        let mut iter = values;
+        let Some(first) = iter.next() else {
+            return unknown_ty();
+        };
+        let first_ty = type_from_value(first);
+        let first_fmt = format_repl_type(&first_ty);
+        if iter.all(|value| format_repl_type(&type_from_value(value)) == first_fmt) {
+            first_ty
+        } else {
+            unknown_ty()
+        }
+    }
+
+    fn format_repl_type(ty: &Ty) -> String {
+        match &ty.kind {
+            TyKind::Int => "Int".to_string(),
+            TyKind::Float => "Float".to_string(),
+            TyKind::Bool => "Bool".to_string(),
+            TyKind::Char => "Char".to_string(),
+            TyKind::String => "String".to_string(),
+            TyKind::Unit => "()".to_string(),
+            TyKind::Var(id) => format!("?{}", id),
+            TyKind::Param(_, name) => name.clone(),
+            TyKind::SelfType => "Self".to_string(),
+            TyKind::SelfAssoc(name) => format!("Self.{name}"),
+            TyKind::Tuple(items) => {
+                let parts: Vec<_> = items.iter().map(format_repl_type).collect();
+                format!("({})", parts.join(", "))
+            }
+            TyKind::Record(fields) => {
+                let parts: Vec<_> = fields
+                    .iter()
+                    .map(|(name, ty)| format!("{name}: {}", format_repl_type(ty)))
+                    .collect();
+                format!("{{ {} }}", parts.join(", "))
+            }
+            TyKind::Fn(params, ret) => {
+                let params: Vec<_> = params.iter().map(format_repl_type).collect();
+                format!("({}) -> {}", params.join(", "), format_repl_type(ret))
+            }
+            TyKind::Forall(params, inner) => {
+                format!("forall {}. {}", params.join(", "), format_repl_type(inner))
+            }
+            TyKind::Named(def_id, args)
+                if [
+                    LIST_TYPE_ID,
+                    OPTION_TYPE_ID,
+                    RESULT_TYPE_ID,
+                    MAP_TYPE_ID,
+                    SET_TYPE_ID,
+                ]
+                .contains(def_id) =>
+            {
+                format_builtin_named_type(*def_id, args, &format_repl_type)
+                    .unwrap_or_else(|| neve_typeck::format_type(ty))
+            }
+            TyKind::Named(def_id, _) if *def_id == REPL_FN_TYPE_ID => "Fn".to_string(),
+            TyKind::Named(def_id, args) if *def_id == REPL_LAZY_TYPE_ID => {
+                format!("Lazy[{}]", format_repl_type(&args[0]))
+            }
+            TyKind::Named(_, _) => neve_typeck::format_type(ty),
+            TyKind::Unknown => "_".to_string(),
+        }
+    }
 
     #[test]
     fn repl_type_infers_basic_expression() {

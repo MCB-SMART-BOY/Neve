@@ -29,6 +29,17 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [1.1.1] - 2026-04-07
+
+### Improved / 改进
+- **Release truthfulness**: Rewrote the root README and install path so the public entry points, source install flow, and project status now match the real repository state. / **发布信息真实性**: 重写根 README 与安装路径，让公开入口、源码安装方式和项目状态描述重新与仓库真实状态保持一致。
+- **Documentation status sync**: Corrected the feature matrix and language roadmap so end-to-end coverage is described as a real smoke baseline instead of stale placeholder text. / **文档状态同步**: 修正 feature matrix 与 language roadmap，对端到端覆盖的描述不再沿用过时的“占位实现”说法，而是准确标记为真实 smoke baseline。
+- **REPL test hygiene**: Moved REPL-only helper logic fully under test scope to keep the runtime surface cleaner. / **REPL 测试卫生**: 将 REPL 专用辅助逻辑完整收回测试作用域，减少正式运行路径上的测试残留代码。
+
+### Fixed / 修复
+- **`neve doc` pager fallback**: Fixed terminal documentation viewing when `PAGER` points to commands like `cat`, by avoiding invalid pager flags and checking pager exit status before suppressing direct output fallback. / **`neve doc` 分页器回退**: 修复 `PAGER=cat` 等环境下的终端文档查看失败问题，不再向非 `less` 分页器传递无效参数，并会在分页器失败时正确回退到直接输出。
+- **Release metadata consistency**: Updated CLI/release wording to match Neve's current positioning as a standalone language for system configuration and structured shell automation. / **发布元数据一致性**: 更新 CLI 与 release 文案，使其与 Neve 目前“面向系统配置与结构化 shell 自动化的独立语言”定位保持一致。
+
 ## [1.1.0] - 2026-04-07
 
 ### Added / 新增
