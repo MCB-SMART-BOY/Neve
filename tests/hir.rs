@@ -436,3 +436,43 @@ fn test_lower_method_call_preserves_method_node() {
         _ => panic!("expected function"),
     }
 }
+
+#[test]
+fn test_lower_keeps_impl_method_ids_stable_when_appending_items() {
+    let base = r#"
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+    "#;
+    let appended = r#"
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let x = 21.twice();
+    "#;
+
+    let (base_ast, base_diags) = parse(base);
+    assert!(base_diags.is_empty(), "parse errors: {:?}", base_diags);
+    let (appended_ast, appended_diags) = parse(appended);
+    assert!(
+        appended_diags.is_empty(),
+        "parse errors: {:?}",
+        appended_diags
+    );
+
+    let base_hir = lower(&base_ast);
+    let appended_hir = lower(&appended_ast);
+
+    let base_impl_id = match &base_hir.items[1].kind {
+        ItemKind::Impl(def) => def.items[0].id,
+        other => panic!("expected impl item, got {:?}", other),
+    };
+    let appended_impl_id = match &appended_hir.items[1].kind {
+        ItemKind::Impl(def) => def.items[0].id,
+        other => panic!("expected impl item, got {:?}", other),
+    };
+
+    assert_eq!(base_impl_id, appended_impl_id);
+}

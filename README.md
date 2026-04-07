@@ -266,7 +266,7 @@ Built-in documentation is available via `neve doc`:
 | Lexer & Parser / 词法与语法 | ⚠️ 语法表面较完整 | 语法入口较多，但并不代表 lowering/typeck/eval 全部闭环 / Broad parser surface, semantic closure still incomplete |
 | Type Checker / 类型检查 | ⚠️ 核心可用 | HM + traits 基本可用，但编译器级诊断与语义闭环仍在补 / Core HM + traits work, compiler-grade closure still in progress |
 | Evaluator / 求值器 | ⚠️ 双路径未收敛 | AST 与 HIR 运行时并存，尚未形成单一规范语义 / AST and HIR runtimes have not fully converged |
-| REPL / 交互式 | ⚠️ 可用但未闭环 | 基本交互与核心增量 HIR 求值已可用，但重定义、跨输入方法派发等边缘语义仍未闭环 / Basic REPL and core incremental HIR evaluation work, but redefinition and cross-input method dispatch remain incomplete |
+| REPL / 交互式 | ⚠️ 可用但未闭环 | 基本交互与核心增量 HIR 求值已可用，但重定义和更广泛的导入/模块语义仍未闭环 / Basic REPL and core incremental HIR evaluation work, but redefinition and broader import/module semantics remain incomplete |
 | Formatter / 格式化 | ⚠️ 基本可用 | 日常格式化可用，但仍以稳定化和一致性为目标 / Usable, still being hardened for stability |
 | LSP / 编辑器 | 🚧 进行中 | 诊断、悬停、跳转等正在持续收敛到同一前端语义 / Still converging on one frontend semantic model |
 | Package Manager / 包管理 | 🚧 进行中 | fetch/store/derive/builder 已有基础，但生态闭环未完成 / Core package pieces exist, ecosystem closure not finished |
