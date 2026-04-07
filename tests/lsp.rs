@@ -355,3 +355,41 @@ fn test_nested_references() {
     let x_refs = index.get_references("x");
     assert!(x_refs.len() >= 2);
 }
+
+#[test]
+fn test_symbol_index_resolves_shadowed_local_definition() {
+    let source = "fn outer(x) = { let x = 2; x + x } + x;";
+    let (ast, _) = parse(source);
+    let index = SymbolIndex::from_ast(&ast);
+
+    let inner_def_offset = source.find("let x = 2").unwrap() + 4;
+    let inner_use_offset = source.find("x + x }").unwrap();
+    let outer_use_offset = source.rfind("x;").unwrap();
+    let param_def_offset = source.find("(x)").unwrap() + 1;
+
+    let inner_symbol = index
+        .find_definition_at(inner_use_offset)
+        .expect("inner reference should resolve");
+    let outer_symbol = index
+        .find_definition_at(outer_use_offset)
+        .expect("outer reference should resolve");
+
+    assert_eq!(usize::from(inner_symbol.def_span.start), inner_def_offset);
+    assert_eq!(usize::from(outer_symbol.def_span.start), param_def_offset);
+}
+
+#[test]
+fn test_symbol_index_references_respect_shadowing() {
+    let source = "fn outer(x) = { let x = 2; x + x } + x;";
+    let (ast, _) = parse(source);
+    let index = SymbolIndex::from_ast(&ast);
+
+    let inner_use_offset = source.find("x + x }").unwrap();
+    let outer_use_offset = source.rfind("x;").unwrap();
+
+    let inner_refs = index.find_references_at(inner_use_offset, true);
+    let outer_refs = index.find_references_at(outer_use_offset, true);
+
+    assert_eq!(inner_refs.len(), 3);
+    assert_eq!(outer_refs.len(), 2);
+}
