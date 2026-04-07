@@ -28,7 +28,7 @@
         "--prefix=$out",
         "--with-installed-readline",
         "--enable-readline",
-        "--disable-nls",  -- No localization for stage0
+        "--disable-nls",  -- No localization for bootstrap builds
     ],
 
     configurePhase = ''

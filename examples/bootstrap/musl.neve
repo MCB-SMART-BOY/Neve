@@ -1,5 +1,5 @@
 -- musl: Lightweight C standard library implementation
--- This is a Stage 0 package - one of the foundational packages needed to bootstrap the system
+-- This is a bootstrap package - one of the foundational packages needed to bootstrap the system
 
 {
     name = "musl",

@@ -281,7 +281,7 @@ Neve/
 │   └── neve-derive/         # Derivations
 ├── docs/                    # Documentation
 ├── scripts/                 # Helper scripts
-├── stage0/                  # Bootstrapping assets
+├── examples/bootstrap/      # Bootstrap package examples
 └── tests/                   # Integration tests
 ```
 

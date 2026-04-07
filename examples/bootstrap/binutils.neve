@@ -1,5 +1,5 @@
 -- GNU Binutils: Essential binary utilities (ld, as, ar, etc.)
--- Stage 0 package for building toolchains
+-- Bootstrap package for building toolchains
 
 {
     name = "binutils",
