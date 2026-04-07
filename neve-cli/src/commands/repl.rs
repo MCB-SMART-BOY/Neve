@@ -488,7 +488,7 @@ impl ReplHirState {
             .iter()
             .map(|(name, is_pub)| (name.as_str(), *is_pub))
             .collect();
-        bindings.sort_by(|(left, _), (right, _)| left.cmp(right));
+        bindings.sort_by_key(|(name, _)| *name);
         bindings
     }
 

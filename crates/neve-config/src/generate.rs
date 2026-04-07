@@ -322,15 +322,13 @@ impl Generator {
 
         // User-defined users (starting from UID 1000)
         // 用户定义的用户（从 UID 1000 开始）
-        let mut uid = 1000;
-        for user in &config.options.users {
+        for (uid, user) in (1000..).zip(config.options.users.iter()) {
             let shell = user.shell.as_deref().unwrap_or("/bin/sh");
             let home = user.home.display();
             passwd_content.push_str(&format!(
                 "{}:x:{}:{}:{}:{}:{}\n",
                 user.name, uid, uid, user.name, home, shell
             ));
-            uid += 1;
         }
 
         let passwd_path = etc_dir.join("passwd");
@@ -351,11 +349,9 @@ impl Generator {
 
         // Add user groups
         // 添加用户组
-        let mut gid = 1000;
-        for user in &config.options.users {
+        for (gid, user) in (1000..).zip(config.options.users.iter()) {
             // Primary group / 主组
             group_content.push_str(&format!("{}:x:{}:\n", user.name, gid));
-            gid += 1;
         }
 
         // Add users to supplementary groups
