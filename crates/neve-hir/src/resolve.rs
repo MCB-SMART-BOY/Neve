@@ -478,6 +478,18 @@ impl Resolver {
         }
     }
 
+    /// Register a std builtin item import for resolution.
+    /// 注册 std 内置项导入以供解析。
+    pub fn register_builtin_item_import(&mut self, name: String, builtin_name: String) {
+        self.imported_builtin_items.insert(name, builtin_name);
+    }
+
+    /// Register a std builtin module alias for resolution.
+    /// 注册 std 内置模块别名以供解析。
+    pub fn register_builtin_module_import(&mut self, alias: String, module_prefix: String) {
+        self.imported_builtin_modules.insert(alias, module_prefix);
+    }
+
     // === First pass: collect definitions ===
     // === 第一遍：收集定义 ===
 

@@ -82,6 +82,7 @@ enum TcoResult {
 /// - Tail call optimization / 尾调用优化
 /// - Pattern matching / 模式匹配
 /// - Closures / 闭包
+#[derive(Clone)]
 pub struct Evaluator {
     /// Local variable environment / 局部变量环境
     env: Environment,
