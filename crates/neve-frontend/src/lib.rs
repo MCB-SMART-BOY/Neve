@@ -122,7 +122,7 @@ pub fn rewrite_diagnostics_with_names(
         .iter()
         .map(|(def_id, name)| (format!("Type#{}", def_id.0), name.clone()))
         .collect();
-    replacements.sort_by(|(left, _), (right, _)| right.len().cmp(&left.len()));
+    replacements.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
 
     diagnostics
         .into_iter()
