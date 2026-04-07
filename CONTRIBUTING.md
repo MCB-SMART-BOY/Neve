@@ -42,17 +42,17 @@ Be respectful, inclusive, and constructive. We welcome contributors of all skill
 
 ### Prerequisites / 前置要求
 
-- **Rust nightly** (1.85+) - Required for Rust 2024 edition
+- **Rust stable** (1.85+) - Required for Rust 2024 edition
 - **Git** - Version control
 - **Linux/macOS** - For full functionality (Windows supports language features only)
 
 ```bash
-# Install Rust nightly / 安装 Rust nightly
-rustup install nightly
-rustup default nightly
+# Install Rust stable / 安装 Rust stable
+rustup toolchain install stable
+rustup default stable
 
 # Verify installation / 验证安装
-rustc --version  # Should show nightly-2024-xx-xx or later
+rustc --version  # Should show stable 1.85+ or later
 ```
 
 ---
