@@ -263,6 +263,7 @@ struct ParsedSource {
 
 /// Module loader responsible for discovering and loading modules.
 /// 负责发现和加载模块的模块加载器。
+#[derive(Debug, Clone)]
 pub struct ModuleLoader {
     /// Root directory for source files. / 源文件的根目录。
     root_dir: PathBuf,
@@ -352,6 +353,18 @@ impl ModuleLoader {
     /// 获取根目录。
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
+    }
+
+    /// Set the next global definition ID counter used when lowering modules.
+    /// 设置模块降级时使用的下一个全局定义 ID 计数器。
+    pub fn set_def_id_counter(&mut self, next: u32) {
+        self.next_def_id = next;
+    }
+
+    /// Get the next global definition ID counter.
+    /// 获取当前的全局定义 ID 计数器。
+    pub fn next_def_id(&self) -> u32 {
+        self.next_def_id
     }
 
     /// Get collected diagnostics.
@@ -549,6 +562,16 @@ impl ModuleLoader {
     ) -> Option<PathBuf> {
         let absolute_path = self.make_absolute(path, from_module)?;
         self.find_module_file(&absolute_path)
+    }
+
+    /// Resolve an import path to its absolute module path segments.
+    /// 将导入路径解析为绝对模块路径段。
+    pub fn resolve_module_path(
+        &self,
+        path: &ModulePath,
+        from_module: Option<&[String]>,
+    ) -> Option<Vec<String>> {
+        self.make_absolute(path, from_module)
     }
 
     /// Convert a relative path to an absolute path.

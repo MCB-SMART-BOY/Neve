@@ -592,10 +592,22 @@ impl TypeChecker {
         &self.diagnostics
     }
 
+    /// Clear collected diagnostics while keeping accumulated semantic state.
+    /// 清空已收集的诊断，但保留已累积的语义状态。
+    pub fn clear_diagnostics(&mut self) {
+        self.diagnostics.clear();
+    }
+
     /// Get resolved method call targets.
     /// 获取已解析的方法调用目标。
     pub fn method_resolutions(&self) -> &HashMap<Span, DefId> {
         &self.method_resolutions
+    }
+
+    /// Clear resolved method call targets while keeping accumulated semantic state.
+    /// 清空已解析的方法调用目标，但保留已累积的语义状态。
+    pub fn clear_method_resolutions(&mut self) {
+        self.method_resolutions.clear();
     }
 
     /// Look up the inferred type of a global definition.
@@ -3212,7 +3224,8 @@ impl TypeChecker {
 
                 for binding_id in binding_ids {
                     let local_id = LocalId(binding_id);
-                    if let Some(local_ty) = self.locals.get(&local_id).map(|local| local.ty.clone()) {
+                    if let Some(local_ty) = self.locals.get(&local_id).map(|local| local.ty.clone())
+                    {
                         let generalized_ty = generalize(&self.apply(&local_ty), &env_vars);
                         if let Some(local) = self.locals.get_mut(&local_id) {
                             local.ty = generalized_ty.clone();
