@@ -9,6 +9,7 @@ use termimad::MadSkin;
 
 // Embed documentation at compile time
 // 在编译时嵌入文档
+const DOC_INDEX: &str = include_str!("../../../docs/README.md");
 const DOC_QUICKSTART: &str = include_str!("../../../docs/quickstart.md");
 const DOC_TUTORIAL: &str = include_str!("../../../docs/tutorial.md");
 const DOC_SPEC: &str = include_str!("../../../docs/spec.md");
@@ -18,11 +19,17 @@ const DOC_PHILOSOPHY: &str = include_str!("../../../docs/philosophy.md");
 const DOC_INSTALL: &str = include_str!("../../../docs/install.md");
 const DOC_ARCHITECTURE: &str = include_str!("../../../docs/architecture.md");
 const DOC_ONBOARDING: &str = include_str!("../../../docs/onboarding.md");
+const DOC_CONTRIBUTING: &str = include_str!("../../../docs/contributing.md");
+const DOC_BOOTSTRAP: &str = include_str!("../../../docs/bootstrap.md");
+const DOC_ROADMAP: &str = include_str!("../../../docs/roadmap.md");
+const DOC_LANGUAGE_ROADMAP: &str = include_str!("../../../docs/language-roadmap.md");
+const DOC_FEATURE_MATRIX: &str = include_str!("../../../docs/feature-matrix.md");
 const DOC_CHANGELOG: &str = include_str!("../../../docs/changelog.md");
 
 /// Available documentation topics.
 /// 可用的文档主题。
 const TOPICS: &[(&str, &str, &str)] = &[
+    ("index", DOC_INDEX, "Documentation hub / 文档首页"),
     (
         "quickstart",
         DOC_QUICKSTART,
@@ -44,6 +51,27 @@ const TOPICS: &[(&str, &str, &str)] = &[
         DOC_ONBOARDING,
         "Contributor onboarding / 贡献者入门",
     ),
+    (
+        "contributing",
+        DOC_CONTRIBUTING,
+        "Contributor guide / 贡献指南",
+    ),
+    (
+        "bootstrap",
+        DOC_BOOTSTRAP,
+        "Bootstrap examples / bootstrap 示例",
+    ),
+    ("roadmap", DOC_ROADMAP, "Project roadmap / 项目路线图"),
+    (
+        "language-roadmap",
+        DOC_LANGUAGE_ROADMAP,
+        "Language completion roadmap / 语言完备化路线图",
+    ),
+    (
+        "feature-matrix",
+        DOC_FEATURE_MATRIX,
+        "Feature support matrix / 功能支持矩阵",
+    ),
     ("changelog", DOC_CHANGELOG, "Changelog / 更新日志"),
 ];
 
@@ -55,6 +83,10 @@ fn resolve_topic(input: &str) -> Option<&'static str> {
 
     let aliases: &[(&str, &str)] = &[
         ("qs", "quickstart"),
+        ("docs", "index"),
+        ("index", "index"),
+        ("home", "index"),
+        ("hub", "index"),
         ("quick", "quickstart"),
         ("getting-started", "quickstart"),
         ("intro", "quickstart"),
@@ -67,6 +99,12 @@ fn resolve_topic(input: &str) -> Option<&'static str> {
         ("guide", "tutorial"),
         ("arch", "architecture"),
         ("onboard", "onboarding"),
+        ("contrib", "contributing"),
+        ("contributors", "contributing"),
+        ("boot", "bootstrap"),
+        ("matrix", "feature-matrix"),
+        ("features", "feature-matrix"),
+        ("lang-roadmap", "language-roadmap"),
         ("change", "changelog"),
         ("changes", "changelog"),
         ("install", "install"),
@@ -132,9 +170,11 @@ pub fn list() -> Result<(), String> {
     content.push_str("```\n\n");
     content.push_str("## Examples / 示例:\n\n");
     content.push_str("```\n");
+    content.push_str("neve doc index            Documentation hub / 文档首页\n");
     content.push_str("neve doc quickstart       Full quickstart guide / 完整快速入门\n");
     content.push_str("neve doc api              API reference / 标准库 API\n");
-    content.push_str("neve doc spec             Language spec / 语言规范\n");
+    content.push_str("neve doc feature-matrix   Real support matrix / 真实功能矩阵\n");
+    content.push_str("neve doc contributing     Contributor guide / 贡献指南\n");
     content.push_str("```\n");
 
     println!("{}", skin.term_text(&content));
