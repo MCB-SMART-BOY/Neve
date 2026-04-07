@@ -521,10 +521,12 @@ fn test_builder_links_real_input_output_path() {
         .input_drv(dep_drv_path.clone(), vec!["out".to_string()])
         .build();
 
-    let mut config = BuilderConfig::default();
-    config.backend = BuildBackend::Simple;
-    config.sandbox = false;
-    config.temp_dir = build_root.clone();
+    let config = BuilderConfig {
+        backend: BuildBackend::Simple,
+        sandbox: false,
+        temp_dir: build_root.clone(),
+        ..Default::default()
+    };
 
     let mut builder = Builder::with_config(store, config);
     let result = builder.build(&main_drv).unwrap();
@@ -580,10 +582,12 @@ fn test_builder_registers_output_metadata_with_references() {
         .input_src(input_src.clone())
         .build();
 
-    let mut config = BuilderConfig::default();
-    config.backend = BuildBackend::Simple;
-    config.sandbox = false;
-    config.temp_dir = build_root.clone();
+    let config = BuilderConfig {
+        backend: BuildBackend::Simple,
+        sandbox: false,
+        temp_dir: build_root.clone(),
+        ..Default::default()
+    };
 
     let mut builder = Builder::with_config(store, config);
     let dep_result = builder.build(&dep_drv).unwrap();
