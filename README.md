@@ -4,7 +4,7 @@
 
 <h1>Neve</h1>
 
-<p><em>A pure functional language for system configuration / 面向系统配置的纯函数式语言</em></p>
+<p><em>A standalone language for system configuration and structured shell automation / 面向系统配置与结构化 shell 自动化的独立语言</em></p>
 
 <p>
   <a href="https://github.com/MCB-SMART-BOY/neve/actions/workflows/ci.yml">
@@ -24,278 +24,97 @@
 <p><strong>Windows</strong> · <strong>Linux</strong> · <strong>macOS</strong></p>
 
 </div>
-> *Nix's soul. Better syntax. Type safety.*  
-> *Nix 的灵魂，更好的语法，类型安全。*
+> *Nix's design ambition. Rust's safety mindset. A standalone language for system configuration and structured shell automation.*  
+> *Nix 的设计野心，Rust 的安全取向，面向系统配置与结构化 shell 自动化的独立语言。*
 
-Neve is a pure functional programming language designed for system configuration and package management. It takes the powerful concepts from Nix—reproducibility, declarative configuration, and functional purity—while providing a cleaner, more intuitive syntax and compile-time type checking.
-Neve 是一门纯函数式编程语言，专为系统配置与包管理而设计。它继承了 Nix 的强大理念，同时提供更清晰、更直观的语法与编译期类型检查。
+Neve is a standalone programming language for system configuration, package workflows, and eventually safer replacement of ad-hoc Bash-style automation.
+Neve 不是 Nix 换皮，也不是 shell 宏层。它是一门独立编程语言，面向系统配置、包工作流，并以类型化、结构化的方式逐步替代随意堆砌的 Bash 自动化。
 
-**Quick Links / 快速链接** · [Docs](docs/) · [Changelog](docs/project/changelog.md) · [Issues](https://github.com/MCB-SMART-BOY/neve/issues)
+**Quick Links / 快速链接** · [Docs](docs/) · [Install](docs/user/install.md) · [Quickstart](docs/user/quickstart.md) · [Feature Matrix](docs/project/feature-matrix.md) · [Issues](https://github.com/MCB-SMART-BOY/neve/issues)
 
-### Highlights / 亮点
+### What Neve Is / Neve 是什么
 
-- Unambiguous records vs functions (`#{ ... }` vs `fn(...)`) / 记录与函数语法不歧义
-- Strong static typing with helpful diagnostics / 强类型与更好的诊断提示
-- Lazy evaluation where it matters / 关键路径惰性求值
-- Modern ergonomics: pipelines, pattern matching, interpolation / 现代语法：管道、模式匹配、插值
-- Practical focus: system config + package workflows / 面向系统配置与包管理的实践
+- New-era language with a Rust-style safety mindset / 新时代、强调安全性与诊断质量的语言
+- Nix-inspired design philosophy without Nix syntax baggage / 继承 Nix 哲学，但不背负其历史语法包袱
+- Standalone programming language, not a config-only DSL / 独立编程语言，而不只是配置 DSL
+- System-level configuration, package/build orchestration, and reproducible workflows / 面向系统配置、包管理、构建编排与可复现工作流
+- Aiming to cover traditional shell workflows with structured, typed APIs / 目标是用结构化、类型化 API 覆盖传统 shell 工作流
 
-### Why Neve? / 为什么选择 Neve？
+### Why It Exists / 为什么做 Neve
 
-| Pain Point / 痛点 | Nix | Neve |
-|:------------------|:----|:-----|
-| Is this a record or function? / 这是记录还是函数？ | `{ x = 1; }` vs `{ x }: x` | `#{ x = 1 }` vs `fn(x) x` |
-| Type errors / 类型错误 | Runtime explosion / 运行时爆炸 | Compile-time catch / 编译期捕获 |
-| String interpolation / 字符串插值 | `"${x}"` | `` `{x}` `` |
-| Recursion / 递归 | `rec { ... }` | Just works / 自动处理 |
+Neve tries to combine four things that are usually split apart: Nix-style declarative system thinking, Rust-style safety expectations, a real general-purpose language surface, and shell-grade automation needs.
+Neve 想把四类通常被拆开的能力放进同一门语言里：Nix 式声明式系统思维、Rust 式安全预期、真正可编程的语言表面，以及能承载 shell 级自动化的执行能力。
 
-### Quick Demo / 快速演示
+| Pain Point / 痛点 | Legacy tool / 传统方案 | Neve |
+|:------------------|:-----------------------|:-----|
+| Config vs programming / 配置与编程割裂 | Config DSL + another language | One language surface / 同一语言表面 |
+| Syntax ambiguity / 语法歧义 | Record/function forms often collide | `#{ ... }` vs `fn(...)` |
+| Errors arrive too late / 错误来得太晚 | Runtime explosion / 运行时爆炸 | Static checking first / 先做静态检查 |
+| Shell automation gets fragile / shell 自动化脆弱 | Strings, exit codes, hidden state | Typed, structured workflows as the target / 目标是结构化、可类型化 |
 
-```bash
-$ neve repl
-neve> #{ name = "world", greet = fn(n) `Hello, {n}!` }
-#{greet = <fn>, name = "world"}
-neve> let r = #{ name = "world", greet = fn(n) `Hello, {n}!` }
-neve> r.greet(r.name)
-"Hello, world!"
+### 30-Second Demo / 30 秒感受一下
+
+```neve
+let service = #{
+    name = "web",
+    port = 8080,
+};
+
+fn unit_file(s: #{ name: String, port: Int }) -> String = `
+[Service]
+Environment=PORT={s.port}
+ExecStart=/usr/bin/{s.name} --port {s.port}
+`;
+
+unit_file(service)
 ```
 
-### Installation / 安装
+### Start Here / 从这里开始
 
-#### Quick Install (Recommended) / 快速安装（推荐）
+- [Install](docs/user/install.md): installation methods, package managers, platform notes
+- [Quickstart](docs/user/quickstart.md): first expression, first file, first REPL session
+- [Tutorial](docs/user/tutorial.md): language walkthrough from basics to modules
+- [Spec](docs/reference/spec.md): exact language rules
+- [API](docs/reference/api.md): standard library reference
+- [Feature Matrix](docs/project/feature-matrix.md): real support status, not marketing status
 
-<table>
-<tr>
-<td width="50%">
-
-**Linux / macOS**
+### Install / 安装
 
 ```bash
+# Linux / macOS
 curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
-```
 
-</td>
-<td width="50%">
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
-```
-
-</td>
-</tr>
-</table>
-
-#### Package Managers / 包管理器
-
-<table>
-<tr>
-<th>Platform / 平台</th>
-<th>Command / 命令</th>
-<th>Notes / 说明</th>
-</tr>
-<tr>
-<td><b>Arch Linux</b></td>
-<td>
-
-```bash
-yay -S neve-bin
-```
-
-</td>
-<td>Prebuilt binary, fastest install / 预编译二进制，最快安装</td>
-</tr>
-<tr>
-<td><b>Arch Linux</b></td>
-<td>
-
-```bash
-yay -S neve-git
-```
-
-</td>
-<td>Build from source, latest features / 源码构建，最新特性</td>
-</tr>
-<tr>
-<td><b>macOS</b></td>
-<td>
-
-```bash
-brew tap MCB-SMART-BOY/neve
-brew install neve
-```
-
-</td>
-<td>Intel & Apple Silicon / Intel 与 Apple Silicon</td>
-</tr>
-<tr>
-<td><b>Nix</b></td>
-<td>
-
-```bash
-nix run github:MCB-SMART-BOY/nix-neve
-```
-
-</td>
-<td>Try without installing / 免安装试用</td>
-</tr>
-<tr>
-<td><b>Nix</b></td>
-<td>
-
-```bash
-nix profile install github:MCB-SMART-BOY/nix-neve
-```
-
-</td>
-<td>Install to profile / 安装到 profile</td>
-</tr>
-<tr>
-<td><b>Cargo</b></td>
-<td>
-
-```bash
+# Cargo
 cargo install neve
 ```
 
-</td>
-<td>Requires Rust toolchain / 需要 Rust 工具链</td>
-</tr>
-</table>
+Windows, Homebrew, AUR, Nix, source builds, binary cache, and platform notes:
+更完整的安装方式、包管理器入口、二进制缓存与平台说明：
+[docs/user/install.md](docs/user/install.md)
 
-#### From Source / 从源码编译
+### Current Reality / 当前现状
 
-```bash
-git clone https://github.com/MCB-SMART-BOY/neve
-cd neve
-cargo build --release
-# Binary at ./target/release/neve
-```
+- Core language, parser, type checker, formatter, and CLI are usable.
+- HIR canonical pipeline and tooling are still converging.
+- LSP, package workflows, and system configuration are still being hardened.
+- Full Bash/shell replacement is a roadmap goal, not current shipped reality.
 
-### Language Features / 语言特性
-
-#### Records & Functions / 记录与函数
-
-```neve
--- Records use #{ } syntax (never ambiguous with functions)
-let config = #{
-    port = 8080,
-    host = "localhost",
-    debug = true,
-};
-
--- Functions use fn keyword
-fn greet(name) = `Hello, {name}!`;
-
--- Multiple parameters
-fn add(a, b) = a + b;
-```
-
-#### Pattern Matching / 模式匹配
-
-```neve
-fn describe(value) = match value {
-    0 -> "zero",
-    1 -> "one",
-    n if n < 0 -> "negative",
-    n -> `positive: {n}`,
-};
-
-fn factorial(n) = match n {
-    0 -> 1,
-    n -> n * factorial(n - 1),
-};
-```
-
-#### Pipe Operator / 管道操作符
-
-```neve
--- Chain operations naturally
-let result = [1, 2, 3, 4, 5]
-    |> filter(fn(x) x > 2)
-    |> map(fn(x) x * 2)
-    |> fold(0, fn(a, b) a + b);
-```
-
-#### Type Annotations / 类型标注
-
-```neve
-fn add(a: Int, b: Int) -> Int = a + b;
-
-let config: #{ port: Int, host: String } = #{
-    port = 8080,
-    host = "localhost",
-};
-```
-
-### CLI Usage / 命令行用法
-
-```bash
-neve repl              # Interactive REPL / 交互式 REPL
-neve eval "1 + 2"      # Evaluate expression / 计算表达式
-neve run file.neve     # Run a file / 运行文件
-neve check file.neve   # Type check without running / 仅类型检查
-neve fmt file.neve     # Format code / 格式化代码
-neve doc               # View documentation / 查看文档
-neve doc quickstart    # Quick start guide / 快速入门
-neve doc spec          # Language specification / 语言规范
-```
-
-### Documentation / 文档
-
-Built-in documentation is available via `neve doc`:
-内置文档可通过 `neve doc` 查看：
-
-| Topic / 主题 | Command / 命令 | Description / 说明 |
-|:-------------|:---------------|:-------------------|
-| Quick Start / 快速入门 | `neve doc quickstart` | 5-minute introduction / 5 分钟入门 |
-| Specification / 语言规范 | `neve doc spec` | Complete language reference / 完整参考 |
-| API Reference / 标准库 | `neve doc api` | Standard library docs / 标准库文档 |
-| Diagnostics / 诊断 | `neve doc diagnostics` | Error code reference / 错误码说明 |
-| Architecture / 架构 | `neve doc architecture` | Internal architecture / 内部架构 |
-| Onboarding / 贡献者入门 | `neve doc onboarding` | Contributor onboarding / 贡献指南 |
-
-### Project Status / 项目进度
-
-当前状态以“真实集成度”为准，不以 parser 表面支持为准。
-更细的支持情况请看 `docs/project/feature-matrix.md`。
-
-| Component / 模块 | Status | Description / 说明 |
-|:-----------------|:-------|:-------------------|
-| Lexer & Parser / 词法与语法 | ⚠️ 语法表面较完整 | 语法入口较多，但并不代表 lowering/typeck/eval 全部闭环 / Broad parser surface, semantic closure still incomplete |
-| Type Checker / 类型检查 | ⚠️ 核心可用 | HM + traits 基本可用，但编译器级诊断与语义闭环仍在补 / Core HM + traits work, compiler-grade closure still in progress |
-| Evaluator / 求值器 | ⚠️ 双路径未收敛 | AST 与 HIR 运行时并存，尚未形成单一规范语义 / AST and HIR runtimes have not fully converged |
-| REPL / 交互式 | ⚠️ 可用但未闭环 | 基本交互、核心增量 HIR 求值、项目内模块导入，以及 `:load` 文件的相对模块图已可用，但跨项目根目录切换和完整工具链镜像仍未闭环 / Basic REPL, core incremental HIR evaluation, project-local imports, and relative module graphs via `:load` now work, but cross-root switching and full tooling mirroring remain incomplete |
-| Formatter / 格式化 | ⚠️ 基本可用 | 日常格式化可用，但仍以稳定化和一致性为目标 / Usable, still being hardened for stability |
-| LSP / 编辑器 | 🚧 进行中 | 诊断、悬停、跳转等正在持续收敛到同一前端语义 / Still converging on one frontend semantic model |
-| Package Manager / 包管理 | 🚧 进行中 | fetch/store/derive/builder 已有基础，但生态闭环未完成 / Core package pieces exist, ecosystem closure not finished |
-| System Config / 系统配置 | ⚠️ 原型阶段 | 已有模块/生成/激活原型，但语义边界和产品形态未稳定 / Prototype exists, semantics and UX not yet stable |
-
-### Logo Assets / Logo 资源
-
-- Primary (with glow) / 主版（含光晕）: `assets/logo.svg`
-- Transparent / no-glow / 透明无光晕: `assets/logo-plain.svg`
-- Size variants (transparent) / 多尺寸透明版: `assets/logo-64.svg`, `assets/logo-128.svg`, `assets/logo-256.svg`
-- PNG exports / PNG 导出: `assets/logo.png`, `assets/logo-plain.png`, `assets/logo-16.png`, `assets/logo-32.png`, `assets/logo-48.png`, `assets/logo-64.png`, `assets/logo-128.png`, `assets/logo-256.png`
-- ICO / 浏览器图标: `assets/logo.ico`
+真实支持范围请直接看：
+- [Feature Matrix](docs/project/feature-matrix.md)
+- [Roadmap](docs/project/roadmap.md)
+- [Language Roadmap](docs/project/language-roadmap.md)
 
 ### Contributing / 贡献
 
-Contributions are welcome! Please see [docs/contributor/contributing.md](docs/contributor/contributing.md) for guidelines.
-欢迎贡献！请查看 [docs/contributor/contributing.md](docs/contributor/contributing.md)。
+Contributions are welcome. Start here:
+欢迎贡献，从这里开始：
 
-```bash
-# Development setup
-git clone https://github.com/MCB-SMART-BOY/neve
-cd neve
-cargo test              # Run tests
-cargo run -- repl       # Test REPL
-```
+- [Contributor Guide](docs/contributor/contributing.md)
+- [Architecture](docs/contributor/architecture.md)
+- [Onboarding](docs/contributor/onboarding.md)
+- [Brand Assets](assets/README.md)
 
 ### License / 许可证
 
 Neve is licensed under the [Mozilla Public License 2.0](LICENSE).
 Neve 使用 [Mozilla Public License 2.0](LICENSE) 许可。
-
----
