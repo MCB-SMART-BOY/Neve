@@ -35,6 +35,9 @@ pub struct Resolver {
     next_outer_generic_idx: u32,
     /// Imported names from other modules. / 从其他模块导入的名称。
     imported: HashMap<String, DefId>,
+    /// Preallocated definition IDs for impl items keyed by source span.
+    /// 按源码 span 预分配的 impl 项定义 ID。
+    impl_item_ids: HashMap<Span, DefId>,
     /// Imported std builtin items keyed by in-scope name.
     /// 作用域内名称到 std builtin 全名的映射。
     imported_builtin_items: HashMap<String, String>,
@@ -62,6 +65,7 @@ impl Resolver {
             generic_scopes: Vec::new(),
             next_outer_generic_idx: 1_000_000,
             imported: HashMap::new(),
+            impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
             imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
@@ -82,6 +86,7 @@ impl Resolver {
             generic_scopes: Vec::new(),
             next_outer_generic_idx: 1_000_000,
             imported: HashMap::new(),
+            impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
             imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
@@ -530,8 +535,12 @@ impl Resolver {
                 self.globals.insert(def.name.name.clone(), id);
             }
             ast::ItemKind::Impl(_) => {
-                // Impls don't introduce names
-                // Impl 不引入名称
+                if let ast::ItemKind::Impl(def) = &item.kind {
+                    for impl_item in &def.items {
+                        let id = self.fresh_def_id();
+                        self.impl_item_ids.insert(impl_item.span, id);
+                    }
+                }
             }
             ast::ItemKind::Import(_) => {
                 // Imports are handled separately
@@ -1052,7 +1061,11 @@ impl Resolver {
     fn lower_impl_item(&mut self, item: &ast::ImplItem) -> Option<ImplItem> {
         self.push_scope();
         self.push_bound_generic_scope(&item.generics);
-        let id = self.fresh_def_id();
+        let id = self
+            .impl_item_ids
+            .get(&item.span)
+            .copied()
+            .unwrap_or_else(|| self.fresh_def_id());
 
         let generics = self.lower_generics(&item.generics);
         let params: Vec<Param> = item.params.iter().map(|p| self.lower_param(p)).collect();

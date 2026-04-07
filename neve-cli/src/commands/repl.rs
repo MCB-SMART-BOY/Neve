@@ -300,7 +300,6 @@ struct ReplHirState {
     user_bindings: HashMap<String, bool>,
     builtin_item_imports: HashMap<String, String>,
     builtin_module_imports: HashMap<String, String>,
-    has_trait_or_impl_items: bool,
 }
 
 impl Default for ReplHirState {
@@ -318,7 +317,6 @@ impl ReplHirState {
             user_bindings: HashMap::new(),
             builtin_item_imports: HashMap::new(),
             builtin_module_imports: HashMap::new(),
-            has_trait_or_impl_items: false,
         }
     }
 
@@ -353,10 +351,6 @@ impl ReplHirState {
         }
         self.record_user_bindings(ast);
         self.record_std_imports(ast);
-        self.has_trait_or_impl_items |= ast
-            .items
-            .iter()
-            .any(|item| matches!(item.kind, ItemKind::Trait(_) | ItemKind::Impl(_)));
         Ok(value)
     }
 
@@ -467,13 +461,6 @@ fn evaluate_repl_input(
 
     let method_resolutions =
         current_method_resolutions(&analysis, current_offset, current_source.len());
-
-    if !method_resolutions.is_empty() && runtime_state.has_trait_or_impl_items {
-        return Err(ReplEvalError::Message(
-            "REPL HIR backend does not yet support method dispatch across separate trait/impl inputs"
-                .to_string(),
-        ));
-    }
 
     let value = if persist_defs {
         runtime_state.eval_persistent(&ast, method_resolutions)
@@ -1017,7 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn repl_hir_runtime_rejects_cross_input_method_dispatch_for_now() {
+    fn repl_hir_runtime_preserves_method_calls_across_inputs() {
         let mut runtime = ReplHirState::new();
         let mut semantic = ReplSemanticState::default();
 
@@ -1035,13 +1022,9 @@ mod tests {
         .expect("trait definition should evaluate");
 
         let expr = prepare_repl_input("21.twice()");
-        let err = evaluate_repl_input(&expr, false, &mut runtime, &mut semantic)
-            .expect_err("cross-input method call should be rejected");
-        assert!(matches!(
-            err,
-            super::ReplEvalError::Message(message)
-                if message.contains("method dispatch across separate trait/impl inputs")
-        ));
+        let value = evaluate_repl_input(&expr, false, &mut runtime, &mut semantic)
+            .expect("cross-input method call should evaluate");
+        assert_eq!(value, Value::Int(42.into()));
     }
 
     #[test]

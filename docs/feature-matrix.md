@@ -85,7 +85,7 @@
 | `neve check` | ⚠️ 可用 | 类型检查能跑，当前模块内命名类型在 diagnostics 中已能较可读地显示；但跨模块类型名、完整语义镜像和更多编译器级保证还没闭环 |
 | `neve eval` | ⚠️ 可用 | 无 `import` 输入、本地模块导入，以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；仅少数仍未收敛的导入/运行时边缘场景会回退 AST |
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
-| REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询已复用 frontend/HIR/typecheck；求值主路径也已开始收敛到增量 HIR runtime，普通持久绑定与常见 `std.<module>` 导入可以跨输入保留。当前仍明确缺少跨输入 trait/impl 方法派发、顶层重定义与更广泛导入场景 |
+| REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询已复用 frontend/HIR/typecheck；求值主路径也已开始收敛到增量 HIR runtime，普通持久绑定、跨输入 trait/impl 方法派发，以及常见 `std.<module>` 导入都可以跨输入保留。当前仍明确缺少顶层重定义与更广泛导入场景 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 现在既能显示定义点类型，也能在局部变量引用、全局函数引用、方法名和一般表达式位置显示真实语义类型；函数参数、lambda 参数和块级 `let` 的 pattern 绑定也已闭环。`goto definition` / `references` / `rename` 对局部遮蔽场景已开始按实际绑定解析。跨模块命名类型显示与更多 IDE 语义功能仍在补 |
 | End-to-end tests | ❌ 不可信 | 还不能作为“语言已闭环”的证据 |

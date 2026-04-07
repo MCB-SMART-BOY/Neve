@@ -110,7 +110,7 @@ Int -> Int                    -- Function / 函数
 | Lexer & Parser | ⚠️ Surface mostly implemented | Parser surface is broad, but semantic closure is incomplete |
 | Type Checker | ⚠️ Core working | Core HM + trait checks exist, compiler-grade semantics still in progress |
 | Evaluator | ⚠️ Divergent runtimes | AST and HIR evaluation paths are not fully converged |
-| REPL | ⚠️ Usable, not complete | Interactive flow now uses incremental HIR for the core path, but redefinition and some advanced cross-input semantics are still incomplete |
+| REPL | ⚠️ Usable, not complete | Interactive flow now uses incremental HIR for the core path, but redefinition and broader import/module-graph semantics are still incomplete |
 | Formatter | ⚠️ Usable | Practical formatter exists, still being hardened |
 | LSP | 🚧 In Progress | Editor tooling is converging on the frontend pipeline |
 | Package Manager | 🚧 In Progress | Core package pieces exist, full dependency/product story is unfinished |
