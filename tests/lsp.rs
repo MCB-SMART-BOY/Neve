@@ -153,6 +153,60 @@ fn test_document_hover_includes_block_pattern_bindings() {
 }
 
 #[test]
+fn test_document_semantic_hover_includes_local_reference_type() {
+    let source = "fn add(x: Int, y: Int) -> Int = { let sum = x + y; sum + x };";
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = source.rmatch_indices("sum").next().unwrap().0;
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("reference semantic hover should exist");
+    assert_eq!(hover, "sum: Int");
+}
+
+#[test]
+fn test_document_semantic_hover_includes_global_reference_type() {
+    let source = "fn id<T>(x: T) -> T = x; let y = id(1);";
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = source.rmatch_indices("id").next().unwrap().0;
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("global reference semantic hover should exist");
+    assert_eq!(hover, "id: forall T. (T) -> T");
+}
+
+#[test]
+fn test_document_semantic_hover_includes_expression_type() {
+    let source = "fn add(x: Int, y: Int) -> Int = x + y;";
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = source.find('+').unwrap();
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("expression semantic hover should exist");
+    assert_eq!(hover, "Int");
+}
+
+#[test]
+fn test_document_semantic_hover_includes_method_signature() {
+    let source = r#"
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let x = 21.twice();
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = source.rmatch_indices("twice").next().unwrap().0;
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("method semantic hover should exist");
+    assert_eq!(hover, "fn twice: (Int) -> Int");
+}
+
+#[test]
 fn test_position_at() {
     let doc = Document::new(
         "file:///test.neve".to_string(),

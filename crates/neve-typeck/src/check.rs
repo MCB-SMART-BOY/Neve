@@ -162,6 +162,9 @@ pub struct TypeChecker {
     /// Final inferred types for local definitions keyed by LocalId.
     /// 按 LocalId 存储的局部定义最终推断类型。
     local_definitions: HashMap<LocalId, Ty>,
+    /// Final inferred types for expressions keyed by source span.
+    /// 按源码 span 存储的表达式最终推断类型。
+    expr_types: HashMap<Span, Ty>,
     /// Trait resolver for trait/impl handling.
     /// 用于处理 trait/impl 的特征解析器。
     trait_resolver: TraitResolver,
@@ -196,6 +199,7 @@ impl TypeChecker {
             global_spans: HashMap::new(),
             locals: HashMap::new(),
             local_definitions: HashMap::new(),
+            expr_types: HashMap::new(),
             trait_resolver: TraitResolver::new(),
             trait_ids: HashMap::new(),
             structs: HashMap::new(),
@@ -606,6 +610,12 @@ impl TypeChecker {
         self.local_definitions
             .get(&local_id)
             .map(|ty| self.apply(ty))
+    }
+
+    /// Look up the inferred type of an expression by span.
+    /// 按 span 查询表达式推断出的类型。
+    pub fn expr_type(&self, span: Span) -> Option<Ty> {
+        self.expr_types.get(&span).map(|ty| self.apply(ty))
     }
 
     fn format_trait_bound(&self, bound: &TraitBound) -> String {
@@ -2435,7 +2445,7 @@ impl TypeChecker {
 
     fn infer_expr(&mut self, expr: &Expr) -> Ty {
         let span = expr.span;
-        match &expr.kind {
+        let ty = match &expr.kind {
             ExprKind::Literal(lit) => self.infer_literal(lit),
 
             ExprKind::Var(local_id) => {
@@ -2761,7 +2771,11 @@ impl TypeChecker {
                 self.error(span, message.clone());
                 self.fresh_var()
             }
-        }
+        };
+
+        let ty = self.apply(&ty);
+        self.expr_types.insert(span, ty.clone());
+        ty
     }
 
     fn infer_literal(&self, lit: &Literal) -> Ty {

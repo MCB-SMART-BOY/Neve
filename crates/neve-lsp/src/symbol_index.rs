@@ -108,6 +108,20 @@ impl SymbolIndex {
         self.definitions.get(&ref_at_offset.name)?.first()
     }
 
+    /// Find the definition site whose span directly contains the offset.
+    /// 查找其定义 span 直接覆盖该偏移量的定义点。
+    pub fn find_definition_site_at(&self, offset: usize) -> Option<&Symbol> {
+        self.definitions
+            .values()
+            .flat_map(|symbols| symbols.iter())
+            .filter(|symbol| {
+                let start: usize = symbol.def_span.start.into();
+                let end: usize = symbol.def_span.end.into();
+                start <= offset && offset < end
+            })
+            .min_by_key(|symbol| symbol.def_span.len())
+    }
+
     /// Find all references to the symbol at the given offset.
     /// 查找给定偏移量处符号的所有引用。
     pub fn find_references_at(&self, offset: usize, include_declaration: bool) -> Vec<&SymbolRef> {
