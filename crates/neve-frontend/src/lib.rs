@@ -76,7 +76,16 @@ pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
 /// Format a type using names available in the given module.
 /// 使用给定模块中可见的名称格式化类型。
 pub fn format_type_in_module(ty: &Ty, module: &Module) -> String {
-    let names = collect_item_names(module);
+    format_type_in_modules(ty, [module])
+}
+
+/// Format a type using names collected from multiple modules.
+/// 使用多个模块中收集到的名称格式化类型。
+pub fn format_type_in_modules<'a>(
+    ty: &Ty,
+    modules: impl IntoIterator<Item = &'a Module>,
+) -> String {
+    let names = collect_item_names_from_modules(modules);
     format_type_with_names(ty, &names)
 }
 
@@ -86,14 +95,32 @@ pub fn rewrite_diagnostics_with_module_names(
     diagnostics: Vec<Diagnostic>,
     module: &Module,
 ) -> Vec<Diagnostic> {
-    let names = collect_item_names(module);
+    rewrite_diagnostics_with_module_set(diagnostics, [module])
+}
+
+/// Rewrite diagnostics so named types from multiple modules render readably.
+/// 重写诊断文本，使多个模块中的命名类型都以可读名称显示。
+pub fn rewrite_diagnostics_with_module_set<'a>(
+    diagnostics: Vec<Diagnostic>,
+    modules: impl IntoIterator<Item = &'a Module>,
+) -> Vec<Diagnostic> {
+    let names = collect_item_names_from_modules(modules);
+    rewrite_diagnostics_with_names(diagnostics, &names)
+}
+
+/// Rewrite diagnostics using a precomputed type-name map.
+/// 使用预先收集的类型名映射重写诊断文本。
+pub fn rewrite_diagnostics_with_names(
+    diagnostics: Vec<Diagnostic>,
+    names: &HashMap<DefId, String>,
+) -> Vec<Diagnostic> {
     if names.is_empty() {
         return diagnostics;
     }
 
     let mut replacements: Vec<_> = names
-        .into_iter()
-        .map(|(def_id, name)| (format!("Type#{}", def_id.0), name))
+        .iter()
+        .map(|(def_id, name)| (format!("Type#{}", def_id.0), name.clone()))
         .collect();
     replacements.sort_by(|(left, _), (right, _)| right.len().cmp(&left.len()));
 
@@ -115,29 +142,35 @@ pub fn rewrite_diagnostics_with_module_names(
         .collect()
 }
 
-fn collect_item_names(module: &Module) -> HashMap<DefId, String> {
+/// Collect visible item names from multiple modules keyed by definition ID.
+/// 从多个模块收集可见项名称，并按定义 ID 建立映射。
+pub fn collect_item_names_from_modules<'a>(
+    modules: impl IntoIterator<Item = &'a Module>,
+) -> HashMap<DefId, String> {
     let mut names = HashMap::new();
-    for item in &module.items {
-        match &item.kind {
-            HirItemKind::Fn(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Struct(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Enum(def) => {
-                names.insert(item.id, def.name.clone());
-                for variant in &def.variants {
-                    names.insert(variant.id, variant.name.clone());
+    for module in modules {
+        for item in &module.items {
+            match &item.kind {
+                HirItemKind::Fn(def) => {
+                    names.insert(item.id, def.name.clone());
                 }
+                HirItemKind::Struct(def) => {
+                    names.insert(item.id, def.name.clone());
+                }
+                HirItemKind::Enum(def) => {
+                    names.insert(item.id, def.name.clone());
+                    for variant in &def.variants {
+                        names.insert(variant.id, variant.name.clone());
+                    }
+                }
+                HirItemKind::TypeAlias(def) => {
+                    names.insert(item.id, def.name.clone());
+                }
+                HirItemKind::Trait(def) => {
+                    names.insert(item.id, def.name.clone());
+                }
+                HirItemKind::Impl(_) => {}
             }
-            HirItemKind::TypeAlias(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Trait(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Impl(_) => {}
         }
     }
     names
