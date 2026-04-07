@@ -16,9 +16,10 @@ use neve_std::stdlib;
 use neve_syntax::{ImportDef, ImportItems, Item, ItemKind, PatternKind, SourceFile, Visibility};
 use neve_typeck::{
     LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, TypeChecker,
-    builtin_list, builtin_map, builtin_option, builtin_result, builtin_set,
     format_builtin_named_type,
 };
+#[cfg(test)]
+use neve_typeck::{builtin_list, builtin_map, builtin_option, builtin_result, builtin_set};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::collections::{HashMap, HashSet};
@@ -769,7 +770,6 @@ fn evaluate_repl_input(
     .map_err(ReplEvalError::Message)?;
 
     if persist_defs {
-        semantic_state.record_source(current_source, &ast);
         semantic_state.record_module(module);
     }
 
@@ -985,28 +985,15 @@ enum TypeQueryError {
 
 #[derive(Debug, Clone, Default)]
 struct ReplSemanticState {
-    entries: Vec<ReplSemanticEntry>,
     modules: Vec<Module>,
 }
 
-#[derive(Debug, Clone)]
-struct ReplSemanticEntry {
-    defined_names: Vec<String>,
-}
-
 impl ReplSemanticState {
-    fn record_source(&mut self, source: &str, ast: &SourceFile) {
-        for entry in semantic_entries_from_ast(source, ast) {
-            self.entries.push(entry);
-        }
-    }
-
     fn record_module(&mut self, module: Module) {
         self.modules.push(module);
     }
 
     fn clear(&mut self) {
-        self.entries.clear();
         self.modules.clear();
     }
 }
@@ -1066,6 +1053,13 @@ fn prepare_repl_type_input(expr: &str) -> String {
     }
 }
 
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct ReplSemanticEntry {
+    defined_names: Vec<String>,
+}
+
+#[cfg(test)]
 fn semantic_entries_from_ast(source: &str, ast: &SourceFile) -> Vec<ReplSemanticEntry> {
     ast.items
         .iter()
@@ -1082,6 +1076,7 @@ fn semantic_entries_from_ast(source: &str, ast: &SourceFile) -> Vec<ReplSemantic
         .collect()
 }
 
+#[cfg(test)]
 fn normalize_repl_item_source(source: &str) -> String {
     let trimmed = source.trim();
     if trimmed.is_empty() {
@@ -1138,6 +1133,7 @@ fn find_repl_type_target(module: &neve_hir::Module) -> Option<DefId> {
     })
 }
 
+#[cfg(test)]
 fn unknown_ty() -> Ty {
     Ty {
         kind: TyKind::Unknown,
@@ -1145,6 +1141,7 @@ fn unknown_ty() -> Ty {
     }
 }
 
+#[cfg(test)]
 fn named_repl_ty(def_id: DefId, args: Vec<Ty>) -> Ty {
     Ty {
         kind: TyKind::Named(def_id, args),
@@ -1152,6 +1149,7 @@ fn named_repl_ty(def_id: DefId, args: Vec<Ty>) -> Ty {
     }
 }
 
+#[cfg(test)]
 fn fn_repl_ty(arity: usize) -> Ty {
     Ty {
         kind: TyKind::Fn(vec![unknown_ty(); arity], Box::new(unknown_ty())),
@@ -1159,6 +1157,7 @@ fn fn_repl_ty(arity: usize) -> Ty {
     }
 }
 
+#[cfg(test)]
 fn type_from_value(value: &Value) -> Ty {
     match value {
         Value::Int(_) => Ty {
@@ -1221,6 +1220,7 @@ fn type_from_value(value: &Value) -> Ty {
     }
 }
 
+#[cfg(test)]
 fn common_runtime_type<'a>(values: impl Iterator<Item = &'a Value>) -> Ty {
     let mut iter = values;
     let Some(first) = iter.next() else {
@@ -1235,6 +1235,7 @@ fn common_runtime_type<'a>(values: impl Iterator<Item = &'a Value>) -> Ty {
     }
 }
 
+#[cfg(test)]
 fn format_repl_type(ty: &Ty) -> String {
     match &ty.kind {
         TyKind::Int => "Int".to_string(),
