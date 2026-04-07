@@ -243,7 +243,7 @@ impl LanguageServer for Backend {
 
             // Try to get symbol information first / 首先尝试获取符号信息
             if let Some(ref index) = doc.symbol_index
-                && let Some(symbol) = index.find_definition_at(offset)
+                && let Some(symbol) = index.find_definition_site_at(offset)
             {
                 // Format symbol kind nicely / 格式化符号类型
                 let kind_str = match symbol.kind {
@@ -303,6 +303,29 @@ impl LanguageServer for Backend {
                         start: Position::new(start_line, start_col),
                         end: Position::new(end_line, end_col),
                     }),
+                }));
+            }
+
+            if let Some((span, hover_text)) = doc.semantic_hover_at(offset) {
+                return Ok(Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: format!("`{hover_text}`"),
+                    }),
+                    range: Some(range_for_span(&doc, span)),
+                }));
+            }
+
+            if let Some(ref index) = doc.symbol_index
+                && let Some(symbol) = index.find_definition_at(offset)
+                && let Some(type_info) = doc.definition_hovers.get(&symbol.def_span)
+            {
+                return Ok(Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: format!("`{type_info}`"),
+                    }),
+                    range: Some(range_for_span(&doc, symbol.def_span)),
                 }));
             }
 
