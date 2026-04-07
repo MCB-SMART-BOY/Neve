@@ -81,6 +81,41 @@ neve repl               # Start interactive REPL / 启动 REPL
 neve eval "1 + 2"       # Evaluate expression / 计算表达式
 ```
 
+## Binary Cache & Signatures / 二进制缓存与签名
+
+```bash
+# One key for all caches / 单个密钥应用到全部缓存
+neve build ./pkg.neve \
+  --cache-url https://cache.example.org \
+  --cache-dir /var/lib/neve/cache \
+  --cache-public-key 'ed25519:<base64-public-key>' \
+  --cache-private-key 'ed25519:<base64-private-key>' \
+  --cache-upload
+```
+
+Environment variables / 环境变量：
+
+- `NEVE_BINARY_CACHE_URLS` (comma-separated) / 远程缓存 URL（逗号分隔）
+- `NEVE_BINARY_CACHE_LOCAL_DIRS` (comma-separated) / 本地缓存目录（逗号分隔）
+- `NEVE_BINARY_CACHE_PUBLIC_KEYS` (comma-separated, fallback `NEVE_BINARY_CACHE_PUBLIC_KEY`)
+- `NEVE_BINARY_CACHE_PRIVATE_KEYS` (comma-separated, fallback `NEVE_BINARY_CACHE_PRIVATE_KEY`)
+- `NEVE_BINARY_CACHE_UPLOAD` (`true/false`)
+- `NEVE_SUBSTITUTE` (`true/false`)
+
+Key mapping rule / 密钥映射规则：
+
+- `0` keys: disabled / 禁用
+- `1` key: apply to all cache sources / 应用于所有缓存源
+- `N` keys: must match total cache sources / 必须等于缓存源总数
+
+Behavior notes / 行为说明：
+
+- Push writes `narinfo` with `FileHash`, `NarHash`, and `References`.
+- Reference discovery is best-effort by scanning store payloads for existing store path tokens.
+- Fetching a cached path resolves `References` recursively before installing the target path.
+- If a referenced path is missing in caches, fetch fails to avoid partial closure installs.
+- Remote retry only applies to transient failures (`429`, `5xx`, timeout/connect errors).
+
 ## Troubleshooting / 常见问题
 
 ### "Command not found: neve" / 提示找不到命令
