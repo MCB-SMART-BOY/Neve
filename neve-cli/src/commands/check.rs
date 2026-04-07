@@ -3,7 +3,7 @@
 
 use crate::{commands::module_graph, output};
 use neve_diagnostic::emit;
-use neve_frontend::rewrite_diagnostics_with_module_names;
+use neve_frontend::{collect_item_names_from_modules, rewrite_diagnostics_with_names};
 use neve_hir::ModuleLoader;
 use neve_typeck::TypeChecker;
 use std::fs;
@@ -31,6 +31,12 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
             global_spans.extend(spans);
         }
     }
+    let type_names = collect_item_names_from_modules(
+        loader
+            .load_order()
+            .iter()
+            .filter_map(|module_id| loader.hir_module(*module_id)),
+    );
 
     let mut parse_errors = 0usize;
     let mut type_errors = 0usize;
@@ -80,7 +86,7 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
         // 使用共享全局签名进行类型检查
         let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
         checker.check(module);
-        let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), module);
+        let diagnostics = rewrite_diagnostics_with_names(checker.diagnostics(), &type_names);
 
         for diag in &diagnostics {
             emit(&source, &file_path.display().to_string(), diag);

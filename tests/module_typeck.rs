@@ -1,5 +1,6 @@
 //! Integration tests for type checking across modules.
 
+use neve_frontend::rewrite_diagnostics_with_module_set;
 use neve_hir::ModuleLoader;
 use neve_typeck::TypeChecker;
 use std::fs;
@@ -62,5 +63,73 @@ fn test_typeck_imported_function() {
             "unexpected type errors: {:?}",
             diagnostics
         );
+    }
+}
+
+#[test]
+fn test_module_typeck_formats_imported_named_types_readably() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    write_module(
+        root,
+        &["types"],
+        r#"
+            pub struct User {};
+        "#,
+    );
+
+    write_module(
+        root,
+        &["main"],
+        r#"
+            import types (User);
+            fn broken(x: User) -> Int = x;
+        "#,
+    );
+
+    let mut loader = ModuleLoader::new(root);
+    loader.load_module(&["main".into()]).unwrap();
+
+    let mut global_types = std::collections::HashMap::new();
+    let mut global_spans = std::collections::HashMap::new();
+    for module_id in loader.load_order() {
+        let module = loader.hir_module(*module_id).unwrap();
+        let (types, spans) = TypeChecker::collect_signatures(module);
+        global_types.extend(types);
+        global_spans.extend(spans);
+    }
+
+    let modules: Vec<_> = loader
+        .load_order()
+        .iter()
+        .filter_map(|module_id| loader.hir_module(*module_id))
+        .collect();
+    let main_module = loader
+        .hir_module(*loader.load_order().last().unwrap())
+        .unwrap();
+
+    let mut checker = TypeChecker::with_global_env(global_types, global_spans);
+    checker.check(main_module);
+    let diagnostics =
+        rewrite_diagnostics_with_module_set(checker.diagnostics(), modules.iter().copied());
+
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| !diag.message.contains("Type#")),
+        "expected readable type names in diagnostics, got {diagnostics:?}"
+    );
+    for diagnostic in &diagnostics {
+        assert!(
+            !diagnostic.message.contains("Type#"),
+            "unexpected raw type placeholder in message: {diagnostic:?}"
+        );
+        for label in &diagnostic.labels {
+            assert!(
+                !label.message.contains("Type#"),
+                "unexpected raw type placeholder in label: {diagnostic:?}"
+            );
+        }
     }
 }

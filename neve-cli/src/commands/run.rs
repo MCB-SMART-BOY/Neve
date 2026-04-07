@@ -4,7 +4,7 @@
 use crate::{commands::module_graph, output};
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
-use neve_frontend::rewrite_diagnostics_with_module_names;
+use neve_frontend::{collect_item_names_from_modules, rewrite_diagnostics_with_names};
 use neve_hir::{ModuleId, ModuleLoadError, ModuleLoader};
 use neve_std::{std_module_overrides, stdlib};
 use neve_syntax::{ImportDef, ItemKind, SourceFile};
@@ -192,6 +192,12 @@ fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Valu
         global_types.extend(types);
         global_spans.extend(spans);
     }
+    let type_names = collect_item_names_from_modules(
+        loader
+            .load_order()
+            .iter()
+            .filter_map(|module_id| loader.hir_module(*module_id)),
+    );
 
     let mut had_errors = false;
     let mut module_method_resolutions = HashMap::new();
@@ -210,7 +216,7 @@ fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Valu
         let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
         checker.check(module);
         let method_resolutions = checker.method_resolutions().clone();
-        let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), module);
+        let diagnostics = rewrite_diagnostics_with_names(checker.diagnostics(), &type_names);
 
         for diag in diagnostics {
             emit(&source, &info.file_path.display().to_string(), &diag);

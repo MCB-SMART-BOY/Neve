@@ -5,7 +5,7 @@ use crate::output;
 use neve_common::Span;
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{Evaluator, Value, builtins};
-use neve_frontend::rewrite_diagnostics_with_module_names;
+use neve_frontend::{collect_item_names_from_modules, rewrite_diagnostics_with_names};
 use neve_hir::{
     DefId, Import as HirImport, ImportKind as HirImportKind, ImportPathPrefix,
     ItemKind as HirItemKind, Module, ModuleId, ModuleLoader, ModulePath, Resolver, Ty, TyKind,
@@ -175,28 +175,28 @@ pub fn run() -> Result<(), String> {
                                         &mut semantic_state,
                                     ) {
                                         Ok(_) => println!("Loaded: {}", file_path),
-                                    Err(ReplEvalError::Diagnostics {
-                                        source,
-                                        diagnostics,
-                                    }) => {
-                                        for diag in &diagnostics {
-                                            emit(&source, file_path, diag);
-                                        }
-                                    }
-                                    Err(ReplEvalError::ModuleDiagnostics(entries)) => {
-                                        for entry in &entries {
-                                            for diag in &entry.diagnostics {
-                                                emit(
-                                                    &entry.source,
-                                                    &entry.path.display().to_string(),
-                                                    diag,
-                                                );
+                                        Err(ReplEvalError::Diagnostics {
+                                            source,
+                                            diagnostics,
+                                        }) => {
+                                            for diag in &diagnostics {
+                                                emit(&source, file_path, diag);
                                             }
                                         }
-                                    }
-                                    Err(ReplEvalError::Message(message)) => {
-                                        eprintln!("{message}");
-                                    }
+                                        Err(ReplEvalError::ModuleDiagnostics(entries)) => {
+                                            for entry in &entries {
+                                                for diag in &entry.diagnostics {
+                                                    emit(
+                                                        &entry.source,
+                                                        &entry.path.display().to_string(),
+                                                        diag,
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        Err(ReplEvalError::Message(message)) => {
+                                            eprintln!("{message}");
+                                        }
                                     }
                                 }
                                 Err(e) => {
@@ -771,8 +771,9 @@ fn typecheck_repl_module(
     }
 
     checker.check(current_module);
+    let type_names = collect_repl_type_names(runtime_state, semantic_state, current_module);
     let diagnostics =
-        rewrite_diagnostics_with_module_names(checker.diagnostics_ref().to_vec(), current_module);
+        rewrite_diagnostics_with_names(checker.diagnostics_ref().to_vec(), &type_names);
     if diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
@@ -815,7 +816,14 @@ fn report_loaded_module_diagnostics(
 
         let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
         checker.check(module);
-        let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), module);
+        let type_names = collect_item_names_from_modules(
+            runtime_state
+                .module_loader
+                .load_order()
+                .iter()
+                .filter_map(|loaded_id| runtime_state.module_loader.hir_module(*loaded_id)),
+        );
+        let diagnostics = rewrite_diagnostics_with_names(checker.diagnostics(), &type_names);
         if diagnostics
             .iter()
             .any(|diagnostic| diagnostic.severity == Severity::Error)
@@ -1257,43 +1265,24 @@ fn format_repl_semantic_type(
     runtime_state: &ReplHirState,
     semantic_state: &ReplSemanticState,
 ) -> String {
-    let mut names = HashMap::new();
-    for module_id in runtime_state.module_loader.load_order() {
-        if let Some(loaded_module) = runtime_state.module_loader.hir_module(*module_id) {
-            collect_repl_type_names(loaded_module, &mut names);
-        }
-    }
-    for previous in &semantic_state.modules {
-        collect_repl_type_names(previous, &mut names);
-    }
-    collect_repl_type_names(module, &mut names);
+    let names = collect_repl_type_names(runtime_state, semantic_state, module);
     format_repl_semantic_type_with_names(ty, &names)
 }
 
-fn collect_repl_type_names(module: &Module, names: &mut HashMap<DefId, String>) {
-    for item in &module.items {
-        match &item.kind {
-            HirItemKind::Fn(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Struct(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Enum(def) => {
-                names.insert(item.id, def.name.clone());
-                for variant in &def.variants {
-                    names.insert(variant.id, variant.name.clone());
-                }
-            }
-            HirItemKind::TypeAlias(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Trait(def) => {
-                names.insert(item.id, def.name.clone());
-            }
-            HirItemKind::Impl(_) => {}
-        }
-    }
+fn collect_repl_type_names(
+    runtime_state: &ReplHirState,
+    semantic_state: &ReplSemanticState,
+    module: &Module,
+) -> HashMap<DefId, String> {
+    collect_item_names_from_modules(
+        runtime_state
+            .module_loader
+            .load_order()
+            .iter()
+            .filter_map(|module_id| runtime_state.module_loader.hir_module(*module_id))
+            .chain(semantic_state.modules.iter())
+            .chain(std::iter::once(module)),
+    )
 }
 
 fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>) -> String {
@@ -1669,7 +1658,11 @@ mod tests {
     #[test]
     fn repl_reports_type_errors_from_newly_imported_modules() {
         let temp_dir = TempDir::new().unwrap();
-        fs::write(temp_dir.path().join("broken.neve"), "pub fn bad() = 1 + true;").unwrap();
+        fs::write(
+            temp_dir.path().join("broken.neve"),
+            "pub fn bad() = 1 + true;",
+        )
+        .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
         let mut semantic = ReplSemanticState::default();
