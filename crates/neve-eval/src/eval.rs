@@ -189,6 +189,11 @@ impl Evaluator {
     fn collect_item(&mut self, item: &Item) {
         match &item.kind {
             ItemKind::Fn(fn_def) => {
+                if fn_def.params.is_empty()
+                    && matches!(self.globals.get(&item.id), Some(GlobalDef::Value(_)))
+                {
+                    return;
+                }
                 self.globals
                     .insert(item.id, GlobalDef::Function(fn_def.clone()));
             }

@@ -33,6 +33,9 @@ pub struct Resolver {
     /// captured by inner `forall` binders.
     /// 为外层泛型作用域分配不会被内层 `forall` 误捕获的参数索引。
     next_outer_generic_idx: u32,
+    /// Previously existing globals inherited from an outer incremental context.
+    /// 从外部增量上下文继承的既有全局定义。
+    inherited_globals: HashMap<String, DefId>,
     /// Imported names from other modules. / 从其他模块导入的名称。
     imported: HashMap<String, DefId>,
     /// Preallocated definition IDs for impl items keyed by source span.
@@ -64,6 +67,7 @@ impl Resolver {
             scopes: Vec::new(),
             generic_scopes: Vec::new(),
             next_outer_generic_idx: 1_000_000,
+            inherited_globals: HashMap::new(),
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
@@ -85,6 +89,7 @@ impl Resolver {
             scopes: Vec::new(),
             generic_scopes: Vec::new(),
             next_outer_generic_idx: 1_000_000,
+            inherited_globals: HashMap::new(),
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
@@ -129,6 +134,14 @@ impl Resolver {
     /// 获取当前模块解析到的全局定义。
     pub fn global_defs(&self) -> &HashMap<String, DefId> {
         &self.globals
+    }
+
+    /// Register globals inherited from a previous incremental compilation step.
+    /// 注册来自上一次增量编译步骤的已有全局定义。
+    pub fn register_existing_globals(&mut self, globals: Vec<(String, DefId)>) {
+        for (name, def_id) in globals {
+            self.inherited_globals.insert(name, def_id);
+        }
     }
 
     /// Set the current module path for relative import resolution.
@@ -465,6 +478,7 @@ impl Resolver {
         // 首先检查本地全局变量，然后检查导入的名称
         self.globals
             .get(name)
+            .or_else(|| self.inherited_globals.get(name))
             .or_else(|| self.imported.get(name))
             .copied()
     }
@@ -504,34 +518,69 @@ impl Resolver {
         match &item.kind {
             ast::ItemKind::Let(def) => {
                 if let Some(name) = self.pattern_name(&def.pattern) {
-                    let id = self.fresh_def_id();
+                    let id = self
+                        .globals
+                        .get(&name)
+                        .copied()
+                        .or_else(|| self.inherited_globals.get(&name).copied())
+                        .unwrap_or_else(|| self.fresh_def_id());
                     self.globals.insert(name, id);
                 }
             }
             ast::ItemKind::Fn(def) => {
-                let id = self.fresh_def_id();
+                let id = self
+                    .globals
+                    .get(&def.name.name)
+                    .copied()
+                    .or_else(|| self.inherited_globals.get(&def.name.name).copied())
+                    .unwrap_or_else(|| self.fresh_def_id());
                 self.globals.insert(def.name.name.clone(), id);
             }
             ast::ItemKind::Struct(def) => {
-                let id = self.fresh_def_id();
+                let id = self
+                    .globals
+                    .get(&def.name.name)
+                    .copied()
+                    .or_else(|| self.inherited_globals.get(&def.name.name).copied())
+                    .unwrap_or_else(|| self.fresh_def_id());
                 self.globals.insert(def.name.name.clone(), id);
             }
             ast::ItemKind::Enum(def) => {
-                let id = self.fresh_def_id();
+                let id = self
+                    .globals
+                    .get(&def.name.name)
+                    .copied()
+                    .or_else(|| self.inherited_globals.get(&def.name.name).copied())
+                    .unwrap_or_else(|| self.fresh_def_id());
                 self.globals.insert(def.name.name.clone(), id);
                 // Also register variants
                 // 同时注册变体
                 for variant in &def.variants {
-                    let vid = self.fresh_def_id();
+                    let vid = self
+                        .globals
+                        .get(&variant.name.name)
+                        .copied()
+                        .or_else(|| self.inherited_globals.get(&variant.name.name).copied())
+                        .unwrap_or_else(|| self.fresh_def_id());
                     self.globals.insert(variant.name.name.clone(), vid);
                 }
             }
             ast::ItemKind::TypeAlias(def) => {
-                let id = self.fresh_def_id();
+                let id = self
+                    .globals
+                    .get(&def.name.name)
+                    .copied()
+                    .or_else(|| self.inherited_globals.get(&def.name.name).copied())
+                    .unwrap_or_else(|| self.fresh_def_id());
                 self.globals.insert(def.name.name.clone(), id);
             }
             ast::ItemKind::Trait(def) => {
-                let id = self.fresh_def_id();
+                let id = self
+                    .globals
+                    .get(&def.name.name)
+                    .copied()
+                    .or_else(|| self.inherited_globals.get(&def.name.name).copied())
+                    .unwrap_or_else(|| self.fresh_def_id());
                 self.globals.insert(def.name.name.clone(), id);
             }
             ast::ItemKind::Impl(_) => {
