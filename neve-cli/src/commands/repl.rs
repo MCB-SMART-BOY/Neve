@@ -175,17 +175,28 @@ pub fn run() -> Result<(), String> {
                                         &mut semantic_state,
                                     ) {
                                         Ok(_) => println!("Loaded: {}", file_path),
-                                        Err(ReplEvalError::Diagnostics {
-                                            source,
-                                            diagnostics,
-                                        }) => {
-                                            for diag in &diagnostics {
-                                                emit(&source, file_path, diag);
+                                    Err(ReplEvalError::Diagnostics {
+                                        source,
+                                        diagnostics,
+                                    }) => {
+                                        for diag in &diagnostics {
+                                            emit(&source, file_path, diag);
+                                        }
+                                    }
+                                    Err(ReplEvalError::ModuleDiagnostics(entries)) => {
+                                        for entry in &entries {
+                                            for diag in &entry.diagnostics {
+                                                emit(
+                                                    &entry.source,
+                                                    &entry.path.display().to_string(),
+                                                    diag,
+                                                );
                                             }
                                         }
-                                        Err(ReplEvalError::Message(message)) => {
-                                            eprintln!("{message}");
-                                        }
+                                    }
+                                    Err(ReplEvalError::Message(message)) => {
+                                        eprintln!("{message}");
+                                    }
                                     }
                                 }
                                 Err(e) => {
@@ -234,6 +245,13 @@ pub fn run() -> Result<(), String> {
                     }) => {
                         for diag in &diagnostics {
                             emit(&source, "<repl>", diag);
+                        }
+                    }
+                    Err(ReplEvalError::ModuleDiagnostics(entries)) => {
+                        for entry in &entries {
+                            for diag in &entry.diagnostics {
+                                emit(&entry.source, &entry.path.display().to_string(), diag);
+                            }
                         }
                     }
                     Err(ReplEvalError::Message(message)) => {
@@ -305,7 +323,15 @@ enum ReplEvalError {
         source: String,
         diagnostics: Vec<neve_diagnostic::Diagnostic>,
     },
+    ModuleDiagnostics(Vec<LoadedModuleDiagnostics>),
     Message(String),
+}
+
+#[derive(Debug)]
+struct LoadedModuleDiagnostics {
+    path: PathBuf,
+    source: String,
+    diagnostics: Vec<neve_diagnostic::Diagnostic>,
 }
 
 #[derive(Debug, Clone)]
@@ -478,9 +504,9 @@ impl ReplHirState {
         &mut self,
         ast: &SourceFile,
         context: &ReplInputContext,
-    ) -> Result<(Module, Resolver), String> {
+    ) -> Result<(Module, Resolver, Vec<ModuleId>), String> {
         self.validate_context(context)?;
-        self.load_import_modules(ast, &context.module_path)?;
+        let newly_loaded = self.load_import_modules(ast, &context.module_path)?;
 
         let mut resolver = Resolver::new();
         resolver.set_def_id_counter(self.next_def_id.max(self.module_loader.next_def_id()));
@@ -511,7 +537,7 @@ impl ReplHirState {
             context.module_name.clone(),
             context.module_path.clone(),
         );
-        Ok((module, resolver))
+        Ok((module, resolver, newly_loaded))
     }
 
     fn record_user_bindings(&mut self, ast: &SourceFile) {
@@ -524,9 +550,10 @@ impl ReplHirState {
         &mut self,
         ast: &SourceFile,
         current_module_path: &[String],
-    ) -> Result<(), String> {
+    ) -> Result<Vec<ModuleId>, String> {
         self.module_loader
             .set_def_id_counter(self.next_def_id.max(self.module_loader.next_def_id()));
+        let known_modules: HashSet<_> = self.module_loader.load_order().iter().copied().collect();
 
         for item in &ast.items {
             let ItemKind::Import(import) = &item.kind else {
@@ -553,7 +580,14 @@ impl ReplHirState {
         }
 
         self.next_def_id = self.next_def_id.max(self.module_loader.next_def_id());
-        Ok(())
+        let newly_loaded = self
+            .module_loader
+            .load_order()
+            .iter()
+            .copied()
+            .filter(|module_id| !known_modules.contains(module_id))
+            .collect();
+        Ok(newly_loaded)
     }
 
     fn eval_pending_loaded_modules(&mut self) -> Result<(), String> {
@@ -681,9 +715,12 @@ fn evaluate_repl_input(
         });
     }
 
-    let (module, resolver) = runtime_state
+    let (module, resolver, newly_loaded) = runtime_state
         .build_module(&ast, context)
         .map_err(ReplEvalError::Message)?;
+    if !newly_loaded.is_empty() {
+        report_loaded_module_diagnostics(runtime_state, &newly_loaded)?;
+    }
 
     let checker = match typecheck_repl_module(&module, runtime_state, semantic_state) {
         Ok(checker) => checker,
@@ -744,6 +781,59 @@ fn typecheck_repl_module(
     }
 
     Ok(checker)
+}
+
+fn report_loaded_module_diagnostics(
+    runtime_state: &ReplHirState,
+    newly_loaded: &[ModuleId],
+) -> Result<(), ReplEvalError> {
+    let mut global_types = HashMap::new();
+    let mut global_spans = HashMap::new();
+    let pending: HashSet<_> = newly_loaded.iter().copied().collect();
+
+    for module_id in runtime_state.module_loader.load_order() {
+        let Some(module) = runtime_state.module_loader.hir_module(*module_id) else {
+            continue;
+        };
+        let (types, spans) = TypeChecker::collect_signatures(module);
+        global_types.extend(types);
+        global_spans.extend(spans);
+    }
+
+    let mut entries = Vec::new();
+    for module_id in runtime_state.module_loader.load_order() {
+        if !pending.contains(module_id) {
+            continue;
+        }
+
+        let Some(module) = runtime_state.module_loader.hir_module(*module_id) else {
+            continue;
+        };
+        let Some(info) = runtime_state.module_loader.get_module(*module_id) else {
+            continue;
+        };
+
+        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
+        checker.check(module);
+        let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), module);
+        if diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+        {
+            let source = std::fs::read_to_string(&info.file_path).unwrap_or_default();
+            entries.push(LoadedModuleDiagnostics {
+                path: info.file_path.clone(),
+                source,
+                diagnostics,
+            });
+        }
+    }
+
+    if entries.is_empty() {
+        Ok(())
+    } else {
+        Err(ReplEvalError::ModuleDiagnostics(entries))
+    }
 }
 
 fn item_bindings(ast: &SourceFile) -> Vec<(String, bool)> {
@@ -901,7 +991,7 @@ fn infer_repl_type(
 
     let context = ReplInputContext::repl();
     let mut runtime = runtime_state.clone();
-    let (module, _) = runtime
+    let (module, _, _) = runtime
         .build_module(&ast, &context)
         .map_err(TypeQueryError::Message)?;
     let checker = typecheck_repl_module(&module, &runtime, state).map_err(|diagnostics| {
@@ -1297,11 +1387,12 @@ fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>)
 #[cfg(test)]
 mod tests {
     use super::{
-        ReplHirState, ReplInputContext, ReplSemanticState, evaluate_repl_input,
+        ReplEvalError, ReplHirState, ReplInputContext, ReplSemanticState, evaluate_repl_input,
         format_repl_semantic_type, format_repl_type, infer_repl_type, prepare_repl_input,
         semantic_entries_from_ast, type_from_value,
     };
     use neve_common::Span;
+    use neve_diagnostic::Severity;
     use neve_eval::Value;
     use neve_hir::{ItemKind as HirItemKind, Ty, TyKind, lower};
     use neve_parser::parse;
@@ -1573,5 +1664,38 @@ mod tests {
         )
         .expect("loaded binding should persist");
         assert_eq!(value, Value::Int(42.into()));
+    }
+
+    #[test]
+    fn repl_reports_type_errors_from_newly_imported_modules() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("broken.neve"), "pub fn bad() = 1 + true;").unwrap();
+
+        let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
+        let mut semantic = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        let error = evaluate_repl_input(
+            "import broken (bad);",
+            true,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect_err("importing a broken module should surface diagnostics");
+
+        match error {
+            ReplEvalError::ModuleDiagnostics(entries) => {
+                assert_eq!(entries.len(), 1);
+                assert!(entries[0].path.ends_with("broken.neve"));
+                assert!(
+                    entries[0]
+                        .diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.severity == Severity::Error)
+                );
+            }
+            other => panic!("expected module diagnostics, got {other:?}"),
+        }
     }
 }
