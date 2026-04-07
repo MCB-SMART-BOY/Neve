@@ -1164,7 +1164,11 @@ impl Evaluator {
                     };
                 }
 
-                match (builtin_constructor_name(*def_id), patterns.as_slice(), value) {
+                match (
+                    builtin_constructor_name(*def_id),
+                    patterns.as_slice(),
+                    value,
+                ) {
                     (Some("Some"), [p], Value::Some(v)) => self.match_pattern(p, v),
                     (Some("None"), [], Value::None) => Some(Vec::new()),
                     (Some("Ok"), [p], Value::Ok(v)) => self.match_pattern(p, v),
