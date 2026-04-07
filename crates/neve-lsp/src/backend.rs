@@ -721,48 +721,38 @@ impl LanguageServer for Backend {
         {
             let offset = doc.offset_at(pos.line, pos.character);
 
-            // Find the symbol name at this position / 在此位置查找符号名称
-            if let Some(name) = index.find_name_at(offset) {
-                // Check if this is a valid symbol that can be renamed
-                // 通过验证是否有定义来检查这是否是可以重命名的有效符号
-                if index.get_definitions(&name).is_none() {
-                    return Ok(None);
-                }
+            let refs = index.find_references_at(offset, true);
 
-                // Get all references to this symbol / 获取此符号的所有引用
-                let refs = index.get_references(&name);
+            if !refs.is_empty() {
+                let edits: Vec<TextEdit> = refs
+                    .iter()
+                    .map(|r| {
+                        let start: usize = r.span.start.into();
+                        let end: usize = r.span.end.into();
+                        let (start_line, start_col) = doc.position_at(start);
+                        let (end_line, end_col) = doc.position_at(end);
 
-                if !refs.is_empty() {
-                    let edits: Vec<TextEdit> = refs
-                        .iter()
-                        .map(|r| {
-                            let start: usize = r.span.start.into();
-                            let end: usize = r.span.end.into();
-                            let (start_line, start_col) = doc.position_at(start);
-                            let (end_line, end_col) = doc.position_at(end);
+                        TextEdit {
+                            range: Range {
+                                start: Position::new(start_line, start_col),
+                                end: Position::new(end_line, end_col),
+                            },
+                            new_text: new_name.clone(),
+                        }
+                    })
+                    .collect();
 
-                            TextEdit {
-                                range: Range {
-                                    start: Position::new(start_line, start_col),
-                                    end: Position::new(end_line, end_col),
-                                },
-                                new_text: new_name.clone(),
-                            }
-                        })
-                        .collect();
+                let mut changes = std::collections::HashMap::new();
+                changes.insert(
+                    params.text_document_position.text_document.uri.clone(),
+                    edits,
+                );
 
-                    let mut changes = std::collections::HashMap::new();
-                    changes.insert(
-                        params.text_document_position.text_document.uri.clone(),
-                        edits,
-                    );
-
-                    return Ok(Some(WorkspaceEdit {
-                        changes: Some(changes),
-                        document_changes: None,
-                        change_annotations: None,
-                    }));
-                }
+                return Ok(Some(WorkspaceEdit {
+                    changes: Some(changes),
+                    document_changes: None,
+                    change_annotations: None,
+                }));
             }
         }
 
@@ -782,25 +772,19 @@ impl LanguageServer for Backend {
             let offset = doc.offset_at(pos.line, pos.character);
 
             // Find the symbol at this position / 在此位置查找符号
-            if let Some(name) = index.find_name_at(offset) {
-                // Find the reference at this position to get its span
-                // 查找此位置的引用以获取其范围
-                for r in &index.references {
-                    let start: usize = r.span.start.into();
-                    let end: usize = r.span.end.into();
-                    if start <= offset && offset < end {
-                        let (start_line, start_col) = doc.position_at(start);
-                        let (end_line, end_col) = doc.position_at(end);
+            if let Some(reference) = index.find_reference_at(offset) {
+                let start: usize = reference.span.start.into();
+                let end: usize = reference.span.end.into();
+                let (start_line, start_col) = doc.position_at(start);
+                let (end_line, end_col) = doc.position_at(end);
 
-                        return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-                            range: Range {
-                                start: Position::new(start_line, start_col),
-                                end: Position::new(end_line, end_col),
-                            },
-                            placeholder: name,
-                        }));
-                    }
-                }
+                return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                    range: Range {
+                        start: Position::new(start_line, start_col),
+                        end: Position::new(end_line, end_col),
+                    },
+                    placeholder: reference.name.clone(),
+                }));
             }
         }
 

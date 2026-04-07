@@ -62,11 +62,14 @@ pub struct SymbolRef {
     /// Whether this is a write (definition) or read (usage).
     /// 这是写入（定义）还是读取（使用）。
     pub is_write: bool,
+    /// The resolved definition span for this reference when known.
+    /// 该引用解析到的定义 span（如果已知）。
+    pub target_def_span: Option<Span>,
 }
 
 /// Index of all symbols and references in a document.
 /// 文档中所有符号和引用的索引。
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SymbolIndex {
     /// All symbol definitions, keyed by name. / 所有符号定义，按名称索引。
     pub definitions: HashMap<String, Vec<Symbol>>,
@@ -81,7 +84,11 @@ impl SymbolIndex {
     /// Create a new empty symbol index.
     /// 创建新的空符号索引。
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            definitions: HashMap::new(),
+            references: Vec::new(),
+            scopes: vec![HashMap::new()],
+        }
     }
 
     /// Build a symbol index from an AST.
@@ -95,17 +102,15 @@ impl SymbolIndex {
     /// Find the definition of a symbol at the given offset.
     /// 在给定偏移量处查找符号的定义。
     pub fn find_definition_at(&self, offset: usize) -> Option<&Symbol> {
-        // First, find what reference is at this offset
-        // 首先，查找此偏移量处的引用
-        let ref_at_offset = self.references.iter().find(|r| {
-            let start: usize = r.span.start.into();
-            let end: usize = r.span.end.into();
-            start <= offset && offset < end
-        })?;
+        if let Some(reference) = self.find_reference_at(offset) {
+            if let Some(def_span) = reference.target_def_span {
+                return self.find_symbol_by_def_span(def_span);
+            }
 
-        // Then find the definition for this name
-        // 然后查找此名称的定义
-        self.definitions.get(&ref_at_offset.name)?.first()
+            return self.definitions.get(&reference.name)?.first();
+        }
+
+        self.find_definition_site_at(offset)
     }
 
     /// Find the definition site whose span directly contains the offset.
@@ -125,44 +130,53 @@ impl SymbolIndex {
     /// Find all references to the symbol at the given offset.
     /// 查找给定偏移量处符号的所有引用。
     pub fn find_references_at(&self, offset: usize, include_declaration: bool) -> Vec<&SymbolRef> {
-        // First, find what symbol is at this offset
-        // 首先，查找此偏移量处的符号
-        let name = self.find_name_at(offset);
+        if let Some(reference) = self.find_reference_at(offset) {
+            if let Some(def_span) = reference.target_def_span {
+                return self
+                    .references
+                    .iter()
+                    .filter(|r| {
+                        r.target_def_span == Some(def_span) && (include_declaration || !r.is_write)
+                    })
+                    .collect();
+            }
 
-        if let Some(name) = name {
-            self.references
+            return self
+                .references
                 .iter()
-                .filter(|r| r.name == name && (include_declaration || !r.is_write))
-                .collect()
-        } else {
-            Vec::new()
+                .filter(|r| r.name == reference.name && (include_declaration || !r.is_write))
+                .collect();
         }
+
+        if let Some(symbol) = self.find_definition_site_at(offset) {
+            return self
+                .references
+                .iter()
+                .filter(|r| {
+                    r.target_def_span == Some(symbol.def_span) && (include_declaration || !r.is_write)
+                })
+                .collect();
+        }
+
+        Vec::new()
     }
 
     /// Find the name of the symbol at the given offset.
     /// 查找给定偏移量处符号的名称。
     pub fn find_name_at(&self, offset: usize) -> Option<String> {
-        // Check references / 检查引用
-        for r in &self.references {
+        self.find_reference_at(offset)
+            .map(|r| r.name.clone())
+            .or_else(|| self.find_definition_site_at(offset).map(|sym| sym.name.clone()))
+    }
+
+    /// Find the reference whose span directly contains the offset.
+    /// 查找其引用 span 直接覆盖该偏移量的引用点。
+    pub fn find_reference_at(&self, offset: usize) -> Option<&SymbolRef> {
+        self.references.iter().find(|r| {
             let start: usize = r.span.start.into();
             let end: usize = r.span.end.into();
-            if start <= offset && offset < end {
-                return Some(r.name.clone());
-            }
-        }
-
-        // Check definitions / 检查定义
-        for symbols in self.definitions.values() {
-            for sym in symbols {
-                let start: usize = sym.def_span.start.into();
-                let end: usize = sym.def_span.end.into();
-                if start <= offset && offset < end {
-                    return Some(sym.name.clone());
-                }
-            }
-        }
-
-        None
+            start <= offset && offset < end
+        })
     }
 
     /// Get all references to a symbol by name.
@@ -198,12 +212,7 @@ impl SymbolIndex {
                     def_span: def.name.span,
                     full_span: item.span,
                 };
-                self.add_definition(symbol.clone());
-                self.add_reference(SymbolRef {
-                    name: def.name.name.clone(),
-                    span: def.name.span,
-                    is_write: true,
-                });
+                self.define_symbol(symbol, true);
 
                 // Index parameters as Parameter kind
                 // 将参数索引为 Parameter 类型
@@ -221,12 +230,7 @@ impl SymbolIndex {
                     def_span: def.name.span,
                     full_span: item.span,
                 };
-                self.add_definition(symbol);
-                self.add_reference(SymbolRef {
-                    name: def.name.name.clone(),
-                    span: def.name.span,
-                    is_write: true,
-                });
+                self.define_symbol(symbol, true);
 
                 // Index fields / 索引字段
                 for field in &def.fields {
@@ -236,7 +240,7 @@ impl SymbolIndex {
                         def_span: field.name.span,
                         full_span: field.span,
                     };
-                    self.add_definition(field_symbol);
+                    self.define_symbol(field_symbol, false);
                 }
             }
             ItemKind::Enum(def) => {
@@ -246,12 +250,7 @@ impl SymbolIndex {
                     def_span: def.name.span,
                     full_span: item.span,
                 };
-                self.add_definition(symbol);
-                self.add_reference(SymbolRef {
-                    name: def.name.name.clone(),
-                    span: def.name.span,
-                    is_write: true,
-                });
+                self.define_symbol(symbol, true);
 
                 // Index variants / 索引变体
                 for variant in &def.variants {
@@ -261,12 +260,7 @@ impl SymbolIndex {
                         def_span: variant.name.span,
                         full_span: variant.span,
                     };
-                    self.add_definition(variant_symbol);
-                    self.add_reference(SymbolRef {
-                        name: variant.name.name.clone(),
-                        span: variant.name.span,
-                        is_write: true,
-                    });
+                    self.define_symbol(variant_symbol, true);
                 }
             }
             ItemKind::TypeAlias(def) => {
@@ -276,12 +270,7 @@ impl SymbolIndex {
                     def_span: def.name.span,
                     full_span: item.span,
                 };
-                self.add_definition(symbol);
-                self.add_reference(SymbolRef {
-                    name: def.name.name.clone(),
-                    span: def.name.span,
-                    is_write: true,
-                });
+                self.define_symbol(symbol, true);
             }
             ItemKind::Trait(def) => {
                 let symbol = Symbol {
@@ -290,12 +279,7 @@ impl SymbolIndex {
                     def_span: def.name.span,
                     full_span: item.span,
                 };
-                self.add_definition(symbol);
-                self.add_reference(SymbolRef {
-                    name: def.name.name.clone(),
-                    span: def.name.span,
-                    is_write: true,
-                });
+                self.define_symbol(symbol, true);
 
                 // Index trait methods / 索引 trait 方法
                 for trait_item in &def.items {
@@ -305,12 +289,7 @@ impl SymbolIndex {
                         def_span: trait_item.name.span,
                         full_span: trait_item.span,
                     };
-                    self.add_definition(method_symbol);
-                    self.add_reference(SymbolRef {
-                        name: trait_item.name.name.clone(),
-                        span: trait_item.name.span,
-                        is_write: true,
-                    });
+                    self.define_symbol(method_symbol, false);
                 }
 
                 // Index trait associated types / 索引 trait 关联类型
@@ -321,12 +300,7 @@ impl SymbolIndex {
                         def_span: assoc.name.span,
                         full_span: assoc.span,
                     };
-                    self.add_definition(assoc_symbol);
-                    self.add_reference(SymbolRef {
-                        name: assoc.name.name.clone(),
-                        span: assoc.name.span,
-                        is_write: true,
-                    });
+                    self.define_symbol(assoc_symbol, false);
                 }
             }
             ItemKind::Impl(def) => {
@@ -338,12 +312,7 @@ impl SymbolIndex {
                         def_span: impl_item.name.span,
                         full_span: impl_item.span,
                     };
-                    self.add_definition(method_symbol);
-                    self.add_reference(SymbolRef {
-                        name: impl_item.name.name.clone(),
-                        span: impl_item.name.span,
-                        is_write: true,
-                    });
+                    self.define_symbol(method_symbol, false);
 
                     // Index method body / 索引方法体
                     self.push_scope();
@@ -362,12 +331,7 @@ impl SymbolIndex {
                         def_span: assoc.name.span,
                         full_span: assoc.span,
                     };
-                    self.add_definition(assoc_symbol);
-                    self.add_reference(SymbolRef {
-                        name: assoc.name.name.clone(),
-                        span: assoc.name.span,
-                        is_write: true,
-                    });
+                    self.define_symbol(assoc_symbol, false);
                 }
             }
             ItemKind::Import(_) => {
@@ -380,19 +344,21 @@ impl SymbolIndex {
     fn index_expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Var(ident) => {
-                self.add_reference(SymbolRef {
-                    name: ident.name.clone(),
-                    span: ident.span,
-                    is_write: false,
-                });
+                self.add_named_reference(
+                    ident.name.clone(),
+                    ident.span,
+                    false,
+                    self.lookup_symbol(&ident.name).map(|symbol| symbol.def_span),
+                );
             }
             ExprKind::Path(parts) => {
-                for part in parts {
-                    self.add_reference(SymbolRef {
-                        name: part.name.clone(),
-                        span: part.span,
-                        is_write: false,
-                    });
+                for (index, part) in parts.iter().enumerate() {
+                    let resolved = if index == 0 {
+                        self.lookup_symbol(&part.name).map(|symbol| symbol.def_span)
+                    } else {
+                        None
+                    };
+                    self.add_named_reference(part.name.clone(), part.span, false, resolved);
                 }
             }
             ExprKind::Lambda { params, body } => {
@@ -415,22 +381,14 @@ impl SymbolIndex {
                 args,
             } => {
                 self.index_expr(receiver);
-                self.add_reference(SymbolRef {
-                    name: method.name.clone(),
-                    span: method.span,
-                    is_write: false,
-                });
+                self.add_named_reference(method.name.clone(), method.span, false, None);
                 for arg in args {
                     self.index_expr(arg);
                 }
             }
             ExprKind::Field { base, field } => {
                 self.index_expr(base);
-                self.add_reference(SymbolRef {
-                    name: field.name.clone(),
-                    span: field.span,
-                    is_write: false,
-                });
+                self.add_named_reference(field.name.clone(), field.span, false, None);
             }
             ExprKind::TupleIndex { base, .. } => {
                 self.index_expr(base);
@@ -456,11 +414,12 @@ impl SymbolIndex {
                     } else {
                         // Shorthand: #{ x } means #{ x = x }
                         // 简写：#{ x } 表示 #{ x = x }
-                        self.add_reference(SymbolRef {
-                            name: field.name.name.clone(),
-                            span: field.name.span,
-                            is_write: false,
-                        });
+                        self.add_named_reference(
+                            field.name.name.clone(),
+                            field.name.span,
+                            false,
+                            self.lookup_symbol(&field.name.name).map(|symbol| symbol.def_span),
+                        );
                     }
                 }
             }
@@ -533,11 +492,7 @@ impl SymbolIndex {
             }
             ExprKind::SafeField { base, field } => {
                 self.index_expr(base);
-                self.add_reference(SymbolRef {
-                    name: field.name.clone(),
-                    span: field.span,
-                    is_write: false,
-                });
+                self.add_named_reference(field.name.clone(), field.span, false, None);
             }
             ExprKind::Let {
                 pattern,
@@ -596,13 +551,7 @@ impl SymbolIndex {
                         def_span: ident.span,
                         full_span: pattern.span,
                     };
-                    self.add_definition(symbol.clone());
-                    self.add_to_scope(symbol);
-                    self.add_reference(SymbolRef {
-                        name: ident.name.clone(),
-                        span: ident.span,
-                        is_write: true,
-                    });
+                    self.define_symbol(symbol, true);
                 }
             }
             PatternKind::Tuple(patterns) => {
@@ -621,13 +570,7 @@ impl SymbolIndex {
                             def_span: field.name.span,
                             full_span: field.span,
                         };
-                        self.add_definition(symbol.clone());
-                        self.add_to_scope(symbol);
-                        self.add_reference(SymbolRef {
-                            name: field.name.name.clone(),
-                            span: field.name.span,
-                            is_write: true,
-                        });
+                        self.define_symbol(symbol, true);
                     }
                 }
             }
@@ -650,14 +593,15 @@ impl SymbolIndex {
                             def_span: ident.span,
                             full_span: pattern.span,
                         };
-                        self.add_definition(symbol.clone());
-                        self.add_to_scope(symbol);
+                        self.define_symbol(symbol, true);
+                    } else {
+                        self.add_named_reference(
+                            ident.name.clone(),
+                            ident.span,
+                            false,
+                            self.lookup_symbol(&ident.name).map(|symbol| symbol.def_span),
+                        );
                     }
-                    self.add_reference(SymbolRef {
-                        name: ident.name.clone(),
-                        span: ident.span,
-                        is_write: is_definition,
-                    });
                 }
             }
             PatternKind::Tuple(patterns) => {
@@ -684,14 +628,15 @@ impl SymbolIndex {
                                 def_span: field.name.span,
                                 full_span: field.span,
                             };
-                            self.add_definition(symbol.clone());
-                            self.add_to_scope(symbol);
+                            self.define_symbol(symbol, true);
+                        } else {
+                            self.add_named_reference(
+                                field.name.name.clone(),
+                                field.name.span,
+                                false,
+                                self.lookup_symbol(&field.name.name).map(|symbol| symbol.def_span),
+                            );
                         }
-                        self.add_reference(SymbolRef {
-                            name: field.name.name.clone(),
-                            span: field.name.span,
-                            is_write: is_definition,
-                        });
                     }
                 }
             }
@@ -699,11 +644,7 @@ impl SymbolIndex {
                 // Constructor name is a reference
                 // 构造函数名是一个引用
                 for part in path {
-                    self.add_reference(SymbolRef {
-                        name: part.name.clone(),
-                        span: part.span,
-                        is_write: false,
-                    });
+                    self.add_named_reference(part.name.clone(), part.span, false, None);
                 }
                 // Pattern arguments may introduce bindings
                 // 模式参数可能引入绑定
@@ -724,14 +665,15 @@ impl SymbolIndex {
                         def_span: name.span,
                         full_span: pattern.span,
                     };
-                    self.add_definition(symbol.clone());
-                    self.add_to_scope(symbol);
+                    self.define_symbol(symbol, true);
+                } else {
+                    self.add_named_reference(
+                        name.name.clone(),
+                        name.span,
+                        false,
+                        self.lookup_symbol(&name.name).map(|symbol| symbol.def_span),
+                    );
                 }
-                self.add_reference(SymbolRef {
-                    name: name.name.clone(),
-                    span: name.span,
-                    is_write: is_definition,
-                });
                 self.index_pattern(pattern, is_definition);
             }
             PatternKind::ListRest { init, rest, tail } => {
@@ -767,6 +709,14 @@ impl SymbolIndex {
         }
     }
 
+    fn lookup_symbol(&self, name: &str) -> Option<&Symbol> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
+            .or_else(|| self.definitions.get(name).and_then(|symbols| symbols.first()))
+    }
+
     fn add_definition(&mut self, symbol: Symbol) {
         self.definitions
             .entry(symbol.name.clone())
@@ -774,7 +724,39 @@ impl SymbolIndex {
             .push(symbol);
     }
 
-    fn add_reference(&mut self, reference: SymbolRef) {
-        self.references.push(reference);
+    fn define_symbol(&mut self, symbol: Symbol, add_to_scope: bool) {
+        if add_to_scope {
+            self.add_to_scope(symbol.clone());
+        }
+        self.add_definition(symbol.clone());
+        self.add_named_reference(symbol.name.clone(), symbol.def_span, true, Some(symbol.def_span));
+    }
+
+    fn add_named_reference(
+        &mut self,
+        name: String,
+        span: Span,
+        is_write: bool,
+        target_def_span: Option<Span>,
+    ) {
+        self.references.push(SymbolRef {
+            name,
+            span,
+            is_write,
+            target_def_span,
+        });
+    }
+
+    fn find_symbol_by_def_span(&self, def_span: Span) -> Option<&Symbol> {
+        self.definitions
+            .values()
+            .flat_map(|symbols| symbols.iter())
+            .find(|symbol| symbol.def_span == def_span)
+    }
+}
+
+impl Default for SymbolIndex {
+    fn default() -> Self {
+        Self::new()
     }
 }
