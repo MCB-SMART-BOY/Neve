@@ -85,7 +85,7 @@
 | `neve check` | ⚠️ 可用 | 类型检查能跑，当前模块和已加载依赖模块中的命名类型现在都能在 diagnostics 中较可读地显示；但完整语义镜像和更多编译器级保证还没闭环 |
 | `neve eval` | ⚠️ 可用 | 无 `import` 输入、本地模块导入，以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；仅少数仍未收敛的导入/运行时边缘场景会回退 AST |
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR，跨模块命名类型在 diagnostics 中的显示也已更可读；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
-| REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入，以及新导入模块的 type diagnostics 展示都已可工作。当前仍明确缺少跨项目根目录切换，以及更完整的 module graph/tooling 镜像 |
+| REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 现在既能显示定义点类型，也能在局部变量引用、全局函数引用、方法名和一般表达式位置显示真实语义类型；函数参数、lambda 参数和块级 `let` 的 pattern 绑定也已闭环。`goto definition` / `references` / `rename` 对局部遮蔽场景已开始按实际绑定解析。跨模块命名类型显示与更多 IDE 语义功能仍在补 |
 | End-to-end tests | ❌ 不可信 | 还不能作为“语言已闭环”的证据 |
