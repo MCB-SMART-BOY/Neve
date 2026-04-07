@@ -36,6 +36,8 @@ Welcome to the Neve language documentation. 欢迎来到 Neve 语言的文档中
 | [feature-matrix.md](feature-matrix.md) | Real support matrix | 真实功能支持矩阵 |
 | [install.md](install.md) | Installation guide | 安装指南 |
 | [architecture.md](architecture.md) | Internal architecture | 内部架构 |
+| [contributing.md](contributing.md) | Contributor guide | 贡献指南 |
+| [bootstrap.md](bootstrap.md) | Bootstrap package notes | Bootstrap 示例包说明 |
 | [changelog.md](changelog.md) | Version changelog | 版本更新日志 |
 
 ---
@@ -122,7 +124,7 @@ Int -> Int                    -- Function / 函数
 
 - **GitHub**: [MCB-SMART-BOY/Neve](https://github.com/MCB-SMART-BOY/Neve)
 - **Issues**: [Bug reports & feature requests](https://github.com/MCB-SMART-BOY/Neve/issues)
-- **Contributing**: [CONTRIBUTING.md](../CONTRIBUTING.md)
+- **Contributing**: [contributing.md](contributing.md)
 
 ---
 

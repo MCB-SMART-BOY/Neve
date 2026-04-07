@@ -2,27 +2,27 @@
 
 <img src="../assets/logo.svg" width="120" alt="Neve logo">
 
-<h1>Stage 0 Bootstrap Packages</h1>
+<h1>Bootstrap Package Examples</h1>
 
-<p><em>Stage 0 启动包</em></p>
+<p><em>Bootstrap 示例包</em></p>
 
 <p>
   <strong><a href="../README.md">Home</a></strong> ·
-  <strong><a href="../docs/">Docs</a></strong>
+  <strong><a href="./README.md">Docs</a></strong>
 </p>
 
 </div>
 
 ---
 
-This directory contains the foundational packages (Stage 0) needed to bootstrap the Neve package ecosystem from scratch.
-本目录包含从零启动 Neve 包生态所需的基础包集合（Stage 0）。
+This document describes the bootstrap package examples kept under `examples/bootstrap/`.
+本文档说明放在 `examples/bootstrap/` 下的 bootstrap 示例包。
 
-## 什么是 Stage 0? / What is Stage 0?
+## 什么是 Bootstrap 基础包? / What Are Bootstrap Packages?
 
-Stage 0 是构建系统的基础包集合,用于从零开始构建完整的工具链和系统。这些包通常使用预编译的二进制或最小依赖进行构建。
+这些示例代表从零启动工具链时最早期的一批基础构件，用来表达 Neve 将来如何描述自举过程。
 
-Stage 0 is the foundational package set used to bootstrap the build system from scratch, building a complete toolchain and system from the ground up.
+These examples represent the earliest building blocks of a future bootstrap chain and show how Neve may describe that process.
 
 ## Bootstrap 顺序 / Bootstrap Order
 
@@ -96,7 +96,7 @@ Stage 0 is the foundational package set used to bootstrap the build system from 
 
 ### 1. 最小化依赖 / Minimal Dependencies
 
-Stage 0 包应该尽可能少的依赖,理想情况下只依赖同一 Stage 或更早 Stage 的包。
+Bootstrap 包应该尽可能少地依赖其他包，理想情况下只依赖更早阶段的基础构件。
 
 ### 2. 可复现构建 / Reproducible Builds
 
@@ -125,19 +125,19 @@ Stage 0 包应该尽可能少的依赖,理想情况下只依赖同一 Stage 或�
 ### 构建单个包 / Build a Single Package
 
 ```bash
-neve build stage0/pkgs/musl.neve
+neve build examples/bootstrap/musl.neve
 ```
 
 ### 构建整个工具链 / Build Entire Toolchain
 
 ```bash
-neve build stage0/pkgs/gcc.neve  # 会自动构建依赖
+neve build examples/bootstrap/gcc.neve  # 会自动构建依赖
 ```
 
 ### 查看包信息 / Show Package Info
 
 ```bash
-neve show stage0/pkgs/musl.neve
+neve show examples/bootstrap/musl.neve
 ```
 
 ## 哈希值获取 / Getting Hashes
@@ -163,9 +163,9 @@ sha256sum musl-1.2.4.tar.gz
 
 ## 贡献指南 / Contributing
 
-添加新的 Stage 0 包:
+添加新的 bootstrap 示例包:
 
-1. 在 `stage0/pkgs/` 创建 `.neve` 文件
+1. 在 `examples/bootstrap/` 创建 `.neve` 文件
 2. 遵循现有包的结构
 3. 确保包含所有必要的元数据
 4. 测试构建过程
@@ -179,4 +179,4 @@ sha256sum musl-1.2.4.tar.gz
 
 ---
 
-*Bootstrap your system with Neve!* 🚀
+*Describe bootstrap packages in Neve.*

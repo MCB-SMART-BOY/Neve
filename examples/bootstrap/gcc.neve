@@ -1,5 +1,5 @@
 -- GCC: GNU Compiler Collection
--- Stage 0 compiler for bootstrapping the toolchain
+-- Bootstrap compiler for bootstrapping the toolchain
 
 {
     name = "gcc",

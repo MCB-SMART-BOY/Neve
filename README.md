@@ -282,8 +282,8 @@ Built-in documentation is available via `neve doc`:
 
 ### Contributing / 贡献
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-欢迎贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Contributions are welcome! Please see [docs/contributing.md](docs/contributing.md) for guidelines.
+欢迎贡献！请查看 [docs/contributing.md](docs/contributing.md)。
 
 ```bash
 # Development setup
