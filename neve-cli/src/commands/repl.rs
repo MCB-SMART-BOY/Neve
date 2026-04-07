@@ -1,6 +1,7 @@
 //! The `neve repl` command.
 //! `neve repl` 命令。
 
+use crate::commands::module_graph;
 use crate::output;
 use neve_common::Span;
 use neve_diagnostic::{Severity, emit};
@@ -107,6 +108,8 @@ pub fn run() -> Result<(), String> {
                             let builtins_count = builtins().len();
                             let user_bindings = runtime_state.user_bindings();
                             let user_binding_count = user_bindings.len();
+                            println!("Project root: {}", runtime_state.root_dir().display());
+                            println!();
 
                             if user_bindings.is_empty() {
                                 println!("(no user-defined bindings)");
@@ -401,6 +404,17 @@ impl ReplHirState {
         self.module_loader.root_dir()
     }
 
+    fn is_pristine(&self) -> bool {
+        self.globals.is_empty()
+            && self.user_bindings.is_empty()
+            && self.builtin_item_imports.is_empty()
+            && self.builtin_module_imports.is_empty()
+            && self.imported_defs.is_empty()
+            && self.imported_module_aliases.is_empty()
+            && self.module_loader.load_order().is_empty()
+            && self.evaluated_modules.is_empty()
+    }
+
     fn validate_context(&self, context: &ReplInputContext) -> Result<(), String> {
         if let Some(root_dir) = &context.root_dir
             && root_dir != self.root_dir()
@@ -413,18 +427,32 @@ impl ReplHirState {
         Ok(())
     }
 
-    fn context_for_file(&self, path: impl AsRef<Path>) -> Result<ReplInputContext, String> {
+    fn context_for_file(&mut self, path: impl AsRef<Path>) -> Result<ReplInputContext, String> {
         let canonical = path
             .as_ref()
             .canonicalize()
             .map_err(|e| format!("cannot resolve path '{}': {}", path.as_ref().display(), e))?;
-        let relative = canonical.strip_prefix(self.root_dir()).map_err(|_| {
-            format!(
-                "loaded file '{}' is outside the REPL session root '{}'",
-                canonical.display(),
-                self.root_dir().display()
-            )
-        })?;
+        let relative = match canonical.strip_prefix(self.root_dir()) {
+            Ok(relative) => relative,
+            Err(_) => {
+                let (root_dir, _) = module_graph::resolve_module_path(&canonical)?;
+                if !self.is_pristine() {
+                    return Err(format!(
+                        "loaded file '{}' is outside the current REPL session root '{}'; run :clear before switching to another project root",
+                        canonical.display(),
+                        self.root_dir().display()
+                    ));
+                }
+                *self = Self::with_root_dir(root_dir.clone());
+                canonical.strip_prefix(self.root_dir()).map_err(|_| {
+                    format!(
+                        "loaded file '{}' is outside the REPL session root '{}'",
+                        canonical.display(),
+                        self.root_dir().display()
+                    )
+                })?
+            }
+        };
 
         let mut module_path: Vec<String> = relative
             .components()
@@ -1690,5 +1718,57 @@ mod tests {
             }
             other => panic!("expected module diagnostics, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn repl_can_switch_project_root_after_clear_for_load() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        fs::create_dir_all(second.path().join("app")).unwrap();
+        fs::write(
+            second.path().join("app").join("helper.neve"),
+            "pub fn inc(x) = x + 1;",
+        )
+        .unwrap();
+        fs::write(
+            second.path().join("app").join("mod.neve"),
+            "import self.helper (inc); let answer = inc(41);",
+        )
+        .unwrap();
+
+        let mut runtime = ReplHirState::with_root_dir(first.path().to_path_buf());
+        runtime.clear();
+        let mut semantic = ReplSemanticState::default();
+
+        let context = runtime
+            .context_for_file(second.path().join("app").join("mod.neve"))
+            .expect("context should rebase to the new root");
+        assert_eq!(context.root_dir.as_deref(), Some(runtime.root_dir()));
+
+        let source = fs::read_to_string(second.path().join("app").join("mod.neve")).unwrap();
+        let value = evaluate_repl_input(&source, true, &context, &mut runtime, &mut semantic)
+            .expect("loaded binding should evaluate after root switch");
+        assert_eq!(value, Value::Int(42.into()));
+    }
+
+    #[test]
+    fn repl_rejects_project_root_switch_when_session_is_not_clear() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        fs::write(second.path().join("main.neve"), "let answer = 42;").unwrap();
+
+        let mut runtime = ReplHirState::with_root_dir(first.path().to_path_buf());
+        let mut semantic = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+        evaluate_repl_input("let x = 1;", true, &context, &mut runtime, &mut semantic)
+            .expect("definition should evaluate");
+
+        let error = runtime
+            .context_for_file(second.path().join("main.neve"))
+            .expect_err("non-empty sessions should not silently mix project roots");
+        assert!(
+            error.contains(":clear"),
+            "expected guidance to clear the session, got {error}"
+        );
     }
 }
