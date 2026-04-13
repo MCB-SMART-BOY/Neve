@@ -389,6 +389,18 @@ The main semantic artifacts should converge toward:
 - Release commits and tags must include only repository artifacts that belong to the product or its documentation.
 - Local AI-assistance files such as `AGENTS.md` must remain outside staged release content.
 
+### D-032: Release notes should describe canonical status truthfully, not the broadest legacy capability
+
+- GitHub release notes should summarize the canonical mainline, explicit compatibility boundaries, current platform scope, and validation gates.
+- Release notes should not imply that AST compatibility or partially migrated platform flows represent the primary supported architecture.
+- Public release notes should avoid over-claiming effect-runtime completeness, shell compatibility, or fully migrated platform semantics.
+
+### D-033: Evaluator callers should stop open-coding method-resolution injection
+
+- As a transitional step toward `eval_typed_module`, `neve-eval` should expose helper APIs that accept semantic side tables directly enough to avoid repeated `set_method_resolutions + eval_module` sequences in commands and tests.
+- This step should not reverse the architectural direction by making lower layers depend on frontend orchestration.
+- Callers should prefer canonical semantic artifacts such as `ModuleSemantics.method_resolutions` over legacy duplicate fields where available.
+
 ## 7. Workstreams
 
 ## 7.1 WS-A: Canonical pipeline convergence
@@ -886,3 +898,10 @@ Track progress with concrete metrics rather than narrative only:
 - Validation completed with:
   - `cargo test --workspace`
   - `cargo clippy --workspace --all-targets -- -D warnings`
+- Prepared a refined `v1.2.0` release-notes body that emphasizes canonical pipeline progress, explicit AST compat boundaries, current platform scope, and the release validation gates.
+- Started the next mainline step after the release cut by introducing an evaluator helper for caller-provided method-resolution tables and migrating command/test call sites toward that API.
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test eval --test end_to_end`
+  - `cargo test -p neve run_ -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`

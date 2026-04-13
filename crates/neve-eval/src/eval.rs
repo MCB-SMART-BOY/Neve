@@ -142,6 +142,17 @@ impl Evaluator {
         self.method_resolutions = method_resolutions;
     }
 
+    /// Evaluate a module using a caller-provided method-resolution table.
+    /// 使用调用方提供的方法解析表来求值模块。
+    pub fn eval_module_with_method_resolutions(
+        &mut self,
+        module: &Module,
+        method_resolutions: &HashMap<Span, DefId>,
+    ) -> Result<Value, EvalError> {
+        self.set_method_resolutions(method_resolutions.clone());
+        self.eval_module(module)
+    }
+
     /// Attach additional builtin bindings.
     /// 绑定额外的内置值。
     pub fn with_extra_builtins<I>(mut self, builtins: I) -> Self

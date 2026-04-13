@@ -441,9 +441,8 @@ impl ReplHirState {
     ) -> Result<Value, String> {
         self.eval_pending_loaded_modules(semantic_state)?;
         let mut evaluator = self.evaluator.clone();
-        evaluator.set_method_resolutions(method_resolutions);
         evaluator
-            .eval_module(module)
+            .eval_module_with_method_resolutions(module, &method_resolutions)
             .map_err(|e| format!("evaluation error: {e:?}"))
     }
 
@@ -510,9 +509,7 @@ impl ReplHirState {
             };
 
             self.evaluator
-                .set_method_resolutions(analysis.semantics.method_resolutions.clone());
-            self.evaluator
-                .eval_module(module)
+                .eval_module_with_method_resolutions(module, &analysis.semantics.method_resolutions)
                 .map_err(|e| format!("evaluation error: {e:?}"))?;
             self.evaluated_modules.insert(*module_id);
         }

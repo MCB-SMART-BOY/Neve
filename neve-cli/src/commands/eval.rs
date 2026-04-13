@@ -136,11 +136,9 @@ fn eval_value(
         return Err("type error".to_string());
     }
 
-    let mut evaluator = Evaluator::new()
-        .with_method_resolutions(analysis.method_resolutions.clone())
-        .with_extra_builtins(std_builtin_values());
+    let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
     evaluator
-        .eval_module(&analysis.hir)
+        .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
         .map(|value| (EvalBackend::FrontendHir, value))
         .map_err(format_hir_eval_error)
 }

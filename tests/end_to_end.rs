@@ -31,14 +31,13 @@ fn eval_ast(analysis: &AnalysisResult) -> Result<Value, EvalError> {
 }
 
 fn eval_hir(analysis: &AnalysisResult) -> Result<Value, EvalError> {
-    let mut evaluator = Evaluator::new()
-        .with_method_resolutions(analysis.method_resolutions.clone())
-        .with_extra_builtins(
-            stdlib()
-                .into_iter()
-                .map(|(name, value)| (name.to_string(), value)),
-        );
-    evaluator.eval_module(&analysis.hir)
+    let mut evaluator = Evaluator::new().with_extra_builtins(
+        stdlib()
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value)),
+    );
+    evaluator
+        .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
 }
 
 fn assert_runtime_parity(source: &str, expected: Value) {
