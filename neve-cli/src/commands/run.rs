@@ -183,15 +183,15 @@ fn eval_modules_via_hir(analysis: &ProgramAnalysis) -> Result<Value, String> {
             continue;
         };
 
-        evaluator.set_method_resolutions(
-            analysis
-                .semantics(*module_id)
-                .map(|semantics| semantics.method_resolutions.clone())
-                .unwrap_or_default(),
-        );
-
         let value = evaluator
-            .eval_module(module)
+            .eval_module_with_method_resolutions(
+                module,
+                &analysis
+                    .semantics(*module_id)
+                    .map(|semantics| &semantics.method_resolutions)
+                    .cloned()
+                    .unwrap_or_default(),
+            )
             .map_err(|e| format!("evaluation error: {e:?}"))?;
 
         if *module_id == analysis.root_module_id() {

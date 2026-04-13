@@ -26,14 +26,12 @@ fn eval_checked_hir(source: &str) -> Result<Value, EvalError> {
         "unexpected frontend diagnostics: {:?}",
         analysis.diagnostics
     );
-    let mut eval = Evaluator::new()
-        .with_method_resolutions(analysis.method_resolutions.clone())
-        .with_extra_builtins(
-            stdlib()
-                .into_iter()
-                .map(|(name, value)| (name.to_string(), value)),
-        );
-    eval.eval_module(&analysis.hir)
+    let mut eval = Evaluator::new().with_extra_builtins(
+        stdlib()
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value)),
+    );
+    eval.eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
 }
 
 /// Evaluate source with builtins available (using the AST compat evaluator).
