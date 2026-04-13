@@ -12,8 +12,8 @@
 //! - **HIR Evaluation**: Evaluates lowered HIR (High-level IR) for optimized execution.
 //!   **HIR 求值**：对降级后的 HIR（高级中间表示）进行求值，以实现优化执行。
 //!
-//! - **AST Evaluation**: Evaluates the AST directly, useful for REPL and quick prototyping.
-//!   **AST 求值**：直接对 AST 进行求值，适用于 REPL 和快速原型开发。
+//! - **AST Compatibility Evaluation**: Evaluates the AST directly as an explicit compatibility path.
+//!   **AST 兼容求值**：作为显式兼容路径直接对 AST 进行求值。
 //!
 //! ## Pattern Matching Optimization 模式匹配优化
 //!
@@ -24,14 +24,19 @@
 //! - Fast-path detection for common patterns / 常见模式的快速路径检测
 //! - Match expression analysis hints / 匹配表达式分析提示
 
-pub mod ast_eval;
+mod ast_eval;
 mod builtin;
 mod env;
 mod eval;
+pub mod compat {
+    //! Explicit AST compatibility surface.
+    //! 显式 AST 兼容层接口。
+
+    pub use crate::ast_eval::{AstEnv, AstEvaluator};
+}
 pub mod pattern;
 pub mod value;
 
-pub use ast_eval::{AstEnv, AstEvaluator};
 pub use builtin::builtins;
 pub use env::Environment;
 pub use eval::{EvalError, Evaluator};

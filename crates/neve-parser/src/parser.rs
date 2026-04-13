@@ -69,6 +69,7 @@ impl Parser {
     pub fn parse_file(&mut self) -> SourceFile {
         let start = self.current_span();
         let mut items = Vec::new();
+        let mut tail_expr = None;
 
         while !self.at_end() {
             // Track delimiter state for each token
@@ -78,6 +79,15 @@ impl Parser {
 
             if let Some(item) = self.parse_item() {
                 items.push(item);
+            } else if tail_expr.is_none() {
+                let expr = self.parse_expr();
+                tail_expr = Some(expr);
+                let _ = self.eat(TokenKind::Semicolon);
+
+                if !self.at_end() {
+                    self.error("top-level expression must be the last form in a file");
+                    self.synchronize();
+                }
             } else {
                 // Error recovery: synchronize to next statement boundary
                 // 错误恢复：同步到下一个语句边界
@@ -88,6 +98,7 @@ impl Parser {
         let end = self.current_span();
         SourceFile {
             items,
+            tail_expr,
             span: start.merge(end),
         }
     }
@@ -2593,5 +2604,38 @@ impl<T> Iterator for List<T> {
         } else {
             panic!("Third item should be an impl");
         }
+    }
+
+    #[test]
+    fn test_parse_trailing_top_level_expression() {
+        let source = r#"
+fn greet(name) = `Hello, {name}!`;
+
+fn factorial(n) = {
+    if n <= 1 then 1
+    else n * factorial(n - 1)
+};
+
+#{
+    greeting = greet("World"),
+    magic = factorial(5),
+}
+"#;
+
+        let lexer = neve_lexer::Lexer::new(source);
+        let (tokens, _diags) = lexer.tokenize();
+        let mut parser = Parser::new(tokens);
+        let source_file = parser.parse_file();
+
+        let diagnostics = parser.diagnostics();
+        if !diagnostics.is_empty() {
+            for diag in &diagnostics {
+                eprintln!("Error: {:?}", diag);
+            }
+            panic!("Parser should not produce errors");
+        }
+
+        assert_eq!(source_file.items.len(), 2);
+        assert!(source_file.tail_expr.is_some());
     }
 }

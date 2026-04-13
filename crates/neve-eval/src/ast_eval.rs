@@ -392,6 +392,10 @@ impl AstEvaluator {
             result = self.eval_item(item)?;
         }
 
+        if let Some(expr) = &file.tail_expr {
+            result = self.eval_expr(expr)?;
+        }
+
         Ok(result)
     }
 
@@ -1364,7 +1368,19 @@ impl AstEvaluator {
                             }
                             return self.builtin_map(&current_args[0], &current_args[1]);
                         }
+                        "list.map" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_map(&current_args[0], &current_args[1]);
+                        }
                         "filter" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_filter(&current_args[0], &current_args[1]);
+                        }
+                        "list.filter" => {
                             if current_args.len() != 2 {
                                 return Err(EvalError::WrongArity);
                             }

@@ -15,7 +15,7 @@ mod result;
 mod set;
 mod string;
 
-use neve_eval::{AstEnv, Value};
+use neve_eval::{Value, compat::AstEnv};
 use std::collections::HashMap;
 use std::rc::Rc;
 

@@ -6,16 +6,79 @@
 //! 本 crate 提供稳定的 API，用于在一次流程中完成解析、降级与类型检查，
 //! 便于 LSP 和 CLI 等工具复用。
 
+mod driver;
+mod session;
+
+pub use driver::{
+    FrontendDriver, FrontendError, ModuleAnalysis, ProgramAnalysis, analyze_module_path,
+};
 pub use neve_diagnostic::Diagnostic;
 pub use neve_hir::Module;
-use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind};
+use neve_hir::{DefId, ItemKind as HirItemKind, LocalId, Ty, TyKind};
 pub use neve_syntax::SourceFile;
+pub use session::{
+    FrontendSession, SessionBuildInputs, SessionBuildResult, SessionError,
+    SessionLoadedDiagnostics, SessionResolvedImports,
+};
 
 use neve_common::Span;
 use neve_hir::lower;
 use neve_parser::parse;
 use neve_typeck::{TypeChecker, format_builtin_named_type};
 use std::collections::HashMap;
+
+/// Canonical per-module semantic side tables.
+/// 规范化后的单模块语义 side tables。
+#[derive(Debug, Clone, Default)]
+pub struct ModuleSemantics {
+    /// Resolved method call targets keyed by expression span.
+    /// 按表达式 span 存储的方法调用解析结果。
+    pub method_resolutions: HashMap<Span, DefId>,
+    /// Final inferred types for global definitions.
+    /// 全局定义的最终推断类型。
+    pub global_types: HashMap<DefId, Ty>,
+    /// Source spans for global definitions.
+    /// 全局定义的源码位置。
+    pub global_spans: HashMap<DefId, Span>,
+    /// Final inferred types for local definitions.
+    /// 局部定义的最终推断类型。
+    pub local_types: HashMap<LocalId, Ty>,
+    /// Final inferred types for expressions.
+    /// 表达式的最终推断类型。
+    pub expr_types: HashMap<Span, Ty>,
+}
+
+impl ModuleSemantics {
+    /// Look up the type of a global definition.
+    /// 查询全局定义的类型。
+    pub fn global_type(&self, def_id: DefId) -> Option<&Ty> {
+        self.global_types.get(&def_id)
+    }
+
+    /// Look up the source span of a global definition.
+    /// 查询全局定义的源码位置。
+    pub fn global_span(&self, def_id: DefId) -> Option<Span> {
+        self.global_spans.get(&def_id).copied()
+    }
+
+    /// Look up the type of a local definition.
+    /// 查询局部定义的类型。
+    pub fn local_type(&self, local_id: LocalId) -> Option<&Ty> {
+        self.local_types.get(&local_id)
+    }
+
+    /// Look up the type of an expression by span.
+    /// 按 span 查询表达式类型。
+    pub fn expr_type(&self, span: Span) -> Option<&Ty> {
+        self.expr_types.get(&span)
+    }
+
+    /// Look up the resolved method target for an expression span.
+    /// 查询表达式 span 对应的方法目标。
+    pub fn method_resolution(&self, span: Span) -> Option<DefId> {
+        self.method_resolutions.get(&span).copied()
+    }
+}
 
 /// Result of analyzing a single source string.
 /// 单个源文本的分析结果。
@@ -28,6 +91,9 @@ pub struct AnalysisResult {
     /// Resolved method call targets for HIR evaluation.
     /// 用于 HIR 求值的方法调用解析结果。
     pub method_resolutions: HashMap<Span, DefId>,
+    /// Canonical semantic side tables for this module.
+    /// 当前模块的规范语义 side tables。
+    pub semantics: ModuleSemantics,
     /// Diagnostics from parse + type check. / 解析与类型检查诊断。
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -42,6 +108,7 @@ pub fn analyze_source(source: &str) -> AnalysisResult {
     let hir = lower(&ast);
     let mut checker = TypeChecker::new();
     checker.check(&hir);
+    let semantics = collect_module_semantics(&checker);
     let method_resolutions = checker.method_resolutions().clone();
     diagnostics.extend(rewrite_diagnostics_with_module_names(
         checker.diagnostics(),
@@ -52,6 +119,7 @@ pub fn analyze_source(source: &str) -> AnalysisResult {
         ast,
         hir,
         method_resolutions,
+        semantics,
         diagnostics,
     }
 }
@@ -62,6 +130,7 @@ pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
     let hir = lower(ast);
     let mut checker = TypeChecker::new();
     checker.check(&hir);
+    let semantics = collect_module_semantics(&checker);
     let method_resolutions = checker.method_resolutions().clone();
     let diagnostics = rewrite_diagnostics_with_module_names(checker.diagnostics(), &hir);
 
@@ -69,7 +138,34 @@ pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
         ast: ast.clone(),
         hir,
         method_resolutions,
+        semantics,
         diagnostics,
+    }
+}
+
+pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics {
+    let global_types = checker
+        .global_types_ref()
+        .keys()
+        .filter_map(|def_id| checker.global_type(*def_id).map(|ty| (*def_id, ty)))
+        .collect();
+    let local_types = checker
+        .local_definitions_ref()
+        .keys()
+        .filter_map(|local_id| checker.local_type(*local_id).map(|ty| (*local_id, ty)))
+        .collect();
+    let expr_types = checker
+        .expr_types_ref()
+        .keys()
+        .filter_map(|span| checker.expr_type(*span).map(|ty| (*span, ty)))
+        .collect();
+
+    ModuleSemantics {
+        method_resolutions: checker.method_resolutions().clone(),
+        global_types,
+        global_spans: checker.global_spans_ref().clone(),
+        local_types,
+        expr_types,
     }
 }
 
@@ -154,6 +250,7 @@ pub fn collect_item_names_from_modules<'a>(
                 HirItemKind::Fn(def) => {
                     names.insert(item.id, def.name.clone());
                 }
+                HirItemKind::Expr(_) => {}
                 HirItemKind::Struct(def) => {
                     names.insert(item.id, def.name.clone());
                 }

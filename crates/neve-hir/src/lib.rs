@@ -6,14 +6,20 @@
 //! HIR 是经过名称解析后的脱糖 AST 表示，用作类型检查器的输入。
 
 mod hir;
+mod incremental;
 mod lower;
+mod module_diagnostics;
+mod module_graph;
 mod module_loader;
+mod module_lowering;
+mod module_paths;
 mod resolve;
 
 pub use hir::*;
+pub use incremental::{CacheStats, ModuleCache};
 pub use lower::lower;
 pub use module_loader::{
-    ImportResolveError, ModuleInfo, ModuleLoadError, ModuleLoader, ModulePath, ModulePathKind,
-    Visibility,
+    ImportResolveError, ModuleInfo, ModuleLoadError, ModuleLoader, Visibility,
 };
+pub use module_paths::{ModulePath, ModulePathKind};
 pub use resolve::Resolver;

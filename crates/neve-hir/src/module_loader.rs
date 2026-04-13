@@ -1,12 +1,12 @@
-//! Module loading and path resolution.
-//! 模块加载和路径解析。
+//! Module loading and compatibility-facing module discovery.
+//! 模块加载与面向兼容层的模块发现。
 //!
 //! This module provides functionality for:
 //! 本模块提供以下功能：
 //! - Discovering modules from file system / 从文件系统发现模块
 //! - Resolving module paths (self, super, crate) / 解析模块路径（self、super、crate）
 //! - Loading and caching modules / 加载和缓存模块
-//! - Managing module dependencies / 管理模块依赖
+//! - Acting as a compatibility facade over module graph state / 作为模块图状态的兼容外观
 //! - Incremental compilation with file timestamps / 基于文件时间戳的增量编译
 
 use std::collections::{HashMap, HashSet};
@@ -16,123 +16,12 @@ use std::time::SystemTime;
 
 use neve_diagnostic::Diagnostic;
 
-use crate::{DefId, Import, ImportKind, Module, ModuleId, Resolver};
-
-/// Represents a module path in the source code.
-/// 表示源代码中的模块路径。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ModulePath {
-    /// Path segments (e.g., ["std", "list"] for `std.list`). / 路径段（例如 `std.list` 对应 ["std", "list"]）。
-    pub segments: Vec<String>,
-    /// Whether this is a relative path (starts with self or super). / 是否为相对路径（以 self 或 super 开头）。
-    pub kind: ModulePathKind,
-}
-
-/// Kind of module path.
-/// 模块路径的类型。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ModulePathKind {
-    /// Absolute path from crate root (e.g., `std.list`). / 从 crate 根开始的绝对路径（例如 `std.list`）。
-    Absolute,
-    /// Relative to current module (e.g., `self.utils`). / 相对于当前模块（例如 `self.utils`）。
-    Self_,
-    /// Relative to parent module (e.g., `super.common`). / 相对于父模块（例如 `super.common`）。
-    Super,
-    /// Relative to crate root (e.g., `crate.config`). / 相对于 crate 根（例如 `crate.config`）。
-    Crate,
-}
-
-impl ModulePath {
-    /// Create an absolute module path.
-    /// 创建绝对模块路径。
-    pub fn absolute(segments: Vec<String>) -> Self {
-        Self {
-            segments,
-            kind: ModulePathKind::Absolute,
-        }
-    }
-
-    /// Create a self-relative module path.
-    /// 创建 self 相对模块路径。
-    pub fn self_(segments: Vec<String>) -> Self {
-        Self {
-            segments,
-            kind: ModulePathKind::Self_,
-        }
-    }
-
-    /// Create a super-relative module path.
-    /// 创建 super 相对模块路径。
-    pub fn super_(segments: Vec<String>) -> Self {
-        Self {
-            segments,
-            kind: ModulePathKind::Super,
-        }
-    }
-
-    /// Create a crate-relative module path.
-    /// 创建 crate 相对模块路径。
-    pub fn crate_(segments: Vec<String>) -> Self {
-        Self {
-            segments,
-            kind: ModulePathKind::Crate,
-        }
-    }
-
-    /// Create a module path from an AST import definition.
-    /// 从 AST 导入定义创建模块路径。
-    pub fn from_import_def(import: &neve_syntax::ImportDef) -> Self {
-        let segments: Vec<String> = import.path.iter().map(|i| i.name.clone()).collect();
-        match import.prefix {
-            neve_syntax::PathPrefix::Absolute => Self::absolute(segments),
-            neve_syntax::PathPrefix::Self_ => Self::self_(segments),
-            neve_syntax::PathPrefix::Super => Self::super_(segments),
-            neve_syntax::PathPrefix::Crate => Self::crate_(segments),
-        }
-    }
-
-    /// Create a module path from a HIR import.
-    /// 从 HIR 导入创建模块路径。
-    pub fn from_hir_import(import: &crate::Import) -> Self {
-        match import.prefix {
-            crate::ImportPathPrefix::Absolute => Self::absolute(import.path.clone()),
-            crate::ImportPathPrefix::Self_ => Self::self_(import.path.clone()),
-            crate::ImportPathPrefix::Super => Self::super_(import.path.clone()),
-            crate::ImportPathPrefix::Crate => Self::crate_(import.path.clone()),
-        }
-    }
-
-    /// Parse a module path from import path segments (legacy, infers prefix from first segment).
-    /// 从导入路径段解析模块路径（遗留方式，从第一个段推断前缀）。
-    pub fn from_import_path(segments: &[String]) -> Self {
-        if segments.is_empty() {
-            return Self::absolute(Vec::new());
-        }
-
-        match segments[0].as_str() {
-            "self" => Self::self_(segments[1..].to_vec()),
-            "super" => {
-                // Handle super path - remaining segments after "super"
-                // 处理 super 路径 - "super" 之后的剩余段
-                Self::super_(segments[1..].to_vec())
-            }
-            "crate" => Self::crate_(segments[1..].to_vec()),
-            _ => Self::absolute(segments.to_vec()),
-        }
-    }
-}
-
-impl std::fmt::Display for ModulePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let prefix = match self.kind {
-            ModulePathKind::Absolute => "",
-            ModulePathKind::Self_ => "self.",
-            ModulePathKind::Super => "super.",
-            ModulePathKind::Crate => "crate.",
-        };
-        write!(f, "{}{}", prefix, self.segments.join("."))
-    }
-}
+use crate::incremental::{CacheStats, IncrementalCache, get_mtime};
+use crate::module_diagnostics::ModuleDiagnostics;
+use crate::module_graph::ModuleGraphState;
+use crate::module_lowering::{LoweredModuleArtifacts, collect_imports, lower_module_with_imports};
+use crate::module_paths::ModulePathResolver;
+use crate::{DefId, Import, ImportKind, Module, ModuleId, ModulePath};
 
 // Re-export Visibility from the AST
 // 从 AST 重新导出 Visibility
@@ -163,122 +52,18 @@ pub struct ModuleInfo {
     pub mtime: Option<SystemTime>,
 }
 
-/// Cache entry for incremental compilation.
-/// 用于增量编译的缓存条目。
-#[derive(Debug, Clone)]
-pub struct ModuleCache {
-    /// Modification time when cached. / 缓存时的修改时间。
-    pub mtime: SystemTime,
-    /// Cached parsed AST hash (for content-based invalidation).
-    /// 缓存的已解析 AST 哈希（用于基于内容的失效）。
-    pub source_hash: u64,
-    /// Whether the module needs recompilation. / 模块是否需要重新编译。
-    pub dirty: bool,
-}
-
-impl ModuleCache {
-    /// Create a new cache entry. / 创建新的缓存条目。
-    pub fn new(mtime: SystemTime, source_hash: u64) -> Self {
-        Self {
-            mtime,
-            source_hash,
-            dirty: false,
-        }
-    }
-
-    /// Check if the cache is valid for the given file.
-    /// 检查缓存对于给定文件是否有效。
-    pub fn is_valid(&self, file_path: &Path) -> bool {
-        if self.dirty {
-            return false;
-        }
-        if let Ok(metadata) = fs::metadata(file_path)
-            && let Ok(mtime) = metadata.modified()
-        {
-            return self.mtime == mtime;
-        }
-        false
-    }
-
-    /// Check if the cache is valid using content hash (for when mtime is unreliable).
-    /// 使用内容哈希检查缓存是否有效（用于 mtime 不可靠时）。
-    pub fn is_valid_by_hash(&self, source: &str) -> bool {
-        if self.dirty {
-            return false;
-        }
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        source.hash(&mut hasher);
-        hasher.finish() == self.source_hash
-    }
-
-    /// Mark cache entry as dirty (needs recompilation).
-    /// 将缓存条目标记为脏（需要重新编译）。
-    pub fn mark_dirty(&mut self) {
-        self.dirty = true;
-    }
-
-    /// Clear the dirty flag after successful recompilation.
-    /// 成功重新编译后清除脏标志。
-    pub fn mark_clean(&mut self) {
-        self.dirty = false;
-    }
-
-    /// Check if cache entry is dirty. / 检查缓存条目是否为脏。
-    pub fn is_dirty(&self) -> bool {
-        self.dirty
-    }
-
-    /// Get the source hash (for content-based cache invalidation).
-    /// 获取源哈希（用于基于内容的缓存失效）。
-    pub fn source_hash(&self) -> u64 {
-        self.source_hash
-    }
-
-    /// Get the modification time. / 获取修改时间。
-    pub fn mtime(&self) -> SystemTime {
-        self.mtime
-    }
-
-    /// Update the cache with new mtime and hash.
-    /// 使用新的 mtime 和哈希更新缓存。
-    pub fn update(&mut self, mtime: SystemTime, source_hash: u64) {
-        self.mtime = mtime;
-        self.source_hash = source_hash;
-        self.dirty = false;
-    }
-}
-
-/// Cached parsed source by content hash.
-/// 按内容哈希缓存的已解析源文件。
-#[derive(Debug, Clone)]
-struct ParsedSource {
-    /// Cached parsed AST hash. / 缓存的 AST 哈希。
-    source_hash: u64,
-    /// Parsed source file. / 已解析的源文件。
-    file: neve_syntax::SourceFile,
-    /// Parse diagnostics. / 解析诊断信息。
-    diagnostics: Vec<Diagnostic>,
-}
-
 /// Module loader responsible for discovering and loading modules.
 /// 负责发现和加载模块的模块加载器。
 #[derive(Debug, Clone)]
 pub struct ModuleLoader {
-    /// Root directory for source files. / 源文件的根目录。
-    root_dir: PathBuf,
-    /// All loaded modules. / 所有已加载的模块。
-    modules: HashMap<ModuleId, ModuleInfo>,
-    /// Module lookup by path. / 按路径查找模块。
-    path_to_id: HashMap<Vec<String>, ModuleId>,
-    /// Module lookup by file path. / 按文件路径查找模块。
-    file_to_id: HashMap<PathBuf, ModuleId>,
+    /// Rooted path/file resolver. / 以根目录为基准的路径/文件解析器。
+    path_resolver: ModulePathResolver,
+    /// Module graph state. / 模块图状态。
+    graph: ModuleGraphState,
     /// Next module ID. / 下一个模块 ID。
     next_id: u32,
-    /// Standard library path (if available). / 标准库路径（如果可用）。
-    std_path: Option<PathBuf>,
     /// Diagnostics collected during loading. / 加载期间收集的诊断信息。
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: ModuleDiagnostics,
     /// Modules currently being loaded (for cycle detection).
     /// Maps module path to its loading stack for detailed error messages.
     /// 当前正在加载的模块（用于循环检测）。
@@ -287,35 +72,13 @@ pub struct ModuleLoader {
     /// Loading stack to track the import chain.
     /// 加载栈用于跟踪导入链。
     loading_stack: Vec<Vec<String>>,
-    /// Cache for incremental compilation (file path -> cache entry).
-    /// 用于增量编译的缓存（文件路径 -> 缓存条目）。
-    file_cache: HashMap<PathBuf, ModuleCache>,
-    /// Cached parsed sources keyed by file path.
-    /// 按文件路径缓存的已解析源文件。
-    parsed_sources: HashMap<PathBuf, ParsedSource>,
-    /// Statistics for cache hits/misses. / 缓存命中/未命中统计。
-    cache_stats: CacheStats,
+    /// Incremental cache and parsed-source storage.
+    /// 增量缓存与解析源码存储。
+    cache: IncrementalCache,
     /// Next global definition ID. / 下一个全局定义 ID。
     next_def_id: u32,
     /// Lowered HIR modules by ID. / 按 ID 存储的已降级 HIR 模块。
     hir_modules: HashMap<ModuleId, crate::Module>,
-    /// Module load order (dependencies first). / 模块加载顺序（依赖优先）。
-    load_order: Vec<ModuleId>,
-    /// Reverse dependency graph (module -> dependents).
-    /// 反向依赖图（模块 -> 依赖它的模块）。
-    dependents: HashMap<ModuleId, HashSet<ModuleId>>,
-}
-
-/// Statistics for incremental compilation cache.
-/// 增量编译缓存的统计信息。
-#[derive(Debug, Clone, Default)]
-pub struct CacheStats {
-    /// Number of cache hits. / 缓存命中次数。
-    pub hits: usize,
-    /// Number of cache misses. / 缓存未命中次数。
-    pub misses: usize,
-    /// Number of modules recompiled. / 重新编译的模块数。
-    pub recompiled: usize,
 }
 
 impl ModuleLoader {
@@ -323,36 +86,29 @@ impl ModuleLoader {
     /// 使用给定的根目录创建新的模块加载器。
     pub fn new(root_dir: impl AsRef<Path>) -> Self {
         Self {
-            root_dir: root_dir.as_ref().to_path_buf(),
-            modules: HashMap::new(),
-            path_to_id: HashMap::new(),
-            file_to_id: HashMap::new(),
+            path_resolver: ModulePathResolver::new(root_dir),
+            graph: ModuleGraphState::default(),
             next_id: 0,
-            std_path: None,
-            diagnostics: Vec::new(),
+            diagnostics: ModuleDiagnostics::default(),
             loading: HashSet::new(),
             loading_stack: Vec::new(),
-            file_cache: HashMap::new(),
-            parsed_sources: HashMap::new(),
-            cache_stats: CacheStats::default(),
+            cache: IncrementalCache::default(),
             next_def_id: 0,
             hir_modules: HashMap::new(),
-            load_order: Vec::new(),
-            dependents: HashMap::new(),
         }
     }
 
     /// Set the standard library path.
     /// 设置标准库路径。
     pub fn with_std_path(mut self, path: impl AsRef<Path>) -> Self {
-        self.std_path = Some(path.as_ref().to_path_buf());
+        self.path_resolver.set_std_path(path);
         self
     }
 
     /// Get the root directory.
     /// 获取根目录。
     pub fn root_dir(&self) -> &Path {
-        &self.root_dir
+        self.path_resolver.root_dir()
     }
 
     /// Set the next global definition ID counter used when lowering modules.
@@ -370,100 +126,48 @@ impl ModuleLoader {
     /// Get collected diagnostics.
     /// 获取收集的诊断信息。
     pub fn diagnostics(&self) -> &[Diagnostic] {
-        &self.diagnostics
+        self.diagnostics.as_slice()
     }
 
     /// Take collected diagnostics.
     /// 取出收集的诊断信息。
     pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
-        std::mem::take(&mut self.diagnostics)
+        self.diagnostics.take()
     }
 
     /// Get cache statistics. / 获取缓存统计信息。
     pub fn cache_stats(&self) -> &CacheStats {
-        &self.cache_stats
+        self.cache.cache_stats()
     }
 
     /// Get the parsed source for a loaded module.
     /// 获取已加载模块的解析源文件。
     pub fn parsed_source(&self, module_id: ModuleId) -> Option<&neve_syntax::SourceFile> {
-        let info = self.modules.get(&module_id)?;
-        self.parsed_sources
-            .get(&info.file_path)
-            .map(|parsed| &parsed.file)
+        let info = self.graph.get_module(module_id)?;
+        self.cache.parsed_source(&info.file_path)
     }
 
     /// Get parse diagnostics for a loaded module.
     /// 获取已加载模块的解析诊断。
     pub fn parsed_diagnostics(&self, module_id: ModuleId) -> Option<&[Diagnostic]> {
-        let info = self.modules.get(&module_id)?;
-        self.parsed_sources
-            .get(&info.file_path)
-            .map(|parsed| parsed.diagnostics.as_slice())
-    }
-
-    /// Check if a file needs recompilation based on modification time or dirty flag.
-    /// 根据修改时间或脏标志检查文件是否需要重新编译。
-    fn needs_recompile(&self, file_path: &Path) -> bool {
-        if let Some(cache) = self.file_cache.get(file_path) {
-            // Check dirty flag first, then mtime-based validation
-            // 首先检查脏标志，然后检查基于 mtime 的验证
-            cache.is_dirty() || !cache.is_valid(file_path)
-        } else {
-            true // No cache entry, needs compilation / 没有缓存条目，需要编译
-        }
-    }
-
-    /// Get file modification time. / 获取文件修改时间。
-    fn get_mtime(file_path: &Path) -> Option<SystemTime> {
-        fs::metadata(file_path).ok().and_then(|m| m.modified().ok())
-    }
-
-    /// Simple hash of source content for cache validation.
-    /// 用于缓存验证的源内容简单哈希。
-    fn hash_source(source: &str) -> u64 {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        source.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    /// Update cache entry for a file. / 更新文件的缓存条目。
-    fn update_cache(&mut self, file_path: &Path, source: &str) {
-        if let Some(mtime) = Self::get_mtime(file_path) {
-            let hash = Self::hash_source(source);
-            // Use update() if cache entry exists, otherwise create new
-            // 如果缓存条目存在则使用 update()，否则创建新条目
-            if let Some(cache) = self.file_cache.get_mut(file_path) {
-                cache.update(mtime, hash);
-            } else {
-                self.file_cache
-                    .insert(file_path.to_path_buf(), ModuleCache::new(mtime, hash));
-            }
-        }
+        let info = self.graph.get_module(module_id)?;
+        self.cache.parsed_diagnostics(&info.file_path)
     }
 
     /// Invalidate cache for a file. / 使文件的缓存失效。
     pub fn invalidate_cache(&mut self, file_path: &Path) {
-        self.file_cache.remove(file_path);
-        self.parsed_sources.remove(file_path);
+        self.cache.invalidate_cache(file_path);
     }
 
     /// Clear all cache entries. / 清除所有缓存条目。
     pub fn clear_cache(&mut self) {
-        self.file_cache.clear();
-        self.parsed_sources.clear();
-        self.cache_stats = CacheStats::default();
+        self.cache.clear();
     }
 
     /// Get list of files that need recompilation.
     /// 获取需要重新编译的文件列表。
     pub fn get_dirty_files(&self) -> Vec<PathBuf> {
-        self.file_cache
-            .iter()
-            .filter(|(path, cache)| cache.is_dirty() || !cache.is_valid(path))
-            .map(|(path, _)| path.clone())
-            .collect()
+        self.cache.get_dirty_files()
     }
 
     /// Check if a file's content has changed using hash comparison.
@@ -471,45 +175,31 @@ impl ModuleLoader {
     /// 使用哈希比较检查文件内容是否已更改。
     /// 如果内容已更改或文件无法读取，则返回 true。
     pub fn has_content_changed(&self, file_path: &Path) -> bool {
-        if let Some(cache) = self.file_cache.get(file_path) {
-            if let Ok(source) = fs::read_to_string(file_path) {
-                !cache.is_valid_by_hash(&source)
-            } else {
-                true // Cannot read file, assume changed / 无法读取文件，假定已更改
-            }
-        } else {
-            true // No cache entry / 没有缓存条目
-        }
+        self.cache.has_content_changed(file_path)
     }
 
     /// Get cached modification time for a file.
     /// 获取文件的缓存修改时间。
     pub fn get_cached_mtime(&self, file_path: &Path) -> Option<SystemTime> {
-        self.file_cache.get(file_path).map(|cache| cache.mtime())
+        self.cache.get_cached_mtime(file_path)
     }
 
     /// Get cached source hash for a file.
     /// 获取文件的缓存源哈希。
     pub fn get_cached_hash(&self, file_path: &Path) -> Option<u64> {
-        self.file_cache
-            .get(file_path)
-            .map(|cache| cache.source_hash())
+        self.cache.get_cached_hash(file_path)
     }
 
     /// Mark a file as dirty (needs recompilation).
     /// 将文件标记为脏（需要重新编译）。
     pub fn mark_file_dirty(&mut self, file_path: &Path) {
-        if let Some(cache) = self.file_cache.get_mut(file_path) {
-            cache.mark_dirty();
-        }
+        self.cache.mark_file_dirty(file_path);
     }
 
     /// Mark a file as clean after successful recompilation.
     /// 成功重新编译后将文件标记为干净。
     pub fn mark_file_clean(&mut self, file_path: &Path) {
-        if let Some(cache) = self.file_cache.get_mut(file_path) {
-            cache.mark_clean();
-        }
+        self.cache.mark_file_clean(file_path);
     }
 
     /// Mark all dependents of a file as dirty (for incremental recompilation).
@@ -517,29 +207,14 @@ impl ModuleLoader {
     /// 将文件的所有依赖项标记为脏（用于增量重新编译）。
     /// 这会将文件本身及所有导入它的模块标记为需要重新编译。
     pub fn invalidate_dependents(&mut self, file_path: &Path) {
-        // Find the module for this file path
-        // 查找此文件路径对应的模块
-        let module_id = self.file_to_id.get(file_path).copied();
-
-        if let Some(module_id) = module_id {
-            let mut stack = vec![module_id];
-            let mut seen = HashSet::new();
-
-            while let Some(current) = stack.pop() {
-                if !seen.insert(current) {
-                    continue;
-                }
-
+        if let Some(module_id) = self.graph.module_id_for_file(file_path) {
+            for current in self.graph.dependent_closure(module_id) {
                 if let Some(file_path) = self
-                    .modules
-                    .get(&current)
+                    .graph
+                    .get_module(current)
                     .map(|info| info.file_path.clone())
                 {
                     self.mark_file_dirty(&file_path);
-                }
-
-                if let Some(deps) = self.dependents.get(&current) {
-                    stack.extend(deps.iter().copied());
                 }
             }
         }
@@ -560,8 +235,7 @@ impl ModuleLoader {
         path: &ModulePath,
         from_module: Option<&[String]>,
     ) -> Option<PathBuf> {
-        let absolute_path = self.make_absolute(path, from_module)?;
-        self.find_module_file(&absolute_path)
+        self.path_resolver.resolve_path(path, from_module)
     }
 
     /// Resolve an import path to its absolute module path segments.
@@ -571,111 +245,7 @@ impl ModuleLoader {
         path: &ModulePath,
         from_module: Option<&[String]>,
     ) -> Option<Vec<String>> {
-        self.make_absolute(path, from_module)
-    }
-
-    /// Convert a relative path to an absolute path.
-    /// 将相对路径转换为绝对路径。
-    fn make_absolute(
-        &self,
-        path: &ModulePath,
-        from_module: Option<&[String]>,
-    ) -> Option<Vec<String>> {
-        match path.kind {
-            ModulePathKind::Absolute => Some(path.segments.clone()),
-            ModulePathKind::Crate => Some(path.segments.clone()),
-            ModulePathKind::Self_ => {
-                let mut result = from_module?.to_vec();
-                result.extend(path.segments.iter().cloned());
-                Some(result)
-            }
-            ModulePathKind::Super => {
-                let from = from_module?;
-                if from.len() < 2 {
-                    return None; // Can't go above root or single-level module / 无法超出根目录或单级模块
-                }
-                // Go up two levels: remove current file and then go to parent directory
-                // 上溯两级：移除当前文件然后转到父目录
-                // E.g., from ["mylib", "submod", "worker"] -> ["mylib"]
-                // 例如，从 ["mylib", "submod", "worker"] -> ["mylib"]
-                let mut result = from[..from.len() - 2].to_vec();
-
-                // Handle multiple super or additional path segments
-                // 处理多个 super 或附加路径段
-                for seg in &path.segments {
-                    if seg == "super" {
-                        if result.is_empty() {
-                            return None;
-                        }
-                        result.pop();
-                    } else {
-                        result.push(seg.clone());
-                    }
-                }
-                Some(result)
-            }
-        }
-    }
-
-    /// Find the file path for a module path.
-    /// 查找模块路径对应的文件路径。
-    fn find_module_file(&self, module_path: &[String]) -> Option<PathBuf> {
-        if module_path.is_empty() {
-            return Some(self.root_dir.join("lib.neve"));
-        }
-
-        // Check if it's a standard library module
-        // 检查是否为标准库模块
-        if module_path.first().map(|s| s.as_str()) == Some("std")
-            && let Some(std_path) = &self.std_path
-        {
-            let relative: PathBuf = module_path[1..].iter().collect();
-
-            // Try module_name.neve
-            // 尝试 module_name.neve
-            let file_path = std_path.join(&relative).with_extension("neve");
-            if file_path.exists() {
-                return Some(file_path);
-            }
-
-            // Try module_name/mod.neve
-            // 尝试 module_name/mod.neve
-            let mod_path = std_path.join(&relative).join("mod.neve");
-            if mod_path.exists() {
-                return Some(mod_path);
-            }
-        }
-
-        // Build relative path
-        // 构建相对路径
-        let relative: PathBuf = module_path.iter().collect();
-
-        // Try module_name.neve
-        // 尝试 module_name.neve
-        let file_path = self.root_dir.join(&relative).with_extension("neve");
-        if file_path.exists() {
-            return Some(file_path);
-        }
-
-        // Try module_name/mod.neve
-        // 尝试 module_name/mod.neve
-        let mod_path = self.root_dir.join(&relative).join("mod.neve");
-        if mod_path.exists() {
-            return Some(mod_path);
-        }
-
-        // Try src/module_name.neve
-        // 尝试 src/module_name.neve
-        let src_path = self
-            .root_dir
-            .join("src")
-            .join(&relative)
-            .with_extension("neve");
-        if src_path.exists() {
-            return Some(src_path);
-        }
-
-        None
+        self.path_resolver.resolve_module_path(path, from_module)
     }
 
     /// Load a module by path.
@@ -683,7 +253,7 @@ impl ModuleLoader {
     pub fn load_module(&mut self, path: &[String]) -> Result<ModuleId, ModuleLoadError> {
         // Check if already loaded
         // 检查是否已加载
-        if let Some(&id) = self.path_to_id.get(path) {
+        if let Some(id) = self.graph.lookup_module(path) {
             return Ok(id);
         }
 
@@ -702,8 +272,8 @@ impl ModuleLoader {
 
         // Find the file
         // 查找文件
-        let _module_path = ModulePath::absolute(path.to_vec());
         let file_path = self
+            .path_resolver
             .find_module_file(path)
             .ok_or_else(|| ModuleLoadError::NotFound(path.to_vec()))?;
 
@@ -714,53 +284,22 @@ impl ModuleLoader {
 
         // Check if file needs recompilation (incremental compilation)
         // 检查文件是否需要重新编译（增量编译）
-        let needs_recompile = self.needs_recompile(&file_path);
-        if needs_recompile {
-            self.cache_stats.misses += 1;
-        } else {
-            self.cache_stats.hits += 1;
-        }
+        let needs_recompile = self.cache.record_recompile_check(&file_path);
 
         // Read and parse the file
         // 读取并解析文件
         let source = fs::read_to_string(&file_path)
             .map_err(|e| ModuleLoadError::IoError(file_path.clone(), e.to_string()))?;
 
-        let source_hash = Self::hash_source(&source);
-
-        // Parse the source (with content-addressed cache)
-        // 解析源代码（基于内容哈希的缓存）
-        let (source_file, parse_errors) = if let Some(cached) = self.parsed_sources.get(&file_path)
-            && cached.source_hash == source_hash
-        {
-            (cached.file.clone(), cached.diagnostics.clone())
-        } else {
-            let (file, diagnostics) = neve_parser::parse(&source);
-            self.parsed_sources.insert(
-                file_path.clone(),
-                ParsedSource {
-                    source_hash,
-                    file: file.clone(),
-                    diagnostics: diagnostics.clone(),
-                },
-            );
-            (file, diagnostics)
-        };
+        let (source_file, parse_errors) = self.cache.parse_source(&file_path, &source);
 
         // Update cache with new mtime and source hash
         // 使用新的 mtime 和源哈希更新缓存
-        self.update_cache(&file_path, &source);
-
-        // Track recompilation stats / 跟踪重新编译统计
-        if needs_recompile {
-            self.cache_stats.recompiled += 1;
-        }
+        self.cache.finish_load(&file_path, &source, needs_recompile);
 
         // Collect parse errors
         // 收集解析错误
-        for error in parse_errors {
-            self.diagnostics.push(error);
-        }
+        self.diagnostics.extend(parse_errors);
 
         // Allocate module ID
         // 分配模块 ID
@@ -784,7 +323,9 @@ impl ModuleLoader {
                 let is_reexport = import_def.visibility != neve_syntax::Visibility::Private;
 
                 #[allow(clippy::collapsible_if)]
-                if let Some(abs_path) = self.make_absolute(&import_path, Some(path))
+                if let Some(abs_path) = self
+                    .path_resolver
+                    .resolve_module_path(&import_path, Some(path))
                     && abs_path != path
                 // Only load if not a self-reference / 仅在不是自引用时加载
                 {
@@ -806,7 +347,9 @@ impl ModuleLoader {
                     // 立即传播循环依赖错误
                     if let Err(e) = self.load_module(&abs_path) {
                         match &e {
-                            ModuleLoadError::NotFound(_) if Self::is_std_path(&abs_path) => {
+                            ModuleLoadError::NotFound(_)
+                                if ModulePathResolver::is_std_path(&abs_path) =>
+                            {
                                 continue;
                             }
                             // Circular dependencies and module not found should fail immediately
@@ -838,12 +381,8 @@ impl ModuleLoader {
             }
         }
 
-        // Lower to HIR with resolved imports
-        // 使用解析后的导入降级到 HIR
-        let mut resolver = Resolver::new();
-        resolver.set_def_id_counter(self.next_def_id);
-
-        let imports = Self::collect_imports(&source_file);
+        let imports = collect_imports(&source_file);
+        let mut resolved_imports = Vec::new();
         let mut reexports: Vec<(String, DefId)> = Vec::new();
         for import in &imports {
             match self.resolve_import(import, path) {
@@ -851,13 +390,15 @@ impl ModuleLoader {
                     if import.is_pub {
                         reexports.extend(resolved.iter().cloned());
                     }
-                    resolver.register_imports(resolved);
+                    resolved_imports.extend(resolved);
                 }
                 Err(err) => {
                     if matches!(err, ImportResolveError::ModuleNotFound(_)) {
                         let import_path = ModulePath::from_hir_import(import);
-                        if let Some(abs_path) = self.make_absolute(&import_path, Some(path))
-                            && Self::is_std_path(&abs_path)
+                        if let Some(abs_path) = self
+                            .path_resolver
+                            .resolve_module_path(&import_path, Some(path))
+                            && ModulePathResolver::is_std_path(&abs_path)
                         {
                             continue;
                         }
@@ -875,55 +416,31 @@ impl ModuleLoader {
             }
         }
 
-        let module_name = Self::module_name(path);
-        let module =
-            resolver.resolve_with_path_and_id(&source_file, module_name, path.to_vec(), module_id);
-        self.next_def_id = resolver.next_def_id();
-
-        // Build export tables from resolver globals and module exports
-        // 根据解析器全局定义与模块导出表构建导出信息
-        let export_names: HashSet<String> = module
-            .exports
-            .clone()
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
-        let mut items = HashMap::new();
-        let mut exports = HashMap::new();
-
-        for (name, def_id) in resolver.global_defs() {
-            let visibility = if export_names.contains(name) {
-                Visibility::Public
-            } else {
-                Visibility::Private
-            };
-
-            items.insert(name.clone(), (*def_id, visibility));
-            if visibility == Visibility::Public {
-                exports.insert(name.clone(), *def_id);
-            }
-        }
-
-        // Add re-exported imports (pub import)
-        // 添加重导出的导入（pub import）
-        for (name, def_id) in reexports {
-            if items.contains_key(&name) {
-                continue;
-            }
-            items.insert(name.clone(), (def_id, Visibility::Public));
-            exports.insert(name, def_id);
-        }
+        let LoweredModuleArtifacts {
+            module,
+            items,
+            exports,
+            next_def_id,
+        } = lower_module_with_imports(
+            &source_file,
+            path,
+            module_id,
+            self.next_def_id,
+            resolved_imports,
+            reexports,
+        );
+        self.next_def_id = next_def_id;
 
         let dependencies = self.collect_dependencies(&imports, path);
 
         // Create module info
         // 创建模块信息
-        let mtime = Self::get_mtime(&file_path);
+        let mtime = get_mtime(&file_path);
         let info = ModuleInfo {
             id: module_id,
             path: path.to_vec(),
             file_path: file_path.clone(),
-            parent: self.find_parent_module(path),
+            parent: self.graph.find_parent_module(path),
             children: Vec::new(),
             dependencies: dependencies.clone(),
             exports,
@@ -933,22 +450,16 @@ impl ModuleLoader {
 
         // Register the module as loaded (only after dependencies are loaded)
         // 将模块注册为已加载（仅在依赖加载后）
-        self.modules.insert(module_id, info);
-        self.path_to_id.insert(path.to_vec(), module_id);
-        self.file_to_id.insert(file_path, module_id);
+        let parent_id = info.parent;
+        self.graph.register_module(info);
         self.hir_modules.insert(module_id, module);
-        self.load_order.push(module_id);
-
-        for dep in dependencies {
-            self.dependents.entry(dep).or_default().insert(module_id);
-        }
+        self.graph
+            .register_dependency_edges(module_id, &dependencies);
 
         // Update parent's children list
         // 更新父模块的子模块列表
-        if let Some(parent_id) = self.find_parent_module(path)
-            && let Some(parent_info) = self.modules.get_mut(&parent_id)
-        {
-            parent_info.children.push(module_id);
+        if let Some(parent_id) = parent_id {
+            self.graph.register_child(parent_id, module_id);
         }
 
         // Remove from loading set and stack
@@ -959,110 +470,34 @@ impl ModuleLoader {
         Ok(module_id)
     }
 
-    /// Find the parent module for a given path.
-    /// 查找给定路径的父模块。
-    fn find_parent_module(&self, path: &[String]) -> Option<ModuleId> {
-        if path.len() <= 1 {
-            return None;
-        }
-        self.path_to_id.get(&path[..path.len() - 1]).copied()
-    }
-
-    /// Collect all imports from the source file.
-    /// 从源文件收集所有导入。
-    fn collect_imports(file: &neve_syntax::SourceFile) -> Vec<Import> {
-        file.items
-            .iter()
-            .filter_map(|item| match &item.kind {
-                neve_syntax::ItemKind::Import(import_def) => {
-                    let prefix = match import_def.prefix {
-                        neve_syntax::PathPrefix::Absolute => crate::ImportPathPrefix::Absolute,
-                        neve_syntax::PathPrefix::Self_ => crate::ImportPathPrefix::Self_,
-                        neve_syntax::PathPrefix::Super => crate::ImportPathPrefix::Super,
-                        neve_syntax::PathPrefix::Crate => crate::ImportPathPrefix::Crate,
-                    };
-
-                    let path: Vec<String> =
-                        import_def.path.iter().map(|p| p.name.clone()).collect();
-
-                    let kind = match &import_def.items {
-                        neve_syntax::ImportItems::Module => ImportKind::Module,
-                        neve_syntax::ImportItems::Items(items) => {
-                            ImportKind::Items(items.iter().map(|i| i.name.clone()).collect())
-                        }
-                        neve_syntax::ImportItems::All => ImportKind::All,
-                    };
-
-                    let alias = import_def.alias.as_ref().map(|a| a.name.clone());
-
-                    Some(Import {
-                        prefix,
-                        path,
-                        kind,
-                        alias,
-                        is_pub: import_def.visibility == neve_syntax::Visibility::Public,
-                        span: item.span,
-                    })
-                }
-                _ => None,
-            })
-            .collect()
-    }
-
     /// Collect imported module dependencies for a module path.
     /// 收集指定模块路径的导入模块依赖。
     fn collect_dependencies(&self, imports: &[Import], from_module: &[String]) -> Vec<ModuleId> {
-        let mut deps = HashSet::new();
-        for import in imports {
-            let import_path = ModulePath::from_hir_import(import);
-            if let Some(abs_path) = self.make_absolute(&import_path, Some(from_module)) {
-                if abs_path == from_module {
-                    continue;
-                }
-                if let Some(dep_id) = self.lookup_module(&abs_path) {
-                    deps.insert(dep_id);
-                }
-            }
-        }
-        deps.into_iter().collect()
+        self.graph
+            .collect_dependencies(imports, from_module, &self.path_resolver)
     }
-
-    /// Resolve the module name from its path.
-    /// 从模块路径解析模块名称。
-    fn module_name(path: &[String]) -> String {
-        path.last().cloned().unwrap_or_else(|| "main".to_string())
-    }
-
-    /// Check if a module path points to the std namespace.
-    /// 检查模块路径是否指向 std 命名空间。
-    fn is_std_path(path: &[String]) -> bool {
-        path.first().map(|seg| seg == "std").unwrap_or(false)
-    }
-
     /// Get module info by ID.
     /// 按 ID 获取模块信息。
     pub fn get_module(&self, id: ModuleId) -> Option<&ModuleInfo> {
-        self.modules.get(&id)
+        self.graph.get_module(id)
     }
 
     /// Get mutable module info by ID.
     /// 按 ID 获取可变模块信息。
     pub fn get_module_mut(&mut self, id: ModuleId) -> Option<&mut ModuleInfo> {
-        self.modules.get_mut(&id)
+        self.graph.get_module_mut(id)
     }
 
     /// Look up a module by path.
     /// 按路径查找模块。
     pub fn lookup_module(&self, path: &[String]) -> Option<ModuleId> {
-        self.path_to_id.get(path).copied()
+        self.graph.lookup_module(path)
     }
 
     /// Get all loaded modules.
     /// 获取所有已加载的模块。
     pub fn all_modules(&self) -> impl Iterator<Item = (&Vec<String>, &ModuleInfo)> {
-        self.path_to_id
-            .iter()
-            .filter_map(|(path, &id)| self.modules.get(&id).map(|info| (path, info)))
+        self.graph.all_modules()
     }
 
     /// Get lowered HIR module by ID.
@@ -1080,7 +515,7 @@ impl ModuleLoader {
     /// Get module load order (dependencies first).
     /// 获取模块加载顺序（依赖优先）。
     pub fn load_order(&self) -> &[ModuleId] {
-        &self.load_order
+        self.graph.load_order()
     }
 
     /// Register an exported item for a module.
@@ -1092,7 +527,7 @@ impl ModuleLoader {
         def_id: DefId,
         visibility: Visibility,
     ) {
-        if let Some(info) = self.modules.get_mut(&module_id) {
+        if let Some(info) = self.graph.get_module_mut(module_id) {
             info.items.insert(name.clone(), (def_id, visibility));
             if visibility == Visibility::Public {
                 info.exports.insert(name, def_id);
@@ -1110,17 +545,18 @@ impl ModuleLoader {
         let import_path = ModulePath::from_hir_import(import);
 
         let target_path = self
-            .make_absolute(&import_path, Some(from_module))
+            .path_resolver
+            .resolve_module_path(&import_path, Some(from_module))
             .ok_or_else(|| ImportResolveError::InvalidPath(import.path.clone()))?;
 
         let target_id = self
-            .path_to_id
-            .get(&target_path)
+            .graph
+            .lookup_module(&target_path)
             .ok_or_else(|| ImportResolveError::ModuleNotFound(target_path.clone()))?;
 
         let target_info = self
-            .modules
-            .get(target_id)
+            .graph
+            .get_module(target_id)
             .ok_or_else(|| ImportResolveError::ModuleNotFound(target_path.clone()))?;
 
         // Check visibility based on module relationship
@@ -1133,7 +569,7 @@ impl ModuleLoader {
                     // Check if from_module is a child of target's parent
                     // 检查 from_module 是否是目标父模块的子模块
                     if let Some(parent) = &target_info.parent
-                        && let Some(parent_info) = self.modules.get(parent)
+                        && let Some(parent_info) = self.graph.get_module(*parent)
                     {
                         return from_module.starts_with(&parent_info.path);
                     }
@@ -1213,14 +649,15 @@ impl ModuleLoader {
 
         // Start with lib.neve or main.neve
         // 从 lib.neve 或 main.neve 开始
-        let _root_file = if self.root_dir.join("lib.neve").exists() {
-            self.root_dir.join("lib.neve")
-        } else if self.root_dir.join("main.neve").exists() {
-            self.root_dir.join("main.neve")
-        } else if self.root_dir.join("src/lib.neve").exists() {
-            self.root_dir.join("src/lib.neve")
-        } else if self.root_dir.join("src/main.neve").exists() {
-            self.root_dir.join("src/main.neve")
+        let root_dir = self.root_dir().to_path_buf();
+        let _root_file = if root_dir.join("lib.neve").exists() {
+            root_dir.join("lib.neve")
+        } else if root_dir.join("main.neve").exists() {
+            root_dir.join("main.neve")
+        } else if root_dir.join("src/lib.neve").exists() {
+            root_dir.join("src/lib.neve")
+        } else if root_dir.join("src/main.neve").exists() {
+            root_dir.join("src/main.neve")
         } else {
             return Err(ModuleLoadError::NoRootModule);
         };
@@ -1232,7 +669,7 @@ impl ModuleLoader {
 
         // Recursively discover submodules
         // 递归发现子模块
-        self.discover_submodules(&self.root_dir.clone(), &[], &mut discovered)?;
+        self.discover_submodules(&root_dir, &[], &mut discovered)?;
 
         Ok(discovered)
     }
@@ -1378,53 +815,6 @@ impl std::fmt::Display for ImportResolveError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_module_path_parsing() {
-        let path = ModulePath::from_import_path(&["std".into(), "list".into()]);
-        assert_eq!(path.kind, ModulePathKind::Absolute);
-        assert_eq!(path.segments, vec!["std", "list"]);
-
-        let path = ModulePath::from_import_path(&["self".into(), "utils".into()]);
-        assert_eq!(path.kind, ModulePathKind::Self_);
-        assert_eq!(path.segments, vec!["utils"]);
-
-        let path = ModulePath::from_import_path(&["super".into(), "common".into()]);
-        assert_eq!(path.kind, ModulePathKind::Super);
-        assert_eq!(path.segments, vec!["common"]);
-
-        let path = ModulePath::from_import_path(&["crate".into(), "config".into()]);
-        assert_eq!(path.kind, ModulePathKind::Crate);
-        assert_eq!(path.segments, vec!["config"]);
-    }
-
-    #[test]
-    fn test_make_absolute() {
-        let loader = ModuleLoader::new("/tmp");
-
-        // Absolute path stays the same
-        // 绝对路径保持不变
-        let path = ModulePath::absolute(vec!["std".into(), "list".into()]);
-        let result = loader.make_absolute(&path, Some(&["mymod".into()]));
-        assert_eq!(result, Some(vec!["std".into(), "list".into()]));
-
-        // Self-relative path
-        // self 相对路径
-        let path = ModulePath::self_(vec!["utils".into()]);
-        let result = loader.make_absolute(&path, Some(&["mymod".into()]));
-        assert_eq!(result, Some(vec!["mymod".into(), "utils".into()]));
-
-        // Super-relative path (goes up two levels: current file and parent directory)
-        // super 相对路径（向上两级：当前文件和父目录）
-        // From ["mylib", "submod", "worker"], super.config resolves to ["mylib", "config"]
-        // 从 ["mylib", "submod", "worker"]，super.config 解析为 ["mylib", "config"]
-        let path = ModulePath::super_(vec!["common".into()]);
-        let result = loader.make_absolute(
-            &path,
-            Some(&["parent".into(), "child".into(), "file".into()]),
-        );
-        assert_eq!(result, Some(vec!["parent".into(), "common".into()]));
-    }
 
     #[test]
     fn test_circular_dependency_error_message() {

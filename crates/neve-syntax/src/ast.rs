@@ -9,6 +9,7 @@ use neve_common::Span;
 #[derive(Debug, Clone)]
 pub struct SourceFile {
     pub items: Vec<Item>,
+    pub tail_expr: Option<Expr>,
     pub span: Span,
 }
 

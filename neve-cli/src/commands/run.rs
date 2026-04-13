@@ -3,12 +3,11 @@
 
 use crate::{commands::module_graph, output};
 use neve_diagnostic::{Severity, emit};
-use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
-use neve_frontend::{collect_item_names_from_modules, rewrite_diagnostics_with_names};
+use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
+use neve_frontend::{FrontendDriver, FrontendError, ProgramAnalysis};
 use neve_hir::{ModuleId, ModuleLoadError, ModuleLoader};
 use neve_std::{std_module_overrides, stdlib};
 use neve_syntax::{ImportDef, ItemKind, SourceFile};
-use neve_typeck::TypeChecker;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,19 +23,19 @@ struct ParsedModule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RunBackend {
     FrontendHir,
-    AstFallback,
+    AstCompat,
 }
 
 /// Run a Neve file.
 /// 运行 Neve 文件。
-pub fn run(file: &str, verbose: bool) -> Result<(), String> {
+pub fn run(file: &str, verbose: bool, compat_ast: bool) -> Result<(), String> {
     let path = Path::new(file);
-    let (backend, value) = run_value(path, verbose)?;
+    let (backend, value) = run_value(path, verbose, compat_ast)?;
 
     if verbose {
         output::info(match backend {
             RunBackend::FrontendHir => "Run backend: frontend/HIR",
-            RunBackend::AstFallback => "Run backend: AST fallback",
+            RunBackend::AstCompat => "Run backend: AST compat",
         });
     }
 
@@ -47,48 +46,66 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn run_value(file: &Path, verbose: bool) -> Result<(RunBackend, Value), String> {
+pub(crate) fn run_value(
+    file: &Path,
+    verbose: bool,
+    compat_ast: bool,
+) -> Result<(RunBackend, Value), String> {
     let (root_dir, module_path) = module_graph::resolve_module_path(file)?;
 
-    let mut loader = ModuleLoader::new(&root_dir);
-    let root_id = match loader.load_module(&module_path) {
-        Ok(id) => id,
-        Err(ModuleLoadError::NotFound(missing)) if is_std_module_path(&missing) => {
+    let analysis = match FrontendDriver::new(&root_dir).analyze_module_path(&module_path) {
+        Ok(analysis) => analysis,
+        Err(FrontendError::ModuleLoad(ModuleLoadError::NotFound(missing)))
+            if is_std_module_path(&missing) =>
+        {
+            if !compat_ast {
+                return Err(
+                    "frontend/HIR cannot run direct std modules yet; rerun with --compat-ast"
+                        .to_string(),
+                );
+            }
             return run_direct_value(file, &root_dir, &module_path, verbose);
         }
-        Err(e) => return Err(format!("module load error: {e}")),
+        Err(e) => return Err(format!("frontend error: {e}")),
     };
 
-    let parsed_modules = collect_parsed_modules(&loader, &root_dir, verbose)?;
+    let root_id = analysis.root_module_id();
+    let parsed_modules = collect_parsed_modules(&analysis, &root_dir, verbose)?;
     if parsed_modules
         .iter()
         .any(|module| source_file_requires_ast_fallback(&module.ast))
     {
+        if !compat_ast {
+            return Err(
+                "frontend/HIR cannot run this std import shape yet; rerun with --compat-ast"
+                    .to_string(),
+            );
+        }
         let value = eval_modules_via_ast(&parsed_modules, root_id, &root_dir)?;
-        return Ok((RunBackend::AstFallback, value));
+        return Ok((RunBackend::AstCompat, value));
     }
 
-    let value = eval_modules_via_hir(&loader, root_id)?;
+    let value = eval_modules_via_hir(&analysis)?;
     Ok((RunBackend::FrontendHir, value))
 }
 
 fn collect_parsed_modules(
-    loader: &ModuleLoader,
+    analysis: &ProgramAnalysis,
     root_dir: &Path,
     verbose: bool,
 ) -> Result<Vec<ParsedModule>, String> {
     let mut parse_errors = 0usize;
     let mut parsed_modules = Vec::new();
 
-    for module_id in loader.load_order() {
-        let Some(info) = loader.get_module(*module_id) else {
+    for module_id in analysis.load_order() {
+        let Some(info) = analysis.module_info(*module_id) else {
             continue;
         };
 
         let source = fs::read_to_string(&info.file_path)
             .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
 
-        let parse_diagnostics = loader.parsed_diagnostics(*module_id).unwrap_or(&[]);
+        let parse_diagnostics = analysis.parsed_diagnostics(*module_id).unwrap_or(&[]);
         for diag in parse_diagnostics {
             emit(&source, &info.file_path.display().to_string(), diag);
         }
@@ -98,11 +115,12 @@ fn collect_parsed_modules(
             continue;
         }
 
-        let Some(ast) = loader.parsed_source(*module_id) else {
+        let Some(ast) = analysis.parsed_source(*module_id) else {
             continue;
         };
 
         if verbose {
+            let form_count = ast.items.len() + usize::from(ast.tail_expr.is_some());
             let display_path = info
                 .file_path
                 .strip_prefix(root_dir)
@@ -110,9 +128,7 @@ fn collect_parsed_modules(
                 .display()
                 .to_string();
             output::info(&format!(
-                "Parsed {} items in {}",
-                ast.items.len(),
-                display_path
+                "Parsed {form_count} top-level form(s) in {display_path}"
             ));
         }
 
@@ -132,117 +148,45 @@ fn collect_parsed_modules(
     Ok(parsed_modules)
 }
 
-fn eval_modules_via_ast(
-    parsed_modules: &[ParsedModule],
-    root_id: ModuleId,
-    root_dir: &Path,
-) -> Result<Value, String> {
-    let std_overrides = std_module_overrides();
-    let mut module_cache = HashMap::new();
+fn eval_modules_via_hir(analysis: &ProgramAnalysis) -> Result<Value, String> {
+    let mut had_errors = false;
+    let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
     let mut root_value = Value::Unit;
 
-    for parsed in parsed_modules {
-        let base_dir = parsed.file_path.parent().unwrap_or(root_dir).to_path_buf();
-
-        let mut evaluator = AstEvaluator::new()
-            .with_module_overrides(std_overrides.clone())
-            .with_base_path(base_dir)
-            .with_module_loader(ModuleLoader::new(root_dir))
-            .with_module_path(parsed.module_path.clone())
-            .with_loaded_modules(module_cache);
-
-        let value = match evaluator.eval_file(&parsed.ast) {
-            Ok(value) => value,
-            Err(EvalError::ParseDiagnostics {
-                path,
-                source_text,
-                diagnostics,
-                ..
-            }) => {
-                for diag in diagnostics {
-                    emit(&source_text, &path.display().to_string(), &diag);
-                }
-                return Err("parse error".to_string());
-            }
-            Err(e) => return Err(format!("evaluation error: {e:?}")),
+    for module_id in analysis.load_order() {
+        let Some(info) = analysis.module_info(*module_id) else {
+            continue;
         };
 
-        let module_env = evaluator.env();
-        let mut new_cache = evaluator.into_loaded_modules();
-        new_cache.insert(parsed.file_path.clone(), module_env);
-        module_cache = new_cache;
-
-        if parsed.id == root_id {
-            root_value = value;
+        let parse_diagnostics = analysis.parsed_diagnostics(*module_id).unwrap_or(&[]);
+        if !parse_diagnostics.is_empty() {
+            continue;
         }
-    }
-
-    Ok(root_value)
-}
-
-fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Value, String> {
-    let mut global_types = HashMap::new();
-    let mut global_spans = HashMap::new();
-
-    for module_id in loader.load_order() {
-        let Some(module) = loader.hir_module(*module_id) else {
-            continue;
-        };
-        let (types, spans) = TypeChecker::collect_signatures(module);
-        global_types.extend(types);
-        global_spans.extend(spans);
-    }
-    let type_names = collect_item_names_from_modules(
-        loader
-            .load_order()
-            .iter()
-            .filter_map(|module_id| loader.hir_module(*module_id)),
-    );
-
-    let mut had_errors = false;
-    let mut module_method_resolutions = HashMap::new();
-
-    for module_id in loader.load_order() {
-        let Some(module) = loader.hir_module(*module_id) else {
-            continue;
-        };
-        let Some(info) = loader.get_module(*module_id) else {
-            continue;
-        };
 
         let source = fs::read_to_string(&info.file_path)
             .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
 
-        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
-        checker.check(module);
-        let method_resolutions = checker.method_resolutions().clone();
-        let diagnostics = rewrite_diagnostics_with_names(checker.diagnostics(), &type_names);
-
-        for diag in diagnostics {
-            emit(&source, &info.file_path.display().to_string(), &diag);
+        for diag in analysis.diagnostics(*module_id).unwrap_or(&[]) {
+            emit(&source, &info.file_path.display().to_string(), diag);
             if diag.severity == Severity::Error {
                 had_errors = true;
             }
         }
-
-        module_method_resolutions.insert(*module_id, method_resolutions);
     }
 
     if had_errors {
         return Err("type error".to_string());
     }
 
-    let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
-    let mut root_value = Value::Unit;
-
-    for module_id in loader.load_order() {
-        let Some(module) = loader.hir_module(*module_id) else {
+    for module_id in analysis.load_order() {
+        let Some(module) = analysis.hir_module(*module_id) else {
             continue;
         };
 
         evaluator.set_method_resolutions(
-            module_method_resolutions
-                .remove(module_id)
+            analysis
+                .semantics(*module_id)
+                .map(|semantics| semantics.method_resolutions.clone())
                 .unwrap_or_default(),
         );
 
@@ -250,7 +194,7 @@ fn eval_modules_via_hir(loader: &ModuleLoader, root_id: ModuleId) -> Result<Valu
             .eval_module(module)
             .map_err(|e| format!("evaluation error: {e:?}"))?;
 
-        if *module_id == root_id {
+        if *module_id == analysis.root_module_id() {
             root_value = value;
         }
     }
@@ -299,7 +243,55 @@ fn run_direct_value(
         Err(e) => return Err(format!("evaluation error: {e:?}")),
     };
 
-    Ok((RunBackend::AstFallback, value))
+    Ok((RunBackend::AstCompat, value))
+}
+
+fn eval_modules_via_ast(
+    parsed_modules: &[ParsedModule],
+    root_id: ModuleId,
+    root_dir: &Path,
+) -> Result<Value, String> {
+    let std_overrides = std_module_overrides();
+    let mut module_cache = HashMap::new();
+    let mut root_value = Value::Unit;
+
+    for parsed in parsed_modules {
+        let base_dir = parsed.file_path.parent().unwrap_or(root_dir).to_path_buf();
+
+        let mut evaluator = AstEvaluator::new()
+            .with_module_overrides(std_overrides.clone())
+            .with_base_path(base_dir)
+            .with_module_loader(ModuleLoader::new(root_dir))
+            .with_module_path(parsed.module_path.clone())
+            .with_loaded_modules(module_cache);
+
+        let value = match evaluator.eval_file(&parsed.ast) {
+            Ok(value) => value,
+            Err(EvalError::ParseDiagnostics {
+                path,
+                source_text,
+                diagnostics,
+                ..
+            }) => {
+                for diag in diagnostics {
+                    emit(&source_text, &path.display().to_string(), &diag);
+                }
+                return Err("parse error".to_string());
+            }
+            Err(e) => return Err(format!("evaluation error: {e:?}")),
+        };
+
+        let module_env = evaluator.env();
+        let mut new_cache = evaluator.into_loaded_modules();
+        new_cache.insert(parsed.file_path.clone(), module_env);
+        module_cache = new_cache;
+
+        if parsed.id == root_id {
+            root_value = value;
+        }
+    }
+
+    Ok(root_value)
 }
 
 fn source_file_requires_ast_fallback(file: &SourceFile) -> bool {
@@ -367,7 +359,7 @@ mod tests {
             "import math (add); let result = add(1, 2);",
         );
 
-        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        let (backend, value) = run_value(&root.join("main.neve"), false, false).unwrap();
         assert_eq!(backend, RunBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
     }
@@ -383,7 +375,7 @@ mod tests {
             "import std.list (len); let result = len([1, 2]);",
         );
 
-        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        let (backend, value) = run_value(&root.join("main.neve"), false, false).unwrap();
         assert_eq!(backend, RunBackend::FrontendHir);
         assert_eq!(value, Value::Int(2.into()));
     }
@@ -399,7 +391,7 @@ mod tests {
             "import std.list; let result = list.len([1, 2, 3]);",
         );
 
-        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        let (backend, value) = run_value(&root.join("main.neve"), false, false).unwrap();
         assert_eq!(backend, RunBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
     }
@@ -415,8 +407,67 @@ mod tests {
             "import std.list (*); let result = len([1, 2]);",
         );
 
-        let (backend, value) = run_value(&root.join("main.neve"), false).unwrap();
+        let (backend, value) = run_value(&root.join("main.neve"), false, false).unwrap();
         assert_eq!(backend, RunBackend::FrontendHir);
+        assert_eq!(value, Value::Int(2.into()));
+    }
+
+    #[test]
+    fn run_value_executes_trailing_top_level_expression() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(root, &["main"], "fn add(x, y) = x + y;\nadd(1, 2)");
+
+        let (backend, value) = run_value(&root.join("main.neve"), false, false).unwrap();
+        assert_eq!(backend, RunBackend::FrontendHir);
+        assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn run_value_supports_global_print_in_hir() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(
+            root,
+            &["main"],
+            "let result = { print(\"hello\"); 42 };\nresult",
+        );
+
+        let (backend, value) = run_value(&root.join("main.neve"), false, false).unwrap();
+        assert_eq!(backend, RunBackend::FrontendHir);
+        assert_eq!(value, Value::Int(42.into()));
+    }
+
+    #[test]
+    fn run_value_rejects_implicit_ast_compat_for_unsupported_std_import_shape() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(
+            root,
+            &["main"],
+            "import std (list); let result = list.len([1, 2]);",
+        );
+
+        let err = run_value(&root.join("main.neve"), false, false).unwrap_err();
+        assert!(err.contains("--compat-ast"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn run_value_uses_ast_compat_when_explicit_for_unsupported_std_import_shape() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        write_module(
+            root,
+            &["main"],
+            "import std (list); let result = list.len([1, 2]);",
+        );
+
+        let (backend, value) = run_value(&root.join("main.neve"), false, true).unwrap();
+        assert_eq!(backend, RunBackend::AstCompat);
         assert_eq!(value, Value::Int(2.into()));
     }
 }

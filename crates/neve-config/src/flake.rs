@@ -394,7 +394,7 @@ impl Flake {
     /// Parse a flake from source.
     /// 从源码解析 flake。
     pub fn parse(source: &str, root: PathBuf) -> Result<Self, ConfigError> {
-        use neve_eval::AstEvaluator;
+        use neve_eval::compat::AstEvaluator;
         use neve_lexer::Lexer;
         use neve_parser::Parser;
 
@@ -655,7 +655,7 @@ impl Flake {
         // 使用输入调用输出函数
         let result = match outputs_fn {
             Value::AstClosure(ref closure) => {
-                use neve_eval::AstEvaluator;
+                use neve_eval::compat::AstEvaluator;
                 let mut eval = AstEvaluator::new();
                 eval = eval.with_base_path(self.root.clone());
 

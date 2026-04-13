@@ -29,6 +29,23 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [1.2.0] - 2026-04-14
+
+### Added / 新增
+- **Shared frontend driver/session**: Added multi-module `FrontendDriver` and compatibility `FrontendSession` so `check`, REPL, and LSP can consume one frontend-owned semantic artifact instead of rebuilding their own pipelines. / **共享前端驱动与会话**: 新增多模块 `FrontendDriver` 与兼容式 `FrontendSession`，让 `check`、REPL 和 LSP 开始共享同一份 frontend 语义产物，而不是各自重建语义流水线。
+- **Frontend-owned integration coverage**: Added direct integration tests for the new driver/session layer, including module loading, import binding resolution, diagnostics attribution, and canonical higher-order `std.list` runtime parity. / **前端自有集成覆盖**: 为新的 driver/session 层补充直接集成测试，覆盖模块加载、导入绑定解析、诊断归属，以及规范 `std.list` 高阶运行时一致性。
+- **File tail expression support**: Modules can now end with a trailing top-level expression, and the canonical HIR run path evaluates that final form consistently. / **文件尾表达式支持**: 模块现在可以以尾部顶层表达式结束，规范 HIR 运行路径会一致地执行这一最终 form。
+
+### Improved / 改进
+- **Canonical CLI convergence**: `neve check` and the canonical HIR path in `neve run` now use frontend driver results instead of command-local `ModuleLoader + TypeChecker` orchestration. / **规范 CLI 收敛**: `neve check` 与 `neve run` 的规范 HIR 主路径现在直接使用 frontend driver 结果，不再在命令层手工拼装 `ModuleLoader + TypeChecker`。
+- **REPL/LSP semantic consistency**: REPL `:type` and LSP hover now read frontend-owned side tables and display names, reducing semantic drift across CLI, REPL, and editor tooling. / **REPL/LSP 语义一致性**: REPL `:type` 与 LSP hover 现在直接读取 frontend 维护的 side tables 和类型展示名，减少 CLI、REPL 与编辑器工具链之间的语义漂移。
+- **Module infrastructure split**: `ModuleLoader` internals were decomposed into incremental cache, module path resolution, module graph bookkeeping, diagnostics storage, and module lowering helpers, preparing the path toward content-hash-based canonical loading. / **模块基础设施拆分**: `ModuleLoader` 内部已拆分为增量缓存、模块路径解析、模块图状态、诊断存储和模块 lowering 辅助层，为后续按稳定内容哈希收口的规范加载路径做准备。
+- **Explicit AST compatibility boundary**: AST evaluation is now surfaced through explicit compat paths, and repository-internal callers use `neve_eval::compat` instead of treating AST evaluation as a peer default API. / **显式 AST 兼容边界**: AST 求值现在通过显式 compat 路径暴露，仓库内部调用方统一改用 `neve_eval::compat`，不再把 AST 当作默认对等 API。
+- **HIR builtin convergence**: The HIR evaluator now owns the canonical runtime path for existing higher-order `std.list` entrypoints such as `list.map` and `list.filter`, reducing residual AST/HIR runtime divergence. / **HIR builtin 收敛**: HIR evaluator 现在接管已有高阶 `std.list` 入口（如 `list.map`、`list.filter`）的规范运行时路径，进一步减少 AST/HIR 运行时分裂。
+
+### Fixed / 修复
+- **Hidden backend fallback**: `neve run` / `neve eval` no longer silently switch to AST behavior; unsupported paths now fail clearly unless explicit compat mode is requested. / **隐藏后端回退**: `neve run` / `neve eval` 不再静默切回 AST；未覆盖路径现在会明确失败，除非用户显式请求 compat 模式。
+
 ## [1.1.1] - 2026-04-07
 
 ### Improved / 改进

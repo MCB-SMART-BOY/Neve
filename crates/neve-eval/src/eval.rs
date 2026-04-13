@@ -222,6 +222,7 @@ impl Evaluator {
                     );
                 }
             }
+            ItemKind::Expr(_) => {}
             _ => {}
         }
     }
@@ -240,6 +241,7 @@ impl Evaluator {
                     Ok(Value::Unit)
                 }
             }
+            ItemKind::Expr(expr) => self.eval(expr),
             _ => Ok(Value::Unit),
         }
     }
@@ -591,10 +593,10 @@ impl Evaluator {
     }
 
     fn get_builtin(&self, _def_id: DefId) -> Option<Value> {
-        // Builtins are handled through AstEvaluator's builtin registry.
-        // HIR evaluator delegates to AST evaluator for builtin functions.
-        // 内置函数通过 AstEvaluator 的内置函数注册表处理。
-        // HIR 求值器将内置函数委托给 AST 求值器。
+        // Builtin lookup is currently name-based through the shared builtin registry.
+        // Evaluator-owned builtins that need runtime context are intercepted in apply().
+        // 当前内置函数查找仍通过共享注册表按名称进行。
+        // 需要求值器上下文的内置函数会在 apply() 中被求值器拦截处理。
         None
     }
 
@@ -803,11 +805,10 @@ impl Evaluator {
                     }
                 }
                 Value::Builtin(builtin) => {
-                    if builtin.name == "force" {
-                        if current_args.len() != 1 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.force_value(&current_args[0]);
+                    if let Some(result) =
+                        self.apply_evaluator_owned_builtin(builtin.name, &current_args)?
+                    {
+                        return Ok(result);
                     }
                     if current_args.len() != builtin.arity {
                         return Err(EvalError::WrongArity);
@@ -815,11 +816,8 @@ impl Evaluator {
                     return (builtin.func)(&current_args).map_err(EvalError::TypeError);
                 }
                 Value::BuiltinFn(name, func) => {
-                    if name == "force" {
-                        if current_args.len() != 1 {
-                            return Err(EvalError::WrongArity);
-                        }
-                        return self.force_value(&current_args[0]);
+                    if let Some(result) = self.apply_evaluator_owned_builtin(name, &current_args)? {
+                        return Ok(result);
                     }
                     return func(current_args).map_err(EvalError::TypeError);
                 }
@@ -844,6 +842,58 @@ impl Evaluator {
                 }
                 _ => return Err(EvalError::NotAFunction),
             }
+        }
+    }
+
+    fn apply_evaluator_owned_builtin(
+        &mut self,
+        name: &str,
+        args: &[Value],
+    ) -> Result<Option<Value>, EvalError> {
+        match name {
+            "force" => {
+                if args.len() != 1 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.force_value(&args[0])?))
+            }
+            "map" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_map(&args[0], &args[1])?))
+            }
+            "list.map" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_map(&args[0], &args[1])?))
+            }
+            "filter" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_filter(&args[0], &args[1])?))
+            }
+            "list.filter" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_filter(&args[0], &args[1])?))
+            }
+            "all" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_all(&args[0], &args[1])?))
+            }
+            "any" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_any(&args[0], &args[1])?))
+            }
+            _ => Ok(None),
         }
     }
 
@@ -935,6 +985,62 @@ impl Evaluator {
             Value::Thunk(thunk) => self.force_thunk(thunk),
             other => Ok(other.clone()),
         }
+    }
+
+    fn builtin_map(&mut self, func: &Value, list: &Value) -> Result<Value, EvalError> {
+        let items = match list {
+            Value::List(items) => items,
+            _ => return Err(EvalError::TypeError("map expects a list".to_string())),
+        };
+
+        let mut results = Vec::with_capacity(items.len());
+        for item in items.iter() {
+            results.push(self.apply(func.clone(), vec![item.clone()])?);
+        }
+        Ok(Value::List(Rc::new(results)))
+    }
+
+    fn builtin_filter(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
+        let items = match list {
+            Value::List(items) => items,
+            _ => return Err(EvalError::TypeError("filter expects a list".to_string())),
+        };
+
+        let mut results = Vec::with_capacity(items.len());
+        for item in items.iter() {
+            if let Value::Bool(true) = self.apply(pred.clone(), vec![item.clone()])? {
+                results.push(item.clone());
+            }
+        }
+        Ok(Value::List(Rc::new(results)))
+    }
+
+    fn builtin_all(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
+        let items = match list {
+            Value::List(items) => items,
+            _ => return Err(EvalError::TypeError("all expects a list".to_string())),
+        };
+
+        for item in items.iter() {
+            if let Value::Bool(false) = self.apply(pred.clone(), vec![item.clone()])? {
+                return Ok(Value::Bool(false));
+            }
+        }
+        Ok(Value::Bool(true))
+    }
+
+    fn builtin_any(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
+        let items = match list {
+            Value::List(items) => items,
+            _ => return Err(EvalError::TypeError("any expects a list".to_string())),
+        };
+
+        for item in items.iter() {
+            if let Value::Bool(true) = self.apply(pred.clone(), vec![item.clone()])? {
+                return Ok(Value::Bool(true));
+            }
+        }
+        Ok(Value::Bool(false))
     }
 
     fn force_thunk(&mut self, thunk: &crate::value::Thunk) -> Result<Value, EvalError> {

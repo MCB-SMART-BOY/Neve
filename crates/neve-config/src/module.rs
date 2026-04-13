@@ -124,7 +124,7 @@ impl Module {
     /// Parse a module from source.
     /// 从源码解析模块。
     pub fn parse(source: &str, path: Option<PathBuf>) -> Result<Self, ConfigError> {
-        use neve_eval::AstEvaluator;
+        use neve_eval::compat::AstEvaluator;
         use neve_lexer::Lexer;
         use neve_parser::Parser;
 

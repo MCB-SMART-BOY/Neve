@@ -250,6 +250,7 @@ impl ModuleRegistry {
             ItemKind::Enum(e) => Some(e.name.clone()),
             ItemKind::TypeAlias(t) => Some(t.name.clone()),
             ItemKind::Trait(t) => Some(t.name.clone()),
+            ItemKind::Expr(_) => None,
             ItemKind::Impl(_) => None, // Impls don't have names / Impl 没有名称
         }
     }
@@ -399,6 +400,8 @@ pub struct Item {
 pub enum ItemKind {
     /// Function definition. / 函数定义。
     Fn(FnDef),
+    /// Top-level expression. / 顶层表达式。
+    Expr(Expr),
     /// Struct definition. / 结构体定义。
     Struct(StructDef),
     /// Enum definition. / 枚举定义。

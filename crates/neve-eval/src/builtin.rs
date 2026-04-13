@@ -956,17 +956,15 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         // === Lazy evaluation ===
-        // `force` forces evaluation of a thunk. The actual implementation is in
-        // AstEvaluator::apply which intercepts calls to this builtin and handles
-        // them specially since they need evaluator access.
+        // `force` needs evaluator access and is intercepted by the active evaluator.
         (
             "force",
             Value::Builtin(BuiltinFn {
                 name: "force",
                 arity: 1,
                 func: |args| {
-                    // This is a fallback for when force is called outside of AstEvaluator.
-                    // The real implementation is in AstEvaluator::force_value.
+                    // This fallback only handles already-evaluated thunks.
+                    // Canonical forcing is implemented by evaluator-owned builtin dispatch.
                     match &args[0] {
                         Value::Thunk(thunk) => {
                             // If already evaluated, return the cached value
@@ -1239,8 +1237,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         // === Higher-order functions ===
-        // These are stub definitions - actual implementation is in AstEvaluator::apply
-        // which intercepts calls to these builtins and evaluates them with evaluator access.
+        // These builtins require evaluator access and are intercepted by evaluator-owned
+        // builtin dispatch in both HIR and AST compatibility evaluators.
         (
             "map",
             Value::Builtin(BuiltinFn {
