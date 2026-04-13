@@ -540,6 +540,12 @@ impl TypeChecker {
         self.global_spans.get(&def_id).copied()
     }
 
+    /// Borrow all recorded global spans.
+    /// 借用所有已记录的全局定义位置信息。
+    pub fn global_spans_ref(&self) -> &HashMap<DefId, Span> {
+        &self.global_spans
+    }
+
     /// Get struct field type by name.
     /// 通过名称获取结构体字段类型。
     pub fn struct_field_type(&self, def_id: DefId, field_name: &str) -> Option<Ty> {
@@ -616,6 +622,12 @@ impl TypeChecker {
         self.globals.get(&def_id).map(|ty| self.apply(ty))
     }
 
+    /// Borrow all recorded global types before normalization.
+    /// 借用所有已记录的全局类型（规范化前）。
+    pub fn global_types_ref(&self) -> &HashMap<DefId, Ty> {
+        &self.globals
+    }
+
     /// Look up the inferred type of a local definition.
     /// 查询某个局部定义推断出的类型。
     pub fn local_type(&self, local_id: LocalId) -> Option<Ty> {
@@ -624,10 +636,22 @@ impl TypeChecker {
             .map(|ty| self.apply(ty))
     }
 
+    /// Borrow all recorded local definition types before normalization.
+    /// 借用所有已记录的局部定义类型（规范化前）。
+    pub fn local_definitions_ref(&self) -> &HashMap<LocalId, Ty> {
+        &self.local_definitions
+    }
+
     /// Look up the inferred type of an expression by span.
     /// 按 span 查询表达式推断出的类型。
     pub fn expr_type(&self, span: Span) -> Option<Ty> {
         self.expr_types.get(&span).map(|ty| self.apply(ty))
+    }
+
+    /// Borrow all recorded expression types before normalization.
+    /// 借用所有已记录的表达式类型（规范化前）。
+    pub fn expr_types_ref(&self) -> &HashMap<Span, Ty> {
+        &self.expr_types
     }
 
     fn format_trait_bound(&self, bound: &TraitBound) -> String {
@@ -810,6 +834,81 @@ impl TypeChecker {
                 builtin_forall(
                     Vec::from(["a"]),
                     builtin_fn(vec![a], builtin_ty(TyKind::String, span), span),
+                    span,
+                )
+            }
+            "id" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(Vec::from(["a"]), builtin_fn(vec![a.clone()], a, span), span)
+            }
+            "const" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(vec![a.clone(), b], a, span),
+                    span,
+                )
+            }
+            "print" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::Unit, span), span),
+                    span,
+                )
+            }
+            "len" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::Int, span), span),
+                    span,
+                )
+            }
+            "typeOf" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::String, span), span),
+                    span,
+                )
+            }
+            "toInt" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::Int, span), span),
+                    span,
+                )
+            }
+            "toFloat" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::Float, span), span),
+                    span,
+                )
+            }
+            "assert" => builtin_fn(
+                vec![builtin_ty(TyKind::Bool, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "assertEq" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a.clone(), a], builtin_ty(TyKind::Unit, span), span),
+                    span,
+                )
+            }
+            "trace" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(vec![a, b.clone()], b, span),
                     span,
                 )
             }
@@ -1882,6 +1981,7 @@ impl TypeChecker {
                     self.globals.insert(item.id, fn_ty);
                 }
             }
+            ItemKind::Expr(_) => {}
             ItemKind::Trait(trait_def) => {
                 self.collect_trait(item.id, trait_def);
             }
@@ -2066,6 +2166,9 @@ impl TypeChecker {
     fn check_item(&mut self, item: &Item) {
         match &item.kind {
             ItemKind::Fn(fn_def) => self.check_fn(item.id, fn_def),
+            ItemKind::Expr(expr) => {
+                let _ = self.infer_expr(expr);
+            }
             ItemKind::Impl(impl_def) => self.check_impl_methods(impl_def),
             _ => {}
         }

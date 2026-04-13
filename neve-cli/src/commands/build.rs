@@ -9,7 +9,7 @@ use crate::platform::{BuildBackend, PlatformCapabilities, warn_limited_sandbox};
 use neve_builder::{BuildBackend as BuilderBackend, Builder, BuilderConfig};
 use neve_derive::{Derivation, StorePath};
 use neve_diagnostic::emit;
-use neve_eval::{AstEvaluator, Value};
+use neve_eval::{Value, compat::AstEvaluator};
 use neve_parser::parse;
 use neve_std::std_module_overrides;
 use neve_store::{BinaryCache, CacheConfig, Store};

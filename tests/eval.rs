@@ -3,7 +3,7 @@
 //! This file contains extensive edge case tests for the evaluator.
 
 use neve_common::Int;
-use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
+use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
@@ -36,7 +36,7 @@ fn eval_checked_hir(source: &str) -> Result<Value, EvalError> {
     eval.eval_module(&analysis.hir)
 }
 
-/// Evaluate source with builtins available (using AstEvaluator).
+/// Evaluate source with builtins available (using the AST compat evaluator).
 fn eval_with_builtins(source: &str) -> Result<Value, String> {
     let (ast, errors) = parse(source);
     if !errors.is_empty() {
@@ -210,6 +210,24 @@ fn test_eval_hir_std_map_and_set_builtins() {
     match eval_checked_hir(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(42)),
         other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_higher_order_list_builtins() {
+    let source = r#"
+        import std.list as list;
+        fn inc(x) = x + 1;
+        fn isEven(x) = x % 2 == 0;
+        let mapped = list.map(inc, [1, 2, 3]);
+        let result = list.filter(isEven, mapped);
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::List(items)) => {
+            let got: Vec<_> = items.iter().cloned().collect();
+            assert_eq!(got, vec![Value::Int(int(2)), Value::Int(int(4))]);
+        }
+        other => panic!("expected list, got {:?}", other),
     }
 }
 

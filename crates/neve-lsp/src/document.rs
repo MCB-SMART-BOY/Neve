@@ -7,14 +7,15 @@
 use std::collections::HashMap;
 
 use neve_common::Span;
-use neve_frontend::{Diagnostic, Module, SourceFile, analyze_source, format_type_in_module};
+use neve_frontend::{
+    Diagnostic, Module, ModuleSemantics, SourceFile, analyze_source, format_type_in_module,
+};
 use neve_hir::{
     Expr as HirExpr, ExprKind as HirExprKind, ItemKind as HirItemKind, LocalId,
     MatchArm as HirMatchArm, Param as HirParam, Pattern as HirPattern,
     PatternKind as HirPatternKind, Stmt as HirStmt, StmtKind as HirStmtKind, Ty, TyKind,
 };
 use neve_syntax::{self as ast, PatternKind as AstPatternKind};
-use neve_typeck::TypeChecker;
 
 use crate::symbol_index::SymbolIndex;
 
@@ -30,6 +31,9 @@ pub struct Document {
     pub ast: Option<SourceFile>,
     /// The lowered HIR (if available). / 降级的 HIR（如果可用）。
     pub hir: Option<Module>,
+    /// Canonical semantic side tables for this document.
+    /// 当前文档的规范语义 side tables。
+    pub semantics: Option<ModuleSemantics>,
     /// Symbol index for navigation features. / 用于导航功能的符号索引。
     pub symbol_index: Option<SymbolIndex>,
     /// Semantic hover content keyed by definition span.
@@ -51,6 +55,7 @@ impl Document {
             content,
             ast: None,
             hir: None,
+            semantics: None,
             symbol_index: None,
             definition_hovers: HashMap::new(),
             semantic_hovers: HashMap::new(),
@@ -76,11 +81,13 @@ impl Document {
         let analysis = analyze_source(&self.content);
 
         self.symbol_index = Some(SymbolIndex::from_ast(&analysis.ast));
-        let (definition_hovers, semantic_hovers) = build_hover_maps(&analysis.ast, &analysis.hir);
+        let (definition_hovers, semantic_hovers) =
+            build_hover_maps(&analysis.ast, &analysis.hir, &analysis.semantics);
         self.definition_hovers = definition_hovers;
         self.semantic_hovers = semantic_hovers;
         self.ast = Some(analysis.ast);
         self.hir = Some(analysis.hir);
+        self.semantics = Some(analysis.semantics);
         self.diagnostics = analysis.diagnostics;
     }
 
@@ -152,10 +159,8 @@ impl Document {
 fn build_hover_maps(
     ast: &SourceFile,
     hir: &Module,
+    semantics: &ModuleSemantics,
 ) -> (HashMap<Span, String>, HashMap<Span, String>) {
-    let mut checker = TypeChecker::new();
-    checker.check(hir);
-
     let mut definition_hovers = HashMap::new();
     let mut semantic_hovers = HashMap::new();
     let mut hir_items = hir.items.iter();
@@ -172,41 +177,41 @@ fn build_hover_maps(
         match (&ast_item.kind, &hir_item.kind) {
             (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => {
                 if let AstPatternKind::Var(ident) = &def.pattern.kind
-                    && let Some(ty) = checker.global_type(hir_item.id)
+                    && let Some(ty) = semantics.global_type(hir_item.id)
                 {
                     definition_hovers.insert(
                         ident.span,
-                        format!("let {}: {}", ident.name, format_type_in_module(&ty, hir)),
+                        format!("let {}: {}", ident.name, format_type_in_module(ty, hir)),
                     );
                 }
                 collect_expr_hovers(
                     &def.value,
                     &hir_fn.body,
-                    &checker,
+                    semantics,
                     hir,
                     &mut definition_hovers,
                     &mut semantic_hovers,
                 );
             }
             (ast::ItemKind::Fn(def), HirItemKind::Fn(_)) => {
-                if let Some(ty) = checker.global_type(hir_item.id) {
+                if let Some(ty) = semantics.global_type(hir_item.id) {
                     definition_hovers.insert(
                         def.name.span,
-                        format!("fn {}: {}", def.name.name, format_type_in_module(&ty, hir)),
+                        format!("fn {}: {}", def.name.name, format_type_in_module(ty, hir)),
                     );
                 }
                 if let HirItemKind::Fn(hir_fn) = &hir_item.kind {
                     collect_param_hovers(
                         &def.params,
                         &hir_fn.params,
-                        &checker,
+                        semantics,
                         hir,
                         &mut definition_hovers,
                     );
                     collect_expr_hovers(
                         &def.body,
                         &hir_fn.body,
-                        &checker,
+                        semantics,
                         hir,
                         &mut definition_hovers,
                         &mut semantic_hovers,
@@ -232,27 +237,27 @@ fn build_hover_maps(
             }
             (ast::ItemKind::Impl(def), HirItemKind::Impl(hir_impl)) => {
                 for (ast_item, hir_item) in def.items.iter().zip(&hir_impl.items) {
-                    if let Some(ty) = checker.global_type(hir_item.id) {
+                    if let Some(ty) = semantics.global_type(hir_item.id) {
                         definition_hovers.insert(
                             ast_item.name.span,
                             format!(
                                 "fn {}: {}",
                                 ast_item.name.name,
-                                format_type_in_module(&ty, hir)
+                                format_type_in_module(ty, hir)
                             ),
                         );
                     }
                     collect_param_hovers(
                         &ast_item.params,
                         &hir_item.params,
-                        &checker,
+                        semantics,
                         hir,
                         &mut definition_hovers,
                     );
                     collect_expr_hovers(
                         &ast_item.body,
                         &hir_item.body,
-                        &checker,
+                        semantics,
                         hir,
                         &mut definition_hovers,
                         &mut semantic_hovers,
@@ -293,7 +298,7 @@ fn callable_type_string(
 fn collect_param_hovers(
     ast_params: &[ast::Param],
     hir_params: &[HirParam],
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     hovers: &mut HashMap<Span, String>,
 ) {
@@ -305,7 +310,7 @@ fn collect_param_hovers(
                 ident.span,
                 &ident.name,
                 hir_param.id,
-                checker,
+                semantics,
                 module,
                 hovers,
             );
@@ -316,7 +321,7 @@ fn collect_param_hovers(
 fn collect_expr_hovers(
     ast_expr: &ast::Expr,
     hir_expr: &HirExpr,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     definition_hovers: &mut HashMap<Span, String>,
     semantic_hovers: &mut HashMap<Span, String>,
@@ -324,7 +329,7 @@ fn collect_expr_hovers(
     insert_expression_hover(
         ast_expr.span,
         hir_expr.span,
-        checker,
+        semantics,
         module,
         semantic_hovers,
     );
@@ -335,7 +340,7 @@ fn collect_expr_hovers(
                 ident.span,
                 &ident.name,
                 *local_id,
-                checker,
+                semantics,
                 module,
                 semantic_hovers,
             );
@@ -345,13 +350,19 @@ fn collect_expr_hovers(
                 ident.span,
                 &ident.name,
                 *def_id,
-                checker,
+                semantics,
                 module,
                 semantic_hovers,
             );
         }
         (ast::ExprKind::Var(ident), HirExprKind::Builtin(_)) => {
-            insert_expression_hover(ident.span, hir_expr.span, checker, module, semantic_hovers);
+            insert_expression_hover(
+                ident.span,
+                hir_expr.span,
+                semantics,
+                module,
+                semantic_hovers,
+            );
         }
         (ast::ExprKind::Lambda { params, body }, HirExprKind::Lambda(hir_params, hir_body)) => {
             for (ast_param, hir_param) in params.iter().zip(hir_params) {
@@ -362,7 +373,7 @@ fn collect_expr_hovers(
                         ident.span,
                         &ident.name,
                         hir_param.id,
-                        checker,
+                        semantics,
                         module,
                         definition_hovers,
                     );
@@ -371,7 +382,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 body,
                 hir_body,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -388,7 +399,7 @@ fn collect_expr_hovers(
                 collect_stmt_hovers(
                     ast_stmt,
                     hir_stmt,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -398,7 +409,7 @@ fn collect_expr_hovers(
                 collect_expr_hovers(
                     ast_tail,
                     hir_tail,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -422,7 +433,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 value,
                 hir_value,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -430,14 +441,14 @@ fn collect_expr_hovers(
             collect_pattern_definition_hovers(
                 pattern,
                 hir_pattern,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
             );
             collect_expr_hovers(
                 body,
                 hir_body,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -447,7 +458,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 scrutinee,
                 hir_scrutinee,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -456,7 +467,7 @@ fn collect_expr_hovers(
                 collect_match_arm_hovers(
                     ast_arm,
                     hir_arm,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -474,7 +485,7 @@ fn collect_expr_hovers(
                 collect_expr_hovers(
                     &ast_generator.iter,
                     &hir_generator.iter,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -482,7 +493,7 @@ fn collect_expr_hovers(
                 collect_pattern_definition_hovers(
                     &ast_generator.pattern,
                     &hir_generator.pattern,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                 );
@@ -492,7 +503,7 @@ fn collect_expr_hovers(
                     collect_expr_hovers(
                         ast_guard,
                         hir_guard,
-                        checker,
+                        semantics,
                         module,
                         definition_hovers,
                         semantic_hovers,
@@ -502,7 +513,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 body,
                 hir_body,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -512,7 +523,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 func,
                 hir_func,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -521,7 +532,7 @@ fn collect_expr_hovers(
                 collect_expr_hovers(
                     ast_arg,
                     hir_arg,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -544,14 +555,14 @@ fn collect_expr_hovers(
                 method.span,
                 &method.name,
                 hir_expr.span,
-                checker,
+                semantics,
                 module,
                 semantic_hovers,
             );
             collect_expr_hovers(
                 receiver,
                 hir_receiver,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -560,7 +571,7 @@ fn collect_expr_hovers(
                 collect_expr_hovers(
                     ast_arg,
                     hir_arg,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -568,11 +579,17 @@ fn collect_expr_hovers(
             }
         }
         (ast::ExprKind::Field { base, field }, HirExprKind::Field(hir_base, _)) => {
-            insert_expression_hover(field.span, hir_expr.span, checker, module, semantic_hovers);
+            insert_expression_hover(
+                field.span,
+                hir_expr.span,
+                semantics,
+                module,
+                semantic_hovers,
+            );
             collect_expr_hovers(
                 base,
                 hir_base,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -582,11 +599,17 @@ fn collect_expr_hovers(
             ast::ExprKind::SafeField { base, field },
             HirExprKind::SafeField { base: hir_base, .. },
         ) => {
-            insert_expression_hover(field.span, hir_expr.span, checker, module, semantic_hovers);
+            insert_expression_hover(
+                field.span,
+                hir_expr.span,
+                semantics,
+                module,
+                semantic_hovers,
+            );
             collect_expr_hovers(
                 base,
                 hir_base,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -598,7 +621,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 base,
                 hir_base,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -610,7 +633,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 base,
                 &hir_args[0],
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -618,7 +641,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 index,
                 &hir_args[1],
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -631,7 +654,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 left,
                 hir_left,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -639,7 +662,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 right,
                 hir_right,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -649,7 +672,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 operand,
                 hir_operand,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -666,7 +689,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 condition,
                 hir_condition,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -674,7 +697,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 then_branch,
                 hir_then,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -682,7 +705,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 else_branch,
                 hir_else,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -698,7 +721,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 value,
                 hir_value,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -706,7 +729,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 default,
                 hir_default,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -718,7 +741,7 @@ fn collect_expr_hovers(
                     collect_expr_hovers(
                         ast_value,
                         hir_value,
-                        checker,
+                        semantics,
                         module,
                         definition_hovers,
                         semantic_hovers,
@@ -733,7 +756,7 @@ fn collect_expr_hovers(
             collect_expr_hovers(
                 base,
                 hir_base,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -744,7 +767,7 @@ fn collect_expr_hovers(
                         collect_expr_hovers(
                             ast_value,
                             hir_value,
-                            checker,
+                            semantics,
                             module,
                             definition_hovers,
                             semantic_hovers,
@@ -759,7 +782,7 @@ fn collect_expr_hovers(
                 collect_expr_hovers(
                     ast_item,
                     hir_item,
-                    checker,
+                    semantics,
                     module,
                     definition_hovers,
                     semantic_hovers,
@@ -774,7 +797,7 @@ fn collect_expr_hovers(
                     collect_expr_hovers(
                         ast_expr,
                         hir_expr,
-                        checker,
+                        semantics,
                         module,
                         definition_hovers,
                         semantic_hovers,
@@ -789,7 +812,7 @@ fn collect_expr_hovers(
 fn collect_stmt_hovers(
     ast_stmt: &ast::Stmt,
     hir_stmt: &HirStmt,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     definition_hovers: &mut HashMap<Span, String>,
     semantic_hovers: &mut HashMap<Span, String>,
@@ -806,7 +829,7 @@ fn collect_stmt_hovers(
             collect_expr_hovers(
                 value,
                 hir_value,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -814,7 +837,7 @@ fn collect_stmt_hovers(
             collect_pattern_definition_hovers(
                 pattern,
                 hir_pattern,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
             );
@@ -823,7 +846,7 @@ fn collect_stmt_hovers(
             collect_expr_hovers(
                 ast_expr,
                 hir_expr,
-                checker,
+                semantics,
                 module,
                 definition_hovers,
                 semantic_hovers,
@@ -836,7 +859,7 @@ fn collect_stmt_hovers(
 fn collect_match_arm_hovers(
     ast_arm: &ast::MatchArm,
     hir_arm: &HirMatchArm,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     definition_hovers: &mut HashMap<Span, String>,
     semantic_hovers: &mut HashMap<Span, String>,
@@ -844,7 +867,7 @@ fn collect_match_arm_hovers(
     collect_pattern_definition_hovers(
         &ast_arm.pattern,
         &hir_arm.pattern,
-        checker,
+        semantics,
         module,
         definition_hovers,
     );
@@ -852,7 +875,7 @@ fn collect_match_arm_hovers(
         collect_expr_hovers(
             ast_guard,
             hir_guard,
-            checker,
+            semantics,
             module,
             definition_hovers,
             semantic_hovers,
@@ -861,7 +884,7 @@ fn collect_match_arm_hovers(
     collect_expr_hovers(
         &ast_arm.body,
         &hir_arm.body,
-        checker,
+        semantics,
         module,
         definition_hovers,
         semantic_hovers,
@@ -871,7 +894,7 @@ fn collect_match_arm_hovers(
 fn collect_pattern_definition_hovers(
     ast_pattern: &ast::Pattern,
     hir_pattern: &HirPattern,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     hovers: &mut HashMap<Span, String>,
 ) {
@@ -879,7 +902,14 @@ fn collect_pattern_definition_hovers(
         (AstPatternKind::Var(ident), HirPatternKind::Var(local_id, name))
             if ident.name == *name =>
         {
-            insert_local_hover(ident.span, &ident.name, *local_id, checker, module, hovers);
+            insert_local_hover(
+                ident.span,
+                &ident.name,
+                *local_id,
+                semantics,
+                module,
+                hovers,
+            );
         }
         (
             AstPatternKind::Binding {
@@ -888,8 +918,15 @@ fn collect_pattern_definition_hovers(
             },
             HirPatternKind::Binding(local_id, name, inner),
         ) if ident.name == *name => {
-            insert_local_hover(ident.span, &ident.name, *local_id, checker, module, hovers);
-            collect_pattern_definition_hovers(pattern, inner, checker, module, hovers);
+            insert_local_hover(
+                ident.span,
+                &ident.name,
+                *local_id,
+                semantics,
+                module,
+                hovers,
+            );
+            collect_pattern_definition_hovers(pattern, inner, semantics, module, hovers);
         }
         (AstPatternKind::Tuple(ast_patterns), HirPatternKind::Tuple(hir_patterns))
         | (AstPatternKind::List(ast_patterns), HirPatternKind::List(hir_patterns))
@@ -904,7 +941,7 @@ fn collect_pattern_definition_hovers(
                 collect_pattern_definition_hovers(
                     ast_pattern,
                     hir_pattern,
-                    checker,
+                    semantics,
                     module,
                     hovers,
                 );
@@ -922,19 +959,19 @@ fn collect_pattern_definition_hovers(
                 collect_pattern_definition_hovers(
                     ast_pattern,
                     hir_pattern,
-                    checker,
+                    semantics,
                     module,
                     hovers,
                 );
             }
             if let (Some(ast_rest), Some(hir_rest)) = (rest.as_deref(), hir_rest.as_deref()) {
-                collect_pattern_definition_hovers(ast_rest, hir_rest, checker, module, hovers);
+                collect_pattern_definition_hovers(ast_rest, hir_rest, semantics, module, hovers);
             }
             for (ast_pattern, hir_pattern) in tail.iter().zip(hir_tail) {
                 collect_pattern_definition_hovers(
                     ast_pattern,
                     hir_pattern,
-                    checker,
+                    semantics,
                     module,
                     hovers,
                 );
@@ -946,7 +983,7 @@ fn collect_pattern_definition_hovers(
                     collect_pattern_definition_hovers(
                         ast_pattern,
                         hir_pattern,
-                        checker,
+                        semantics,
                         module,
                         hovers,
                     );
@@ -957,7 +994,7 @@ fn collect_pattern_definition_hovers(
                             span: ast_field.name.span,
                         },
                         hir_pattern,
-                        checker,
+                        semantics,
                         module,
                         hovers,
                     );
@@ -972,14 +1009,14 @@ fn insert_local_hover(
     span: Span,
     name: &str,
     local_id: LocalId,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     hovers: &mut HashMap<Span, String>,
 ) {
-    if let Some(ty) = checker.local_type(local_id) {
+    if let Some(ty) = semantics.local_type(local_id) {
         hovers.insert(
             span,
-            format!("{name}: {}", format_type_in_module(&ty, module)),
+            format!("{name}: {}", format_type_in_module(ty, module)),
         );
     }
 }
@@ -988,14 +1025,14 @@ fn insert_global_hover(
     span: Span,
     name: &str,
     def_id: neve_hir::DefId,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     hovers: &mut HashMap<Span, String>,
 ) {
-    if let Some(ty) = checker.global_type(def_id) {
+    if let Some(ty) = semantics.global_type(def_id) {
         hovers.insert(
             span,
-            format!("{name}: {}", format_type_in_module(&ty, module)),
+            format!("{name}: {}", format_type_in_module(ty, module)),
         );
     }
 }
@@ -1003,12 +1040,12 @@ fn insert_global_hover(
 fn insert_expression_hover(
     span: Span,
     expr_span: Span,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     hovers: &mut HashMap<Span, String>,
 ) {
-    if let Some(ty) = checker.expr_type(expr_span) {
-        hovers.insert(span, format_type_in_module(&ty, module));
+    if let Some(ty) = semantics.expr_type(expr_span) {
+        hovers.insert(span, format_type_in_module(ty, module));
     }
 }
 
@@ -1016,16 +1053,16 @@ fn insert_method_hover(
     span: Span,
     name: &str,
     expr_span: Span,
-    checker: &TypeChecker,
+    semantics: &ModuleSemantics,
     module: &Module,
     hovers: &mut HashMap<Span, String>,
 ) {
-    if let Some(def_id) = checker.method_resolutions().get(&expr_span).copied()
-        && let Some(ty) = checker.global_type(def_id)
+    if let Some(def_id) = semantics.method_resolution(expr_span)
+        && let Some(ty) = semantics.global_type(def_id)
     {
         hovers.insert(
             span,
-            format!("fn {name}: {}", format_type_in_module(&ty, module)),
+            format!("fn {name}: {}", format_type_in_module(ty, module)),
         );
     }
 }

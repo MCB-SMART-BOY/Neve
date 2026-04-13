@@ -3,9 +3,7 @@
 
 use crate::{commands::module_graph, output};
 use neve_diagnostic::emit;
-use neve_frontend::{collect_item_names_from_modules, rewrite_diagnostics_with_names};
-use neve_hir::ModuleLoader;
-use neve_typeck::TypeChecker;
+use neve_frontend::FrontendDriver;
 use std::fs;
 use std::path::Path;
 
@@ -15,38 +13,19 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let path = Path::new(file);
     let (root_dir, module_path) = module_graph::resolve_module_path(path)?;
 
-    let mut loader = ModuleLoader::new(&root_dir);
-    loader
-        .load_module(&module_path)
-        .map_err(|e| format!("module load error: {e}"))?;
-
-    // Collect global signatures from all loaded modules
-    // 收集所有已加载模块的全局签名
-    let mut global_types = std::collections::HashMap::new();
-    let mut global_spans = std::collections::HashMap::new();
-    for module_id in loader.load_order() {
-        if let Some(module) = loader.hir_module(*module_id) {
-            let (types, spans) = TypeChecker::collect_signatures(module);
-            global_types.extend(types);
-            global_spans.extend(spans);
-        }
-    }
-    let type_names = collect_item_names_from_modules(
-        loader
-            .load_order()
-            .iter()
-            .filter_map(|module_id| loader.hir_module(*module_id)),
-    );
+    let analysis = FrontendDriver::new(&root_dir)
+        .analyze_module_path(&module_path)
+        .map_err(|e| format!("frontend error: {e}"))?;
 
     let mut parse_errors = 0usize;
     let mut type_errors = 0usize;
 
-    for module_id in loader.load_order() {
-        let Some(module) = loader.hir_module(*module_id) else {
+    for module_id in analysis.load_order() {
+        let Some(module) = analysis.hir_module(*module_id) else {
             continue;
         };
 
-        let Some(info) = loader.get_module(*module_id) else {
+        let Some(info) = analysis.module_info(*module_id) else {
             continue;
         };
 
@@ -56,8 +35,9 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
 
         // Reuse cached parse diagnostics from the module loader.
         // 复用模块加载器缓存的解析诊断。
-        let parse_diagnostics = loader.parsed_diagnostics(*module_id).unwrap_or(&[]);
-        for diag in parse_diagnostics {
+        let parse_diagnostics = analysis.parsed_diagnostics(*module_id).unwrap_or(&[]);
+        let diagnostics = analysis.diagnostics(*module_id).unwrap_or(&[]);
+        for diag in diagnostics {
             emit(&source, &file_path.display().to_string(), diag);
         }
 
@@ -66,10 +46,11 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
             continue;
         }
 
-        if verbose && let Some(ast) = loader.parsed_source(*module_id) {
+        if verbose && let Some(ast) = analysis.parsed_source(*module_id) {
+            let form_count = ast.items.len() + usize::from(ast.tail_expr.is_some());
             output::info(&format!(
-                "Parsed {} items in {}",
-                ast.items.len(),
+                "Parsed {} top-level form(s) in {}",
+                form_count,
                 file_path.display()
             ));
         }
@@ -80,16 +61,6 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
                 module.items.len(),
                 file_path.display()
             ));
-        }
-
-        // Type check with shared globals
-        // 使用共享全局签名进行类型检查
-        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
-        checker.check(module);
-        let diagnostics = rewrite_diagnostics_with_names(checker.diagnostics(), &type_names);
-
-        for diag in &diagnostics {
-            emit(&source, &file_path.display().to_string(), diag);
         }
 
         if !diagnostics.is_empty() {

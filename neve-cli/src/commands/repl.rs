@@ -6,16 +6,13 @@ use crate::output;
 use neve_common::Span;
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{Evaluator, Value, builtins};
-use neve_frontend::{collect_item_names_from_modules, rewrite_diagnostics_with_names};
-use neve_hir::{
-    DefId, Import as HirImport, ImportKind as HirImportKind, ImportPathPrefix,
-    ItemKind as HirItemKind, Module, ModuleId, ModuleLoader, ModulePath, Resolver, Ty, TyKind,
-};
+use neve_frontend::{FrontendSession, ModuleAnalysis, SessionBuildInputs, SessionBuildResult};
+use neve_hir::{DefId, ItemKind as HirItemKind, Module, ModuleId, Ty, TyKind};
 use neve_parser::parse;
 use neve_std::stdlib;
 use neve_syntax::{ImportDef, ImportItems, Item, ItemKind, PatternKind, SourceFile, Visibility};
 use neve_typeck::{
-    LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, TypeChecker,
+    LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID,
     format_builtin_named_type,
 };
 use rustyline::DefaultEditor;
@@ -34,8 +31,9 @@ pub fn run() -> Result<(), String> {
     println!();
 
     let mut rl = DefaultEditor::new().map_err(|e| e.to_string())?;
+    let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut runtime_state = ReplHirState::new();
-    let mut semantic_state = ReplSemanticState::default();
+    let mut semantic_state = ReplSemanticState::with_root_dir(root_dir);
 
     // Buffer for multi-line input
     // 多行输入缓冲区
@@ -107,7 +105,7 @@ pub fn run() -> Result<(), String> {
                             let builtins_count = builtins().len();
                             let user_bindings = runtime_state.user_bindings();
                             let user_binding_count = user_bindings.len();
-                            println!("Project root: {}", runtime_state.root_dir().display());
+                            println!("Project root: {}", semantic_state.root_dir().display());
                             println!();
 
                             if user_bindings.is_empty() {
@@ -160,7 +158,9 @@ pub fn run() -> Result<(), String> {
                             let file_path = parts[1];
                             match std::fs::read_to_string(file_path) {
                                 Ok(content) => {
-                                    let context = match runtime_state.context_for_file(file_path) {
+                                    let context = match semantic_state
+                                        .context_for_file(file_path, runtime_state.is_pristine())
+                                    {
                                         Ok(context) => context,
                                         Err(message) => {
                                             eprintln!("{message}");
@@ -363,7 +363,6 @@ struct ReplHirState {
     builtin_module_imports: HashMap<String, String>,
     imported_defs: HashMap<String, DefId>,
     imported_module_aliases: HashSet<String>,
-    module_loader: ModuleLoader,
     evaluated_modules: HashSet<ModuleId>,
 }
 
@@ -375,11 +374,10 @@ impl Default for ReplHirState {
 
 impl ReplHirState {
     fn new() -> Self {
-        let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        Self::with_root_dir(root_dir)
+        Self::with_root_dir(PathBuf::from("."))
     }
 
-    fn with_root_dir(root_dir: PathBuf) -> Self {
+    fn with_root_dir(_root_dir: PathBuf) -> Self {
         Self {
             evaluator: Evaluator::new().with_extra_builtins(std_builtin_values()),
             next_def_id: 0,
@@ -389,18 +387,12 @@ impl ReplHirState {
             builtin_module_imports: HashMap::new(),
             imported_defs: HashMap::new(),
             imported_module_aliases: HashSet::new(),
-            module_loader: ModuleLoader::new(&root_dir),
             evaluated_modules: HashSet::new(),
         }
     }
 
     fn clear(&mut self) {
-        let root_dir = self.module_loader.root_dir().to_path_buf();
-        *self = Self::with_root_dir(root_dir);
-    }
-
-    fn root_dir(&self) -> &Path {
-        self.module_loader.root_dir()
+        *self = Self::new();
     }
 
     fn is_pristine(&self) -> bool {
@@ -410,74 +402,7 @@ impl ReplHirState {
             && self.builtin_module_imports.is_empty()
             && self.imported_defs.is_empty()
             && self.imported_module_aliases.is_empty()
-            && self.module_loader.load_order().is_empty()
             && self.evaluated_modules.is_empty()
-    }
-
-    fn validate_context(&self, context: &ReplInputContext) -> Result<(), String> {
-        if let Some(root_dir) = &context.root_dir
-            && root_dir != self.root_dir()
-        {
-            return Err(format!(
-                "REPL 模块图当前固定在会话根目录 '{}'；请在该项目根目录启动 REPL，或加载同一根目录下的文件",
-                self.root_dir().display()
-            ));
-        }
-        Ok(())
-    }
-
-    fn context_for_file(&mut self, path: impl AsRef<Path>) -> Result<ReplInputContext, String> {
-        let canonical = path
-            .as_ref()
-            .canonicalize()
-            .map_err(|e| format!("cannot resolve path '{}': {}", path.as_ref().display(), e))?;
-        let relative = match canonical.strip_prefix(self.root_dir()) {
-            Ok(relative) => relative,
-            Err(_) => {
-                let (root_dir, _) = module_graph::resolve_module_path(&canonical)?;
-                if !self.is_pristine() {
-                    return Err(format!(
-                        "loaded file '{}' is outside the current REPL session root '{}'; run :clear before switching to another project root",
-                        canonical.display(),
-                        self.root_dir().display()
-                    ));
-                }
-                *self = Self::with_root_dir(root_dir.clone());
-                canonical.strip_prefix(self.root_dir()).map_err(|_| {
-                    format!(
-                        "loaded file '{}' is outside the REPL session root '{}'",
-                        canonical.display(),
-                        self.root_dir().display()
-                    )
-                })?
-            }
-        };
-
-        let mut module_path: Vec<String> = relative
-            .components()
-            .map(|component| component.as_os_str().to_string_lossy().to_string())
-            .collect();
-        if let Some(last) = module_path.last_mut()
-            && last.ends_with(".neve")
-        {
-            *last = last.trim_end_matches(".neve").to_string();
-        }
-        if module_path.last().map(|segment| segment.as_str()) == Some("mod") {
-            module_path.pop();
-        }
-        if module_path.len() == 1 && module_path[0] == "lib" {
-            module_path.clear();
-        }
-
-        let module_name = module_path
-            .last()
-            .cloned()
-            .unwrap_or_else(|| "main".to_string());
-        Ok(ReplInputContext {
-            root_dir: Some(self.root_dir().to_path_buf()),
-            module_path,
-            module_name,
-        })
     }
 
     fn user_bindings(&self) -> Vec<(&str, bool)> {
@@ -490,36 +415,31 @@ impl ReplHirState {
         bindings
     }
 
-    fn eval_persistent(
-        &mut self,
-        ast: &SourceFile,
-        module: &Module,
-        resolver: &Resolver,
-        context: &ReplInputContext,
-        method_resolutions: HashMap<Span, DefId>,
-    ) -> Result<Value, String> {
-        self.eval_pending_loaded_modules()?;
-        self.evaluator.set_method_resolutions(method_resolutions);
+    fn eval_persistent(&mut self, input: PersistentEvalInput<'_>) -> Result<Value, String> {
+        self.eval_pending_loaded_modules(input.semantic_state)?;
+        self.evaluator
+            .set_method_resolutions(input.method_resolutions);
         let value = self
             .evaluator
-            .eval_module(module)
+            .eval_module(input.module)
             .map_err(|e| format!("evaluation error: {e:?}"))?;
-        self.next_def_id = resolver.next_def_id().max(self.module_loader.next_def_id());
-        for (name, def_id) in resolver.global_defs() {
+        self.next_def_id = input.next_def_id.max(input.semantic_state.next_def_id());
+        for (name, def_id) in input.global_defs {
             self.globals.insert(name.clone(), *def_id);
         }
-        self.record_user_bindings(ast);
-        self.record_module_imports(ast, &context.module_path)?;
-        self.record_std_imports(ast);
+        self.record_user_bindings(input.ast);
+        self.record_module_imports(input.ast, &input.context.module_path, input.semantic_state)?;
+        self.record_std_imports(input.ast);
         Ok(value)
     }
 
     fn eval_ephemeral(
         &mut self,
         module: &Module,
+        semantic_state: &ReplSemanticState,
         method_resolutions: HashMap<Span, DefId>,
     ) -> Result<Value, String> {
-        self.eval_pending_loaded_modules()?;
+        self.eval_pending_loaded_modules(semantic_state)?;
         let mut evaluator = self.evaluator.clone();
         evaluator.set_method_resolutions(method_resolutions);
         evaluator
@@ -531,40 +451,38 @@ impl ReplHirState {
         &mut self,
         ast: &SourceFile,
         context: &ReplInputContext,
-    ) -> Result<(Module, Resolver, Vec<ModuleId>), String> {
-        self.validate_context(context)?;
-        let newly_loaded = self.load_import_modules(ast, &context.module_path)?;
-
-        let mut resolver = Resolver::new();
-        resolver.set_def_id_counter(self.next_def_id.max(self.module_loader.next_def_id()));
-        resolver.register_existing_globals(
-            self.globals
-                .iter()
-                .map(|(name, def_id)| (name.clone(), *def_id))
-                .collect(),
-        );
-        resolver.register_imports(
-            self.imported_defs
-                .iter()
-                .map(|(name, def_id)| (name.clone(), *def_id))
-                .collect(),
-        );
-        for alias in &self.imported_module_aliases {
-            resolver.register_module_import_alias(alias.clone());
-        }
-        for (name, builtin_name) in &self.builtin_item_imports {
-            resolver.register_builtin_item_import(name.clone(), builtin_name.clone());
-        }
-        for (alias, module_prefix) in &self.builtin_module_imports {
-            resolver.register_builtin_module_import(alias.clone(), module_prefix.clone());
-        }
-        resolver.set_module_loader(self.module_loader.clone());
-        let module = resolver.resolve_with_path(
+        semantic_state: &mut ReplSemanticState,
+    ) -> Result<SessionBuildResult, String> {
+        semantic_state.validate_context(context)?;
+        semantic_state.build_module_from_ast(
             ast,
             context.module_name.clone(),
             context.module_path.clone(),
-        );
-        Ok((module, resolver, newly_loaded))
+            SessionBuildInputs {
+                next_def_id: self.next_def_id.max(semantic_state.next_def_id()),
+                existing_globals: self
+                    .globals
+                    .iter()
+                    .map(|(name, def_id)| (name.clone(), *def_id))
+                    .collect(),
+                imported_defs: self
+                    .imported_defs
+                    .iter()
+                    .map(|(name, def_id)| (name.clone(), *def_id))
+                    .collect(),
+                imported_module_aliases: self.imported_module_aliases.iter().cloned().collect(),
+                builtin_item_imports: self
+                    .builtin_item_imports
+                    .iter()
+                    .map(|(name, builtin)| (name.clone(), builtin.clone()))
+                    .collect(),
+                builtin_module_imports: self
+                    .builtin_module_imports
+                    .iter()
+                    .map(|(alias, prefix)| (alias.clone(), prefix.clone()))
+                    .collect(),
+            },
+        )
     }
 
     fn record_user_bindings(&mut self, ast: &SourceFile) {
@@ -573,77 +491,26 @@ impl ReplHirState {
         }
     }
 
-    fn load_import_modules(
+    fn eval_pending_loaded_modules(
         &mut self,
-        ast: &SourceFile,
-        current_module_path: &[String],
-    ) -> Result<Vec<ModuleId>, String> {
-        self.module_loader
-            .set_def_id_counter(self.next_def_id.max(self.module_loader.next_def_id()));
-        let known_modules: HashSet<_> = self.module_loader.load_order().iter().copied().collect();
+        semantic_state: &ReplSemanticState,
+    ) -> Result<(), String> {
+        let analyses = semantic_state.analyze_loaded_modules();
 
-        for item in &ast.items {
-            let ItemKind::Import(import) = &item.kind else {
-                continue;
-            };
-            if repl_std_module_prefix(import).is_some() {
-                continue;
-            }
-
-            let import_path = ModulePath::from_import_def(import);
-            let Some(absolute_path) = self
-                .module_loader
-                .resolve_module_path(&import_path, Some(current_module_path))
-            else {
-                return Err(format!(
-                    "cannot resolve import path '{}' from current REPL context",
-                    format_import_path(import)
-                ));
-            };
-
-            self.module_loader
-                .load_module(&absolute_path)
-                .map_err(|e| format!("module load error: {e}"))?;
-        }
-
-        self.next_def_id = self.next_def_id.max(self.module_loader.next_def_id());
-        let newly_loaded = self
-            .module_loader
-            .load_order()
-            .iter()
-            .copied()
-            .filter(|module_id| !known_modules.contains(module_id))
-            .collect();
-        Ok(newly_loaded)
-    }
-
-    fn eval_pending_loaded_modules(&mut self) -> Result<(), String> {
-        let mut global_types = HashMap::new();
-        let mut global_spans = HashMap::new();
-
-        for module_id in self.module_loader.load_order() {
-            let Some(module) = self.module_loader.hir_module(*module_id) else {
-                continue;
-            };
-            let (types, spans) = TypeChecker::collect_signatures(module);
-            global_types.extend(types);
-            global_spans.extend(spans);
-        }
-
-        for module_id in self.module_loader.load_order() {
+        for module_id in semantic_state.load_order() {
             if self.evaluated_modules.contains(module_id) {
                 continue;
             }
 
-            let Some(module) = self.module_loader.hir_module(*module_id) else {
+            let Some(module) = semantic_state.hir_module(*module_id) else {
+                continue;
+            };
+            let Some(analysis) = analyses.get(module_id) else {
                 continue;
             };
 
-            let mut checker =
-                TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
-            checker.check(module);
             self.evaluator
-                .set_method_resolutions(checker.method_resolutions().clone());
+                .set_method_resolutions(analysis.semantics.method_resolutions.clone());
             self.evaluator
                 .eval_module(module)
                 .map_err(|e| format!("evaluation error: {e:?}"))?;
@@ -657,33 +524,15 @@ impl ReplHirState {
         &mut self,
         ast: &SourceFile,
         current_module_path: &[String],
+        semantic_state: &ReplSemanticState,
     ) -> Result<(), String> {
-        for item in &ast.items {
-            let ItemKind::Import(import) = &item.kind else {
-                continue;
-            };
-            if repl_std_module_prefix(import).is_some() {
-                continue;
-            }
+        let resolved = semantic_state.resolve_ast_imports(ast, current_module_path)?;
 
-            let resolved = self
-                .module_loader
-                .resolve_import(&hir_import_from_ast(item.span, import), current_module_path)
-                .map_err(|e| format!("import resolution error: {e}"))?;
-
-            for (name, def_id) in resolved {
-                self.imported_defs.insert(name, def_id);
-            }
-
-            if matches!(import.items, ImportItems::Module)
-                && let Some(alias) = import
-                    .alias
-                    .as_ref()
-                    .map(|alias| alias.name.clone())
-                    .or_else(|| import.path.last().map(|segment| segment.name.clone()))
-            {
-                self.imported_module_aliases.insert(alias);
-            }
+        for (name, def_id) in resolved.bindings {
+            self.imported_defs.insert(name, def_id);
+        }
+        for alias in resolved.module_aliases {
+            self.imported_module_aliases.insert(alias);
         }
 
         Ok(())
@@ -727,6 +576,16 @@ impl ReplHirState {
     }
 }
 
+struct PersistentEvalInput<'a> {
+    ast: &'a SourceFile,
+    module: &'a Module,
+    global_defs: &'a HashMap<String, DefId>,
+    next_def_id: u32,
+    context: &'a ReplInputContext,
+    semantic_state: &'a ReplSemanticState,
+    method_resolutions: HashMap<Span, DefId>,
+}
+
 fn evaluate_repl_input(
     current_source: &str,
     persist_defs: bool,
@@ -742,15 +601,15 @@ fn evaluate_repl_input(
         });
     }
 
-    let (module, resolver, newly_loaded) = runtime_state
-        .build_module(&ast, context)
+    let build = runtime_state
+        .build_module(&ast, context, semantic_state)
         .map_err(ReplEvalError::Message)?;
-    if !newly_loaded.is_empty() {
-        report_loaded_module_diagnostics(runtime_state, &newly_loaded)?;
+    if !build.newly_loaded.is_empty() {
+        report_loaded_module_diagnostics(semantic_state, &build.newly_loaded)?;
     }
 
-    let checker = match typecheck_repl_module(&module, runtime_state, semantic_state) {
-        Ok(checker) => checker,
+    let analysis = match analyze_repl_module(&build.module, semantic_state) {
+        Ok(analysis) => analysis,
         Err(diagnostics) => {
             return Err(ReplEvalError::Diagnostics {
                 source: current_source.to_string(),
@@ -758,110 +617,59 @@ fn evaluate_repl_input(
             });
         }
     };
-    let method_resolutions = checker.method_resolutions().clone();
+    let method_resolutions = analysis.semantics.method_resolutions.clone();
 
     let value = if persist_defs {
-        runtime_state.eval_persistent(&ast, &module, &resolver, context, method_resolutions)
+        runtime_state.eval_persistent(PersistentEvalInput {
+            ast: &ast,
+            module: &build.module,
+            global_defs: &build.global_defs,
+            next_def_id: build.next_def_id,
+            context,
+            semantic_state,
+            method_resolutions,
+        })
     } else {
-        runtime_state.eval_ephemeral(&module, method_resolutions)
+        runtime_state.eval_ephemeral(&build.module, semantic_state, method_resolutions)
     }
     .map_err(ReplEvalError::Message)?;
 
     if persist_defs {
-        semantic_state.record_module(module);
+        semantic_state.record_module(build.module);
     }
 
     Ok(value)
 }
 
-fn typecheck_repl_module(
+fn analyze_repl_module(
     current_module: &Module,
-    runtime_state: &ReplHirState,
     semantic_state: &ReplSemanticState,
-) -> Result<TypeChecker, Vec<neve_diagnostic::Diagnostic>> {
-    let mut checker = TypeChecker::new();
-
-    for module_id in runtime_state.module_loader.load_order() {
-        let Some(module) = runtime_state.module_loader.hir_module(*module_id) else {
-            continue;
-        };
-        checker.check(module);
-        checker.clear_diagnostics();
-        checker.clear_method_resolutions();
-    }
-
-    for module in &semantic_state.modules {
-        checker.check(module);
-        checker.clear_diagnostics();
-        checker.clear_method_resolutions();
-    }
-
-    checker.check(current_module);
-    let type_names = collect_repl_type_names(runtime_state, semantic_state, current_module);
-    let diagnostics =
-        rewrite_diagnostics_with_names(checker.diagnostics_ref().to_vec(), &type_names);
-    if diagnostics
+) -> Result<ModuleAnalysis, Vec<neve_diagnostic::Diagnostic>> {
+    let analysis = semantic_state.analyze_module(current_module);
+    if analysis
+        .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
     {
-        return Err(diagnostics);
+        return Err(analysis.diagnostics);
     }
 
-    Ok(checker)
+    Ok(analysis)
 }
 
 fn report_loaded_module_diagnostics(
-    runtime_state: &ReplHirState,
+    semantic_state: &ReplSemanticState,
     newly_loaded: &[ModuleId],
 ) -> Result<(), ReplEvalError> {
-    let mut global_types = HashMap::new();
-    let mut global_spans = HashMap::new();
-    let pending: HashSet<_> = newly_loaded.iter().copied().collect();
-
-    for module_id in runtime_state.module_loader.load_order() {
-        let Some(module) = runtime_state.module_loader.hir_module(*module_id) else {
-            continue;
-        };
-        let (types, spans) = TypeChecker::collect_signatures(module);
-        global_types.extend(types);
-        global_spans.extend(spans);
-    }
-
-    let mut entries = Vec::new();
-    for module_id in runtime_state.module_loader.load_order() {
-        if !pending.contains(module_id) {
-            continue;
-        }
-
-        let Some(module) = runtime_state.module_loader.hir_module(*module_id) else {
-            continue;
-        };
-        let Some(info) = runtime_state.module_loader.get_module(*module_id) else {
-            continue;
-        };
-
-        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
-        checker.check(module);
-        let type_names = collect_item_names_from_modules(
-            runtime_state
-                .module_loader
-                .load_order()
-                .iter()
-                .filter_map(|loaded_id| runtime_state.module_loader.hir_module(*loaded_id)),
-        );
-        let diagnostics = rewrite_diagnostics_with_names(checker.diagnostics(), &type_names);
-        if diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.severity == Severity::Error)
-        {
-            let source = std::fs::read_to_string(&info.file_path).unwrap_or_default();
-            entries.push(LoadedModuleDiagnostics {
-                path: info.file_path.clone(),
-                source,
-                diagnostics,
-            });
-        }
-    }
+    let entries: Vec<_> = semantic_state
+        .loaded_module_diagnostics(newly_loaded)
+        .into_iter()
+        .map(|entry| LoadedModuleDiagnostics {
+            path: entry.file_path.clone(),
+            source: std::fs::read_to_string(&entry.file_path).unwrap_or_default(),
+            diagnostics: entry.diagnostics,
+        })
+        .collect();
 
     if entries.is_empty() {
         Ok(())
@@ -923,55 +731,6 @@ fn std_module_exports(module_prefix: &str) -> Vec<String> {
     exports
 }
 
-fn hir_import_from_ast(span: Span, import: &ImportDef) -> HirImport {
-    let prefix = match import.prefix {
-        neve_syntax::PathPrefix::Absolute => ImportPathPrefix::Absolute,
-        neve_syntax::PathPrefix::Self_ => ImportPathPrefix::Self_,
-        neve_syntax::PathPrefix::Super => ImportPathPrefix::Super,
-        neve_syntax::PathPrefix::Crate => ImportPathPrefix::Crate,
-    };
-
-    let kind = match &import.items {
-        ImportItems::Module => HirImportKind::Module,
-        ImportItems::Items(items) => {
-            HirImportKind::Items(items.iter().map(|item| item.name.clone()).collect())
-        }
-        ImportItems::All => HirImportKind::All,
-    };
-
-    HirImport {
-        prefix,
-        path: import
-            .path
-            .iter()
-            .map(|segment| segment.name.clone())
-            .collect(),
-        kind,
-        alias: import.alias.as_ref().map(|alias| alias.name.clone()),
-        is_pub: import.visibility == Visibility::Public,
-        span,
-    }
-}
-
-fn format_import_path(import: &ImportDef) -> String {
-    let prefix = match import.prefix {
-        neve_syntax::PathPrefix::Absolute => "",
-        neve_syntax::PathPrefix::Self_ => "self.",
-        neve_syntax::PathPrefix::Super => "super.",
-        neve_syntax::PathPrefix::Crate => "crate.",
-    };
-    format!(
-        "{}{}",
-        prefix,
-        import
-            .path
-            .iter()
-            .map(|segment| segment.name.as_str())
-            .collect::<Vec<_>>()
-            .join(".")
-    )
-}
-
 #[derive(Debug)]
 enum TypeQueryError {
     Diagnostics {
@@ -981,18 +740,162 @@ enum TypeQueryError {
     Message(String),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct ReplSemanticState {
-    modules: Vec<Module>,
+    session: FrontendSession,
+}
+
+impl Default for ReplSemanticState {
+    fn default() -> Self {
+        let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::with_root_dir(root_dir)
+    }
 }
 
 impl ReplSemanticState {
-    fn record_module(&mut self, module: Module) {
-        self.modules.push(module);
+    fn with_root_dir(root_dir: PathBuf) -> Self {
+        Self {
+            session: FrontendSession::new(root_dir),
+        }
+    }
+
+    fn root_dir(&self) -> &Path {
+        self.session.root_dir()
     }
 
     fn clear(&mut self) {
-        self.modules.clear();
+        self.session.clear();
+    }
+
+    fn is_pristine(&self) -> bool {
+        self.session.is_pristine()
+    }
+
+    fn next_def_id(&self) -> u32 {
+        self.session.next_def_id()
+    }
+
+    fn hir_module(&self, module_id: ModuleId) -> Option<&Module> {
+        self.session.hir_module(module_id)
+    }
+
+    fn load_order(&self) -> &[ModuleId] {
+        self.session.load_order()
+    }
+
+    fn validate_context(&self, context: &ReplInputContext) -> Result<(), String> {
+        if let Some(root_dir) = &context.root_dir
+            && root_dir != self.root_dir()
+        {
+            return Err(format!(
+                "REPL 模块图当前固定在会话根目录 '{}'；请在该项目根目录启动 REPL，或加载同一根目录下的文件",
+                self.root_dir().display()
+            ));
+        }
+        Ok(())
+    }
+
+    fn context_for_file(
+        &mut self,
+        path: impl AsRef<Path>,
+        allow_root_switch: bool,
+    ) -> Result<ReplInputContext, String> {
+        let canonical = path
+            .as_ref()
+            .canonicalize()
+            .map_err(|e| format!("cannot resolve path '{}': {}", path.as_ref().display(), e))?;
+        let relative = match canonical.strip_prefix(self.root_dir()) {
+            Ok(relative) => relative,
+            Err(_) => {
+                let (root_dir, _) = module_graph::resolve_module_path(&canonical)?;
+                if !(allow_root_switch && self.is_pristine()) {
+                    return Err(format!(
+                        "loaded file '{}' is outside the current REPL session root '{}'; run :clear before switching to another project root",
+                        canonical.display(),
+                        self.root_dir().display()
+                    ));
+                }
+                self.session.rebase_root(root_dir.clone());
+                canonical.strip_prefix(self.root_dir()).map_err(|_| {
+                    format!(
+                        "loaded file '{}' is outside the REPL session root '{}'",
+                        canonical.display(),
+                        self.root_dir().display()
+                    )
+                })?
+            }
+        };
+
+        let mut module_path: Vec<String> = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().to_string())
+            .collect();
+        if let Some(last) = module_path.last_mut()
+            && last.ends_with(".neve")
+        {
+            *last = last.trim_end_matches(".neve").to_string();
+        }
+        if module_path.last().map(|segment| segment.as_str()) == Some("mod") {
+            module_path.pop();
+        }
+        if module_path.len() == 1 && module_path[0] == "lib" {
+            module_path.clear();
+        }
+
+        let module_name = module_path
+            .last()
+            .cloned()
+            .unwrap_or_else(|| "main".to_string());
+        Ok(ReplInputContext {
+            root_dir: Some(self.root_dir().to_path_buf()),
+            module_path,
+            module_name,
+        })
+    }
+
+    fn record_module(&mut self, module: Module) {
+        self.session.record_module(module);
+    }
+
+    fn build_module_from_ast(
+        &mut self,
+        ast: &SourceFile,
+        module_name: String,
+        module_path: Vec<String>,
+        inputs: SessionBuildInputs,
+    ) -> Result<SessionBuildResult, String> {
+        self.session
+            .build_module_from_ast(ast, module_name, module_path, &inputs)
+            .map_err(|e| e.to_string())
+    }
+
+    fn analyze_module(&self, current_module: &Module) -> ModuleAnalysis {
+        self.session.analyze_module(current_module)
+    }
+
+    fn analyze_loaded_modules(&self) -> HashMap<ModuleId, ModuleAnalysis> {
+        self.session.analyze_loaded_modules()
+    }
+
+    fn loaded_module_diagnostics(
+        &self,
+        newly_loaded: &[ModuleId],
+    ) -> Vec<neve_frontend::SessionLoadedDiagnostics> {
+        self.session.loaded_module_diagnostics(newly_loaded)
+    }
+
+    fn type_names_with_current(&self, current_module: &Module) -> HashMap<DefId, String> {
+        self.session.type_names_with_current(current_module)
+    }
+
+    fn resolve_ast_imports(
+        &self,
+        ast: &SourceFile,
+        current_module_path: &[String],
+    ) -> Result<neve_frontend::SessionResolvedImports, String> {
+        self.session
+            .resolve_ast_imports(ast, current_module_path)
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -1012,34 +915,30 @@ fn infer_repl_type(
 
     let context = ReplInputContext::repl();
     let mut runtime = runtime_state.clone();
-    let (module, _, _) = runtime
-        .build_module(&ast, &context)
+    let mut semantic = state.clone();
+    let build = runtime
+        .build_module(&ast, &context, &mut semantic)
         .map_err(TypeQueryError::Message)?;
-    let checker = typecheck_repl_module(&module, &runtime, state).map_err(|diagnostics| {
+    let analysis = analyze_repl_module(&build.module, &semantic).map_err(|diagnostics| {
         TypeQueryError::Diagnostics {
             source,
             diagnostics,
         }
     })?;
 
-    let query_def_id = find_repl_type_binding(&module).ok_or_else(|| {
+    let query_def_id = find_repl_type_binding(&build.module).ok_or_else(|| {
         TypeQueryError::Message("internal error: missing type query binding".to_string())
     })?;
 
-    let ty = if let Some(target_def_id) = find_repl_type_target(&module) {
-        checker.global_type(target_def_id)
+    let ty = if let Some(target_def_id) = find_repl_type_target(&build.module) {
+        analysis.semantics.global_type(target_def_id)
     } else {
-        checker.global_type(query_def_id)
+        analysis.semantics.global_type(query_def_id)
     }
     .ok_or_else(|| {
         TypeQueryError::Message("internal error: failed to infer queried type".to_string())
     })?;
-    Ok(format_repl_semantic_type(
-        &ty,
-        &module,
-        runtime_state,
-        state,
-    ))
+    Ok(format_repl_semantic_type(ty, &build.module, &semantic))
 }
 
 fn prepare_repl_type_input(expr: &str) -> String {
@@ -1099,27 +998,17 @@ fn find_repl_type_target(module: &neve_hir::Module) -> Option<DefId> {
 fn format_repl_semantic_type(
     ty: &Ty,
     module: &Module,
-    runtime_state: &ReplHirState,
     semantic_state: &ReplSemanticState,
 ) -> String {
-    let names = collect_repl_type_names(runtime_state, semantic_state, module);
+    let names = collect_repl_type_names(semantic_state, module);
     format_repl_semantic_type_with_names(ty, &names)
 }
 
 fn collect_repl_type_names(
-    runtime_state: &ReplHirState,
     semantic_state: &ReplSemanticState,
     module: &Module,
 ) -> HashMap<DefId, String> {
-    collect_item_names_from_modules(
-        runtime_state
-            .module_loader
-            .load_order()
-            .iter()
-            .filter_map(|module_id| runtime_state.module_loader.hir_module(*module_id))
-            .chain(semantic_state.modules.iter())
-            .chain(std::iter::once(module)),
-    )
+    semantic_state.type_names_with_current(module)
 }
 
 fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>) -> String {
@@ -1472,11 +1361,10 @@ mod tests {
             other => panic!("expected function item, got {other:?}"),
         };
 
-        let runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
         state.record_module(hir.clone());
         assert_eq!(
-            format_repl_semantic_type(&ty, &hir, &runtime, &state),
+            format_repl_semantic_type(&ty, &hir, &state),
             "(User) -> User"
         );
     }
@@ -1600,7 +1488,7 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::default();
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
@@ -1628,7 +1516,7 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::default();
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
         let context = ReplInputContext::repl();
 
         evaluate_repl_input("import math;", true, &context, &mut runtime, &mut semantic)
@@ -1656,9 +1544,12 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::default();
-        let context = runtime
-            .context_for_file(temp_dir.path().join("app").join("mod.neve"))
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
+        let context = semantic
+            .context_for_file(
+                temp_dir.path().join("app").join("mod.neve"),
+                runtime.is_pristine(),
+            )
             .expect("file context should resolve");
 
         let source = fs::read_to_string(temp_dir.path().join("app").join("mod.neve")).unwrap();
@@ -1688,7 +1579,7 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::default();
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
         let context = ReplInputContext::repl();
 
         let error = evaluate_repl_input(
@@ -1733,12 +1624,15 @@ mod tests {
 
         let mut runtime = ReplHirState::with_root_dir(first.path().to_path_buf());
         runtime.clear();
-        let mut semantic = ReplSemanticState::default();
+        let mut semantic = ReplSemanticState::with_root_dir(first.path().to_path_buf());
 
-        let context = runtime
-            .context_for_file(second.path().join("app").join("mod.neve"))
+        let context = semantic
+            .context_for_file(
+                second.path().join("app").join("mod.neve"),
+                runtime.is_pristine(),
+            )
             .expect("context should rebase to the new root");
-        assert_eq!(context.root_dir.as_deref(), Some(runtime.root_dir()));
+        assert_eq!(context.root_dir.as_deref(), Some(semantic.root_dir()));
 
         let source = fs::read_to_string(second.path().join("app").join("mod.neve")).unwrap();
         let value = evaluate_repl_input(&source, true, &context, &mut runtime, &mut semantic)
@@ -1753,13 +1647,13 @@ mod tests {
         fs::write(second.path().join("main.neve"), "let answer = 42;").unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(first.path().to_path_buf());
-        let mut semantic = ReplSemanticState::default();
+        let mut semantic = ReplSemanticState::with_root_dir(first.path().to_path_buf());
         let context = ReplInputContext::repl();
         evaluate_repl_input("let x = 1;", true, &context, &mut runtime, &mut semantic)
             .expect("definition should evaluate");
 
-        let error = runtime
-            .context_for_file(second.path().join("main.neve"))
+        let error = semantic
+            .context_for_file(second.path().join("main.neve"), runtime.is_pristine())
             .expect_err("non-empty sessions should not silently mix project roots");
         assert!(
             error.contains(":clear"),

@@ -221,11 +221,14 @@ impl Resolver {
 
         // Third pass: lower all items
         // 第三遍：降级所有项
-        let items = file
+        let mut items: Vec<_> = file
             .items
             .iter()
             .filter_map(|item| self.lower_item(item))
             .collect();
+        if let Some(expr) = &file.tail_expr {
+            items.push(self.lower_tail_expr(expr));
+        }
 
         // Collect exports based on visibility
         // 根据可见性收集导出
@@ -805,7 +808,23 @@ impl Resolver {
     }
 
     fn is_supported_builtin(name: &str) -> bool {
-        matches!(name, "force" | "isLazy" | "isEvaluated" | "toString")
+        matches!(
+            name,
+            "assert"
+                | "assertEq"
+                | "const"
+                | "force"
+                | "id"
+                | "isLazy"
+                | "isEvaluated"
+                | "len"
+                | "print"
+                | "toFloat"
+                | "toInt"
+                | "toString"
+                | "trace"
+                | "typeOf"
+        )
     }
 
     fn lower_name_kind(&self, name: &str) -> ExprKind {
@@ -1036,6 +1055,15 @@ impl Resolver {
                 })
             }
             ast::ItemKind::Import(_) => None,
+        }
+    }
+
+    fn lower_tail_expr(&mut self, expr: &ast::Expr) -> Item {
+        let id = self.fresh_def_id();
+        Item {
+            id,
+            kind: ItemKind::Expr(self.lower_expr(expr)),
+            span: expr.span,
         }
     }
 

@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Run the eval command.
 /// 运行 eval 命令。
-pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
+pub fn run(expr: &str, verbose: bool, compat_ast: bool) -> Result<(), String> {
     // Prepare source for parsing
     // 准备用于解析的源码
     // Strategy: if there's content after the last semicolon that looks like an expression,
@@ -32,13 +32,13 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
         return Err("parse error".to_string());
     }
 
-    eval_and_print(&file, &source, verbose)
+    eval_and_print(&file, &source, verbose, compat_ast)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EvalBackend {
     FrontendHir,
-    AstFallback,
+    AstCompat,
 }
 
 /// Prepare the source for parsing by wrapping expressions appropriately.
@@ -89,18 +89,19 @@ fn eval_and_print(
     file: &neve_syntax::SourceFile,
     source: &str,
     verbose: bool,
+    compat_ast: bool,
 ) -> Result<(), String> {
     if verbose {
         output::info(&format!("AST: {file:?}"));
     }
 
     let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let (backend, value) = eval_value(file, source, &root_dir)?;
+    let (backend, value) = eval_value(file, source, &root_dir, compat_ast)?;
 
     if verbose {
         output::info(match backend {
             EvalBackend::FrontendHir => "Eval backend: frontend/HIR",
-            EvalBackend::AstFallback => "Eval backend: AST fallback",
+            EvalBackend::AstCompat => "Eval backend: AST compat",
         });
     }
 
@@ -117,9 +118,10 @@ fn eval_value(
     file: &SourceFile,
     source: &str,
     root_dir: &Path,
+    compat_ast: bool,
 ) -> Result<(EvalBackend, Value), String> {
     if source_file_requires_module_graph(file) {
-        return eval_via_module_graph(source, root_dir);
+        return eval_via_module_graph(source, root_dir, compat_ast);
     }
 
     let analysis = analyze_ast(file);
@@ -143,16 +145,20 @@ fn eval_value(
         .map_err(format_hir_eval_error)
 }
 
-fn eval_via_module_graph(source: &str, root_dir: &Path) -> Result<(EvalBackend, Value), String> {
+fn eval_via_module_graph(
+    source: &str,
+    root_dir: &Path,
+    compat_ast: bool,
+) -> Result<(EvalBackend, Value), String> {
     let temp_module = TempEvalModule::create(source, root_dir)?;
-    let (backend, value) = run_file_value(temp_module.path(), false)?;
+    let (backend, value) = run_file_value(temp_module.path(), false, compat_ast)?;
     Ok((map_run_backend(backend), value))
 }
 
 fn map_run_backend(backend: RunBackend) -> EvalBackend {
     match backend {
         RunBackend::FrontendHir => EvalBackend::FrontendHir,
-        RunBackend::AstFallback => EvalBackend::AstFallback,
+        RunBackend::AstCompat => EvalBackend::AstCompat,
     }
 }
 
@@ -233,7 +239,8 @@ mod tests {
             diagnostics
         );
 
-        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        let (backend, value) =
+            eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap();
         assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
     }
@@ -255,7 +262,7 @@ mod tests {
             diagnostics
         );
 
-        let (backend, value) = eval_value(&file, &source, temp_dir.path()).unwrap();
+        let (backend, value) = eval_value(&file, &source, temp_dir.path(), false).unwrap();
         assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
     }
@@ -270,7 +277,8 @@ mod tests {
             diagnostics
         );
 
-        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        let (backend, value) =
+            eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap();
         assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
     }
@@ -285,7 +293,8 @@ mod tests {
             diagnostics
         );
 
-        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        let (backend, value) =
+            eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap();
         assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(2.into()));
     }
@@ -300,8 +309,39 @@ mod tests {
             diagnostics
         );
 
-        let (backend, value) = eval_value(&file, &source, TempDir::new().unwrap().path()).unwrap();
+        let (backend, value) =
+            eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap();
         assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(3.into()));
+    }
+
+    #[test]
+    fn eval_value_rejects_implicit_ast_compat_for_unsupported_std_import_shape() {
+        let source = prepare_source("import std (list); let result = list.len([1, 2])");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let err = eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap_err();
+        assert!(err.contains("--compat-ast"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn eval_value_uses_ast_compat_when_explicit_for_unsupported_std_import_shape() {
+        let source = prepare_source("import std (list); let result = list.len([1, 2])");
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) =
+            eval_value(&file, &source, TempDir::new().unwrap().path(), true).unwrap();
+        assert_eq!(backend, EvalBackend::AstCompat);
+        assert_eq!(value, Value::Int(2.into()));
     }
 }

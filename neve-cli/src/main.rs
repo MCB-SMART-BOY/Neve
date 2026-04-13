@@ -38,12 +38,22 @@ enum Commands {
     Eval {
         /// The expression to evaluate. / 要求值的表达式。
         expr: String,
+
+        /// Use the legacy AST compatibility backend when HIR cannot handle the input shape yet.
+        /// 当 HIR 暂不支持该输入形态时，使用旧的 AST 兼容后端。
+        #[arg(long = "compat-ast")]
+        compat_ast: bool,
     },
 
     /// Run a Neve file. / 运行 Neve 文件。
     Run {
         /// The file to run. / 要运行的文件。
         file: String,
+
+        /// Use the legacy AST compatibility backend when HIR cannot handle the module shape yet.
+        /// 当 HIR 暂不支持该模块形态时，使用旧的 AST 兼容后端。
+        #[arg(long = "compat-ast")]
+        compat_ast: bool,
     },
 
     /// Type check a file. / 类型检查文件。
@@ -245,8 +255,8 @@ fn main() {
     let result = match cli.command {
         // Cross-platform commands (language features)
         // 跨平台命令（语言功能）
-        Commands::Eval { expr } => commands::eval::run(&expr, cli.verbose),
-        Commands::Run { file } => commands::run::run(&file, cli.verbose),
+        Commands::Eval { expr, compat_ast } => commands::eval::run(&expr, cli.verbose, compat_ast),
+        Commands::Run { file, compat_ast } => commands::run::run(&file, cli.verbose, compat_ast),
         Commands::Check { file } => commands::check::run(&file, cli.verbose),
         Commands::Fmt { action } => match action {
             FmtAction::File { file, write } => commands::fmt::run(&file, write),

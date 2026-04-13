@@ -2,12 +2,12 @@
 //!
 //! These tests intentionally avoid placeholder helpers. They cover:
 //! - parse + lower + type check via `neve_frontend`
-//! - runtime parity between AST and HIR evaluators on a supported subset
+//! - runtime parity between AST compat and HIR evaluators on a supported subset
 //! - explicit sentinels for currently known runtime divergence
 
 use neve_common::Int;
 use neve_diagnostic::DiagnosticKind;
-use neve_eval::{AstEvaluator, EvalError, Evaluator, Value};
+use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::{AnalysisResult, analyze_source};
 use neve_std::{std_module_overrides, stdlib};
 
@@ -175,6 +175,23 @@ fn test_end_to_end_lazy_force_runtime_parity() {
         let x = force(thunk);
         ",
         Value::Int(int(42)),
+    );
+}
+
+#[test]
+fn test_end_to_end_higher_order_list_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.list as list;
+        fn inc(x) = x + 1;
+        fn isEven(x) = x % 2 == 0;
+        let mapped = list.map(inc, [1, 2, 3]);
+        let x = list.filter(isEven, mapped);
+        ",
+        Value::List(std::rc::Rc::new(vec![
+            Value::Int(int(2)),
+            Value::Int(int(4)),
+        ])),
     );
 }
 
