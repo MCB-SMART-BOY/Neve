@@ -11,6 +11,7 @@ use neve_hir::{Expr, Param};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 // Forward declaration for AstClosure
@@ -118,6 +119,79 @@ impl fmt::Debug for Thunk {
     }
 }
 
+/// Opaque command runtime object.
+/// 不透明的命令运行时对象。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommandValue {
+    program: Rc<String>,
+    args: Rc<Vec<String>>,
+}
+
+impl CommandValue {
+    /// Create a new command runtime object.
+    /// 创建新的命令运行时对象。
+    pub fn new(program: impl Into<String>, args: Vec<String>) -> Self {
+        Self {
+            program: Rc::new(program.into()),
+            args: Rc::new(args),
+        }
+    }
+
+    pub fn program(&self) -> &str {
+        self.program.as_ref()
+    }
+
+    pub fn args(&self) -> &[String] {
+        self.args.as_ref()
+    }
+}
+
+/// Opaque process-result runtime object.
+/// 不透明的进程结果运行时对象。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcessResultValue {
+    code: i32,
+    success: bool,
+    stdout: Rc<String>,
+    stderr: Rc<String>,
+}
+
+impl ProcessResultValue {
+    /// Create a new process-result runtime object.
+    /// 创建新的进程结果运行时对象。
+    pub fn new(
+        code: i32,
+        success: bool,
+        stdout: impl Into<String>,
+        stderr: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            success,
+            stdout: Rc::new(stdout.into()),
+            stderr: Rc::new(stderr.into()),
+        }
+    }
+
+    pub fn code(&self) -> i32 {
+        self.code
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.success
+    }
+
+    pub fn stdout(&self) -> &str {
+        self.stdout.as_ref()
+    }
+
+    pub fn stderr(&self) -> &str {
+        self.stderr.as_ref()
+    }
+}
+
 /// A runtime value.
 /// 运行时值。
 ///
@@ -138,6 +212,16 @@ pub enum Value {
     String(Rc<String>),
     /// Unit value / 单元值
     Unit,
+
+    // ===== Runtime object skeletons 运行时对象骨架 =====
+    /// Path runtime object / Path 运行时对象
+    Path(Rc<PathBuf>),
+    /// Bytes runtime object / Bytes 运行时对象
+    Bytes(Rc<Vec<u8>>),
+    /// Command runtime object / Command 运行时对象
+    Command(Rc<CommandValue>),
+    /// ProcessResult runtime object / ProcessResult 运行时对象
+    ProcessResult(Rc<ProcessResultValue>),
 
     // ===== Collection types 集合类型 =====
     /// List value / 列表值
@@ -208,6 +292,22 @@ impl fmt::Debug for Value {
             Value::Char(c) => write!(f, "'{}'", c),
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Unit => write!(f, "()"),
+            Value::Path(path) => write!(f, "Path({path:?})"),
+            Value::Bytes(bytes) => write!(f, "Bytes({} bytes)", bytes.len()),
+            Value::Command(command) => write!(
+                f,
+                "Command(program={:?}, args={:?})",
+                command.program(),
+                command.args()
+            ),
+            Value::ProcessResult(result) => write!(
+                f,
+                "ProcessResult(code={}, success={}, stdout={:?}, stderr={:?})",
+                result.code(),
+                result.is_success(),
+                result.stdout(),
+                result.stderr()
+            ),
             Value::List(items) => {
                 write!(f, "[")?;
                 for (i, item) in items.iter().enumerate() {
@@ -288,6 +388,10 @@ impl PartialEq for Value {
             (Value::Char(a), Value::Char(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Unit, Value::Unit) => true,
+            (Value::Path(a), Value::Path(b)) => a == b,
+            (Value::Bytes(a), Value::Bytes(b)) => a == b,
+            (Value::Command(a), Value::Command(b)) => a == b,
+            (Value::ProcessResult(a), Value::ProcessResult(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => a == b,
             (Value::Record(a), Value::Record(b)) => a == b,
@@ -316,6 +420,27 @@ impl PartialEq for Value {
 impl Eq for Value {}
 
 impl Value {
+    /// Construct an opaque command runtime object.
+    /// 构造一个不透明的命令运行时对象。
+    #[cfg(test)]
+    pub(crate) fn command_object(program: impl Into<String>, args: Vec<String>) -> Self {
+        Self::Command(Rc::new(CommandValue::new(program, args)))
+    }
+
+    /// Construct an opaque process-result runtime object.
+    /// 构造一个不透明的进程结果运行时对象。
+    #[cfg(test)]
+    pub(crate) fn process_result_object(
+        code: i32,
+        success: bool,
+        stdout: impl Into<String>,
+        stderr: impl Into<String>,
+    ) -> Self {
+        Self::ProcessResult(Rc::new(ProcessResultValue::new(
+            code, success, stdout, stderr,
+        )))
+    }
+
     /// Check if the value is truthy.
     /// 检查值是否为真值。
     ///
@@ -414,6 +539,30 @@ impl KeyCtx {
             Value::Char(c) => format!("Char('{}')", escape_char(*c)),
             Value::String(s) => format!("String(\"{}\")", escape_string(s)),
             Value::Unit => "Unit".to_string(),
+            Value::Path(path) => {
+                format!("Path(\"{}\")", escape_string(&path.to_string_lossy()))
+            }
+            Value::Bytes(bytes) => format!("Bytes({})", hex_bytes(bytes)),
+            Value::Command(command) => {
+                let args = command
+                    .args()
+                    .iter()
+                    .map(|arg| format!("\"{}\"", escape_string(arg)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "Command{{program=\"{}\",args=[{}]}}",
+                    escape_string(command.program()),
+                    args
+                )
+            }
+            Value::ProcessResult(result) => format!(
+                "ProcessResult{{code={},success={},stdout=\"{}\",stderr=\"{}\"}}",
+                result.code(),
+                result.is_success(),
+                escape_string(result.stdout()),
+                escape_string(result.stderr())
+            ),
             Value::List(items) => {
                 let ptr = Rc::as_ptr(items) as usize;
                 self.key_for_ptr(ptr, |ctx| {
@@ -617,6 +766,30 @@ impl KeyCtx {
                     .collect();
                 format!("Record{{{}}}", parts.join(","))
             }
+            TyKind::DynamicRecord(fields) => {
+                let mut entries: Vec<(String, String)> = fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.ty_key(ty)))
+                    .collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let parts: Vec<String> = entries
+                    .into_iter()
+                    .map(|(name, key)| format!("{}={}", escape_string(&name), key))
+                    .collect();
+                format!("DynamicRecord{{{}}}", parts.join(","))
+            }
+            TyKind::SafeRecordBase(fields) => {
+                let mut entries: Vec<(String, String)> = fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.ty_key(ty)))
+                    .collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let parts: Vec<String> = entries
+                    .into_iter()
+                    .map(|(name, key)| format!("{}={}", escape_string(&name), key))
+                    .collect();
+                format!("SafeRecordBase{{{}}}", parts.join(","))
+            }
             TyKind::Forall(params, ty) => {
                 let params_key = params
                     .iter()
@@ -628,6 +801,14 @@ impl KeyCtx {
             TyKind::Unknown => "Unknown".to_string(),
         }
     }
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 fn escape_string(value: &str) -> String {
@@ -660,4 +841,64 @@ fn canonical_float(value: f64) -> String {
 pub fn stable_key(value: &Value) -> String {
     let mut ctx = KeyCtx::new();
     ctx.value_key(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Value, stable_key};
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    #[test]
+    fn command_runtime_object_has_stable_non_record_key() {
+        let command = Value::command_object("echo", vec!["hello".to_string()]);
+        let command_key = stable_key(&command);
+
+        let command_like_record = Value::Record(Rc::new(HashMap::from([
+            (
+                "program".to_string(),
+                Value::String(Rc::new("echo".to_string())),
+            ),
+            (
+                "args".to_string(),
+                Value::List(Rc::new(vec![Value::String(Rc::new("hello".to_string()))])),
+            ),
+        ])));
+        let record_key = stable_key(&command_like_record);
+
+        assert_eq!(
+            command_key,
+            "Command{program=\"echo\",args=[\"hello\"]}".to_string()
+        );
+        assert_ne!(command_key, record_key);
+    }
+
+    #[test]
+    fn process_result_runtime_object_is_not_equal_to_record() {
+        let process_result = Value::process_result_object(0, true, "stdout", "stderr");
+        let process_result_like_record = Value::Record(Rc::new(HashMap::from([
+            ("code".to_string(), Value::Int(0.into())),
+            ("success".to_string(), Value::Bool(true)),
+            (
+                "stdout".to_string(),
+                Value::String(Rc::new("stdout".to_string())),
+            ),
+            (
+                "stderr".to_string(),
+                Value::String(Rc::new("stderr".to_string())),
+            ),
+        ])));
+
+        assert_ne!(process_result, process_result_like_record);
+    }
+
+    #[test]
+    fn opaque_runtime_objects_compare_by_payload() {
+        let left = Value::command_object("echo", vec!["hello".to_string()]);
+        let right = Value::command_object("echo", vec!["hello".to_string()]);
+        let different = Value::process_result_object(1, false, "", "boom");
+
+        assert_eq!(left, right);
+        assert_ne!(left, different);
+    }
 }

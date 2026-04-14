@@ -8,7 +8,9 @@
 //! 它们可以定义选项、导入和配置逻辑。
 
 use crate::{ConfigError, SystemConfig, UserConfig};
-use neve_eval::Value;
+use neve_diagnostic::Severity;
+use neve_eval::{Evaluator, Value};
+use neve_frontend::{Diagnostic, FrontendDriver, ProgramAnalysis, analyze_source};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -86,8 +88,15 @@ impl Module {
     /// Load a module from a file.
     /// 从文件加载模块。
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let content = std::fs::read_to_string(path)?;
-        Self::parse(&content, Some(path.to_path_buf()))
+        let canonical = path.canonicalize().map_err(|e| {
+            ConfigError::Module(format!(
+                "failed to canonicalize module path '{}': {}",
+                path.display(),
+                e
+            ))
+        })?;
+        let value = eval_module_file_via_frontend(&canonical)?;
+        module_from_value(value, Some(canonical))
     }
 
     /// Load a module and its imports recursively in deterministic order.
@@ -124,78 +133,16 @@ impl Module {
     /// Parse a module from source.
     /// 从源码解析模块。
     pub fn parse(source: &str, path: Option<PathBuf>) -> Result<Self, ConfigError> {
-        use neve_eval::compat::AstEvaluator;
-        use neve_lexer::Lexer;
-        use neve_parser::Parser;
-
-        let lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-        if !lex_errors.is_empty() {
-            return Err(ConfigError::Module(format!(
-                "lexer errors: {:?}",
-                lex_errors
-            )));
-        }
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse_file();
-        let parse_errors = parser.diagnostics();
-        if !parse_errors.is_empty() {
-            return Err(ConfigError::Module(format!(
-                "parser errors: {:?}",
-                parse_errors
-            )));
-        }
-
-        let base_path = path
-            .as_ref()
-            .and_then(|p| p.parent())
-            .map(|p| p.to_path_buf());
-
-        let mut evaluator = AstEvaluator::new();
-        if let Some(bp) = base_path {
-            evaluator = evaluator.with_base_path(bp);
-        }
-
-        let value = evaluator
-            .eval_file(&ast)
+        let analysis = analyze_source(source);
+        ensure_single_module_has_no_errors(&analysis.diagnostics, path.as_deref())?;
+        let value = Evaluator::new()
+            .eval_module_with_method_resolutions(
+                &analysis.hir,
+                &analysis.semantics.method_resolutions,
+            )
             .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
 
-        // Extract module structure from evaluated value
-        // 从评估的值中提取模块结构
-        let mut module = Module::new(
-            path.as_ref()
-                .and_then(|p| p.file_stem())
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "anonymous".to_string()),
-        );
-        module.path = path;
-
-        // If the result is a record, extract module structure and config values.
-        // 如果结果是记录，提取模块结构和配置值。
-        let Value::Record(fields) = value else {
-            return Err(ConfigError::Module(
-                "module file must evaluate to a record".to_string(),
-            ));
-        };
-
-        if let Some(imports_value) = fields.get("imports") {
-            module.imports = parse_imports(imports_value)?;
-        }
-        if let Some(options_value) = fields.get("options") {
-            module.options = parse_options(options_value)?;
-        }
-
-        if let Some(config_value) = fields.get("config") {
-            module.config = extract_record(config_value, "config")?;
-        } else {
-            for (key, val) in fields.iter() {
-                if !RESERVED_KEYS.contains(&key.as_str()) {
-                    module.config.insert(key.clone(), val.clone());
-                }
-            }
-        }
-
-        Ok(module)
+        module_from_value(value, path)
     }
 
     /// Add an import.
@@ -316,6 +263,191 @@ impl Module {
 
         Ok(values)
     }
+}
+
+fn eval_module_file_via_frontend(path: &Path) -> Result<Value, ConfigError> {
+    let (root_dir, module_path) = resolve_source_module_path(path)?;
+    let analysis = FrontendDriver::new(&root_dir)
+        .analyze_module_path(&module_path)
+        .map_err(|err| ConfigError::Module(format!("frontend error: {err}")))?;
+
+    ensure_program_has_no_errors(&analysis)?;
+    eval_program_root_value(&analysis)
+}
+
+fn resolve_source_module_path(path: &Path) -> Result<(PathBuf, Vec<String>), ConfigError> {
+    let canonical = path.canonicalize().map_err(|e| {
+        ConfigError::Module(format!(
+            "failed to canonicalize module path '{}': {}",
+            path.display(),
+            e
+        ))
+    })?;
+
+    let mut root_dir = canonical
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let mut rel_path = canonical.clone();
+    let mut saw_src = false;
+    for ancestor in canonical.ancestors() {
+        if ancestor.file_name().is_some_and(|name| name == "src") {
+            if let Some(parent) = ancestor.parent() {
+                root_dir = parent.to_path_buf();
+                rel_path = canonical
+                    .strip_prefix(ancestor)
+                    .unwrap_or(&canonical)
+                    .to_path_buf();
+                saw_src = true;
+            }
+            break;
+        }
+    }
+
+    if !saw_src {
+        rel_path = canonical
+            .strip_prefix(&root_dir)
+            .unwrap_or(&canonical)
+            .to_path_buf();
+    }
+
+    let mut segments: Vec<String> = rel_path
+        .components()
+        .map(|component| {
+            let part = component.as_os_str().to_string_lossy().to_string();
+            if part.ends_with(".neve") {
+                part.trim_end_matches(".neve").to_string()
+            } else {
+                part
+            }
+        })
+        .collect();
+
+    if segments.last().map(|segment| segment.as_str()) == Some("mod") {
+        segments.pop();
+    }
+
+    if segments.len() == 1 && segments[0] == "lib" {
+        segments.clear();
+    }
+
+    Ok((root_dir, segments))
+}
+
+fn ensure_single_module_has_no_errors(
+    diagnostics: &[Diagnostic],
+    path: Option<&Path>,
+) -> Result<(), ConfigError> {
+    let errors: Vec<_> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .collect();
+    if errors.is_empty() {
+        return Ok(());
+    }
+
+    let prefix = path
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "<memory>".to_string());
+    Err(ConfigError::Module(format!(
+        "frontend diagnostics:\n{}",
+        errors
+            .iter()
+            .map(|diagnostic| format!("{prefix}: {}", diagnostic.message))
+            .collect::<Vec<_>>()
+            .join("\n")
+    )))
+}
+
+fn ensure_program_has_no_errors(analysis: &ProgramAnalysis) -> Result<(), ConfigError> {
+    let mut errors = Vec::new();
+
+    for module_id in analysis.load_order() {
+        let Some(info) = analysis.module_info(*module_id) else {
+            continue;
+        };
+
+        for diagnostic in analysis.diagnostics(*module_id).unwrap_or(&[]) {
+            if diagnostic.severity == Severity::Error {
+                errors.push(format!(
+                    "{}: {}",
+                    info.file_path.display(),
+                    diagnostic.message
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        return Ok(());
+    }
+
+    Err(ConfigError::Module(format!(
+        "frontend diagnostics:\n{}",
+        errors.join("\n")
+    )))
+}
+
+fn eval_program_root_value(analysis: &ProgramAnalysis) -> Result<Value, ConfigError> {
+    let mut evaluator = Evaluator::new();
+    let mut root_value = Value::Unit;
+
+    for module_id in analysis.load_order() {
+        let Some(module) = analysis.hir_module(*module_id) else {
+            continue;
+        };
+        let method_resolutions = analysis
+            .semantics(*module_id)
+            .map(|semantics| &semantics.method_resolutions)
+            .cloned()
+            .unwrap_or_default();
+
+        let value = evaluator
+            .eval_module_with_method_resolutions(module, &method_resolutions)
+            .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
+
+        if *module_id == analysis.root_module_id() {
+            root_value = value;
+        }
+    }
+
+    Ok(root_value)
+}
+
+fn module_from_value(value: Value, path: Option<PathBuf>) -> Result<Module, ConfigError> {
+    let mut module = Module::new(
+        path.as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "anonymous".to_string()),
+    );
+    module.path = path;
+
+    let Value::Record(fields) = value else {
+        return Err(ConfigError::Module(
+            "module file must evaluate to a record".to_string(),
+        ));
+    };
+
+    if let Some(imports_value) = fields.get("imports") {
+        module.imports = parse_imports(imports_value)?;
+    }
+    if let Some(options_value) = fields.get("options") {
+        module.options = parse_options(options_value)?;
+    }
+
+    if let Some(config_value) = fields.get("config") {
+        module.config = extract_record(config_value, "config")?;
+    } else {
+        for (key, val) in fields.iter() {
+            if !RESERVED_KEYS.contains(&key.as_str()) {
+                module.config.insert(key.clone(), val.clone());
+            }
+        }
+    }
+
+    Ok(module)
 }
 
 /// Recursively load module imports with cycle detection.

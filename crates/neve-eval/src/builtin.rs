@@ -806,6 +806,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::List(_) => "List",
                         Value::Tuple(_) => "Tuple",
                         Value::Record(_) => "Record",
+                        Value::Path(_) => "Path",
+                        Value::Bytes(_) => "Bytes",
+                        Value::Command(_) => "Command",
+                        Value::ProcessResult(_) => "ProcessResult",
                         Value::Map(_) => "Map",
                         Value::Set(_) => "Set",
                         Value::Closure { .. } => "Function",
@@ -1794,6 +1798,20 @@ pub fn format_value(v: &Value) -> String {
         }
         Value::Char(c) => format!("'{c}'"),
         Value::String(s) => format!("\"{s}\""),
+        Value::Path(path) => path.display().to_string(),
+        Value::Bytes(bytes) => format!("<bytes:{}>", bytes.len()),
+        Value::Command(command) => {
+            format!(
+                "<command:{} {} arg(s)>",
+                command.program(),
+                command.args().len()
+            )
+        }
+        Value::ProcessResult(result) => format!(
+            "<process-result:{} {}>",
+            result.code(),
+            if result.is_success() { "ok" } else { "err" }
+        ),
         Value::List(items) => {
             let parts: Vec<String> = items.iter().map(format_value).collect();
             format!("[{}]", parts.join(", "))
@@ -1860,3 +1878,74 @@ trait Pipe: Sized {
 }
 
 impl<T> Pipe for T {}
+
+#[cfg(test)]
+mod tests {
+    use super::builtins;
+    use crate::Value;
+    use std::path::PathBuf;
+    use std::rc::Rc;
+
+    fn typeof_builtin() -> Value {
+        builtins()
+            .into_iter()
+            .find(|(name, _)| *name == "typeOf")
+            .map(|(_, value)| value)
+            .expect("typeOf builtin should exist")
+    }
+
+    fn call_builtin(value: Value, args: &[Value]) -> Value {
+        match value {
+            Value::Builtin(builtin) => (builtin.func)(args).expect("builtin call should succeed"),
+            other => panic!("expected builtin, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typeof_reports_path_runtime_object() {
+        let result = call_builtin(
+            typeof_builtin(),
+            &[Value::Path(Rc::new(PathBuf::from("/tmp/neve")))],
+        );
+        assert_eq!(result, Value::String(Rc::new("Path".to_string())));
+    }
+
+    #[test]
+    fn typeof_reports_bytes_runtime_object() {
+        let result = call_builtin(typeof_builtin(), &[Value::Bytes(Rc::new(vec![0xde, 0xad]))]);
+        assert_eq!(result, Value::String(Rc::new("Bytes".to_string())));
+    }
+
+    #[test]
+    fn typeof_reports_command_runtime_object() {
+        let result = call_builtin(
+            typeof_builtin(),
+            &[Value::command_object("echo", vec!["hello".to_string()])],
+        );
+        assert_eq!(result, Value::String(Rc::new("Command".to_string())));
+    }
+
+    #[test]
+    fn typeof_reports_process_result_runtime_object() {
+        let result = call_builtin(
+            typeof_builtin(),
+            &[Value::process_result_object(0, true, "stdout", "")],
+        );
+        assert_eq!(result, Value::String(Rc::new("ProcessResult".to_string())));
+    }
+
+    #[test]
+    fn format_value_keeps_command_opaque() {
+        let rendered = super::format_value(&Value::command_object(
+            "echo",
+            vec!["hello".to_string(), "world".to_string()],
+        ));
+        assert_eq!(rendered, "<command:echo 2 arg(s)>");
+    }
+
+    #[test]
+    fn format_value_keeps_process_result_opaque() {
+        let rendered = super::format_value(&Value::process_result_object(0, true, "out", ""));
+        assert_eq!(rendered, "<process-result:0 ok>");
+    }
+}

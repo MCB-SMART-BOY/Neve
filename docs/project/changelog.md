@@ -29,6 +29,21 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [2.0.0] - 2026-04-15
+
+### Added / 新增
+- **Runtime object bridges for system automation**: Added first-class `Path`, `Command`, and `ProcessResult` runtime-object bridges in the verified mainline, including `std.path`/`std.io` entrypoints and aligned REPL/LSP/runtime type visibility. / **系统自动化运行时对象桥接**: 在已验证的主线中加入一等 `Path`、`Command` 与 `ProcessResult` 运行时对象桥接，并同步打通 `std.path`/`std.io` 入口以及 REPL/LSP/运行时类型可见性。
+- **Canonical command/process surface starters**: Added `io.command`, `io.execCommand`, `io.processSuccess`, `io.processStdout`, `io.processCode`, and `io.processStderr` as the first explicit public bridges over the command/process runtime family. / **规范命令/进程公开起点**: 新增 `io.command`、`io.execCommand`、`io.processSuccess`、`io.processStdout`、`io.processCode` 和 `io.processStderr`，作为命令/进程运行时家族的首批显式公开桥接。
+- **Full-pipeline convergence coverage**: Added focused regression coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, `lsp`, and REPL for the canonical runtime-object and tooling paths. / **全流水线收敛覆盖**: 为规范运行时对象和工具链主路径新增覆盖 `std`、`typeck`、`frontend`、`eval`、`end_to_end`、`lsp` 与 REPL 的聚焦回归测试。
+
+### Improved / 改进
+- **Canonical frontend/HIR convergence**: Mainline CLI/tooling workflows continue to converge on frontend-owned semantics, and legacy `io.exec` is now internally projected from the canonical `Command -> ProcessResult` execution path while preserving its public record contract. / **规范 frontend/HIR 收敛**: 主线 CLI/工具链工作流继续向 frontend 自有语义收拢，旧 `io.exec` 现在也已在内部改为从规范 `Command -> ProcessResult` 执行路径投影而来，同时保持原有 record 公开合同不变。
+- **Type-system and diagnostics hardening**: Expanded builtin named runtime types, associated-type/pattern/optional-flow analysis, and readable type presentation across diagnostics, REPL `:type`, and LSP hover. / **类型系统与诊断加固**: 扩展内置命名运行时类型、关联类型/模式/optional-flow 分析，并提升诊断、REPL `:type` 与 LSP hover 的类型可读性。
+- **Platform/config semantic truthfulness**: Build/config evaluation and project documentation were synchronized more tightly with the verified canonical path and explicit compatibility boundaries. / **平台/配置语义真实性**: build/config 求值路径与项目文档更紧密地同步到已验证的规范主路径和显式兼容边界。
+
+### Fixed / 修复
+- **Implicit semantic drift**: Reduced remaining hidden divergence between legacy command-local execution paths and the canonical runtime-object pipeline by routing `io.exec` through the shared command/process execution core. / **隐式语义漂移**: 通过让 `io.exec` 走共享的命令/进程执行核心，进一步减少旧命令局部执行路径与规范运行时对象流水线之间的隐藏分裂。
+
 ## [1.2.0] - 2026-04-14
 
 ### Added / 新增

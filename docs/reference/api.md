@@ -232,16 +232,27 @@ I/O helpers are impure and raise runtime errors on failure.
 
 ```neve
 io.readFile(path: String) -> String
+io.readFilePath(path: Path) -> String
 io.readDir(path: String) -> List<String>
 io.writeFile(path: String, content: String) -> Unit
 io.appendFile(path: String, content: String) -> Unit
 io.createDirAll(path: String) -> Unit
 io.removeDirAll(path: String) -> Unit
 io.pathExists(path: String) -> Bool
+io.pathExistsPath(path: Path) -> Bool
 io.isDir(path: String) -> Bool
+io.isDirPath(path: Path) -> Bool
 io.isFile(path: String) -> Bool
+io.isFilePath(path: Path) -> Bool
 io.getEnv(name: String) -> Option<String>
 io.currentDir() -> String
+io.currentDirPath() -> Path
+io.command(program: String, args: List<String>) -> Command
+io.execCommand(command: Command) -> ProcessResult
+io.processSuccess(result: ProcessResult) -> Bool
+io.processStdout(result: ProcessResult) -> String
+io.processCode(result: ProcessResult) -> Int
+io.processStderr(result: ProcessResult) -> String
 io.homeDir() -> Option<String>
 io.hashFile(path: String) -> String
 io.hashString(content: String) -> String
@@ -262,16 +273,27 @@ I/O 函数是非纯的，失败会抛出运行时错误。
 
 ```neve
 io.readFile(path: String) -> String
+io.readFilePath(path: Path) -> String
 io.readDir(path: String) -> List<String>
 io.writeFile(path: String, content: String) -> Unit
 io.appendFile(path: String, content: String) -> Unit
 io.createDirAll(path: String) -> Unit
 io.removeDirAll(path: String) -> Unit
 io.pathExists(path: String) -> Bool
+io.pathExistsPath(path: Path) -> Bool
 io.isDir(path: String) -> Bool
+io.isDirPath(path: Path) -> Bool
 io.isFile(path: String) -> Bool
+io.isFilePath(path: Path) -> Bool
 io.getEnv(name: String) -> Option<String>
 io.currentDir() -> String
+io.currentDirPath() -> Path
+io.command(program: String, args: List<String>) -> Command
+io.execCommand(command: Command) -> ProcessResult
+io.processSuccess(result: ProcessResult) -> Bool
+io.processStdout(result: ProcessResult) -> String
+io.processCode(result: ProcessResult) -> Int
+io.processStderr(result: ProcessResult) -> String
 io.homeDir() -> Option<String>
 io.hashFile(path: String) -> String
 io.hashString(content: String) -> String
@@ -292,6 +314,10 @@ io.execWith(opts: #{
 
 
 ```neve
+path.fromString(path: String) -> Path
+path.joinPath(base: Path, child: String) -> Path
+path.parentPath(path: Path) -> Option<Path>
+path.isAbsolutePath(path: Path) -> Bool
 path.join(a: String, b: String) -> String
 path.parent(path: String) -> Option<String>
 path.filename(path: String) -> Option<String>
@@ -301,6 +327,10 @@ path.is_absolute(path: String) -> Bool
 
 
 ```neve
+path.fromString(path: String) -> Path
+path.joinPath(base: Path, child: String) -> Path
+path.parentPath(path: Path) -> Option<Path>
+path.isAbsolutePath(path: Path) -> Bool
 path.join(a: String, b: String) -> String
 path.parent(path: String) -> Option<String>
 path.filename(path: String) -> Option<String>

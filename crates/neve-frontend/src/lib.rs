@@ -35,6 +35,9 @@ pub struct ModuleSemantics {
     /// Resolved method call targets keyed by expression span.
     /// 按表达式 span 存储的方法调用解析结果。
     pub method_resolutions: HashMap<Span, DefId>,
+    /// Resolved associated-type projections keyed by explicit type-use span.
+    /// 按显式类型使用位置 span 存储的关联类型投影解析结果。
+    pub assoc_projection_resolutions: HashMap<Span, Ty>,
     /// Final inferred types for global definitions.
     /// 全局定义的最终推断类型。
     pub global_types: HashMap<DefId, Ty>,
@@ -78,6 +81,12 @@ impl ModuleSemantics {
     /// 查询表达式 span 对应的方法目标。
     pub fn method_resolution(&self, span: Span) -> Option<DefId> {
         self.method_resolutions.get(&span).copied()
+    }
+
+    /// Look up the resolved associated-type projection for a type-use span.
+    /// 查询类型使用位置 span 对应的关联类型投影结果。
+    pub fn assoc_projection_resolution(&self, span: Span) -> Option<&Ty> {
+        self.assoc_projection_resolutions.get(&span)
     }
 }
 
@@ -240,6 +249,15 @@ pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics
         .keys()
         .filter_map(|def_id| checker.global_type(*def_id).map(|ty| (*def_id, ty)))
         .collect();
+    let assoc_projection_resolutions = checker
+        .assoc_projection_resolutions()
+        .keys()
+        .filter_map(|span| {
+            checker
+                .assoc_projection_resolution(*span)
+                .map(|ty| (*span, ty))
+        })
+        .collect();
     let local_types = checker
         .local_definitions_ref()
         .keys()
@@ -253,6 +271,7 @@ pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics
 
     ModuleSemantics {
         method_resolutions: checker.method_resolutions().clone(),
+        assoc_projection_resolutions,
         global_types,
         global_spans: checker.global_spans_ref().clone(),
         local_types,
@@ -264,6 +283,26 @@ pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics
 /// 使用给定模块中可见的名称格式化类型。
 pub fn format_type_in_module(ty: &Ty, module: &Module) -> String {
     format_type_in_modules(ty, [module])
+}
+
+/// Format an explicit type-use span using canonical semantic projections when available.
+/// 优先使用规范语义中的关联类型投影结果来格式化显式类型使用位置。
+pub fn format_type_use_in_module(
+    semantics: &ModuleSemantics,
+    module: &Module,
+    type_use_span: Span,
+    fallback: &Ty,
+) -> String {
+    semantics
+        .assoc_projection_resolution(type_use_span)
+        .map(|ty| format_type_in_module(ty, module))
+        .unwrap_or_else(|| format_type_in_module(fallback, module))
+}
+
+/// Format a type using an explicit map of visible type names.
+/// 使用显式提供的可见类型名称映射格式化类型。
+pub fn format_type_with_names_map(ty: &Ty, names: &HashMap<DefId, String>) -> String {
+    format_type_with_names(ty, names)
 }
 
 /// Format a type using names collected from multiple modules.
@@ -397,6 +436,28 @@ fn format_type_with_names(ty: &Ty, names: &HashMap<DefId, String>) -> String {
                 .map(|(name, ty)| format!("{name}: {}", format_type_with_names(ty, names)))
                 .collect();
             format!("{{ {} }}", parts.join(", "))
+        }
+        TyKind::DynamicRecord(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|(name, ty)| format!("{name}: {}", format_type_with_names(ty, names)))
+                .collect();
+            if parts.is_empty() {
+                "{ .. }".to_string()
+            } else {
+                format!("{{ {}, .. }}", parts.join(", "))
+            }
+        }
+        TyKind::SafeRecordBase(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|(name, ty)| format!("{name}: {}", format_type_with_names(ty, names)))
+                .collect();
+            if parts.is_empty() {
+                "RecordOrOption[{ .. }]".to_string()
+            } else {
+                format!("RecordOrOption[{{ {}, .. }}]", parts.join(", "))
+            }
         }
         TyKind::Fn(params, ret) => {
             let params: Vec<_> = params

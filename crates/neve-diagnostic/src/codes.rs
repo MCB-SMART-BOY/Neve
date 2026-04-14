@@ -45,6 +45,7 @@ pub enum ErrorCode {
     UnreachablePattern,
     PrivateAccess,
     CyclicDependency,
+    UnknownMethod,
 
     // ===== Eval errors (E0300 - E0399) 求值错误 =====
     DivisionByZero,
@@ -95,6 +96,7 @@ impl ErrorCode {
             ErrorCode::UnreachablePattern => "E0221",
             ErrorCode::PrivateAccess => "E0222",
             ErrorCode::CyclicDependency => "E0223",
+            ErrorCode::UnknownMethod => "E0224",
 
             // Eval
             ErrorCode::DivisionByZero => "E0300",
@@ -149,6 +151,7 @@ impl ErrorCode {
             ErrorCode::UnreachablePattern => "unreachable pattern in match",
             ErrorCode::PrivateAccess => "cannot access private binding",
             ErrorCode::CyclicDependency => "cyclic dependency detected",
+            ErrorCode::UnknownMethod => "cannot resolve method call on receiver type",
 
             // Eval
             ErrorCode::DivisionByZero => "division by zero",
@@ -191,6 +194,9 @@ impl ErrorCode {
             ErrorCode::CyclicDependency => {
                 Some("break the cycle by restructuring the dependencies")
             }
+            ErrorCode::UnknownMethod => Some(
+                "implement the method for the receiver type or define a matching callable fallback",
+            ),
             _ => None,
         }
     }

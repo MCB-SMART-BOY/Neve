@@ -15,10 +15,12 @@
 
 use crate::ConfigError;
 use neve_derive::Hash;
-use neve_eval::Value;
+use neve_diagnostic::{Diagnostic, Severity};
+use neve_eval::{Evaluator, Value};
 use neve_fetch::{
     archive as fetch_archive, git as fetch_git, url as fetch_url, verify as fetch_verify,
 };
+use neve_frontend::{FrontendDriver, ProgramAnalysis, analyze_source};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -349,6 +351,8 @@ pub struct Flake {
     pub resolved_inputs: HashMap<String, Value>,
     /// Lock file. / 锁定文件。
     pub lock: FlakeLock,
+    source_path: Option<PathBuf>,
+    source_snapshot: Option<String>,
 }
 
 impl Flake {
@@ -362,6 +366,8 @@ impl Flake {
             outputs: None,
             resolved_inputs: HashMap::new(),
             lock: FlakeLock::new(),
+            source_path: None,
+            source_snapshot: None,
         }
     }
 
@@ -376,10 +382,18 @@ impl Flake {
             )));
         }
 
-        // Parse the flake file
-        // 解析 flake 文件
-        let source = std::fs::read_to_string(&flake_file)?;
-        let mut flake = Self::parse(&source, root.to_path_buf())?;
+        let flake_path = flake_file.canonicalize().map_err(|e| {
+            ConfigError::Flake(format!(
+                "failed to canonicalize flake path '{}': {}",
+                flake_file.display(),
+                e
+            ))
+        })?;
+        let source = std::fs::read_to_string(&flake_path)?;
+        let value = eval_flake_file_via_frontend(&flake_path)?;
+        let mut flake = flake_from_value(value, root.to_path_buf())?;
+        flake.source_path = Some(flake_path);
+        flake.source_snapshot = Some(source);
 
         // Try to load lock file
         // 尝试加载锁定文件
@@ -394,60 +408,9 @@ impl Flake {
     /// Parse a flake from source.
     /// 从源码解析 flake。
     pub fn parse(source: &str, root: PathBuf) -> Result<Self, ConfigError> {
-        use neve_eval::compat::AstEvaluator;
-        use neve_lexer::Lexer;
-        use neve_parser::Parser;
-
-        let lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-        if !lex_errors.is_empty() {
-            return Err(ConfigError::Flake(format!(
-                "lexer errors: {:?}",
-                lex_errors
-            )));
-        }
-
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse_file();
-        let parse_errors = parser.diagnostics();
-        if !parse_errors.is_empty() {
-            return Err(ConfigError::Flake(format!(
-                "parser errors: {:?}",
-                parse_errors
-            )));
-        }
-
-        let mut evaluator = AstEvaluator::new();
-        evaluator = evaluator.with_base_path(root.clone());
-
-        let value = evaluator
-            .eval_file(&ast)
-            .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
-
-        let mut flake = Self::new(root);
-
-        // Extract flake structure from evaluated value
-        // 从评估的值中提取 flake 结构
-        if let Value::Record(fields) = value {
-            // Description / 描述
-            if let Some(Value::String(desc)) = fields.get("description") {
-                flake.description = Some(desc.to_string());
-            }
-
-            // Inputs / 输入
-            if let Some(Value::Record(inputs)) = fields.get("inputs") {
-                for (name, input_value) in inputs.iter() {
-                    let input = FlakeInput::from_value(name, input_value)?;
-                    flake.inputs.insert(name.clone(), input);
-                }
-            }
-
-            // Outputs / 输出
-            if let Some(outputs) = fields.get("outputs") {
-                flake.outputs = Some(outputs.clone());
-            }
-        }
-
+        let value = eval_flake_source_via_frontend(source)?;
+        let mut flake = flake_from_value(value, root)?;
+        flake.source_snapshot = Some(source.to_string());
         Ok(flake)
     }
 
@@ -654,6 +617,13 @@ impl Flake {
         // Call the outputs function with inputs
         // 使用输入调用输出函数
         let result = match outputs_fn {
+            Value::Closure { .. } => {
+                let (mut evaluator, outputs_fn) = self.rebuild_outputs_fn_via_frontend()?;
+                let inputs_value = Value::Record(Rc::new(inputs_record));
+                evaluator
+                    .call_value(outputs_fn, vec![inputs_value])
+                    .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?
+            }
             Value::AstClosure(ref closure) => {
                 use neve_eval::compat::AstEvaluator;
                 let mut eval = AstEvaluator::new();
@@ -674,6 +644,37 @@ impl Flake {
         // Parse the outputs
         // 解析输出
         self.parse_outputs(&result)
+    }
+
+    fn rebuild_outputs_fn_via_frontend(&self) -> Result<(Evaluator, Value), ConfigError> {
+        if let Some(path) = &self.source_path {
+            let (root_dir, module_path) = resolve_source_module_path(path)?;
+            let analysis = FrontendDriver::new(&root_dir)
+                .analyze_module_path(&module_path)
+                .map_err(|err| ConfigError::Flake(format!("frontend error: {err}")))?;
+            ensure_flake_program_has_no_errors(&analysis)?;
+            let (evaluator, root_value) = build_program_evaluator_and_root_value(&analysis)?;
+            let outputs = extract_outputs_value(&root_value)?;
+            return Ok((evaluator, outputs));
+        }
+
+        if let Some(source) = &self.source_snapshot {
+            let analysis = analyze_source(source);
+            ensure_single_flake_has_no_errors(&analysis.diagnostics)?;
+            let mut evaluator = Evaluator::new();
+            let root_value = evaluator
+                .eval_module_with_method_resolutions(
+                    &analysis.hir,
+                    &analysis.semantics.method_resolutions,
+                )
+                .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
+            let outputs = extract_outputs_value(&root_value)?;
+            return Ok((evaluator, outputs));
+        }
+
+        Err(ConfigError::Flake(
+            "cannot rebuild outputs function without flake source context".to_string(),
+        ))
     }
 
     /// Resolve all declared inputs before evaluating outputs.
@@ -1213,6 +1214,197 @@ impl Flake {
     }
 }
 
+fn flake_from_value(value: Value, root: PathBuf) -> Result<Flake, ConfigError> {
+    let mut flake = Flake::new(root);
+
+    if let Value::Record(fields) = value {
+        if let Some(Value::String(desc)) = fields.get("description") {
+            flake.description = Some(desc.to_string());
+        }
+
+        if let Some(Value::Record(inputs)) = fields.get("inputs") {
+            for (name, input_value) in inputs.iter() {
+                let input = FlakeInput::from_value(name, input_value)?;
+                flake.inputs.insert(name.clone(), input);
+            }
+        }
+
+        if let Some(outputs) = fields.get("outputs") {
+            flake.outputs = Some(outputs.clone());
+        }
+    }
+
+    Ok(flake)
+}
+
+fn eval_flake_source_via_frontend(source: &str) -> Result<Value, ConfigError> {
+    let analysis = analyze_source(source);
+    ensure_single_flake_has_no_errors(&analysis.diagnostics)?;
+    Evaluator::new()
+        .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
+        .map_err(|e| ConfigError::Eval(format!("{:?}", e)))
+}
+
+fn eval_flake_file_via_frontend(path: &Path) -> Result<Value, ConfigError> {
+    let (root_dir, module_path) = resolve_source_module_path(path)?;
+    let analysis = FrontendDriver::new(&root_dir)
+        .analyze_module_path(&module_path)
+        .map_err(|err| ConfigError::Flake(format!("frontend error: {err}")))?;
+
+    ensure_flake_program_has_no_errors(&analysis)?;
+    let (_, root_value) = build_program_evaluator_and_root_value(&analysis)?;
+    Ok(root_value)
+}
+
+fn build_program_evaluator_and_root_value(
+    analysis: &ProgramAnalysis,
+) -> Result<(Evaluator, Value), ConfigError> {
+    let mut evaluator = Evaluator::new();
+    let mut root_value = Value::Unit;
+
+    for module_id in analysis.load_order() {
+        let Some(module) = analysis.hir_module(*module_id) else {
+            continue;
+        };
+        let method_resolutions = analysis
+            .semantics(*module_id)
+            .map(|semantics| &semantics.method_resolutions)
+            .cloned()
+            .unwrap_or_default();
+
+        let value = evaluator
+            .eval_module_with_method_resolutions(module, &method_resolutions)
+            .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
+
+        if *module_id == analysis.root_module_id() {
+            root_value = value;
+        }
+    }
+
+    Ok((evaluator, root_value))
+}
+
+fn resolve_source_module_path(path: &Path) -> Result<(PathBuf, Vec<String>), ConfigError> {
+    let canonical = path.canonicalize().map_err(|e| {
+        ConfigError::Flake(format!(
+            "failed to canonicalize flake path '{}': {}",
+            path.display(),
+            e
+        ))
+    })?;
+
+    let mut root_dir = canonical
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let mut rel_path = canonical.clone();
+    let mut saw_src = false;
+    for ancestor in canonical.ancestors() {
+        if ancestor.file_name().is_some_and(|name| name == "src") {
+            if let Some(parent) = ancestor.parent() {
+                root_dir = parent.to_path_buf();
+                rel_path = canonical
+                    .strip_prefix(ancestor)
+                    .unwrap_or(&canonical)
+                    .to_path_buf();
+                saw_src = true;
+            }
+            break;
+        }
+    }
+
+    if !saw_src {
+        rel_path = canonical
+            .strip_prefix(&root_dir)
+            .unwrap_or(&canonical)
+            .to_path_buf();
+    }
+
+    let mut segments: Vec<String> = rel_path
+        .components()
+        .map(|component| {
+            let part = component.as_os_str().to_string_lossy().to_string();
+            if part.ends_with(".neve") {
+                part.trim_end_matches(".neve").to_string()
+            } else {
+                part
+            }
+        })
+        .collect();
+
+    if segments.last().map(|segment| segment.as_str()) == Some("mod") {
+        segments.pop();
+    }
+
+    if segments.len() == 1 && segments[0] == "lib" {
+        segments.clear();
+    }
+
+    Ok((root_dir, segments))
+}
+
+fn ensure_single_flake_has_no_errors(diagnostics: &[Diagnostic]) -> Result<(), ConfigError> {
+    let errors: Vec<_> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .collect();
+    if errors.is_empty() {
+        return Ok(());
+    }
+
+    Err(ConfigError::Flake(format!(
+        "frontend diagnostics:\n{}",
+        errors
+            .iter()
+            .map(|diagnostic| diagnostic.message.clone())
+            .collect::<Vec<_>>()
+            .join("\n")
+    )))
+}
+
+fn ensure_flake_program_has_no_errors(analysis: &ProgramAnalysis) -> Result<(), ConfigError> {
+    let mut errors = Vec::new();
+
+    for module_id in analysis.load_order() {
+        let Some(info) = analysis.module_info(*module_id) else {
+            continue;
+        };
+
+        for diagnostic in analysis.diagnostics(*module_id).unwrap_or(&[]) {
+            if diagnostic.severity == Severity::Error {
+                errors.push(format!(
+                    "{}: {}",
+                    info.file_path.display(),
+                    diagnostic.message
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        return Ok(());
+    }
+
+    Err(ConfigError::Flake(format!(
+        "frontend diagnostics:\n{}",
+        errors.join("\n")
+    )))
+}
+
+fn extract_outputs_value(root_value: &Value) -> Result<Value, ConfigError> {
+    let Value::Record(fields) = root_value else {
+        return Err(ConfigError::Flake(
+            "flake file must evaluate to a record".to_string(),
+        ));
+    };
+
+    fields
+        .get("outputs")
+        .cloned()
+        .ok_or_else(|| ConfigError::Flake("flake has no outputs".into()))
+}
+
 /// Initialize a new flake in a directory.
 /// 在目录中初始化新的 flake。
 pub fn init_flake(root: &Path, description: Option<&str>) -> Result<Flake, ConfigError> {
@@ -1535,6 +1727,54 @@ mod tests {
                     return Err("missing package name".into());
                 };
                 assert_eq!(name.as_str(), "dep");
+            }
+            _ => return Err("expected package record".into()),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_flake_load_supports_language_imports_via_frontend_hir()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let temp = tempdir()?;
+        let root = temp.path();
+
+        fs::write(
+            root.join("helpers.neve"),
+            r#"pub fn package(name) = #{
+    name = name,
+    version = "3.0.0"
+};"#,
+        )?;
+
+        fs::write(
+            root.join("flake.neve"),
+            r#"import helpers (package);
+
+let flake = #{
+    outputs = fn(inputs) #{
+        packages = #{
+            x86_64_linux = #{
+                default = package("frontend")
+            }
+        }
+    }
+};
+"#,
+        )?;
+
+        let mut flake = Flake::load(root)?;
+        let default_pkg = flake
+            .get_default_package("x86_64-linux")?
+            .ok_or("missing default package")?;
+
+        match default_pkg {
+            Value::Record(fields) => {
+                let Some(Value::String(name)) = fields.get("name") else {
+                    return Err("missing package name".into());
+                };
+                assert_eq!(name.as_str(), "frontend");
             }
             _ => return Err("expected package record".into()),
         }

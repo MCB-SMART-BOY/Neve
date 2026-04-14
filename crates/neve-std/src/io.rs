@@ -6,7 +6,7 @@
 //! 这些是与文件系统交互的非纯操作。
 //! 主要用于包构建和配置生成期间。
 
-use neve_eval::value::{BuiltinFn, Value};
+use neve_eval::value::{BuiltinFn, CommandValue, ProcessResultValue, Value};
 use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
@@ -26,6 +26,19 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         .map(|s| Value::String(Rc::new(s)))
                         .map_err(|e| format!("io.readFile: {e}")),
                     _ => Err("io.readFile expects a string path".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.readFilePath",
+            Value::Builtin(BuiltinFn {
+                name: "io.readFilePath",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(path) => std::fs::read_to_string(path.as_path())
+                        .map(|s| Value::String(Rc::new(s)))
+                        .map_err(|e| format!("io.readFilePath: {e}")),
+                    _ => Err("io.readFilePath expects a Path".to_string()),
                 },
             }),
         ),
@@ -127,6 +140,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "io.pathExistsPath",
+            Value::Builtin(BuiltinFn {
+                name: "io.pathExistsPath",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(path) => Ok(Value::Bool(path.exists())),
+                    _ => Err("io.pathExistsPath expects a Path".to_string()),
+                },
+            }),
+        ),
+        (
             "io.isDir",
             Value::Builtin(BuiltinFn {
                 name: "io.isDir",
@@ -140,6 +164,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "io.isDirPath",
+            Value::Builtin(BuiltinFn {
+                name: "io.isDirPath",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(path) => Ok(Value::Bool(path.is_dir())),
+                    _ => Err("io.isDirPath expects a Path".to_string()),
+                },
+            }),
+        ),
+        (
             "io.isFile",
             Value::Builtin(BuiltinFn {
                 name: "io.isFile",
@@ -149,6 +184,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Ok(Value::Bool(std::path::Path::new(path.as_str()).is_file()))
                     }
                     _ => Err("io.isFile expects a string path".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.isFilePath",
+            Value::Builtin(BuiltinFn {
+                name: "io.isFilePath",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(path) => Ok(Value::Bool(path.is_file())),
+                    _ => Err("io.isFilePath expects a Path".to_string()),
                 },
             }),
         ),
@@ -176,6 +222,94 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     std::env::current_dir()
                         .map(|p| Value::String(Rc::new(p.to_string_lossy().to_string())))
                         .map_err(|e| format!("io.currentDir: {e}"))
+                },
+            }),
+        ),
+        (
+            "io.currentDirPath",
+            Value::Builtin(BuiltinFn {
+                name: "io.currentDirPath",
+                arity: 0,
+                func: |_args| {
+                    std::env::current_dir()
+                        .map(|p| Value::Path(Rc::new(p)))
+                        .map_err(|e| format!("io.currentDirPath: {e}"))
+                },
+            }),
+        ),
+        (
+            "io.command",
+            Value::Builtin(BuiltinFn {
+                name: "io.command",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(program), Value::List(argv)) => {
+                        let argv = list_to_string_vec(argv, "io.command args")?;
+                        Ok(Value::Command(Rc::new(CommandValue::new(
+                            program.as_str(),
+                            argv,
+                        ))))
+                    }
+                    _ => Err("io.command expects (String, List<String>)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.execCommand",
+            Value::Builtin(BuiltinFn {
+                name: "io.execCommand",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Command(command) => execute_command_value(command),
+                    _ => Err("io.execCommand expects a Command".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.processSuccess",
+            Value::Builtin(BuiltinFn {
+                name: "io.processSuccess",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => Ok(Value::Bool(result.is_success())),
+                    _ => Err("io.processSuccess expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.processStdout",
+            Value::Builtin(BuiltinFn {
+                name: "io.processStdout",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => {
+                        Ok(Value::String(Rc::new(result.stdout().to_string())))
+                    }
+                    _ => Err("io.processStdout expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.processCode",
+            Value::Builtin(BuiltinFn {
+                name: "io.processCode",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => Ok(Value::Int(result.code().into())),
+                    _ => Err("io.processCode expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.processStderr",
+            Value::Builtin(BuiltinFn {
+                name: "io.processStderr",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => {
+                        Ok(Value::String(Rc::new(result.stderr().to_string())))
+                    }
+                    _ => Err("io.processStderr expects a ProcessResult".to_string()),
                 },
             }),
         ),
@@ -312,12 +446,52 @@ fn output_to_record(output: std::process::Output) -> Value {
     Value::Record(Rc::new(fields))
 }
 
-fn execute_command(program: &str, argv: &[String]) -> Result<Value, String> {
+fn output_to_process_result_value(output: std::process::Output) -> ProcessResultValue {
+    let code = output.status.code().unwrap_or(-1);
+    ProcessResultValue::new(
+        code,
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
+}
+
+fn process_result_to_record(result: &ProcessResultValue) -> Value {
+    let mut fields = HashMap::with_capacity(4);
+    fields.insert("code".to_string(), Value::Int(result.code().into()));
+    fields.insert("success".to_string(), Value::Bool(result.is_success()));
+    fields.insert(
+        "stdout".to_string(),
+        Value::String(Rc::new(result.stdout().to_string())),
+    );
+    fields.insert(
+        "stderr".to_string(),
+        Value::String(Rc::new(result.stderr().to_string())),
+    );
+    Value::Record(Rc::new(fields))
+}
+
+fn execute_command_to_process_result(
+    program: &str,
+    argv: &[String],
+    fn_name: &str,
+) -> Result<ProcessResultValue, String> {
     std::process::Command::new(program)
         .args(argv)
         .output()
-        .map(output_to_record)
-        .map_err(|e| format!("io.exec: {e}"))
+        .map(output_to_process_result_value)
+        .map_err(|e| format!("{fn_name}: {e}"))
+}
+
+fn execute_command(program: &str, argv: &[String]) -> Result<Value, String> {
+    let result = execute_command_to_process_result(program, argv, "io.exec")?;
+    Ok(process_result_to_record(&result))
+}
+
+fn execute_command_value(command: &CommandValue) -> Result<Value, String> {
+    let result =
+        execute_command_to_process_result(command.program(), command.args(), "io.execCommand")?;
+    Ok(Value::ProcessResult(Rc::new(result)))
 }
 
 fn execute_with_options(options: &HashMap<String, Value>) -> Result<Value, String> {

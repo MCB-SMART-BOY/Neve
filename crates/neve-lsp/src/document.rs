@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use neve_common::Span;
 use neve_frontend::{
     Diagnostic, Module, ModuleSemantics, SourceFile, analyze_source, format_type_in_module,
+    format_type_use_in_module,
 };
 use neve_hir::{
     Expr as HirExpr, ExprKind as HirExprKind, ItemKind as HirItemKind, LocalId,
@@ -208,6 +209,24 @@ fn build_hover_maps(
                         hir,
                         &mut definition_hovers,
                     );
+                    for (ast_param, hir_param) in def.params.iter().zip(&hir_fn.params) {
+                        collect_type_hovers(
+                            &ast_param.ty,
+                            &hir_param.ty,
+                            semantics,
+                            hir,
+                            &mut semantic_hovers,
+                        );
+                    }
+                    if let Some(ast_return) = &def.return_type {
+                        collect_type_hovers(
+                            ast_return,
+                            &hir_fn.return_ty,
+                            semantics,
+                            hir,
+                            &mut semantic_hovers,
+                        );
+                    }
                     collect_expr_hovers(
                         &def.body,
                         &hir_fn.body,
@@ -233,6 +252,24 @@ fn build_hover_maps(
                             )
                         ),
                     );
+                    for (ast_param, hir_param) in ast_item.params.iter().zip(&hir_item.params) {
+                        collect_type_hovers(
+                            &ast_param.ty,
+                            hir_param,
+                            semantics,
+                            hir,
+                            &mut semantic_hovers,
+                        );
+                    }
+                    if let Some(ast_return) = &ast_item.return_type {
+                        collect_type_hovers(
+                            ast_return,
+                            &hir_item.return_ty,
+                            semantics,
+                            hir,
+                            &mut semantic_hovers,
+                        );
+                    }
                 }
             }
             (ast::ItemKind::Impl(def), HirItemKind::Impl(hir_impl)) => {
@@ -254,6 +291,24 @@ fn build_hover_maps(
                         hir,
                         &mut definition_hovers,
                     );
+                    for (ast_param, hir_param) in ast_item.params.iter().zip(&hir_item.params) {
+                        collect_type_hovers(
+                            &ast_param.ty,
+                            &hir_param.ty,
+                            semantics,
+                            hir,
+                            &mut semantic_hovers,
+                        );
+                    }
+                    if let Some(ast_return) = &ast_item.return_type {
+                        collect_type_hovers(
+                            ast_return,
+                            &hir_item.return_ty,
+                            semantics,
+                            hir,
+                            &mut semantic_hovers,
+                        );
+                    }
                     collect_expr_hovers(
                         &ast_item.body,
                         &hir_item.body,
@@ -315,6 +370,44 @@ fn collect_param_hovers(
                 hovers,
             );
         }
+    }
+}
+
+fn collect_type_hovers(
+    ast_ty: &ast::Type,
+    hir_ty: &Ty,
+    semantics: &ModuleSemantics,
+    module: &Module,
+    hovers: &mut HashMap<Span, String>,
+) {
+    hovers.insert(
+        ast_ty.span,
+        format_type_use_in_module(semantics, module, ast_ty.span, hir_ty),
+    );
+
+    match (&ast_ty.kind, &hir_ty.kind) {
+        (ast::TypeKind::Named { args, .. }, TyKind::Named(_, hir_args)) => {
+            for (ast_arg, hir_arg) in args.iter().zip(hir_args) {
+                collect_type_hovers(ast_arg, hir_arg, semantics, module, hovers);
+            }
+        }
+        (ast::TypeKind::Function { params, result }, TyKind::Fn(hir_params, hir_result)) => {
+            for (ast_param, hir_param) in params.iter().zip(hir_params) {
+                collect_type_hovers(ast_param, hir_param, semantics, module, hovers);
+            }
+            collect_type_hovers(result, hir_result, semantics, module, hovers);
+        }
+        (ast::TypeKind::Tuple(items), TyKind::Tuple(hir_items)) => {
+            for (ast_item, hir_item) in items.iter().zip(hir_items) {
+                collect_type_hovers(ast_item, hir_item, semantics, module, hovers);
+            }
+        }
+        (ast::TypeKind::Record(fields), TyKind::Record(hir_fields)) => {
+            for (ast_field, (_, hir_field_ty)) in fields.iter().zip(hir_fields) {
+                collect_type_hovers(&ast_field.ty, hir_field_ty, semantics, module, hovers);
+            }
+        }
+        _ => {}
     }
 }
 

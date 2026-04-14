@@ -249,6 +249,49 @@ fn test_module_load_with_imports_detects_cycle() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn test_module_load_supports_language_imports_via_frontend_hir() {
+    let dir = temp_dir("module-language-import");
+    fs::create_dir_all(&dir).unwrap();
+
+    let helpers = dir.join("helpers.neve");
+    fs::write(&helpers, r#"pub fn packages(seed) = ["git", "vim"];"#).unwrap();
+
+    let main = dir.join("main.neve");
+    fs::write(
+        &main,
+        r#"import helpers (packages);
+
+let module = #{
+    packages = packages(0)
+};
+"#,
+    )
+    .unwrap();
+
+    let module = Module::load(&main).expect("frontend/HIR load should succeed");
+    let config = module.to_system_config().expect("module should convert");
+    assert_eq!(config.options.packages, vec!["git", "vim"]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_module_load_reports_frontend_type_errors() {
+    let dir = temp_dir("module-frontend-type-error");
+    fs::create_dir_all(&dir).unwrap();
+
+    let main = dir.join("bad.neve");
+    fs::write(&main, "let module = 1 + true;").unwrap();
+
+    let err = Module::load(&main).expect_err("type error should be surfaced");
+    let message = err.to_string();
+    assert!(message.contains("frontend diagnostics"));
+    assert!(message.contains("bad.neve"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // Generator tests
 
 fn temp_dir(suffix: &str) -> PathBuf {

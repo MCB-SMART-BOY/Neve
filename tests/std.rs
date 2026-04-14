@@ -193,6 +193,71 @@ fn test_stdlib_has_fetch_builtins() {
 }
 
 #[test]
+fn test_path_from_string_builtin_returns_path_runtime_value() {
+    let builtin = get_builtin("path.fromString").expect("path.fromString builtin should exist");
+    let result = call_builtin(&builtin, &[Value::String(Rc::new("/tmp/neve".to_string()))])
+        .expect("path.fromString should succeed");
+
+    match result {
+        Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp/neve")),
+        other => panic!("expected Path runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_path_join_path_builtin_returns_path_runtime_value() {
+    let builtin = get_builtin("path.joinPath").expect("path.joinPath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[
+            Value::Path(Rc::new(std::path::PathBuf::from("/tmp"))),
+            Value::String(Rc::new("neve.txt".to_string())),
+        ],
+    )
+    .expect("path.joinPath should succeed");
+
+    match result {
+        Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp/neve.txt")),
+        other => panic!("expected Path runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_path_parent_path_builtin_returns_option_path() {
+    let builtin = get_builtin("path.parentPath").expect("path.parentPath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.txt",
+        )))],
+    )
+    .expect("path.parentPath should succeed");
+
+    match result {
+        Value::Some(inner) => match inner.as_ref() {
+            Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp")),
+            other => panic!("expected inner Path runtime value, got {:?}", other),
+        },
+        other => panic!("expected Some(Path), got {:?}", other),
+    }
+}
+
+#[test]
+fn test_path_is_absolute_path_builtin_reports_bool() {
+    let builtin =
+        get_builtin("path.isAbsolutePath").expect("path.isAbsolutePath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.txt",
+        )))],
+    )
+    .expect("path.isAbsolutePath should succeed");
+
+    assert_eq!(result, Value::Bool(true));
+}
+
+#[test]
 fn test_fetch_path_builtin_returns_metadata_record() {
     let temp = TempDir::new().unwrap();
     let file_path = temp.path().join("source.txt");
@@ -274,6 +339,68 @@ fn test_io_exec_returns_structured_result() {
 }
 
 #[test]
+fn test_io_exec_matches_canonical_command_process_projection() {
+    let exec_builtin = get_builtin("io.exec").expect("io.exec builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_command_builtin =
+        get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let success_builtin =
+        get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
+    let stdout_builtin =
+        get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
+    let code_builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
+    let stderr_builtin =
+        get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+
+    let program = Value::String(Rc::new("rustc".to_string()));
+    let argv = Value::List(Rc::new(vec![Value::String(Rc::new(
+        "--version".to_string(),
+    ))]));
+
+    let legacy = call_builtin(&exec_builtin, &[program.clone(), argv.clone()])
+        .expect("io.exec should succeed");
+    let command =
+        call_builtin(&command_builtin, &[program, argv]).expect("io.command should succeed");
+    let canonical =
+        call_builtin(&exec_command_builtin, &[command]).expect("io.execCommand should succeed");
+
+    let success =
+        call_builtin(&success_builtin, std::slice::from_ref(&canonical)).expect("success access");
+    let stdout =
+        call_builtin(&stdout_builtin, std::slice::from_ref(&canonical)).expect("stdout access");
+    let code = call_builtin(&code_builtin, std::slice::from_ref(&canonical)).expect("code access");
+    let stderr =
+        call_builtin(&stderr_builtin, std::slice::from_ref(&canonical)).expect("stderr access");
+
+    match legacy {
+        Value::Record(fields) => {
+            assert_eq!(fields.get("success"), Some(&success));
+            assert_eq!(fields.get("stdout"), Some(&stdout));
+            assert_eq!(fields.get("code"), Some(&code));
+            assert_eq!(fields.get("stderr"), Some(&stderr));
+        }
+        other => panic!("expected record from io.exec, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_exec_preserves_legacy_error_prefix() {
+    let builtin = get_builtin("io.exec").expect("io.exec builtin should exist");
+    let args = vec![
+        Value::String(Rc::new(
+            "neve-definitely-missing-command-for-tests".to_string(),
+        )),
+        Value::List(Rc::new(vec![])),
+    ];
+
+    let err = call_builtin(&builtin, &args).expect_err("io.exec should report missing program");
+    assert!(
+        err.starts_with("io.exec:"),
+        "expected io.exec-prefixed error, got {err}"
+    );
+}
+
+#[test]
 fn test_io_exec_shell_returns_structured_result() {
     let builtin = get_builtin("io.execShell").expect("io.execShell builtin should exist");
     let args = vec![Value::String(Rc::new("rustc --version".to_string()))];
@@ -342,6 +469,327 @@ fn test_io_write_file_and_read_back() {
     let read_args = vec![Value::String(Rc::new(path_str.clone()))];
     let read_result = call_builtin(&read, &read_args).expect("io.readFile should succeed");
     assert!(matches!(read_result, Value::String(s) if s.as_str() == "hello"));
+}
+
+#[test]
+fn test_io_read_file_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("io-read-path.txt");
+    fs::write(&path, "hello-path").unwrap();
+
+    let read = get_builtin("io.readFilePath").expect("io.readFilePath builtin should exist");
+    let read_args = vec![Value::Path(Rc::new(path.clone()))];
+    let read_result = call_builtin(&read, &read_args).expect("io.readFilePath should succeed");
+
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "hello-path"));
+}
+
+#[test]
+fn test_io_read_file_path_rejects_string_argument() {
+    let read = get_builtin("io.readFilePath").expect("io.readFilePath builtin should exist");
+    let err = call_builtin(
+        &read,
+        &[Value::String(Rc::new("/tmp/io-read-path.txt".to_string()))],
+    )
+    .expect_err("io.readFilePath should reject string arguments");
+
+    assert_eq!(err, "io.readFilePath expects a Path");
+}
+
+#[test]
+fn test_io_current_dir_path_returns_path_runtime_value() {
+    let current_dir = std::env::current_dir().unwrap();
+    let builtin = get_builtin("io.currentDirPath").expect("io.currentDirPath builtin should exist");
+    let result = call_builtin(&builtin, &[]).expect("io.currentDirPath should succeed");
+
+    match result {
+        Value::Path(path) => assert_eq!(path.as_path(), current_dir.as_path()),
+        other => panic!("expected Path runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_command_returns_command_runtime_value() {
+    let builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    match result {
+        Value::Command(_) => {}
+        other => panic!("expected Command runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_command_rejects_non_string_argument_items() {
+    let builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::Int(1.into())])),
+        ],
+    )
+    .expect_err("io.command should reject non-string argv items");
+
+    assert_eq!(err, "io.command args[0] must be String");
+}
+
+#[test]
+fn test_io_exec_command_returns_process_result_runtime_value() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let result = call_builtin(&exec_builtin, &[command]).expect("io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(_) => {}
+        other => panic!("expected ProcessResult runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_exec_command_rejects_non_command_argument() {
+    let builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let err = call_builtin(&builtin, &[Value::String(Rc::new("rustc".to_string()))])
+        .expect_err("io.execCommand should reject string arguments");
+
+    assert_eq!(err, "io.execCommand expects a Command");
+}
+
+#[test]
+fn test_io_process_success_reports_bool_from_process_result() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let success_builtin =
+        get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let result = call_builtin(&exec_builtin, &[command]).expect("io.execCommand should succeed");
+    let success =
+        call_builtin(&success_builtin, &[result]).expect("io.processSuccess should succeed");
+
+    assert_eq!(success, Value::Bool(true));
+}
+
+#[test]
+fn test_io_process_success_rejects_non_process_result_argument() {
+    let builtin = get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("not-a-process-result".to_string()))],
+    )
+    .expect_err("io.processSuccess should reject string arguments");
+
+    assert_eq!(err, "io.processSuccess expects a ProcessResult");
+}
+
+#[test]
+fn test_io_process_stdout_reports_string_from_process_result() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let stdout_builtin =
+        get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let result = call_builtin(&exec_builtin, &[command]).expect("io.execCommand should succeed");
+    let stdout = call_builtin(&stdout_builtin, &[result]).expect("io.processStdout should succeed");
+
+    assert!(
+        matches!(stdout, Value::String(s) if s.contains("rustc")),
+        "stdout should contain rustc version"
+    );
+}
+
+#[test]
+fn test_io_process_stdout_rejects_non_process_result_argument() {
+    let builtin = get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("not-a-process-result".to_string()))],
+    )
+    .expect_err("io.processStdout should reject string arguments");
+
+    assert_eq!(err, "io.processStdout expects a ProcessResult");
+}
+
+#[test]
+fn test_io_process_code_reports_int_from_process_result() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let code_builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let result = call_builtin(&exec_builtin, &[command]).expect("io.execCommand should succeed");
+    let code = call_builtin(&code_builtin, &[result]).expect("io.processCode should succeed");
+
+    assert_eq!(code, Value::Int(0.into()));
+}
+
+#[test]
+fn test_io_process_code_rejects_non_process_result_argument() {
+    let builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("not-a-process-result".to_string()))],
+    )
+    .expect_err("io.processCode should reject string arguments");
+
+    assert_eq!(err, "io.processCode expects a ProcessResult");
+}
+
+#[test]
+fn test_io_process_stderr_reports_string_from_process_result() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let stderr_builtin =
+        get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let result = call_builtin(&exec_builtin, &[command]).expect("io.execCommand should succeed");
+    let stderr = call_builtin(&stderr_builtin, &[result]).expect("io.processStderr should succeed");
+
+    assert_eq!(stderr, Value::String(Rc::new(String::new())));
+}
+
+#[test]
+fn test_io_process_stderr_rejects_non_process_result_argument() {
+    let builtin = get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("not-a-process-result".to_string()))],
+    )
+    .expect_err("io.processStderr should reject string arguments");
+
+    assert_eq!(err, "io.processStderr expects a ProcessResult");
+}
+
+#[test]
+fn test_io_path_exists_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("exists-path.txt");
+    fs::write(&path, "exists").unwrap();
+
+    let builtin = get_builtin("io.pathExistsPath").expect("io.pathExistsPath builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(path))])
+        .expect("io.pathExistsPath should succeed");
+
+    assert_eq!(result, Value::Bool(true));
+}
+
+#[test]
+fn test_io_path_exists_path_rejects_string_argument() {
+    let builtin = get_builtin("io.pathExistsPath").expect("io.pathExistsPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/exists-path.txt".to_string()))],
+    )
+    .expect_err("io.pathExistsPath should reject string arguments");
+
+    assert_eq!(err, "io.pathExistsPath expects a Path");
+}
+
+#[test]
+fn test_io_is_dir_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("dir-path");
+    fs::create_dir_all(&dir).unwrap();
+
+    let builtin = get_builtin("io.isDirPath").expect("io.isDirPath builtin should exist");
+    let result =
+        call_builtin(&builtin, &[Value::Path(Rc::new(dir))]).expect("io.isDirPath should succeed");
+
+    assert_eq!(result, Value::Bool(true));
+}
+
+#[test]
+fn test_io_is_dir_path_rejects_string_argument() {
+    let builtin = get_builtin("io.isDirPath").expect("io.isDirPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/dir-path".to_string()))],
+    )
+    .expect_err("io.isDirPath should reject string arguments");
+
+    assert_eq!(err, "io.isDirPath expects a Path");
+}
+
+#[test]
+fn test_io_is_file_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("file-path.txt");
+    fs::write(&path, "file").unwrap();
+
+    let builtin = get_builtin("io.isFilePath").expect("io.isFilePath builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(path))])
+        .expect("io.isFilePath should succeed");
+
+    assert_eq!(result, Value::Bool(true));
+}
+
+#[test]
+fn test_io_is_file_path_rejects_string_argument() {
+    let builtin = get_builtin("io.isFilePath").expect("io.isFilePath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/file-path.txt".to_string()))],
+    )
+    .expect_err("io.isFilePath should reject string arguments");
+
+    assert_eq!(err, "io.isFilePath expects a Path");
 }
 
 #[test]

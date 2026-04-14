@@ -2,7 +2,7 @@
 //!
 //! This file contains extensive edge case tests for type checking.
 
-use neve_diagnostic::{Diagnostic, Severity};
+use neve_diagnostic::{Diagnostic, ErrorCode, Severity};
 use neve_hir::lower;
 use neve_parser::parse;
 use neve_typeck::{TypeChecker, format_type};
@@ -38,6 +38,113 @@ fn assert_has_diagnostic(source: &str, severity: Severity, message_fragment: &st
             .any(|diag| { diag.severity == severity && diag.message.contains(message_fragment) }),
         "expected diagnostic containing '{message_fragment}', got {:?}",
         diags
+    );
+}
+
+fn assert_warning_previous_label_contains(
+    source: &str,
+    message_fragment: &str,
+    previous_fragment: &str,
+) {
+    let diags = check_source(source);
+    let diag = diags
+        .iter()
+        .find(|diag| diag.severity == Severity::Warning && diag.message.contains(message_fragment))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected warning containing '{message_fragment}', got {:?}",
+                diags
+            )
+        });
+    assert!(
+        diag.labels.len() >= 2,
+        "expected unreachable warning to carry previous-pattern label, got {:?}",
+        diag
+    );
+    let previous_snippet = source.get(diag.labels[1].span.range()).unwrap_or("");
+    assert!(
+        previous_snippet.contains(previous_fragment),
+        "expected previous label to contain '{previous_fragment}', got snippet {:?} in {:?}",
+        previous_snippet,
+        diag
+    );
+}
+
+fn assert_warning_label_message_contains(
+    source: &str,
+    message_fragment: &str,
+    label_index: usize,
+    expected_fragment: &str,
+) {
+    let diags = check_source(source);
+    let diag = diags
+        .iter()
+        .find(|diag| diag.severity == Severity::Warning && diag.message.contains(message_fragment))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected warning containing '{message_fragment}', got {:?}",
+                diags
+            )
+        });
+    let label = diag.labels.get(label_index).unwrap_or_else(|| {
+        panic!(
+            "expected warning label at index {label_index}, got {:?}",
+            diag
+        )
+    });
+    assert!(
+        label.message.contains(expected_fragment),
+        "expected label {label_index} to contain '{expected_fragment}', got {:?} in {:?}",
+        label.message,
+        diag
+    );
+}
+
+fn assert_diagnostic_note_contains(
+    source: &str,
+    severity: Severity,
+    message_fragment: &str,
+    note_fragment: &str,
+) {
+    let diags = check_source(source);
+    let diag = diags
+        .iter()
+        .find(|diag| diag.severity == severity && diag.message.contains(message_fragment))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected diagnostic containing '{message_fragment}', got {:?}",
+                diags
+            )
+        });
+    assert!(
+        diag.notes.iter().any(|note| note.contains(note_fragment)),
+        "expected diagnostic note containing '{note_fragment}', got {:?}",
+        diag
+    );
+}
+
+fn assert_diagnostic_label_contains(
+    source: &str,
+    severity: Severity,
+    message_fragment: &str,
+    label_fragment: &str,
+) {
+    let diags = check_source(source);
+    let diag = diags
+        .iter()
+        .find(|diag| diag.severity == severity && diag.message.contains(message_fragment))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected diagnostic containing '{message_fragment}', got {:?}",
+                diags
+            )
+        });
+    assert!(
+        diag.labels
+            .iter()
+            .any(|label| label.message.contains(label_fragment)),
+        "expected diagnostic label containing '{label_fragment}', got {:?}",
+        diag
     );
 }
 
@@ -316,6 +423,8 @@ fn test_typeck_std_path_builtins_allow_valid_uses() {
     check_no_errors(
         r#"
             import std.path as path;
+            let structured = path.fromString("/tmp/file.txt");
+            let rendered: String = toString(structured);
             let joined: String = path.join("a", "b");
             let parent = path.parent("/tmp/file.txt") ?? "/";
             let abs: Bool = path.is_absolute("/tmp/file.txt");
@@ -337,10 +446,63 @@ fn test_typeck_std_path_builtins_reject_wrong_use() {
 }
 
 #[test]
+fn test_typeck_std_path_from_string_does_not_silently_fit_legacy_string_api() {
+    assert_has_diagnostic(
+        r#"
+            import std.path as path;
+            let wrong = path.is_absolute(path.fromString("/tmp"));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_typed_path_adapters_allow_valid_uses() {
+    check_no_errors(
+        r#"
+            import std.path as path;
+            let nested: Path = path.joinPath(path.fromString("/tmp"), "neve.txt");
+            let parent: Path = path.parentPath(nested) ?? path.fromString("/");
+            let abs: Bool = path.isAbsolutePath(parent);
+            let rendered: String = toString(parent);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_typed_path_adapters_reject_string_receiver() {
+    assert_has_diagnostic(
+        r#"
+            import std.path as path;
+            let wrong = path.joinPath("/tmp", "neve.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
 fn test_typeck_std_io_builtins_allow_valid_uses() {
     check_no_errors(
         r#"
             import std.io as io;
+            import std.path as path;
+            let content: String = io.readFile("/tmp/file.txt");
+            let structured: String = io.readFilePath(path.fromString("/tmp/file.txt"));
+            let cwd_path: Path = io.currentDirPath();
+            let cmd: Command = io.command("printf", ["neve"]);
+            let proc: ProcessResult = io.execCommand(io.command("rustc", ["--version"]));
+            let proc_ok: Bool = io.processSuccess(proc);
+            let proc_out: String = io.processStdout(io.execCommand(io.command("rustc", ["--version"])));
+            let proc_code: Int = io.processCode(io.execCommand(io.command("rustc", ["--version"])));
+            let proc_err: String = io.processStderr(io.execCommand(io.command("rustc", ["--version"])));
+            let exists: Bool = io.pathExistsPath(path.fromString("/tmp/file.txt"));
+            let dir: Bool = io.isDirPath(path.fromString("/tmp"));
+            let file: Bool = io.isFilePath(path.fromString("/tmp/file.txt"));
+            let cwd_text: String = toString(cwd_path);
+            let cmd_text: String = toString(cmd);
+            let proc_text: String = toString(proc);
             let digest: String = io.hashString("abc");
             let cwd: String = io.currentDir();
             let env = io.getEnv("HOME") ?? "";
@@ -357,6 +519,139 @@ fn test_typeck_std_io_builtins_reject_wrong_use() {
             fn expectInt(x: Int) -> Int = x;
             import std.io as io;
             let wrong = expectInt(io.pathExists("."));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_read_file_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.readFilePath("/tmp/file.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_path_exists_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.pathExistsPath("/tmp/file.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_is_dir_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.isDirPath("/tmp");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_is_file_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.isFilePath("/tmp/file.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_current_dir_path_does_not_silently_fit_string_annotation() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let wrong = path.is_absolute(io.currentDirPath());
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_command_does_not_silently_fit_legacy_exec_shell_api() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execShell(io.command("printf", ["neve"]));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_exec_command_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execCommand("rustc");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_process_success_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.processSuccess("not-a-result");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_process_stdout_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.processStdout("not-a-result");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_process_code_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.processCode("not-a-result");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_process_stderr_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.processStderr("not-a-result");
         "#,
         Severity::Error,
         "type mismatch",
@@ -642,6 +937,53 @@ fn test_typeck_record_field_access_after_record_binding() {
 }
 
 #[test]
+fn test_typeck_record_field_access_reports_missing_known_field() {
+    check_has_errors(
+        r#"
+            let config = #{ port = 40, host = "localhost" };
+            let x = config.missing;
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_dynamic_record_field_chain_on_unknown_param() {
+    check_no_errors(
+        r#"
+            let outputs = fn(inputs) inputs.dep.packages.default;
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_dynamic_record_constraints_accumulate_on_same_base() {
+    check_no_errors(
+        r#"
+            let project = fn(inputs) #{
+                pkg = inputs.dep.packages.default,
+                src = inputs.dep.sources.default
+            };
+            let x = project(#{
+                dep = #{
+                    packages = #{ default = 1 },
+                    sources = #{ default = 2 }
+                }
+            });
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_dynamic_record_constraints_reject_missing_nested_field() {
+    check_has_errors(
+        r#"
+            let outputs = fn(inputs) inputs.dep.packages.default;
+            let x = outputs(#{ dep = #{} });
+        "#,
+    );
+}
+
+#[test]
 fn test_typeck_lazy_force() {
     check_no_errors("let thunk = lazy 42; let x = force(thunk);");
 }
@@ -697,6 +1039,11 @@ fn test_typeck_try_on_result_like_enum() {
 }
 
 #[test]
+fn test_typeck_try_rejects_known_non_optional_value() {
+    check_has_errors("let x = 41?;");
+}
+
+#[test]
 fn test_typeck_coalesce_on_option_like_enum() {
     check_no_errors(
         "
@@ -704,6 +1051,11 @@ fn test_typeck_coalesce_on_option_like_enum() {
         let x = Some(41) ?? 0;
         ",
     );
+}
+
+#[test]
+fn test_typeck_coalesce_rejects_known_non_optional_value() {
+    check_has_errors("let x = 41 ?? 0;");
 }
 
 #[test]
@@ -717,12 +1069,103 @@ fn test_typeck_safe_field_coalesce_defaults_to_string() {
 }
 
 #[test]
+fn test_typeck_safe_field_on_unknown_param_with_coalesce() {
+    check_no_errors(
+        "
+        let readName = fn(config) config?.name ?? \"default\";
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_safe_field_on_unknown_param_rejects_non_record_callsite() {
+    check_has_errors(
+        "
+        let readName = fn(config) config?.name ?? \"default\";
+        let value = readName(42);
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_safe_field_on_unknown_param_allows_missing_record_field() {
+    check_no_errors(
+        "
+        let readName = fn(config) config?.name ?? \"default\";
+        let value = readName(#{});
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_safe_field_on_unknown_param_accepts_option_record_callsite() {
+    check_no_errors(
+        "
+        import std.option as option;
+        let readName = fn(config) config?.name ?? \"default\";
+        let value = readName(option.some(#{ name = \"neve\" }));
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_safe_field_on_unknown_param_checks_present_field_type() {
+    check_has_errors(
+        "
+        let readName = fn(config) config?.name ?? \"default\";
+        let value = readName(#{ name = 42 });
+        ",
+    );
+}
+
+#[test]
 fn test_typeck_method_call_falls_back_to_function_call_semantics() {
     check_no_errors(
         "
         fn twice(x: Int) -> Int = x + x;
         let y = 21.twice();
         ",
+    );
+}
+
+#[test]
+fn test_typeck_trait_method_dispatch_takes_precedence_over_callable_target_fallback() {
+    check_no_errors(
+        "
+        fn twice(x: Int) -> String = \"fallback\";
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let value: Int = 21.twice();
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_method_call_without_dispatch_or_callable_reports_dedicated_missing_method() {
+    let diags = check_source(
+        "
+        let value = 21.missing();
+        ",
+    );
+    let diag = diags
+        .iter()
+        .find(|diag| diag.message.contains("no method `missing` found for `Int`"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected dedicated missing-method diagnostic, got {:?}",
+                diags
+            )
+        });
+    assert_eq!(diag.severity, Severity::Error);
+    assert_eq!(diag.code, Some(ErrorCode::UnknownMethod));
+    assert!(
+        diag.notes
+            .iter()
+            .any(|note| note.contains("no callable fallback `missing(receiver, ...)`")),
+        "expected fallback note, got {:?}",
+        diag
     );
 }
 
@@ -1030,6 +1473,23 @@ fn test_typeck_match_enum_non_exhaustive() {
 }
 
 #[test]
+fn test_typeck_match_user_enum_missing_patterns_follow_declaration_order() {
+    let source = "
+        enum Status { Pending(Int), Running, Done(String), Failed };
+        let x = match Running() {
+            Running -> 1
+        };
+        ";
+    assert_has_diagnostic(source, Severity::Error, "non-exhaustive pattern match");
+    assert_diagnostic_note_contains(
+        source,
+        Severity::Error,
+        "non-exhaustive pattern match",
+        "missing patterns: Pending(_), Done(_), Failed",
+    );
+}
+
+#[test]
 fn test_typeck_match_builtin_option_non_exhaustive() {
     assert_has_diagnostic(
         "
@@ -1074,15 +1534,18 @@ fn test_typeck_match_builtin_option_rejects_wrong_constructor() {
 
 #[test]
 fn test_typeck_match_unreachable_after_wildcard() {
-    assert_has_diagnostic(
-        "
+    let source = "
         let x = match true {
             _ -> 1,
             false -> 0
         };
-        ",
-        Severity::Warning,
+        ";
+    assert_has_diagnostic(source, Severity::Warning, "unreachable pattern");
+    assert_warning_label_message_contains(
+        source,
         "unreachable pattern",
+        1,
+        "matches all remaining values",
     );
 }
 
@@ -1098,6 +1561,111 @@ fn test_typeck_match_builtin_option_unreachable_after_complete_coverage() {
         ",
         Severity::Warning,
         "unreachable pattern",
+    );
+}
+
+#[test]
+fn test_typeck_match_builtin_option_subset_shadowing_is_unreachable() {
+    let source = "
+        import std.option as option;
+        let x = match option.some(1) {
+            Some(_) -> 1,
+            Some(value) -> value,
+            None -> 0
+        };
+        ";
+    assert_has_diagnostic(source, Severity::Warning, "unreachable pattern");
+    assert_warning_previous_label_contains(source, "unreachable pattern", "Some(_) -> 1");
+    assert_warning_label_message_contains(
+        source,
+        "unreachable pattern",
+        1,
+        "already covers this case",
+    );
+}
+
+#[test]
+fn test_typeck_match_builtin_result_subset_shadowing_is_unreachable() {
+    assert_has_diagnostic(
+        "
+        import std.result as result;
+        let x = match result.ok(1) {
+            Ok(_) -> 1,
+            Ok(value) -> value,
+            Err(_) -> 0
+        };
+        ",
+        Severity::Warning,
+        "unreachable pattern",
+    );
+}
+
+#[test]
+fn test_typeck_match_user_enum_subset_shadowing_is_unreachable() {
+    assert_has_diagnostic(
+        "
+        enum Value { Int(Int), Missing };
+        let x = match Int(1) {
+            Int(_) -> 1,
+            Int(value) -> value,
+            Missing -> 0
+        };
+        ",
+        Severity::Warning,
+        "unreachable pattern",
+    );
+}
+
+#[test]
+fn test_typeck_match_single_variant_irrefutable_constructor_makes_later_arm_unreachable() {
+    let source = "
+        enum Only { Only(Int) };
+        let x = match Only(1) {
+            Only(value) -> value,
+            Only(1) -> 1
+        };
+        ";
+    assert_has_diagnostic(source, Severity::Warning, "unreachable pattern");
+    assert_warning_previous_label_contains(source, "unreachable pattern", "Only(value) -> value");
+}
+
+#[test]
+fn test_typeck_match_bool_or_pattern_complete_then_later_arm_is_unreachable() {
+    assert_has_diagnostic(
+        "
+        let x = match true {
+            true | false -> 1,
+            true -> 2
+        };
+        ",
+        Severity::Warning,
+        "unreachable pattern",
+    );
+}
+
+#[test]
+fn test_typeck_match_guarded_arm_does_not_make_match_exhaustive() {
+    assert_has_diagnostic(
+        "
+        let x = match true {
+            value if value -> 1
+        };
+        ",
+        Severity::Error,
+        "non-exhaustive pattern match",
+    );
+}
+
+#[test]
+fn test_typeck_match_guarded_arm_does_not_make_later_arm_unreachable() {
+    check_no_errors(
+        "
+        let x = match true {
+            value if value -> 1,
+            true -> 2,
+            false -> 3
+        };
+        ",
     );
 }
 
@@ -1465,6 +2033,63 @@ fn test_typeck_assoc_type_bounds_missing_impl() {
 }
 
 #[test]
+fn test_typeck_assoc_type_bounds_accept_canonical_self_assoc_binding() {
+    check_no_errors(
+        "
+        trait Show { };
+        trait Iterator { type Item: Show; type Alias; };
+        struct Foo {};
+        impl Show for Int { };
+        impl Iterator for Foo {
+            type Alias = Int;
+            type Item = Self.Alias;
+        };
+    ",
+    );
+}
+
+#[test]
+fn test_typeck_assoc_type_bounds_report_canonical_type_from_self_assoc_binding() {
+    let source = "
+        trait Show { };
+        trait Iterator { type Item: Show; type Alias; };
+        struct Foo {};
+        impl Iterator for Foo {
+            type Alias = Int;
+            type Item = Self.Alias;
+        };
+    ";
+    assert_diagnostic_label_contains(
+        source,
+        Severity::Error,
+        "associated type 'Item' in impl of trait 'Iterator' must satisfy bound 'Show'",
+        "associated type resolves to `Int` here",
+    );
+    assert_diagnostic_note_contains(
+        source,
+        Severity::Error,
+        "associated type 'Item' in impl of trait 'Iterator' must satisfy bound 'Show'",
+        "`Int` does not implement `Show`",
+    );
+}
+
+#[test]
+fn test_typeck_assoc_type_bounds_report_cyclic_assoc_definition() {
+    assert_has_diagnostic(
+        "
+        trait Show { };
+        trait Iterator { type Item: Show; };
+        struct Foo {};
+        impl Iterator for Foo {
+            type Item = Self.Item;
+        };
+        ",
+        Severity::Error,
+        "cyclic associated type definition `Self.Item`",
+    );
+}
+
+#[test]
 fn test_typeck_impl_method_body_return_type_mismatch() {
     assert_has_diagnostic(
         "
@@ -1582,6 +2207,99 @@ fn test_typeck_trait_assoc_type_use_site_body_mismatch() {
         ",
         Severity::Error,
         "impl method `first` return type",
+    );
+}
+
+#[test]
+fn test_typeck_trait_method_call_uses_canonical_assoc_return_type() {
+    check_no_errors(
+        "
+        trait Iterator {
+            type Item;
+            fn first(self) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self) -> Self.Item = toString(self);
+        };
+        let value: String = 1.first();
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_trait_method_call_checks_canonical_assoc_return_type() {
+    assert_has_diagnostic(
+        "
+        trait Iterator {
+            type Item;
+            fn first(self) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self) -> Self.Item = toString(self);
+        };
+        fn expectInt(x: Int) -> Int = x;
+        let value = expectInt(1.first());
+        ",
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_trait_method_call_uses_canonical_default_assoc_alias_return_type() {
+    check_no_errors(
+        "
+        trait Iterator {
+            type Alias;
+            type Item = Self.Alias;
+            fn first(self) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Alias = String;
+            fn first(self) -> Self.Item = toString(self);
+        };
+        let value: String = 1.first();
+        ",
+    );
+}
+
+#[test]
+fn test_typeck_trait_signature_mismatch_reports_assoc_projection_label() {
+    assert_diagnostic_label_contains(
+        "
+        trait Iterator {
+            type Item;
+            fn first(self, fallback: Self.Item) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self, fallback: Int) -> Int = fallback;
+        };
+        ",
+        Severity::Error,
+        "does not match trait `Iterator` signature",
+        "`Self.Item` resolves to `String` here",
+    );
+}
+
+#[test]
+fn test_typeck_impl_method_body_mismatch_reports_assoc_projection_label() {
+    assert_diagnostic_label_contains(
+        "
+        trait Iterator {
+            type Item;
+            fn first(self) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self) -> Self.Item = true;
+        };
+        ",
+        Severity::Error,
+        "impl method `first` return type",
+        "`Self.Item` resolves to `String` here",
     );
 }
 

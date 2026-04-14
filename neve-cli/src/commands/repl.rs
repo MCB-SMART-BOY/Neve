@@ -6,22 +6,21 @@ use crate::output;
 use neve_common::Span;
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{Evaluator, Value, builtins};
-use neve_frontend::{FrontendSession, ModuleAnalysis, SessionBuildInputs, SessionBuildResult};
+use neve_frontend::{
+    FrontendSession, ModuleAnalysis, SessionBuildInputs, SessionBuildResult,
+    format_type_with_names_map,
+};
 use neve_hir::{DefId, ItemKind as HirItemKind, Module, ModuleId, Ty, TyKind};
 use neve_parser::parse;
 use neve_std::stdlib;
 use neve_syntax::{ImportDef, ImportItems, Item, ItemKind, PatternKind, SourceFile, Visibility};
-use neve_typeck::{
-    LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID,
-    format_builtin_named_type,
-};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 5);
-const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 6);
+const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 100);
+const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 101);
 
 /// Run the REPL.
 /// 运行 REPL。
@@ -1010,66 +1009,6 @@ fn collect_repl_type_names(
 
 fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>) -> String {
     match &ty.kind {
-        TyKind::Int => "Int".to_string(),
-        TyKind::Float => "Float".to_string(),
-        TyKind::Bool => "Bool".to_string(),
-        TyKind::Char => "Char".to_string(),
-        TyKind::String => "String".to_string(),
-        TyKind::Unit => "()".to_string(),
-        TyKind::Var(id) => format!("?{id}"),
-        TyKind::Param(_, name) => name.clone(),
-        TyKind::SelfType => "Self".to_string(),
-        TyKind::SelfAssoc(name) => format!("Self.{name}"),
-        TyKind::Tuple(items) => {
-            let parts: Vec<_> = items
-                .iter()
-                .map(|item| format_repl_semantic_type_with_names(item, names))
-                .collect();
-            format!("({})", parts.join(", "))
-        }
-        TyKind::Record(fields) => {
-            let parts: Vec<_> = fields
-                .iter()
-                .map(|(name, ty)| {
-                    format!(
-                        "{name}: {}",
-                        format_repl_semantic_type_with_names(ty, names)
-                    )
-                })
-                .collect();
-            format!("{{ {} }}", parts.join(", "))
-        }
-        TyKind::Fn(params, ret) => {
-            let params: Vec<_> = params
-                .iter()
-                .map(|param| format_repl_semantic_type_with_names(param, names))
-                .collect();
-            format!(
-                "({}) -> {}",
-                params.join(", "),
-                format_repl_semantic_type_with_names(ret, names)
-            )
-        }
-        TyKind::Forall(params, inner) => format!(
-            "forall {}. {}",
-            params.join(", "),
-            format_repl_semantic_type_with_names(inner, names)
-        ),
-        TyKind::Named(def_id, args)
-            if [
-                LIST_TYPE_ID,
-                OPTION_TYPE_ID,
-                RESULT_TYPE_ID,
-                MAP_TYPE_ID,
-                SET_TYPE_ID,
-            ]
-            .contains(def_id) =>
-        {
-            format_builtin_named_type(*def_id, args, &|arg| {
-                format_repl_semantic_type_with_names(arg, names)
-            })
-            .unwrap_or_else(|| neve_typeck::format_type(ty))
-        }
         TyKind::Named(def_id, _) if *def_id == REPL_FN_TYPE_ID => "Fn".to_string(),
         TyKind::Named(def_id, args) if *def_id == REPL_LAZY_TYPE_ID => {
             format!(
@@ -1077,22 +1016,7 @@ fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>)
                 format_repl_semantic_type_with_names(&args[0], names)
             )
         }
-        TyKind::Named(def_id, args) => {
-            if let Some(name) = names.get(def_id) {
-                if args.is_empty() {
-                    name.clone()
-                } else {
-                    let args: Vec<_> = args
-                        .iter()
-                        .map(|arg| format_repl_semantic_type_with_names(arg, names))
-                        .collect();
-                    format!("{name}[{}]", args.join(", "))
-                }
-            } else {
-                neve_typeck::format_type(ty)
-            }
-        }
-        TyKind::Unknown => "_".to_string(),
+        _ => format_type_with_names_map(ty, names),
     }
 }
 
@@ -1100,20 +1024,69 @@ fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>)
 mod tests {
     use super::{
         REPL_FN_TYPE_ID, REPL_LAZY_TYPE_ID, ReplEvalError, ReplHirState, ReplInputContext,
-        ReplSemanticState, evaluate_repl_input, format_repl_semantic_type, infer_repl_type,
-        prepare_repl_input,
+        ReplSemanticState, TypeQueryError, evaluate_repl_input, format_repl_semantic_type,
+        infer_repl_type, prepare_repl_input,
     };
     use neve_common::Span;
-    use neve_diagnostic::Severity;
-    use neve_eval::Value;
+    use neve_diagnostic::{ErrorCode, Severity};
+    use neve_eval::{
+        Value,
+        value::{CommandValue, ProcessResultValue},
+    };
     use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind, lower};
     use neve_parser::parse;
+
+    fn normalize_inference_vars(input: &str) -> String {
+        let mut output = String::new();
+        let mut chars = input.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            output.push(ch);
+            if ch == '?' {
+                while matches!(chars.peek(), Some(next) if next.is_ascii_digit()) {
+                    chars.next();
+                }
+            }
+        }
+
+        output
+    }
+
+    fn assert_repl_type_diagnostic(
+        expr: &str,
+        runtime: &ReplHirState,
+        state: &ReplSemanticState,
+        expected_code: ErrorCode,
+        message_fragment: &str,
+    ) {
+        let err = infer_repl_type(expr, runtime, state)
+            .expect_err("expected REPL type inference to fail with diagnostics");
+        let TypeQueryError::Diagnostics { diagnostics, .. } = err else {
+            panic!("expected diagnostic-bearing REPL type error, got {:?}", err);
+        };
+        let diag = diagnostics
+            .iter()
+            .find(|diag| {
+                diag.code == Some(expected_code) && diag.message.contains(message_fragment)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "expected REPL diagnostic code {:?} containing {:?}, got {:?}",
+                    expected_code, message_fragment, diagnostics
+                )
+            });
+        assert_eq!(diag.severity, Severity::Error);
+    }
+
     use neve_syntax::SourceFile;
     use neve_typeck::{
-        LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, builtin_list,
-        builtin_map, builtin_option, builtin_result, builtin_set, format_builtin_named_type,
+        BYTES_TYPE_ID, COMMAND_TYPE_ID, LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, PATH_TYPE_ID,
+        PROCESS_RESULT_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, builtin_bytes, builtin_command,
+        builtin_list, builtin_map, builtin_option, builtin_path, builtin_process_result,
+        builtin_result, builtin_set, format_builtin_named_type,
     };
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[derive(Debug, Clone)]
@@ -1195,6 +1168,10 @@ mod tests {
                 kind: TyKind::Unit,
                 span: Span::DUMMY,
             },
+            Value::Path(_) => builtin_path(Span::DUMMY),
+            Value::Bytes(_) => builtin_bytes(Span::DUMMY),
+            Value::Command(_) => builtin_command(Span::DUMMY),
+            Value::ProcessResult(_) => builtin_process_result(Span::DUMMY),
             Value::List(items) => builtin_list(common_runtime_type(items.iter()), Span::DUMMY),
             Value::Tuple(items) => Ty {
                 kind: TyKind::Tuple(items.iter().map(type_from_value).collect()),
@@ -1268,6 +1245,28 @@ mod tests {
                     .collect();
                 format!("{{ {} }}", parts.join(", "))
             }
+            TyKind::DynamicRecord(fields) => {
+                let parts: Vec<_> = fields
+                    .iter()
+                    .map(|(name, ty)| format!("{name}: {}", format_repl_type(ty)))
+                    .collect();
+                if parts.is_empty() {
+                    "{ .. }".to_string()
+                } else {
+                    format!("{{ {}, .. }}", parts.join(", "))
+                }
+            }
+            TyKind::SafeRecordBase(fields) => {
+                let parts: Vec<_> = fields
+                    .iter()
+                    .map(|(name, ty)| format!("{name}: {}", format_repl_type(ty)))
+                    .collect();
+                if parts.is_empty() {
+                    "RecordOrOption[{ .. }]".to_string()
+                } else {
+                    format!("RecordOrOption[{{ {}, .. }}]", parts.join(", "))
+                }
+            }
             TyKind::Fn(params, ret) => {
                 let params: Vec<_> = params.iter().map(format_repl_type).collect();
                 format!("({}) -> {}", params.join(", "), format_repl_type(ret))
@@ -1338,6 +1337,35 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_canonical_assoc_return_for_trait_method_calls() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            r#"
+            trait Iterator {
+                type Item;
+                fn first(self) -> Self.Item;
+            };
+            impl Iterator for Int {
+                type Item = String;
+                fn first(self) -> Self.Item = toString(self);
+            };
+            "#,
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("trait definition should evaluate");
+
+        let ty =
+            infer_repl_type("1.first()", &runtime, &state).expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
     fn repl_type_formats_local_named_types_readably() {
         let source = "struct User {}; fn id(x: User) -> User = x;";
         let (ast, diagnostics) = parse(source);
@@ -1367,6 +1395,484 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_formats_dynamic_record_shape_readably() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "let outputs = fn(inputs) inputs.dep.packages.default;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("definition should evaluate");
+
+        let ty =
+            infer_repl_type("outputs", &runtime, &state).expect("type inference should succeed");
+        assert_eq!(
+            normalize_inference_vars(&ty),
+            "({ dep: { packages: { default: ?, .. }, .. }, .. }) -> ?"
+        );
+    }
+
+    #[test]
+    fn repl_type_uses_optional_flow_result_for_try_expr() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.option as option;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type("option.some(41)? + 1", &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_path_runtime_bridge_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"path.fromString("/tmp/file.txt")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Path");
+    }
+
+    #[test]
+    fn repl_type_uses_typed_path_adapter_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"path.joinPath(path.fromString("/tmp"), "neve.txt")"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Path");
+    }
+
+    #[test]
+    fn repl_type_uses_io_read_file_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.readFilePath(path.fromString("/tmp/file.txt"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_current_dir_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.currentDirPath()"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Path");
+    }
+
+    #[test]
+    fn repl_type_uses_io_command_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.command("printf", ["neve"])"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Command");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_command_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execCommand(io.command("rustc", ["--version"]))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_process_success_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.processSuccess(io.execCommand(io.command("rustc", ["--version"])))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_io_process_stdout_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.processStdout(io.execCommand(io.command("rustc", ["--version"])))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_process_code_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.processCode(io.execCommand(io.command("rustc", ["--version"])))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_io_process_stderr_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.processStderr(io.execCommand(io.command("rustc", ["--version"])))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_path_exists_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.pathExistsPath(path.fromString("/tmp/file.txt"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_io_is_dir_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.isDirPath(path.fromString("/tmp"))"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_io_is_file_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.isFilePath(path.fromString("/tmp/file.txt"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_optional_flow_result_for_coalesce_expr() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.option as option;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type("option.none ?? 5", &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_optional_flow_result_for_safe_field_coalesce_expr() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.option as option;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            "option.some(#{ name = \"test\" })?.name ?? \"default\"",
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_reports_invalid_try_optional_flow_diagnostic() {
+        let runtime = ReplHirState::new();
+        let state = ReplSemanticState::default();
+        assert_repl_type_diagnostic(
+            "41?",
+            &runtime,
+            &state,
+            ErrorCode::TypeMismatch,
+            "`?` expects Option-like or Result-like value",
+        );
+    }
+
+    #[test]
+    fn repl_type_reports_invalid_coalesce_optional_flow_diagnostic() {
+        let runtime = ReplHirState::new();
+        let state = ReplSemanticState::default();
+        assert_repl_type_diagnostic(
+            "41 ?? 0",
+            &runtime,
+            &state,
+            ErrorCode::TypeMismatch,
+            "`??` expects Option-like value",
+        );
+    }
+
+    #[test]
+    fn repl_type_reports_invalid_safe_field_boundary_diagnostic() {
+        let runtime = ReplHirState::new();
+        let state = ReplSemanticState::default();
+        assert_repl_type_diagnostic(
+            r#"42?.name ?? "default""#,
+            &runtime,
+            &state,
+            ErrorCode::TypeMismatch,
+            "safe field access requires a record or Option[Record]",
+        );
+    }
+
+    #[test]
+    fn repl_type_reports_invalid_io_read_file_path_diagnostic() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        assert_repl_type_diagnostic(
+            r#"io.readFilePath("/tmp/file.txt")"#,
+            &runtime,
+            &state,
+            ErrorCode::TypeMismatch,
+            "type mismatch",
+        );
+    }
+
+    #[test]
     fn semantic_state_skips_hidden_expr_bindings() {
         let source = "let __expr__ = 1 + 2;";
         let (ast, diagnostics) = parse(source);
@@ -1383,6 +1889,41 @@ mod tests {
     fn repl_runtime_value_type_formatting_is_readable() {
         let ty = type_from_value(&Value::List(std::rc::Rc::new(vec![Value::Int(1.into())])));
         assert_eq!(format_repl_type(&ty), "List[Int]");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_uses_path_builtin_name() {
+        let ty = type_from_value(&Value::Path(std::rc::Rc::new(PathBuf::from("/tmp/neve"))));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == PATH_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "Path");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_uses_bytes_builtin_name() {
+        let ty = type_from_value(&Value::Bytes(std::rc::Rc::new(vec![
+            0xde, 0xad, 0xbe, 0xef,
+        ])));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == BYTES_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "Bytes");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_uses_command_builtin_name() {
+        let ty = type_from_value(&Value::Command(std::rc::Rc::new(CommandValue::new(
+            "printf",
+            vec!["neve".to_string()],
+        ))));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == COMMAND_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "Command");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_uses_process_result_builtin_name() {
+        let ty = type_from_value(&Value::ProcessResult(std::rc::Rc::new(
+            ProcessResultValue::new(0, true, "stdout", "stderr"),
+        )));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == PROCESS_RESULT_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "ProcessResult");
     }
 
     #[test]

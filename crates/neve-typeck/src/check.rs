@@ -7,15 +7,17 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::builtin_types::{
-    builtin_list, builtin_map, builtin_option, builtin_result, builtin_set, is_builtin_option_type,
+    builtin_command, builtin_list, builtin_map, builtin_option, builtin_path,
+    builtin_process_result, builtin_result, builtin_set, is_builtin_option_type,
     is_builtin_result_type,
 };
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
-    unbound_variable, unreachable_pattern, unused_variable,
+    unbound_variable, unknown_method_call, unreachable_pattern, unused_variable,
 };
 use crate::infer::InferContext;
-use crate::traits::{ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
+use crate::pattern_analysis::{PatternAnalysisContext, analyze_match};
+use crate::traits::{ImplId, ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
 use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
@@ -24,7 +26,7 @@ use neve_hir::{
     MatchArm, Module, Pattern, PatternKind, Stmt, StmtKind, StructDef, TraitDef, Ty, TyKind,
     TypeAlias, UnaryOp, builtin_constructor_name,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 fn builtin_ty(kind: TyKind, span: Span) -> Ty {
     Ty { kind, span }
@@ -91,6 +93,41 @@ fn builtin_fetch_result(span: Span) -> Ty {
     )
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OptionalFlowMode {
+    BuiltinOptionOnly,
+    OptionLike,
+    OptionOrResultLike,
+}
+
+impl OptionalFlowMode {
+    fn allows_enum_option(self) -> bool {
+        matches!(self, Self::OptionLike | Self::OptionOrResultLike)
+    }
+
+    fn allows_result(self) -> bool {
+        matches!(self, Self::OptionOrResultLike)
+    }
+}
+
+enum OptionalFlowResolution {
+    Known(Ty),
+    Unknown,
+    Invalid,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProjectionRecordingMode {
+    None,
+    ConcreteUseSite,
+}
+
+#[derive(Clone)]
+struct AssocBindingSource {
+    ty: Ty,
+    span: Span,
+}
+
 /// Information about a local variable.
 /// 局部变量的信息。
 #[derive(Clone)]
@@ -116,21 +153,23 @@ struct StructInfo {
 /// Information about an enum type definition.
 /// 枚举类型定义的信息。
 #[derive(Clone)]
-struct EnumInfo {
+pub(crate) struct EnumInfo {
     /// Variant constructors (name -> field types). / 变体构造函数（名称 -> 字段类型）。
-    variants: HashMap<String, Vec<Ty>>,
+    pub(crate) variants: HashMap<String, Vec<Ty>>,
+    /// Declaration order of variants. / 变体声明顺序。
+    pub(crate) variant_order: Vec<String>,
 }
 
 /// Information about a variant constructor.
 /// 变体构造器的信息。
 #[derive(Clone)]
-struct VariantInfo {
+pub(crate) struct VariantInfo {
     /// Enum definition ID. / 枚举定义 ID。
-    enum_id: DefId,
+    pub(crate) enum_id: DefId,
     /// Variant name. / 变体名称。
-    name: String,
+    pub(crate) name: String,
     /// Field types. / 字段类型。
-    fields: Vec<Ty>,
+    pub(crate) fields: Vec<Ty>,
 }
 
 /// Information about a type alias.
@@ -185,6 +224,9 @@ pub struct TypeChecker {
     /// Resolved method call targets keyed by expression span.
     /// 按表达式 span 存储的方法调用解析结果。
     method_resolutions: HashMap<Span, DefId>,
+    /// Resolved associated-type projections keyed by explicit type-use span.
+    /// 按显式类型使用位置 span 存储的关联类型投影解析结果。
+    assoc_projection_resolutions: HashMap<Span, Ty>,
     /// Whether to check for unused variables.
     /// 是否检查未使用的变量。
     check_unused: bool,
@@ -208,6 +250,7 @@ impl TypeChecker {
             type_aliases: HashMap::new(),
             diagnostics: Vec::new(),
             method_resolutions: HashMap::new(),
+            assoc_projection_resolutions: HashMap::new(),
             check_unused: true,
         }
     }
@@ -310,15 +353,25 @@ impl TypeChecker {
                     }
                 }
 
-                self.check_assoc_type_bounds(&trait_info, &impl_info);
-                self.check_impl_method_signatures(&trait_info, &impl_info);
+                let canonical_assoc_types =
+                    self.canonical_impl_assoc_types(&trait_info, &impl_info);
+                self.check_assoc_type_bounds(&trait_info, &impl_info, &canonical_assoc_types);
+                self.check_impl_method_signatures(&trait_info, &impl_info, &canonical_assoc_types);
+                self.canonicalize_trait_impl_signatures(
+                    impl_id,
+                    &impl_info,
+                    &canonical_assoc_types,
+                );
             }
         }
     }
 
-    fn check_impl_method_signatures(&mut self, trait_info: &TraitInfo, impl_info: &ImplInfo) {
-        let assoc_types = self.impl_signature_assoc_types(trait_info, impl_info);
-
+    fn check_impl_method_signatures(
+        &mut self,
+        trait_info: &TraitInfo,
+        impl_info: &ImplInfo,
+        assoc_types: &HashMap<String, Ty>,
+    ) {
         for trait_method in &trait_info.methods {
             let Some(impl_method) = impl_info
                 .methods
@@ -331,22 +384,38 @@ impl TypeChecker {
             let expected_params: Vec<Ty> = trait_method
                 .params
                 .iter()
-                .map(|ty| self.resolve_impl_signature_type(ty, &impl_info.self_ty, &assoc_types))
+                .map(|ty| {
+                    self.resolve_impl_signature_type(
+                        ty,
+                        &impl_info.self_ty,
+                        assoc_types,
+                        ProjectionRecordingMode::None,
+                    )
+                })
                 .collect();
             let actual_params: Vec<Ty> = impl_method
                 .params
                 .iter()
-                .map(|ty| self.resolve_impl_signature_type(ty, &impl_info.self_ty, &assoc_types))
+                .map(|ty| {
+                    self.resolve_impl_signature_type(
+                        ty,
+                        &impl_info.self_ty,
+                        assoc_types,
+                        ProjectionRecordingMode::ConcreteUseSite,
+                    )
+                })
                 .collect();
             let expected_return = self.resolve_impl_signature_type(
                 &trait_method.return_ty,
                 &impl_info.self_ty,
-                &assoc_types,
+                assoc_types,
+                ProjectionRecordingMode::None,
             );
             let actual_return = self.resolve_impl_signature_type(
                 &impl_method.return_ty,
                 &impl_info.self_ty,
-                &assoc_types,
+                assoc_types,
+                ProjectionRecordingMode::ConcreteUseSite,
             );
 
             let params_match =
@@ -364,58 +433,112 @@ impl TypeChecker {
             let expected_signature =
                 Self::format_method_signature(&expected_params, &expected_return);
             let actual_signature = Self::format_method_signature(&actual_params, &actual_return);
+            let mut local_projection_resolutions = HashMap::new();
+            for ty in trait_method
+                .params
+                .iter()
+                .chain(std::iter::once(&trait_method.return_ty))
+            {
+                Self::collect_assoc_projection_resolutions_for_types(
+                    ty,
+                    assoc_types,
+                    &mut local_projection_resolutions,
+                );
+            }
+            let diag = Diagnostic::error(
+                DiagnosticKind::Type,
+                impl_method.span,
+                format!(
+                    "impl method `{}` does not match trait `{}` signature",
+                    impl_method.name, trait_info.name
+                ),
+            )
+            .with_note(format!("trait expects {expected_signature}"))
+            .with_note(format!("impl provides {actual_signature}"));
             self.diagnostics.push(
-                Diagnostic::error(
-                    DiagnosticKind::Type,
-                    impl_method.span,
-                    format!(
-                        "impl method `{}` does not match trait `{}` signature",
-                        impl_method.name, trait_info.name
-                    ),
-                )
-                .with_note(format!("trait expects {expected_signature}"))
-                .with_note(format!("impl provides {actual_signature}")),
+                self.with_assoc_projection_labels_from(
+                    diag,
+                    trait_method
+                        .params
+                        .iter()
+                        .chain(std::iter::once(&trait_method.return_ty))
+                        .chain(impl_method.params.iter())
+                        .chain(std::iter::once(&impl_method.return_ty)),
+                    Some(&local_projection_resolutions),
+                ),
             );
         }
     }
 
-    fn impl_signature_assoc_types(
-        &self,
-        trait_info: &TraitInfo,
+    fn canonicalize_trait_impl_signatures(
+        &mut self,
+        impl_id: ImplId,
         impl_info: &ImplInfo,
-    ) -> HashMap<String, Ty> {
-        let mut assoc_types: HashMap<String, Ty> = impl_info
-            .assoc_types
-            .iter()
-            .map(|assoc| (assoc.name.clone(), assoc.ty.clone()))
-            .collect();
+        assoc_types: &HashMap<String, Ty>,
+    ) {
+        self.trait_resolver
+            .normalize_impl_assoc_types(impl_id, assoc_types);
 
-        for assoc in &trait_info.assoc_types {
-            if assoc_types.contains_key(&assoc.name) {
-                continue;
-            }
-            if let Some(default) = &assoc.default {
-                assoc_types.insert(assoc.name.clone(), default.clone());
-            }
+        for method in &impl_info.methods {
+            let canonical_params: Vec<Ty> = method
+                .params
+                .iter()
+                .map(|ty| {
+                    self.resolve_impl_signature_type(
+                        ty,
+                        &impl_info.self_ty,
+                        assoc_types,
+                        ProjectionRecordingMode::ConcreteUseSite,
+                    )
+                })
+                .collect();
+            let canonical_return = self.resolve_impl_signature_type(
+                &method.return_ty,
+                &impl_info.self_ty,
+                assoc_types,
+                ProjectionRecordingMode::ConcreteUseSite,
+            );
+
+            self.trait_resolver.normalize_impl_method_signature(
+                impl_id,
+                method.def_id,
+                canonical_params,
+                canonical_return,
+            );
         }
-
-        assoc_types
     }
 
     fn resolve_impl_signature_type(
-        &self,
+        &mut self,
         ty: &Ty,
         self_ty: &Ty,
         assoc_types: &HashMap<String, Ty>,
+        recording_mode: ProjectionRecordingMode,
     ) -> Ty {
         match &ty.kind {
             TyKind::SelfType => self_ty.clone(),
-            TyKind::SelfAssoc(name) => assoc_types.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            TyKind::SelfAssoc(name) => match assoc_types.get(name).cloned() {
+                Some(resolved) => {
+                    if matches!(recording_mode, ProjectionRecordingMode::ConcreteUseSite) {
+                        self.assoc_projection_resolutions
+                            .insert(ty.span, resolved.clone());
+                    }
+                    resolved
+                }
+                None => ty.clone(),
+            },
             TyKind::Named(id, args) => Ty {
                 kind: TyKind::Named(
                     *id,
                     args.iter()
-                        .map(|arg| self.resolve_impl_signature_type(arg, self_ty, assoc_types))
+                        .map(|arg| {
+                            self.resolve_impl_signature_type(
+                                arg,
+                                self_ty,
+                                assoc_types,
+                                recording_mode,
+                            )
+                        })
                         .collect(),
                 ),
                 span: ty.span,
@@ -424,9 +547,21 @@ impl TypeChecker {
                 kind: TyKind::Fn(
                     params
                         .iter()
-                        .map(|param| self.resolve_impl_signature_type(param, self_ty, assoc_types))
+                        .map(|param| {
+                            self.resolve_impl_signature_type(
+                                param,
+                                self_ty,
+                                assoc_types,
+                                recording_mode,
+                            )
+                        })
                         .collect(),
-                    Box::new(self.resolve_impl_signature_type(ret, self_ty, assoc_types)),
+                    Box::new(self.resolve_impl_signature_type(
+                        ret,
+                        self_ty,
+                        assoc_types,
+                        recording_mode,
+                    )),
                 ),
                 span: ty.span,
             },
@@ -434,7 +569,14 @@ impl TypeChecker {
                 kind: TyKind::Tuple(
                     items
                         .iter()
-                        .map(|item| self.resolve_impl_signature_type(item, self_ty, assoc_types))
+                        .map(|item| {
+                            self.resolve_impl_signature_type(
+                                item,
+                                self_ty,
+                                assoc_types,
+                                recording_mode,
+                            )
+                        })
                         .collect(),
                 ),
                 span: ty.span,
@@ -446,7 +588,50 @@ impl TypeChecker {
                         .map(|(name, field_ty)| {
                             (
                                 name.clone(),
-                                self.resolve_impl_signature_type(field_ty, self_ty, assoc_types),
+                                self.resolve_impl_signature_type(
+                                    field_ty,
+                                    self_ty,
+                                    assoc_types,
+                                    recording_mode,
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::DynamicRecord(fields) => Ty {
+                kind: TyKind::DynamicRecord(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                self.resolve_impl_signature_type(
+                                    field_ty,
+                                    self_ty,
+                                    assoc_types,
+                                    recording_mode,
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::SafeRecordBase(fields) => Ty {
+                kind: TyKind::SafeRecordBase(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                self.resolve_impl_signature_type(
+                                    field_ty,
+                                    self_ty,
+                                    assoc_types,
+                                    recording_mode,
+                                ),
                             )
                         })
                         .collect(),
@@ -456,7 +641,12 @@ impl TypeChecker {
             TyKind::Forall(params, body) => Ty {
                 kind: TyKind::Forall(
                     params.clone(),
-                    Box::new(self.resolve_impl_signature_type(body, self_ty, assoc_types)),
+                    Box::new(self.resolve_impl_signature_type(
+                        body,
+                        self_ty,
+                        assoc_types,
+                        recording_mode,
+                    )),
                 ),
                 span: ty.span,
             },
@@ -512,6 +702,50 @@ impl TypeChecker {
                         },
                     )
             }
+            (TyKind::DynamicRecord(left_fields), TyKind::Record(right_fields))
+            | (TyKind::Record(right_fields), TyKind::DynamicRecord(left_fields)) => {
+                left_fields.iter().all(|(left_name, left_ty)| {
+                    right_fields
+                        .iter()
+                        .find(|(right_name, _)| right_name == left_name)
+                        .is_some_and(|(_, right_ty)| {
+                            self.method_signature_ty_compatible(left_ty, right_ty)
+                        })
+                })
+            }
+            (TyKind::DynamicRecord(left_fields), TyKind::DynamicRecord(right_fields)) => {
+                left_fields.iter().all(|(left_name, left_ty)| {
+                    right_fields
+                        .iter()
+                        .find(|(right_name, _)| right_name == left_name)
+                        .is_none_or(|(_, right_ty)| {
+                            self.method_signature_ty_compatible(left_ty, right_ty)
+                        })
+                })
+            }
+            (TyKind::SafeRecordBase(left_fields), TyKind::Record(right_fields))
+            | (TyKind::Record(right_fields), TyKind::SafeRecordBase(left_fields))
+            | (TyKind::SafeRecordBase(left_fields), TyKind::DynamicRecord(right_fields))
+            | (TyKind::DynamicRecord(right_fields), TyKind::SafeRecordBase(left_fields)) => {
+                left_fields.iter().all(|(left_name, left_ty)| {
+                    right_fields
+                        .iter()
+                        .find(|(right_name, _)| right_name == left_name)
+                        .is_none_or(|(_, right_ty)| {
+                            self.method_signature_ty_compatible(left_ty, right_ty)
+                        })
+                })
+            }
+            (TyKind::SafeRecordBase(left_fields), TyKind::SafeRecordBase(right_fields)) => {
+                left_fields.iter().all(|(left_name, left_ty)| {
+                    right_fields
+                        .iter()
+                        .find(|(right_name, _)| right_name == left_name)
+                        .is_none_or(|(_, right_ty)| {
+                            self.method_signature_ty_compatible(left_ty, right_ty)
+                        })
+                })
+            }
             (TyKind::Forall(_, left), TyKind::Forall(_, right)) => {
                 self.method_signature_ty_compatible(left, right)
             }
@@ -526,6 +760,125 @@ impl TypeChecker {
             .collect::<Vec<_>>()
             .join(", ");
         format!("({params}) -> {}", format_type(ret))
+    }
+
+    fn with_assoc_projection_labels<'a>(
+        &self,
+        diag: Diagnostic,
+        tys: impl IntoIterator<Item = &'a Ty>,
+    ) -> Diagnostic {
+        self.with_assoc_projection_labels_from(diag, tys, None)
+    }
+
+    fn with_assoc_projection_labels_from<'a>(
+        &self,
+        mut diag: Diagnostic,
+        tys: impl IntoIterator<Item = &'a Ty>,
+        extra_resolutions: Option<&HashMap<Span, Ty>>,
+    ) -> Diagnostic {
+        let mut seen = HashSet::new();
+        for ty in tys {
+            self.collect_assoc_projection_labels(ty, extra_resolutions, &mut seen, &mut diag);
+        }
+        diag
+    }
+
+    fn collect_assoc_projection_labels(
+        &self,
+        ty: &Ty,
+        extra_resolutions: Option<&HashMap<Span, Ty>>,
+        seen: &mut HashSet<Span>,
+        diag: &mut Diagnostic,
+    ) {
+        match &ty.kind {
+            TyKind::SelfAssoc(name) => {
+                if seen.insert(ty.span)
+                    && let Some(resolved) = self
+                        .assoc_projection_resolution(ty.span)
+                        .or_else(|| extra_resolutions.and_then(|map| map.get(&ty.span).cloned()))
+                {
+                    diag.labels.push(Label::new(
+                        ty.span,
+                        format!(
+                            "`Self.{name}` resolves to `{}` here",
+                            format_type(&resolved)
+                        ),
+                    ));
+                }
+            }
+            TyKind::Named(_, args) => {
+                for arg in args {
+                    self.collect_assoc_projection_labels(arg, extra_resolutions, seen, diag);
+                }
+            }
+            TyKind::Fn(params, ret) => {
+                for param in params {
+                    self.collect_assoc_projection_labels(param, extra_resolutions, seen, diag);
+                }
+                self.collect_assoc_projection_labels(ret, extra_resolutions, seen, diag);
+            }
+            TyKind::Tuple(items) => {
+                for item in items {
+                    self.collect_assoc_projection_labels(item, extra_resolutions, seen, diag);
+                }
+            }
+            TyKind::Record(fields)
+            | TyKind::DynamicRecord(fields)
+            | TyKind::SafeRecordBase(fields) => {
+                for (_, field_ty) in fields {
+                    self.collect_assoc_projection_labels(field_ty, extra_resolutions, seen, diag);
+                }
+            }
+            TyKind::Forall(_, inner) => {
+                self.collect_assoc_projection_labels(inner, extra_resolutions, seen, diag);
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_assoc_projection_resolutions_for_types(
+        ty: &Ty,
+        assoc_types: &HashMap<String, Ty>,
+        out: &mut HashMap<Span, Ty>,
+    ) {
+        match &ty.kind {
+            TyKind::SelfAssoc(name) => {
+                if let Some(resolved) = assoc_types.get(name).cloned() {
+                    out.insert(ty.span, resolved);
+                }
+            }
+            TyKind::Named(_, args) => {
+                for arg in args {
+                    Self::collect_assoc_projection_resolutions_for_types(arg, assoc_types, out);
+                }
+            }
+            TyKind::Fn(params, ret) => {
+                for param in params {
+                    Self::collect_assoc_projection_resolutions_for_types(param, assoc_types, out);
+                }
+                Self::collect_assoc_projection_resolutions_for_types(ret, assoc_types, out);
+            }
+            TyKind::Tuple(items) => {
+                for item in items {
+                    Self::collect_assoc_projection_resolutions_for_types(item, assoc_types, out);
+                }
+            }
+            TyKind::Record(fields)
+            | TyKind::DynamicRecord(fields)
+            | TyKind::SafeRecordBase(fields) => {
+                for (_, field_ty) in fields {
+                    Self::collect_assoc_projection_resolutions_for_types(
+                        field_ty,
+                        assoc_types,
+                        out,
+                    );
+                }
+            }
+            TyKind::Forall(_, inner) => {
+                Self::collect_assoc_projection_resolutions_for_types(inner, assoc_types, out);
+            }
+            _ => {}
+        }
     }
 
     /// Get the trait resolver (for external use).
@@ -616,6 +969,26 @@ impl TypeChecker {
         self.method_resolutions.clear();
     }
 
+    /// Get resolved associated-type projections.
+    /// 获取已解析的关联类型投影结果。
+    pub fn assoc_projection_resolutions(&self) -> &HashMap<Span, Ty> {
+        &self.assoc_projection_resolutions
+    }
+
+    /// Look up one resolved associated-type projection by type-use span.
+    /// 按类型使用位置 span 查询单个关联类型投影结果。
+    pub fn assoc_projection_resolution(&self, span: Span) -> Option<Ty> {
+        self.assoc_projection_resolutions
+            .get(&span)
+            .map(|ty| self.apply(ty))
+    }
+
+    /// Clear resolved associated-type projections while keeping accumulated semantic state.
+    /// 清空已解析的关联类型投影结果，但保留已累积的语义状态。
+    pub fn clear_assoc_projection_resolutions(&mut self) {
+        self.assoc_projection_resolutions.clear();
+    }
+
     /// Look up the inferred type of a global definition.
     /// 查询某个全局定义推断出的类型。
     pub fn global_type(&self, def_id: DefId) -> Option<Ty> {
@@ -674,27 +1047,48 @@ impl TypeChecker {
         }
     }
 
-    fn check_assoc_type_bounds(&mut self, trait_info: &TraitInfo, impl_info: &ImplInfo) {
+    fn check_assoc_type_bounds(
+        &mut self,
+        trait_info: &TraitInfo,
+        impl_info: &ImplInfo,
+        canonical_assoc_types: &HashMap<String, Ty>,
+    ) {
         if trait_info.assoc_types.is_empty() {
             return;
         }
+
+        let impl_assoc_spans: HashMap<&str, Span> = impl_info
+            .assoc_types
+            .iter()
+            .map(|assoc| (assoc.name.as_str(), assoc.span))
+            .collect();
+        let impl_span = self
+            .global_spans
+            .get(&impl_info.def_id)
+            .copied()
+            .unwrap_or(Span::DUMMY);
 
         for assoc_def in &trait_info.assoc_types {
             if assoc_def.bounds.is_empty() {
                 continue;
             }
 
-            let assoc_impl = impl_info
-                .assoc_types
-                .iter()
-                .find(|assoc| assoc.name == assoc_def.name);
-
-            let Some(assoc_impl) = assoc_impl else {
+            let Some(assoc_ty) = canonical_assoc_types.get(&assoc_def.name) else {
                 continue;
             };
-
-            let assoc_ty = &assoc_impl.ty;
             let assoc_ty_str = format_type(assoc_ty);
+            let assoc_span = impl_assoc_spans
+                .get(assoc_def.name.as_str())
+                .copied()
+                .unwrap_or(impl_span);
+            let assoc_label = if impl_assoc_spans.contains_key(assoc_def.name.as_str()) {
+                format!("associated type resolves to `{}` here", assoc_ty_str)
+            } else {
+                format!(
+                    "default associated type resolves to `{}` for this impl",
+                    assoc_ty_str
+                )
+            };
 
             for bound in &assoc_def.bounds {
                 if self
@@ -712,18 +1106,206 @@ impl TypeChecker {
                 );
 
                 self.diagnostics.push(
-                    Diagnostic::error(DiagnosticKind::Type, assoc_impl.span, message)
+                    Diagnostic::error(DiagnosticKind::Type, assoc_span, message)
                         .with_code(ErrorCode::TraitNotImplemented)
-                        .with_label(Label::new(
-                            assoc_impl.span,
-                            format!("this is `{}`", assoc_ty_str),
-                        ))
+                        .with_label(Label::new(assoc_span, assoc_label.clone()))
                         .with_note(format!(
                             "`{}` does not implement `{}`",
                             assoc_ty_str, bound_name
                         )),
                 );
             }
+        }
+    }
+
+    fn canonical_impl_assoc_types(
+        &mut self,
+        trait_info: &TraitInfo,
+        impl_info: &ImplInfo,
+    ) -> HashMap<String, Ty> {
+        let mut sources = HashMap::new();
+
+        for assoc in &trait_info.assoc_types {
+            if let Some(default) = &assoc.default {
+                sources.insert(
+                    assoc.name.clone(),
+                    AssocBindingSource {
+                        ty: default.clone(),
+                        span: default.span,
+                    },
+                );
+            }
+        }
+
+        for assoc in &impl_info.assoc_types {
+            sources.insert(
+                assoc.name.clone(),
+                AssocBindingSource {
+                    ty: assoc.ty.clone(),
+                    span: assoc.span,
+                },
+            );
+        }
+
+        let mut resolved = HashMap::new();
+        let mut visiting = HashSet::new();
+        for name in sources.keys().cloned().collect::<Vec<_>>() {
+            let _ = self.resolve_canonical_impl_assoc_type(
+                &name,
+                &impl_info.self_ty,
+                &sources,
+                &mut resolved,
+                &mut visiting,
+            );
+        }
+
+        resolved
+    }
+
+    fn resolve_canonical_impl_assoc_type(
+        &mut self,
+        assoc_name: &str,
+        self_ty: &Ty,
+        sources: &HashMap<String, AssocBindingSource>,
+        resolved: &mut HashMap<String, Ty>,
+        visiting: &mut HashSet<String>,
+    ) -> Option<Ty> {
+        if let Some(ty) = resolved.get(assoc_name) {
+            return Some(ty.clone());
+        }
+
+        let source = sources.get(assoc_name)?;
+        if !visiting.insert(assoc_name.to_string()) {
+            self.error(
+                source.span,
+                format!("cyclic associated type definition `Self.{assoc_name}`"),
+            );
+            return Some(source.ty.clone());
+        }
+
+        let resolved_ty = self
+            .resolve_canonical_impl_assoc_value(&source.ty, self_ty, sources, resolved, visiting);
+        visiting.remove(assoc_name);
+        resolved.insert(assoc_name.to_string(), resolved_ty.clone());
+        Some(resolved_ty)
+    }
+
+    fn resolve_canonical_impl_assoc_value(
+        &mut self,
+        ty: &Ty,
+        self_ty: &Ty,
+        sources: &HashMap<String, AssocBindingSource>,
+        resolved: &mut HashMap<String, Ty>,
+        visiting: &mut HashSet<String>,
+    ) -> Ty {
+        match &ty.kind {
+            TyKind::SelfType => self_ty.clone(),
+            TyKind::SelfAssoc(name) => self
+                .resolve_canonical_impl_assoc_type(name, self_ty, sources, resolved, visiting)
+                .unwrap_or_else(|| {
+                    self.error(ty.span, format!("unknown associated type `Self.{name}`"));
+                    ty.clone()
+                }),
+            TyKind::Named(id, args) => Ty {
+                kind: TyKind::Named(
+                    *id,
+                    args.iter()
+                        .map(|arg| {
+                            self.resolve_canonical_impl_assoc_value(
+                                arg, self_ty, sources, resolved, visiting,
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Fn(params, ret) => Ty {
+                kind: TyKind::Fn(
+                    params
+                        .iter()
+                        .map(|param| {
+                            self.resolve_canonical_impl_assoc_value(
+                                param, self_ty, sources, resolved, visiting,
+                            )
+                        })
+                        .collect(),
+                    Box::new(self.resolve_canonical_impl_assoc_value(
+                        ret, self_ty, sources, resolved, visiting,
+                    )),
+                ),
+                span: ty.span,
+            },
+            TyKind::Tuple(items) => Ty {
+                kind: TyKind::Tuple(
+                    items
+                        .iter()
+                        .map(|item| {
+                            self.resolve_canonical_impl_assoc_value(
+                                item, self_ty, sources, resolved, visiting,
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Record(fields) => Ty {
+                kind: TyKind::Record(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                self.resolve_canonical_impl_assoc_value(
+                                    field_ty, self_ty, sources, resolved, visiting,
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::DynamicRecord(fields) => Ty {
+                kind: TyKind::DynamicRecord(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                self.resolve_canonical_impl_assoc_value(
+                                    field_ty, self_ty, sources, resolved, visiting,
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::SafeRecordBase(fields) => Ty {
+                kind: TyKind::SafeRecordBase(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                self.resolve_canonical_impl_assoc_value(
+                                    field_ty, self_ty, sources, resolved, visiting,
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Forall(params, body) => Ty {
+                kind: TyKind::Forall(
+                    params.clone(),
+                    Box::new(self.resolve_canonical_impl_assoc_value(
+                        body, self_ty, sources, resolved, visiting,
+                    )),
+                ),
+                span: ty.span,
+            },
+            _ => ty.clone(),
         }
     }
 
@@ -1187,6 +1769,26 @@ impl TypeChecker {
                 )
             }
             "math.pi" | "math.e" | "math.inf" | "math.nan" => builtin_ty(TyKind::Float, span),
+            "path.fromString" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_path(span),
+                span,
+            ),
+            "path.joinPath" => builtin_fn(
+                vec![builtin_path(span), builtin_ty(TyKind::String, span)],
+                builtin_path(span),
+                span,
+            ),
+            "path.parentPath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_option(builtin_path(span), span),
+                span,
+            ),
+            "path.isAbsolutePath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
             "path.join" => builtin_fn(
                 vec![
                     builtin_ty(TyKind::String, span),
@@ -1210,6 +1812,11 @@ impl TypeChecker {
                 builtin_ty(TyKind::String, span),
                 span,
             ),
+            "io.readFilePath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
             "io.readDir" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_string_list(span),
@@ -1230,6 +1837,21 @@ impl TypeChecker {
                 };
                 builtin_fn(vec![builtin_ty(TyKind::String, span)], ret_ty, span)
             }
+            "io.pathExistsPath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "io.isDirPath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "io.isFilePath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
             "io.getEnv" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_string_option(span),
@@ -1238,6 +1860,37 @@ impl TypeChecker {
             "io.currentDir" | "io.currentSystem" => {
                 builtin_fn(Vec::new(), builtin_ty(TyKind::String, span), span)
             }
+            "io.currentDirPath" => builtin_fn(Vec::new(), builtin_path(span), span),
+            "io.command" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span), builtin_string_list(span)],
+                builtin_command(span),
+                span,
+            ),
+            "io.execCommand" => builtin_fn(
+                vec![builtin_command(span)],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.processSuccess" => builtin_fn(
+                vec![builtin_process_result(span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "io.processStdout" => builtin_fn(
+                vec![builtin_process_result(span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "io.processCode" => builtin_fn(
+                vec![builtin_process_result(span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "io.processStderr" => builtin_fn(
+                vec![builtin_process_result(span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
             "io.homeDir" => builtin_fn(Vec::new(), builtin_string_option(span), span),
             "io.exec" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span), builtin_string_list(span)],
@@ -1502,23 +2155,57 @@ impl TypeChecker {
             })
     }
 
-    fn try_result_type(&mut self, inner_ty: Ty, span: Span) -> Ty {
-        let inner_ty = self.apply(&inner_ty);
-        match inner_ty.kind {
+    fn resolve_optional_flow_payload(
+        &mut self,
+        ty: Ty,
+        span: Span,
+        mode: OptionalFlowMode,
+    ) -> OptionalFlowResolution {
+        let ty = self.apply(&ty);
+        match ty.kind {
             TyKind::Named(def_id, args) if is_builtin_option_type(def_id) => {
-                args.into_iter().next().unwrap_or_else(|| self.fresh_var())
+                OptionalFlowResolution::Known(
+                    args.into_iter().next().unwrap_or_else(|| self.fresh_var()),
+                )
             }
-            TyKind::Named(def_id, args) if is_builtin_result_type(def_id) => {
-                args.into_iter().next().unwrap_or_else(|| self.fresh_var())
+            TyKind::Named(def_id, args)
+                if mode.allows_result() && is_builtin_result_type(def_id) =>
+            {
+                OptionalFlowResolution::Known(
+                    args.into_iter().next().unwrap_or_else(|| self.fresh_var()),
+                )
             }
-            TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Some", "None"]) => self
-                .try_payload_type(def_id, "Some", span)
-                .unwrap_or_else(|| self.fresh_var()),
-            TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Ok", "Err"]) => self
-                .try_payload_type(def_id, "Ok", span)
-                .unwrap_or_else(|| self.fresh_var()),
-            TyKind::Var(_) | TyKind::Unknown => self.fresh_var(),
-            _ => {
+            TyKind::Named(def_id, _)
+                if mode.allows_enum_option()
+                    && self.enum_has_variants(def_id, &["Some", "None"]) =>
+            {
+                OptionalFlowResolution::Known(
+                    self.try_payload_type(def_id, "Some", span)
+                        .unwrap_or_else(|| self.fresh_var()),
+                )
+            }
+            TyKind::Named(def_id, _)
+                if mode.allows_result() && self.enum_has_variants(def_id, &["Ok", "Err"]) =>
+            {
+                OptionalFlowResolution::Known(
+                    self.try_payload_type(def_id, "Ok", span)
+                        .unwrap_or_else(|| self.fresh_var()),
+                )
+            }
+            TyKind::Var(_) | TyKind::Unknown => OptionalFlowResolution::Unknown,
+            _ => OptionalFlowResolution::Invalid,
+        }
+    }
+
+    fn try_result_type(&mut self, inner_ty: Ty, span: Span) -> Ty {
+        match self.resolve_optional_flow_payload(
+            inner_ty,
+            span,
+            OptionalFlowMode::OptionOrResultLike,
+        ) {
+            OptionalFlowResolution::Known(payload_ty) => payload_ty,
+            OptionalFlowResolution::Unknown => self.fresh_var(),
+            OptionalFlowResolution::Invalid => {
                 self.error(span, "`?` expects Option-like or Result-like value");
                 self.fresh_var()
             }
@@ -1526,399 +2213,244 @@ impl TypeChecker {
     }
 
     fn coalesce_result_type(&mut self, value_ty: Ty, default_ty: Ty, span: Span) -> Ty {
-        let value_ty = self.apply(&value_ty);
-        match value_ty.kind {
-            TyKind::Named(def_id, args) if is_builtin_option_type(def_id) => {
-                let payload_ty = args.into_iter().next().unwrap_or_else(|| self.fresh_var());
+        match self.resolve_optional_flow_payload(
+            value_ty.clone(),
+            span,
+            OptionalFlowMode::OptionLike,
+        ) {
+            OptionalFlowResolution::Known(payload_ty) => {
                 self.unify(&payload_ty, &default_ty, span);
                 self.apply(&payload_ty)
             }
-            TyKind::Named(def_id, _) if self.enum_has_variants(def_id, &["Some", "None"]) => {
-                let payload_ty = self
-                    .try_payload_type(def_id, "Some", span)
-                    .unwrap_or_else(|| self.fresh_var());
-                self.unify(&payload_ty, &default_ty, span);
-                self.apply(&payload_ty)
-            }
-            _ => {
+            OptionalFlowResolution::Unknown => {
+                let value_ty = self.apply(&value_ty);
                 self.unify(&value_ty, &default_ty, span);
                 self.apply(&value_ty)
             }
+            OptionalFlowResolution::Invalid => {
+                self.error(span, "`??` expects Option-like value");
+                self.fresh_var()
+            }
         }
     }
 
-    fn bool_pattern_coverage(&self, pattern: &Pattern) -> (bool, bool) {
-        match &pattern.kind {
-            PatternKind::Wildcard | PatternKind::Var(_, _) => (true, true),
-            PatternKind::Binding(_, _, inner) => self.bool_pattern_coverage(inner),
-            PatternKind::Literal(Literal::Bool(value)) => (*value, !*value),
-            PatternKind::Or(patterns) => patterns.iter().fold((false, false), |(t, f), pattern| {
-                let (covers_true, covers_false) = self.bool_pattern_coverage(pattern);
-                (t || covers_true, f || covers_false)
-            }),
-            _ => (false, false),
+    fn record_field_type(&mut self, fields: &[(String, Ty)], field: &str, span: Span) -> Ty {
+        for (name, ty) in fields {
+            if name == field {
+                return ty.clone();
+            }
         }
+        self.error(span, format!("no field '{}' in record", field));
+        self.fresh_var()
     }
 
-    fn pattern_covers_unit(&self, pattern: &Pattern) -> bool {
-        match &pattern.kind {
-            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
-            PatternKind::Binding(_, _, inner) => self.pattern_covers_unit(inner),
-            PatternKind::Literal(Literal::Unit) => true,
-            PatternKind::Or(patterns) => patterns
-                .iter()
-                .any(|pattern| self.pattern_covers_unit(pattern)),
-            _ => false,
-        }
-    }
-
-    fn pattern_is_irrefutable_for(&self, pattern: &Pattern, expected: &Ty) -> bool {
-        let expected = self.apply(expected);
-        match &pattern.kind {
-            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
-            PatternKind::Binding(_, _, inner) => self.pattern_is_irrefutable_for(inner, &expected),
-            PatternKind::Literal(Literal::Unit) => matches!(expected.kind, TyKind::Unit),
-            PatternKind::Tuple(patterns) => match &expected.kind {
-                TyKind::Tuple(elem_tys) if elem_tys.len() == patterns.len() => patterns
-                    .iter()
-                    .zip(elem_tys.iter())
-                    .all(|(pattern, ty)| self.pattern_is_irrefutable_for(pattern, ty)),
-                _ => false,
-            },
-            PatternKind::Constructor(def_id, patterns) => {
-                let Some(variant) = self.variants.get(def_id) else {
-                    return false;
-                };
-                let TyKind::Named(enum_id, _) = expected.kind else {
-                    return false;
-                };
-                if variant.enum_id != enum_id {
-                    return false;
-                }
-                let Some(enum_info) = self.enums.get(&enum_id) else {
-                    return false;
-                };
-                if enum_info.variants.len() != 1 || variant.fields.len() != patterns.len() {
-                    return false;
-                }
-                patterns
-                    .iter()
-                    .zip(variant.fields.iter())
-                    .all(|(pattern, ty)| self.pattern_is_irrefutable_for(pattern, ty))
-            }
-            PatternKind::Or(patterns) => {
-                let (covers_true, covers_false) = self.bool_pattern_coverage(pattern);
-                matches!(expected.kind, TyKind::Bool) && covers_true && covers_false
-                    || patterns
-                        .iter()
-                        .any(|pattern| self.pattern_is_irrefutable_for(pattern, &expected))
-            }
-            _ => false,
-        }
-    }
-
-    fn pattern_covers_enum_variant(
-        &self,
-        pattern: &Pattern,
-        enum_id: DefId,
-        variant_name: &str,
-    ) -> bool {
-        match &pattern.kind {
-            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
-            PatternKind::Binding(_, _, inner) => {
-                self.pattern_covers_enum_variant(inner, enum_id, variant_name)
-            }
-            PatternKind::Constructor(def_id, patterns) => {
-                let Some(variant) = self.variants.get(def_id) else {
-                    return false;
-                };
-                if variant.enum_id != enum_id
-                    || variant.name != variant_name
-                    || variant.fields.len() != patterns.len()
-                {
-                    return false;
-                }
-                patterns
-                    .iter()
-                    .zip(variant.fields.iter())
-                    .all(|(pattern, ty)| self.pattern_is_irrefutable_for(pattern, ty))
-            }
-            PatternKind::Or(patterns) => patterns
-                .iter()
-                .any(|pattern| self.pattern_covers_enum_variant(pattern, enum_id, variant_name)),
-            _ => false,
-        }
-    }
-
-    fn pattern_covers_builtin_variant(
-        &self,
-        pattern: &Pattern,
-        variant_name: &str,
-        payload_ty: Option<&Ty>,
-    ) -> bool {
-        match &pattern.kind {
-            PatternKind::Wildcard | PatternKind::Var(_, _) => true,
-            PatternKind::Binding(_, _, inner) => {
-                self.pattern_covers_builtin_variant(inner, variant_name, payload_ty)
-            }
-            PatternKind::Constructor(def_id, patterns) => {
-                match (
-                    builtin_constructor_name(*def_id),
-                    variant_name,
-                    patterns.as_slice(),
-                ) {
-                    (Some("Some"), "Some", [pattern])
-                    | (Some("Ok"), "Ok", [pattern])
-                    | (Some("Err"), "Err", [pattern]) => {
-                        payload_ty.is_some_and(|ty| self.pattern_is_irrefutable_for(pattern, ty))
-                    }
-                    (Some("None"), "None", []) => true,
-                    _ => false,
-                }
-            }
-            PatternKind::Or(patterns) => patterns.iter().any(|pattern| {
-                self.pattern_covers_builtin_variant(pattern, variant_name, payload_ty)
-            }),
-            _ => false,
-        }
-    }
-
-    fn missing_enum_patterns(&self, enum_id: DefId, covered_variants: &[String]) -> Vec<String> {
-        let Some(enum_info) = self.enums.get(&enum_id) else {
-            return Vec::new();
-        };
-
-        enum_info
-            .variants
+    fn dynamic_record_field_type(&mut self, fields: &[(String, Ty)], field: &str) -> Ty {
+        fields
             .iter()
-            .filter(|(name, _)| !covered_variants.iter().any(|covered| covered == *name))
-            .map(|(name, fields)| {
-                if fields.is_empty() {
-                    name.clone()
-                } else {
-                    let placeholders = std::iter::repeat_n("_", fields.len()).collect::<Vec<_>>();
-                    format!("{}({})", name, placeholders.join(", "))
+            .find_map(|(name, ty)| (name == field).then(|| ty.clone()))
+            .unwrap_or_else(|| self.fresh_var())
+    }
+
+    fn safe_record_base_field_type(&mut self, fields: &[(String, Ty)], field: &str) -> Ty {
+        fields
+            .iter()
+            .find_map(|(name, ty)| (name == field).then(|| ty.clone()))
+            .unwrap_or_else(|| self.fresh_var())
+    }
+
+    fn constrain_dynamic_record_field(&mut self, base_ty: &Ty, field: &str, span: Span) -> Ty {
+        let applied_base_ty = self.apply(base_ty);
+
+        match (&base_ty.kind, &applied_base_ty.kind) {
+            (_, TyKind::Record(fields)) => self.record_field_type(fields, field, span),
+            (TyKind::Var(var), TyKind::DynamicRecord(fields)) => {
+                let mut updated_fields = fields.clone();
+                if let Some((_, field_ty)) = updated_fields.iter().find(|(name, _)| name == field) {
+                    return field_ty.clone();
                 }
-            })
-            .collect()
+
+                let field_ty = self.fresh_var();
+                updated_fields.push((field.to_string(), field_ty.clone()));
+                self.subst.extend(
+                    *var,
+                    Ty {
+                        kind: TyKind::DynamicRecord(updated_fields),
+                        span: base_ty.span,
+                    },
+                );
+                field_ty
+            }
+            (TyKind::Var(var), TyKind::Var(_)) | (TyKind::Var(var), TyKind::Unknown) => {
+                let field_ty = self.fresh_var();
+                self.subst.extend(
+                    *var,
+                    Ty {
+                        kind: TyKind::DynamicRecord(vec![(field.to_string(), field_ty.clone())]),
+                        span: base_ty.span,
+                    },
+                );
+                field_ty
+            }
+            (TyKind::Var(var), TyKind::SafeRecordBase(fields)) => {
+                let mut updated_fields = fields.clone();
+                if let Some((_, field_ty)) = updated_fields.iter().find(|(name, _)| name == field) {
+                    return field_ty.clone();
+                }
+
+                let field_ty = self.fresh_var();
+                updated_fields.push((field.to_string(), field_ty.clone()));
+                self.subst.extend(
+                    *var,
+                    Ty {
+                        kind: TyKind::DynamicRecord(updated_fields),
+                        span: base_ty.span,
+                    },
+                );
+                field_ty
+            }
+            (_, TyKind::DynamicRecord(fields)) => self.dynamic_record_field_type(fields, field),
+            (_, TyKind::Unknown) | (_, TyKind::Var(_)) => self.fresh_var(),
+            _ => {
+                self.error(span, "field access on non-record type");
+                self.fresh_var()
+            }
+        }
+    }
+
+    fn safe_record_field_type(&mut self, fields: &[(String, Ty)], field: &str, span: Span) -> Ty {
+        let payload_ty = fields
+            .iter()
+            .find_map(|(name, ty)| (name == field).then(|| ty.clone()))
+            .unwrap_or_else(|| self.fresh_var());
+        builtin_option(payload_ty, span)
+    }
+
+    fn constrain_safe_record_base(&mut self, var: u32, span: Span, field: &str) -> Ty {
+        let field_ty = self.fresh_var();
+        self.subst.extend(
+            var,
+            Ty {
+                kind: TyKind::SafeRecordBase(vec![(field.to_string(), field_ty.clone())]),
+                span,
+            },
+        );
+        field_ty
+    }
+
+    fn extend_safe_record_base(
+        &mut self,
+        var: u32,
+        span: Span,
+        fields: &[(String, Ty)],
+        field: &str,
+    ) -> Ty {
+        if let Some((_, field_ty)) = fields.iter().find(|(name, _)| name == field) {
+            return field_ty.clone();
+        }
+
+        let field_ty = self.fresh_var();
+        let mut updated_fields = fields.to_vec();
+        updated_fields.push((field.to_string(), field_ty.clone()));
+        self.subst.extend(
+            var,
+            Ty {
+                kind: TyKind::SafeRecordBase(updated_fields),
+                span,
+            },
+        );
+        field_ty
+    }
+
+    fn safe_field_result_type(&mut self, base_ty: Ty, span: Span, field: &str) -> Ty {
+        let applied_base_ty = self.apply(&base_ty);
+        match (&base_ty.kind, &applied_base_ty.kind) {
+            (_, TyKind::Record(fields)) => self.safe_record_field_type(fields, field, span),
+            (_, TyKind::DynamicRecord(fields)) => {
+                builtin_option(self.dynamic_record_field_type(fields, field), span)
+            }
+            (TyKind::Var(var), TyKind::SafeRecordBase(fields)) => builtin_option(
+                self.extend_safe_record_base(*var, base_ty.span, fields, field),
+                span,
+            ),
+            (_, TyKind::SafeRecordBase(fields)) => {
+                builtin_option(self.safe_record_base_field_type(fields, field), span)
+            }
+            (TyKind::Var(var), TyKind::Var(_)) | (TyKind::Var(var), TyKind::Unknown) => {
+                builtin_option(
+                    self.constrain_safe_record_base(*var, base_ty.span, field),
+                    span,
+                )
+            }
+            (_, TyKind::Var(_)) | (_, TyKind::Unknown) => builtin_option(self.fresh_var(), span),
+            _ => match self.resolve_optional_flow_payload(
+                applied_base_ty.clone(),
+                span,
+                OptionalFlowMode::BuiltinOptionOnly,
+            ) {
+                OptionalFlowResolution::Known(payload_ty) => {
+                    let applied_payload_ty = self.apply(&payload_ty);
+                    match (&payload_ty.kind, &applied_payload_ty.kind) {
+                        (_, TyKind::Record(fields)) => {
+                            self.safe_record_field_type(fields, field, span)
+                        }
+                        (_, TyKind::DynamicRecord(fields)) => {
+                            builtin_option(self.dynamic_record_field_type(fields, field), span)
+                        }
+                        (TyKind::Var(var), TyKind::SafeRecordBase(fields)) => builtin_option(
+                            self.extend_safe_record_base(*var, payload_ty.span, fields, field),
+                            span,
+                        ),
+                        (_, TyKind::SafeRecordBase(fields)) => {
+                            builtin_option(self.safe_record_base_field_type(fields, field), span)
+                        }
+                        (TyKind::Var(var), TyKind::Var(_))
+                        | (TyKind::Var(var), TyKind::Unknown) => builtin_option(
+                            self.constrain_safe_record_base(*var, payload_ty.span, field),
+                            span,
+                        ),
+                        (_, TyKind::Var(_)) | (_, TyKind::Unknown) => {
+                            builtin_option(self.fresh_var(), span)
+                        }
+                        _ => {
+                            self.error(
+                                span,
+                                "safe field access requires a record or Option[Record]",
+                            );
+                            builtin_option(self.fresh_var(), span)
+                        }
+                    }
+                }
+                OptionalFlowResolution::Unknown => builtin_option(self.fresh_var(), span),
+                OptionalFlowResolution::Invalid => {
+                    self.error(
+                        span,
+                        "safe field access requires a record or Option[Record]",
+                    );
+                    builtin_option(self.fresh_var(), span)
+                }
+            },
+        }
     }
 
     fn check_match_coverage(&mut self, scrutinee_ty: &Ty, arms: &[MatchArm], span: Span) {
         let scrutinee_ty = self.apply(scrutinee_ty);
-        let mut coverage_complete_span = None;
+        let analysis = analyze_match(
+            &scrutinee_ty,
+            arms,
+            &PatternAnalysisContext {
+                enums: &self.enums,
+                variants: &self.variants,
+            },
+        );
 
-        match &scrutinee_ty.kind {
-            TyKind::Bool => {
-                let mut covers_true = false;
-                let mut covers_false = false;
+        if !analysis.missing_patterns.is_empty() {
+            self.diagnostics
+                .push(non_exhaustive_match(&analysis.missing_patterns, span));
+        }
 
-                for arm in arms {
-                    if let Some(previous_span) = coverage_complete_span {
-                        self.diagnostics
-                            .push(unreachable_pattern(arm.span, previous_span));
-                        continue;
-                    }
-                    if arm.guard.is_some() {
-                        continue;
-                    }
-                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        coverage_complete_span = Some(arm.span);
-                        covers_true = true;
-                        covers_false = true;
-                        continue;
-                    }
-
-                    let (arm_true, arm_false) = self.bool_pattern_coverage(&arm.pattern);
-                    covers_true |= arm_true;
-                    covers_false |= arm_false;
-
-                    if covers_true && covers_false {
-                        coverage_complete_span = Some(arm.span);
-                    }
-                }
-
-                let mut missing = Vec::new();
-                if !covers_true {
-                    missing.push("true".to_string());
-                }
-                if !covers_false {
-                    missing.push("false".to_string());
-                }
-                if !missing.is_empty() {
-                    self.diagnostics.push(non_exhaustive_match(&missing, span));
-                }
-            }
-
-            TyKind::Unit => {
-                let mut covered = false;
-
-                for arm in arms {
-                    if let Some(previous_span) = coverage_complete_span {
-                        self.diagnostics
-                            .push(unreachable_pattern(arm.span, previous_span));
-                        continue;
-                    }
-                    if arm.guard.is_some() {
-                        continue;
-                    }
-                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        coverage_complete_span = Some(arm.span);
-                        covered = true;
-                        continue;
-                    }
-
-                    covered |= self.pattern_covers_unit(&arm.pattern);
-
-                    if covered {
-                        coverage_complete_span = Some(arm.span);
-                    }
-                }
-
-                if !covered {
-                    self.diagnostics
-                        .push(non_exhaustive_match(&["()".to_string()], span));
-                }
-            }
-
-            TyKind::Named(def_id, args) if is_builtin_option_type(*def_id) => {
-                let payload_ty = args.first().cloned();
-                let mut covers_some = false;
-                let mut covers_none = false;
-
-                for arm in arms {
-                    if let Some(previous_span) = coverage_complete_span {
-                        self.diagnostics
-                            .push(unreachable_pattern(arm.span, previous_span));
-                        continue;
-                    }
-                    if arm.guard.is_some() {
-                        continue;
-                    }
-                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        coverage_complete_span = Some(arm.span);
-                        covers_some = true;
-                        covers_none = true;
-                        continue;
-                    }
-
-                    covers_some |= self.pattern_covers_builtin_variant(
-                        &arm.pattern,
-                        "Some",
-                        payload_ty.as_ref(),
-                    );
-                    covers_none |= self.pattern_covers_builtin_variant(&arm.pattern, "None", None);
-
-                    if covers_some && covers_none {
-                        coverage_complete_span = Some(arm.span);
-                    }
-                }
-
-                let mut missing = Vec::new();
-                if !covers_some {
-                    missing.push("Some(_)".to_string());
-                }
-                if !covers_none {
-                    missing.push("None".to_string());
-                }
-                if !missing.is_empty() {
-                    self.diagnostics.push(non_exhaustive_match(&missing, span));
-                }
-            }
-
-            TyKind::Named(def_id, args) if is_builtin_result_type(*def_id) => {
-                let ok_ty = args.first().cloned();
-                let err_ty = args.get(1).cloned();
-                let mut covers_ok = false;
-                let mut covers_err = false;
-
-                for arm in arms {
-                    if let Some(previous_span) = coverage_complete_span {
-                        self.diagnostics
-                            .push(unreachable_pattern(arm.span, previous_span));
-                        continue;
-                    }
-                    if arm.guard.is_some() {
-                        continue;
-                    }
-                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        coverage_complete_span = Some(arm.span);
-                        covers_ok = true;
-                        covers_err = true;
-                        continue;
-                    }
-
-                    covers_ok |=
-                        self.pattern_covers_builtin_variant(&arm.pattern, "Ok", ok_ty.as_ref());
-                    covers_err |=
-                        self.pattern_covers_builtin_variant(&arm.pattern, "Err", err_ty.as_ref());
-
-                    if covers_ok && covers_err {
-                        coverage_complete_span = Some(arm.span);
-                    }
-                }
-
-                let mut missing = Vec::new();
-                if !covers_ok {
-                    missing.push("Ok(_)".to_string());
-                }
-                if !covers_err {
-                    missing.push("Err(_)".to_string());
-                }
-                if !missing.is_empty() {
-                    self.diagnostics.push(non_exhaustive_match(&missing, span));
-                }
-            }
-
-            TyKind::Named(enum_id, _) if self.enums.contains_key(enum_id) => {
-                let mut covered_variants = Vec::new();
-
-                for arm in arms {
-                    if let Some(previous_span) = coverage_complete_span {
-                        self.diagnostics
-                            .push(unreachable_pattern(arm.span, previous_span));
-                        continue;
-                    }
-                    if arm.guard.is_some() {
-                        continue;
-                    }
-                    if self.pattern_is_irrefutable_for(&arm.pattern, &scrutinee_ty) {
-                        coverage_complete_span = Some(arm.span);
-                        if let Some(enum_info) = self.enums.get(enum_id) {
-                            covered_variants = enum_info.variants.keys().cloned().collect();
-                        }
-                        continue;
-                    }
-
-                    let Some(enum_info) = self.enums.get(enum_id) else {
-                        continue;
-                    };
-
-                    for variant_name in enum_info.variants.keys() {
-                        if !covered_variants
-                            .iter()
-                            .any(|covered| covered == variant_name)
-                            && self.pattern_covers_enum_variant(
-                                &arm.pattern,
-                                *enum_id,
-                                variant_name,
-                            )
-                        {
-                            covered_variants.push(variant_name.clone());
-                        }
-                    }
-
-                    if covered_variants.len() == enum_info.variants.len() {
-                        coverage_complete_span = Some(arm.span);
-                    }
-                }
-
-                let missing = self.missing_enum_patterns(*enum_id, &covered_variants);
-                if !missing.is_empty() {
-                    self.diagnostics.push(non_exhaustive_match(&missing, span));
-                }
-            }
-
-            _ => {}
+        for arm in analysis.unreachable_arms {
+            self.diagnostics
+                .push(unreachable_pattern(arm.span, arm.shadowed_by, arm.reason));
         }
     }
 
@@ -2034,11 +2566,16 @@ impl TypeChecker {
     /// 收集枚举类型定义。
     fn collect_enum(&mut self, def_id: DefId, enum_def: &EnumDef) {
         let mut variants = HashMap::new();
+        let mut variant_order = Vec::new();
         for variant in &enum_def.variants {
             variants.insert(variant.name.clone(), variant.fields.clone());
+            variant_order.push(variant.name.clone());
         }
 
-        let info = EnumInfo { variants };
+        let info = EnumInfo {
+            variants,
+            variant_order,
+        };
 
         self.enums.insert(def_id, info);
 
@@ -2271,14 +2808,18 @@ impl TypeChecker {
 
         let mut param_tys = Vec::with_capacity(item.params.len());
         for (index, param) in item.params.iter().enumerate() {
-            let ty = if index == 0
-                && param.name == "self"
-                && matches!(param.ty.kind, TyKind::Unknown)
-            {
-                self_ty.clone()
-            } else {
-                self.resolve_type_with_context(&param.ty, &generic_vars, Some(self_ty), assoc_types)
-            };
+            let ty =
+                if index == 0 && param.name == "self" && matches!(param.ty.kind, TyKind::Unknown) {
+                    self_ty.clone()
+                } else {
+                    self.resolve_type_with_context(
+                        &param.ty,
+                        &generic_vars,
+                        Some(self_ty),
+                        assoc_types,
+                        ProjectionRecordingMode::ConcreteUseSite,
+                    )
+                };
             param_tys.push(ty.clone());
             self.local_definitions.insert(param.id, ty.clone());
             self.locals.insert(
@@ -2298,13 +2839,13 @@ impl TypeChecker {
             &generic_vars,
             Some(self_ty),
             assoc_types,
+            ProjectionRecordingMode::ConcreteUseSite,
         );
         if !self.unify(&body_ty, &ret_ty, item.body.span) {
-            self.emit(
-                TypeMismatchError::new(ret_ty.clone(), body_ty.clone(), item.body.span)
-                    .with_context(format!("impl method `{}` return type", item.name))
-                    .build(),
-            );
+            let diag = TypeMismatchError::new(ret_ty.clone(), body_ty.clone(), item.body.span)
+                .with_context(format!("impl method `{}` return type", item.name))
+                .build();
+            self.emit(self.with_assoc_projection_labels(diag, std::iter::once(&item.return_ty)));
         }
 
         let refined_ret_ty = self.apply(&ret_ty);
@@ -2416,6 +2957,34 @@ impl TypeChecker {
                 ),
                 span: ty.span,
             },
+            TyKind::DynamicRecord(fields) => Ty {
+                kind: TyKind::DynamicRecord(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                Self::replace_generic_vars_with_params(field_ty, var_to_param),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::SafeRecordBase(fields) => Ty {
+                kind: TyKind::SafeRecordBase(
+                    fields
+                        .iter()
+                        .map(|(name, field_ty)| {
+                            (
+                                name.clone(),
+                                Self::replace_generic_vars_with_params(field_ty, var_to_param),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
             TyKind::Forall(params, inner) => Ty {
                 kind: TyKind::Forall(
                     params.clone(),
@@ -2430,7 +2999,13 @@ impl TypeChecker {
     /// Resolve a type, substituting generic parameters with their bound types.
     /// 解析类型，将泛型参数替换为其绑定的类型。
     fn resolve_type_with_generics(&mut self, ty: &Ty, generics: &HashMap<String, Ty>) -> Ty {
-        self.resolve_type_with_context(ty, generics, None, &HashMap::new())
+        self.resolve_type_with_context(
+            ty,
+            generics,
+            None,
+            &HashMap::new(),
+            ProjectionRecordingMode::None,
+        )
     }
 
     fn resolve_type_with_context(
@@ -2439,6 +3014,7 @@ impl TypeChecker {
         generics: &HashMap<String, Ty>,
         self_ty: Option<&Ty>,
         assoc_types: &HashMap<String, Ty>,
+        recording_mode: ProjectionRecordingMode,
     ) -> Ty {
         match &ty.kind {
             TyKind::Unknown => self.fresh_var(),
@@ -2450,14 +3026,31 @@ impl TypeChecker {
                 kind: TyKind::SelfType,
                 span: ty.span,
             }),
-            TyKind::SelfAssoc(name) => assoc_types.get(name).cloned().unwrap_or_else(|| {
-                self.error(ty.span, format!("unknown associated type `Self.{name}`"));
-                self.fresh_var()
-            }),
+            TyKind::SelfAssoc(name) => match assoc_types.get(name).cloned() {
+                Some(resolved) => {
+                    if matches!(recording_mode, ProjectionRecordingMode::ConcreteUseSite) {
+                        self.assoc_projection_resolutions
+                            .insert(ty.span, resolved.clone());
+                    }
+                    resolved
+                }
+                None => {
+                    self.error(ty.span, format!("unknown associated type `Self.{name}`"));
+                    self.fresh_var()
+                }
+            },
             TyKind::Named(id, args) => {
                 let resolved_args: Vec<Ty> = args
                     .iter()
-                    .map(|a| self.resolve_type_with_context(a, generics, self_ty, assoc_types))
+                    .map(|a| {
+                        self.resolve_type_with_context(
+                            a,
+                            generics,
+                            self_ty,
+                            assoc_types,
+                            recording_mode,
+                        )
+                    })
                     .collect();
                 Ty {
                     kind: TyKind::Named(*id, resolved_args),
@@ -2467,7 +3060,15 @@ impl TypeChecker {
             TyKind::Fn(params, ret) => {
                 let resolved_params: Vec<Ty> = params
                     .iter()
-                    .map(|p| self.resolve_type_with_context(p, generics, self_ty, assoc_types))
+                    .map(|p| {
+                        self.resolve_type_with_context(
+                            p,
+                            generics,
+                            self_ty,
+                            assoc_types,
+                            recording_mode,
+                        )
+                    })
                     .collect();
                 Ty {
                     kind: TyKind::Fn(
@@ -2477,6 +3078,7 @@ impl TypeChecker {
                             generics,
                             self_ty,
                             assoc_types,
+                            recording_mode,
                         )),
                     ),
                     span: ty.span,
@@ -2485,7 +3087,15 @@ impl TypeChecker {
             TyKind::Tuple(elems) => {
                 let resolved_elems: Vec<Ty> = elems
                     .iter()
-                    .map(|e| self.resolve_type_with_context(e, generics, self_ty, assoc_types))
+                    .map(|e| {
+                        self.resolve_type_with_context(
+                            e,
+                            generics,
+                            self_ty,
+                            assoc_types,
+                            recording_mode,
+                        )
+                    })
                     .collect();
                 Ty {
                     kind: TyKind::Tuple(resolved_elems),
@@ -2503,12 +3113,55 @@ impl TypeChecker {
                                 generics,
                                 self_ty,
                                 assoc_types,
+                                recording_mode,
                             ),
                         )
                     })
                     .collect();
                 Ty {
                     kind: TyKind::Record(resolved_fields),
+                    span: ty.span,
+                }
+            }
+            TyKind::DynamicRecord(fields) => {
+                let resolved_fields = fields
+                    .iter()
+                    .map(|(name, field_ty)| {
+                        (
+                            name.clone(),
+                            self.resolve_type_with_context(
+                                field_ty,
+                                generics,
+                                self_ty,
+                                assoc_types,
+                                recording_mode,
+                            ),
+                        )
+                    })
+                    .collect();
+                Ty {
+                    kind: TyKind::DynamicRecord(resolved_fields),
+                    span: ty.span,
+                }
+            }
+            TyKind::SafeRecordBase(fields) => {
+                let resolved_fields = fields
+                    .iter()
+                    .map(|(name, field_ty)| {
+                        (
+                            name.clone(),
+                            self.resolve_type_with_context(
+                                field_ty,
+                                generics,
+                                self_ty,
+                                assoc_types,
+                                recording_mode,
+                            ),
+                        )
+                    })
+                    .collect();
+                Ty {
+                    kind: TyKind::SafeRecordBase(resolved_fields),
                     span: ty.span,
                 }
             }
@@ -2525,8 +3178,13 @@ impl TypeChecker {
         let mut assoc_types = HashMap::new();
 
         for assoc in &impl_def.assoc_type_impls {
-            let resolved =
-                self.resolve_type_with_context(&assoc.ty, generics, Some(self_ty), &assoc_types);
+            let resolved = self.resolve_type_with_context(
+                &assoc.ty,
+                generics,
+                Some(self_ty),
+                &assoc_types,
+                ProjectionRecordingMode::ConcreteUseSite,
+            );
             assoc_types.insert(assoc.name.clone(), resolved);
         }
 
@@ -2549,8 +3207,13 @@ impl TypeChecker {
                 if assoc_types.contains_key(&name) {
                     continue;
                 }
-                let resolved =
-                    self.resolve_type_with_context(&default, generics, Some(self_ty), &assoc_types);
+                let resolved = self.resolve_type_with_context(
+                    &default,
+                    generics,
+                    Some(self_ty),
+                    &assoc_types,
+                    ProjectionRecordingMode::None,
+                );
                 assoc_types.insert(name, resolved);
             }
         }
@@ -2673,6 +3336,9 @@ impl TypeChecker {
                 let receiver_ty = self.infer_expr(receiver);
                 let applied_receiver_ty = self.apply(&receiver_ty);
 
+                // Canonical dispatch order:
+                // 1. resolve an inherent/trait method on the receiver
+                // 2. if unresolved, type-check the lowered callable fallback target
                 if let Some(resolution) = self
                     .trait_resolver
                     .resolve_method(&applied_receiver_ty, method)
@@ -2703,45 +3369,37 @@ impl TypeChecker {
 
                     resolution.return_ty
                 } else {
-                    let func_ty = self.infer_expr(target);
-                    let mut arg_tys = vec![receiver_ty];
-                    arg_tys.extend(args.iter().map(|arg| self.infer_expr(arg)));
+                    if matches!(
+                        &target.kind,
+                        ExprKind::Global(def_id) if def_id.0 == u32::MAX
+                    ) {
+                        self.emit(unknown_method_call(method, &applied_receiver_ty, span));
+                        self.fresh_var()
+                    } else {
+                        let func_ty = self.infer_expr(target);
+                        let mut arg_tys = vec![receiver_ty];
+                        arg_tys.extend(args.iter().map(|arg| self.infer_expr(arg)));
 
-                    let ret_ty = self.fresh_var();
-                    let expected_fn_ty = Ty {
-                        kind: TyKind::Fn(arg_tys, Box::new(ret_ty.clone())),
-                        span,
-                    };
+                        let ret_ty = self.fresh_var();
+                        let expected_fn_ty = Ty {
+                            kind: TyKind::Fn(arg_tys, Box::new(ret_ty.clone())),
+                            span,
+                        };
 
-                    self.unify(&func_ty, &expected_fn_ty, span);
-                    self.apply(&ret_ty)
+                        self.unify(&func_ty, &expected_fn_ty, span);
+                        self.apply(&ret_ty)
+                    }
                 }
             }
 
             ExprKind::Field(base, field) => {
                 let base_ty = self.infer_expr(base);
-                let base_ty = self.apply(&base_ty);
-
-                match &base_ty.kind {
-                    TyKind::Record(fields) => {
-                        for (name, ty) in fields {
-                            if name == field {
-                                return ty.clone();
-                            }
-                        }
-                        self.error(span, format!("no field '{}' in record", field));
-                        self.fresh_var()
-                    }
-                    _ => {
-                        self.error(span, "field access on non-record type");
-                        self.fresh_var()
-                    }
-                }
+                self.constrain_dynamic_record_field(&base_ty, field, span)
             }
 
-            ExprKind::SafeField { base, .. } => {
-                let _ = self.infer_expr(base);
-                self.fresh_var()
+            ExprKind::SafeField { base, field } => {
+                let base_ty = self.infer_expr(base);
+                self.safe_field_result_type(base_ty, span, field)
             }
 
             ExprKind::TupleIndex(base, index) => {
@@ -3126,6 +3784,10 @@ impl TypeChecker {
                 for (name, pat) in fields {
                     let field_ty = match &expected.kind {
                         TyKind::Record(field_tys) => field_tys
+                            .iter()
+                            .find(|(n, _)| n == name)
+                            .map(|(_, t)| t.clone()),
+                        TyKind::DynamicRecord(field_tys) => field_tys
                             .iter()
                             .find(|(n, _)| n == name)
                             .map(|(_, t)| t.clone()),

@@ -311,6 +311,20 @@ let x = maybe ?? default;   -- default value
 user?.profile?.name         -- safe access
 ```
 
+### Method Calls
+
+```neve
+x.foo(y)
+```
+
+Current canonical dispatch order:
+
+1. Try inherent/trait method resolution on the receiver `x`.
+2. If a matching method exists, use that method.
+3. Otherwise fall back to the lowered callable-target form `foo(x, y)`.
+4. If no method exists and no callable fallback target `foo` exists either, type checking reports a dedicated missing-method diagnostic at the call site.
+5. If a callable fallback target exists, its ordinary call diagnostics still apply.
+
 
 ### 绑定
 
@@ -368,6 +382,19 @@ let data = fetch(url)?;     -- 传播错误
 let x = maybe ?? default;   -- 默认值
 user?.profile?.name         -- 安全访问
 ```
+
+### 方法调用
+
+```neve
+x.foo(y)
+```
+
+当前规范的派发顺序是：
+
+1. 先在接收者 `x` 上尝试固有方法 / trait 方法解析。
+2. 如果找到匹配方法，就走该方法。
+3. 如果没有找到，再回退到降级后的可调用目标形式 `foo(x, y)`。
+4. 如果两条分支都不成立，则类型检查失败。
 
 
 ## 7. Operators / 操作符
