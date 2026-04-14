@@ -2,7 +2,10 @@
 //! 前端分析管线的集成测试。
 
 use neve_diagnostic::DiagnosticKind;
-use neve_frontend::analyze_source;
+use neve_frontend::{analyze_snippet_ast, analyze_source};
+use neve_parser::parse;
+use std::fs;
+use tempfile::TempDir;
 
 #[test]
 fn test_frontend_reports_parse_errors() {
@@ -235,6 +238,66 @@ fn test_frontend_accepts_coalesce_on_safe_field_and_option_enum() {
         result.diagnostics.is_empty(),
         "unexpected diagnostics: {:?}",
         result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
+    let temp_dir = TempDir::new().unwrap();
+    fs::write(
+        temp_dir.path().join("math.neve"),
+        "pub fn add(x, y) = x + y;",
+    )
+    .unwrap();
+
+    let source = "import math (add); let result = add(1, 2);";
+    let (ast, diagnostics) = parse(source);
+    assert!(
+        diagnostics.is_empty(),
+        "unexpected parse diagnostics: {:?}",
+        diagnostics
+    );
+
+    let analysis =
+        analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "unexpected snippet diagnostics: {:?}",
+        analysis.diagnostics
+    );
+    assert!(
+        analysis
+            .loaded_modules
+            .iter()
+            .any(|entry| entry.file_path.ends_with("math.neve") && entry.diagnostics.is_empty()),
+        "expected successfully loaded dependency module, got {:?}",
+        analysis.loaded_modules
+    );
+}
+
+#[test]
+fn test_frontend_snippet_reports_loaded_module_diagnostics() {
+    let temp_dir = TempDir::new().unwrap();
+    fs::write(temp_dir.path().join("math.neve"), "pub fn add(x, y) = ;").unwrap();
+
+    let source = "import math (add); let result = add(1, 2);";
+    let (ast, diagnostics) = parse(source);
+    assert!(
+        diagnostics.is_empty(),
+        "unexpected parse diagnostics: {:?}",
+        diagnostics
+    );
+
+    let analysis =
+        analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
+    assert!(
+        analysis
+            .loaded_modules
+            .iter()
+            .flat_map(|entry| entry.diagnostics.iter())
+            .any(|diag| diag.kind == DiagnosticKind::Parser),
+        "expected loaded parser diagnostics, got {:?}",
+        analysis.loaded_modules
     );
 }
 

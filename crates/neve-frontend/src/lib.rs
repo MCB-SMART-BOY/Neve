@@ -22,10 +22,11 @@ pub use session::{
 };
 
 use neve_common::Span;
-use neve_hir::lower;
+use neve_hir::{ModuleId, lower};
 use neve_parser::parse;
 use neve_typeck::{TypeChecker, format_builtin_named_type};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Canonical per-module semantic side tables.
 /// 规范化后的单模块语义 side tables。
@@ -98,6 +99,45 @@ pub struct AnalysisResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// Result of analyzing one in-memory snippet against a rooted frontend session.
+/// 基于带根目录的 frontend 会话分析单个内存 snippet 的结果。
+#[derive(Debug, Clone)]
+pub struct SnippetAnalysis {
+    /// Lowered HIR for the current in-memory snippet.
+    /// 当前内存 snippet 的降级 HIR。
+    pub hir: Module,
+    /// Canonical semantic side tables for the current snippet.
+    /// 当前 snippet 的规范语义 side tables。
+    pub semantics: ModuleSemantics,
+    /// Diagnostics attributed to the current snippet.
+    /// 归属到当前 snippet 的诊断。
+    pub diagnostics: Vec<Diagnostic>,
+    /// Loaded dependency modules and their diagnostics/semantics.
+    /// 已加载依赖模块及其诊断/语义结果。
+    pub loaded_modules: Vec<LoadedSnippetModule>,
+}
+
+/// One dependency module loaded while analyzing a snippet.
+/// 分析 snippet 过程中加载的单个依赖模块。
+#[derive(Debug, Clone)]
+pub struct LoadedSnippetModule {
+    /// Loaded module id.
+    /// 已加载模块 ID。
+    pub module_id: ModuleId,
+    /// Backing source path on disk.
+    /// 模块对应的磁盘路径。
+    pub file_path: PathBuf,
+    /// Lowered HIR for this dependency when available.
+    /// 当前依赖模块可用时的降级 HIR。
+    pub hir: Option<Module>,
+    /// Final diagnostics for this dependency.
+    /// 当前依赖模块的最终诊断。
+    pub diagnostics: Vec<Diagnostic>,
+    /// Canonical semantic side tables for this dependency when available.
+    /// 当前依赖模块可用时的规范语义 side tables。
+    pub semantics: ModuleSemantics,
+}
+
 /// Analyze a source string and return AST, HIR, and diagnostics.
 /// 分析源文本并返回 AST、HIR 以及诊断。
 pub fn analyze_source(source: &str) -> AnalysisResult {
@@ -141,6 +181,57 @@ pub fn analyze_ast(ast: &SourceFile) -> AnalysisResult {
         semantics,
         diagnostics,
     }
+}
+
+/// Analyze one already-parsed snippet against a rooted frontend session.
+/// 基于带根目录的 frontend 会话分析单个已解析 snippet。
+pub fn analyze_snippet_ast(
+    ast: &SourceFile,
+    root_dir: impl AsRef<Path>,
+) -> Result<SnippetAnalysis, SessionError> {
+    let mut session = FrontendSession::new(root_dir);
+    let build = session.build_module_from_ast(
+        ast,
+        "__eval__".to_string(),
+        vec!["__eval__".to_string()],
+        &SessionBuildInputs::default(),
+    )?;
+    let analysis = session.analyze_module(&build.module);
+    let loaded_analyses = session.analyze_loaded_modules();
+    let loaded_pending: std::collections::HashSet<_> = build.newly_loaded.iter().copied().collect();
+    let mut loaded_modules = Vec::new();
+
+    for module_id in session.load_order() {
+        if !loaded_pending.contains(module_id) {
+            continue;
+        }
+
+        let Some(info) = session.module_info(*module_id) else {
+            continue;
+        };
+        let analysis = loaded_analyses
+            .get(module_id)
+            .cloned()
+            .unwrap_or(ModuleAnalysis {
+                diagnostics: Vec::new(),
+                semantics: ModuleSemantics::default(),
+            });
+
+        loaded_modules.push(LoadedSnippetModule {
+            module_id: *module_id,
+            file_path: info.file_path.clone(),
+            hir: session.hir_module(*module_id).cloned(),
+            diagnostics: analysis.diagnostics,
+            semantics: analysis.semantics,
+        });
+    }
+
+    Ok(SnippetAnalysis {
+        hir: build.module,
+        semantics: analysis.semantics,
+        diagnostics: analysis.diagnostics,
+        loaded_modules,
+    })
 }
 
 pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics {

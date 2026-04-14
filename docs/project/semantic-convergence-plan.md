@@ -401,6 +401,30 @@ The main semantic artifacts should converge toward:
 - This step should not reverse the architectural direction by making lower layers depend on frontend orchestration.
 - Callers should prefer canonical semantic artifacts such as `ModuleSemantics.method_resolutions` over legacy duplicate fields where available.
 
+### D-034: Post-v1.2.0 highest-priority work is finishing `neve eval` migration onto the shared frontend/driver path
+
+- After `check`, `run`, `REPL`, and `LSP` have substantially converged, the next highest-priority mainline task is to remove the remaining split inside `neve eval`.
+- `neve eval` still has two non-canonical execution shapes:
+  - single-snippet evaluation via `analyze_ast`
+  - import-bearing evaluation via temp-file/module-graph indirection
+- The next implementation target should be a frontend-owned snippet/program API that lets `neve eval` consume the same canonical semantic artifact shape as the other core tools without hidden orchestration.
+- This has higher priority than effect-runtime expansion and platform-crate migration because it closes the last obvious core-language CLI split in WS-A.
+
+### D-035: `neve eval` snippet migration should use `FrontendSession`-backed in-memory module analysis, not synthetic temp modules
+
+- The first `neve eval` convergence step should introduce a frontend-owned snippet analysis API built on `FrontendSession::build_module_from_ast` plus `analyze_module`.
+- Local imports in `neve eval` should move to this in-memory frontend path instead of being forced through temp-file indirection.
+- A narrow explicit compat branch may remain for std import shapes that the canonical frontend still cannot represent, but local-import support should no longer depend on the `run` command path.
+
+### D-036: After `neve eval` snippet convergence, the next highest-priority semantic split is the remaining AST-only platform path
+
+- Once `neve eval` no longer depends on `analyze_ast` or temp-module indirection for normal local-import snippets, the biggest remaining AST/HIR semantic authority split becomes `PR-010`.
+- The next highest-priority migration target is therefore the remaining AST-only platform stack:
+  - `neve build`
+  - `neve-config::flake`
+  - `neve-config::module`
+- This should proceed before effect-runtime expansion because those paths still give AST evaluation a first-class product role instead of an explicit compat/bootstrap role.
+
 ## 7. Workstreams
 
 ## 7.1 WS-A: Canonical pipeline convergence
@@ -905,3 +929,17 @@ Track progress with concrete metrics rather than narrative only:
   - `cargo test --test eval --test end_to_end`
   - `cargo test -p neve run_ -- --nocapture`
   - `cargo test -p neve repl_ -- --nocapture`
+- Continued the post-release highest-priority task by introducing a frontend-owned snippet analysis API for `neve eval`.
+- Added `analyze_snippet_ast` plus `LoadedSnippetModule` in `crates/neve-frontend`, backed by `FrontendSession` in-memory module construction and loaded-module analysis.
+- Migrated `neve eval` so:
+  - ordinary snippets use the frontend-owned snippet analysis path
+  - local imports no longer depend on temp-file/module-graph indirection
+  - a narrow explicit compat branch remains only for unsupported std import shapes
+- Added frontend integration coverage for:
+  - snippet analysis with local imports against a rooted project directory
+  - diagnostics attribution for loaded dependency modules during snippet analysis
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test -p neve eval_ -- --nocapture`
+  - `cargo test --test frontend --test eval --test end_to_end`
+  - `cargo clippy -p neve-frontend -p neve --all-targets -- -D warnings`
