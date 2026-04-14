@@ -5,7 +5,7 @@ use crate::commands::run::{RunBackend, run_value as run_file_value};
 use crate::output;
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{Evaluator, Value};
-use neve_frontend::analyze_ast;
+use neve_frontend::{LoadedSnippetModule, analyze_snippet_ast};
 use neve_parser::parse;
 use neve_std::stdlib;
 use neve_syntax::{ImportDef, ItemKind, SourceFile};
@@ -120,13 +120,26 @@ fn eval_value(
     root_dir: &Path,
     compat_ast: bool,
 ) -> Result<(EvalBackend, Value), String> {
-    if source_file_requires_module_graph(file) {
+    if source_file_requires_ast_compat(file) {
         return eval_via_module_graph(source, root_dir, compat_ast);
     }
 
-    let analysis = analyze_ast(file);
+    let analysis =
+        analyze_snippet_ast(file, root_dir).map_err(|e| format!("frontend error: {e}"))?;
+    let mut loaded_had_errors = false;
+    let mut loaded_had_parse_errors = false;
+    for entry in &analysis.loaded_modules {
+        emit_loaded_module_diagnostics(entry, &mut loaded_had_errors, &mut loaded_had_parse_errors);
+    }
+
     for diag in &analysis.diagnostics {
         emit(source, "<eval>", diag);
+    }
+    if loaded_had_parse_errors {
+        return Err("parse error".to_string());
+    }
+    if loaded_had_errors {
+        return Err("type error".to_string());
     }
     if analysis
         .diagnostics
@@ -137,6 +150,22 @@ fn eval_value(
     }
 
     let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
+    for entry in &analysis.loaded_modules {
+        let Some(module) = &entry.hir else {
+            continue;
+        };
+        if entry
+            .diagnostics
+            .iter()
+            .any(|diag| diag.severity == Severity::Error)
+        {
+            continue;
+        }
+
+        evaluator
+            .eval_module_with_method_resolutions(module, &entry.semantics.method_resolutions)
+            .map_err(format_hir_eval_error)?;
+    }
     evaluator
         .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
         .map(|value| (EvalBackend::FrontendHir, value))
@@ -192,20 +221,24 @@ fn temp_eval_module_path(root_dir: &Path) -> PathBuf {
     root_dir.join(format!("__neve_eval_{pid}_{nanos}.neve"))
 }
 
-fn source_file_requires_module_graph(file: &SourceFile) -> bool {
+fn source_file_requires_ast_compat(file: &SourceFile) -> bool {
     file.items.iter().any(|item| match &item.kind {
-        ItemKind::Import(import) => import_requires_module_graph(import),
+        ItemKind::Import(import) => import_requires_ast_compat(import),
         _ => false,
     })
 }
 
-fn import_requires_module_graph(import: &ImportDef) -> bool {
-    !is_supported_std_import(import)
+fn import_requires_ast_compat(import: &ImportDef) -> bool {
+    is_std_import(import) && !is_supported_std_import(import)
 }
 
 fn is_supported_std_import(import: &ImportDef) -> bool {
     import.path.len() == 2
         && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+}
+
+fn is_std_import(import: &ImportDef) -> bool {
+    import.path.first().map(|segment| segment.name.as_str()) == Some("std")
 }
 
 fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
@@ -217,6 +250,23 @@ fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
 fn format_hir_eval_error(err: neve_eval::EvalError) -> String {
     output::error(&format!("{err:?}"));
     "evaluation error".to_string()
+}
+
+fn emit_loaded_module_diagnostics(
+    entry: &LoadedSnippetModule,
+    had_errors: &mut bool,
+    had_parse_errors: &mut bool,
+) {
+    let source = fs::read_to_string(&entry.file_path).unwrap_or_default();
+    for diag in &entry.diagnostics {
+        emit(&source, &entry.file_path.display().to_string(), diag);
+        if diag.severity == Severity::Error {
+            *had_errors = true;
+        }
+        if diag.kind == neve_diagnostic::DiagnosticKind::Parser {
+            *had_parse_errors = true;
+        }
+    }
 }
 
 #[cfg(test)]
