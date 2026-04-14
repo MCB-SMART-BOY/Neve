@@ -235,7 +235,7 @@ For shell replacement, there is a second set of dimensions:
 
 | Dimension | What it means | Current pressure |
 |-----------|---------------|------------------|
-| Command model | Commands are typed objects, not shell strings | Missing |
+| Command model | Commands are typed objects, not shell strings | Minimal public constructor and execution bridges exist, but the legacy exec surface is still string/record-based |
 | Stream model | Pipelines and redirects are first-class | Missing |
 | Failure model | Exit codes, retries, cancellation, and timeouts are explicit | Mostly missing |
 | Host interaction | Filesystem, env, cwd, and services are structured APIs | Partially started |
@@ -302,7 +302,7 @@ Neve 要成为可信的系统级语言，做到 L1-L3 就够了，不需要追�
 |------------|-------------------|---------------------|
 | Canonical execution pipeline | `eval`, `run`, `check`, tests, and LSP all reflect one semantic core | AST and HIR paths diverge |
 | Pattern fidelity | `or`, binding, rest, record patterns survive lowering intact | Lowering is lossy |
-| Trait method semantics | Method calls, trait resolution, and evaluation agree | Method syntax is not semantically unified |
+| Trait method semantics | Method calls, trait resolution, evaluation, and tooling agree on one dispatch order, and missing-method call sites report a dedicated diagnostic when no callable fallback exists | Long-term callable-fallback policy is still not fully settled |
 | Error propagation | `Try`, `Option`, `Result`, and non-local failure rules are explicit and stable | Current handling differs by path |
 | Path semantics | Path literals are typed values with stable operations | Paths still collapse into `String` |
 | Match diagnostics | Exhaustiveness and unreachable arms are compiler-grade | Diagnostic hooks exist but are not wired in |
@@ -395,8 +395,8 @@ Decision / 要决策的问题:
 
 Required answer / 建议答案:
 
-- Short term: preserve sugar semantics only if type checker and evaluator agree.
-- Medium term: align method syntax with trait-based dispatch, or remove the misleading distinction.
+- Current canonical rule: `x.foo(y)` first attempts receiver method dispatch, then falls back to the lowered callable form `foo(x, y)` if no method resolves.
+- Next step: keep that precedence explicit, tested, and documented before considering any future breaking change to remove the fallback branch.
 
 ### Gate G3: Failure Propagation / 决策门 G3：失败传播
 
@@ -508,6 +508,14 @@ Exit criteria / 退出标准:
 
 - path literals no longer degrade to plain strings
 - process execution no longer relies on unstructured string conventions
+
+Current state / 当前状态:
+
+- internal `Path` identity exists and `std.path.fromString` plus a minimal typed `std.path` adapter set expose it to user code, with `std.io.readFilePath`, `std.io.currentDirPath`, `std.io.pathExistsPath`, `std.io.isFilePath`, and `std.io.isDirPath` as the first typed host-boundary bridges
+- dormant internal `Command` / `ProcessResult` identities now exist in `neve-eval`, and `typeOf` / runtime formatting / stable keys recognize them as first-class runtime objects
+- `std.io.command` and `std.io.execCommand` now expose the first minimal public `Command -> ProcessResult` bridge without changing the legacy process execution surface
+- `std.io.processSuccess`, `std.io.processStdout`, `std.io.processCode`, and `std.io.processStderr` now expose the first pure `ProcessResult` inspector bridges, and `io.exec` now internally projects the canonical `Command -> ProcessResult` path back into its legacy record contract, but `io.execShell` and `io.execWith` still remain on their existing string/record contracts, so `WP-3C` is started but not closed
+- path literals and most stdlib contracts are still string-based, so `WP-3A` is started but not closed
 - shell-facing operations become composable library primitives
 
 ### 5. Effect Boundary / 副作用边界
@@ -876,7 +884,7 @@ If work starts immediately after this roadmap, the first batch should be:
 | Correct public status claims | `WP-0C` | `README.md`, `docs/README.md`, `docs/project/philosophy.md`, `tests/README.md` | Status labels aligned with reality |
 | Preserve pattern semantics in lowering | `WP-1A` | `crates/neve-hir/src/resolve.rs`, `crates/neve-hir/src/hir.rs`, `tests/parser.rs`, `tests/typeck.rs`, `tests/eval.rs` | No lossy fallback for pattern forms |
 | Decide and document `?` semantics | `WP-1B` | `docs/reference/spec.md`, `crates/neve-hir/src/resolve.rs`, `crates/neve-eval`, `crates/neve-typeck` | One rule for `Try`/`Option`/`Result` |
-| Unify method call semantics | `WP-1C` | `crates/neve-typeck/src/traits.rs`, `crates/neve-typeck/src/check.rs`, `crates/neve-eval/src/ast_eval.rs`, `crates/neve-hir/src/resolve.rs` | Method syntax no longer ambiguous semantically |
+| Unify method call semantics | `WP-1C` | `crates/neve-typeck/src/traits.rs`, `crates/neve-typeck/src/check.rs`, `crates/neve-eval/src/eval.rs`, `crates/neve-hir/src/resolve.rs`, `tests/typeck.rs`, `tests/end_to_end.rs`, `tests/lsp.rs`, `docs/reference/spec.md` | Dispatch precedence explicit and test-locked across typeck/eval/tooling |
 | Bring HIR runtime to parity | `WP-1D` | `crates/neve-eval/src/eval.rs`, `neve-cli/src/commands/eval.rs`, `neve-cli/src/commands/run.rs` | Canonical runtime path for CLI execution |
 
 ## Acceptance Standard / 验收标准

@@ -926,6 +926,14 @@ pub enum TyKind {
     /// Record type. / 记录类型。
     Record(Vec<(String, Ty)>),
 
+    /// Inference-only dynamic/open record type used for accumulated field constraints.
+    /// 仅用于推断阶段、用于累积字段约束的动态/开放记录类型。
+    DynamicRecord(Vec<(String, Ty)>),
+
+    /// Inference-only record-or-option-record base used for safe-field constraints.
+    /// 仅用于推断阶段、用于 `?.` 约束的 record / Option[record] 基类型。
+    SafeRecordBase(Vec<(String, Ty)>),
+
     /// Forall type (polymorphic type, e.g., `forall a. a -> a`). / Forall 类型（多态类型，例如 `forall a. a -> a`）。
     Forall(Vec<String>, Box<Ty>),
 

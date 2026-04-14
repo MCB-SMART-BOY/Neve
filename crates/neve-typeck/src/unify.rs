@@ -99,6 +99,34 @@ impl Substitution {
                 ),
                 span: ty.span,
             },
+            TyKind::DynamicRecord(fields) => Ty {
+                kind: TyKind::DynamicRecord(
+                    fields
+                        .iter()
+                        .map(|(n, t)| {
+                            (
+                                n.clone(),
+                                self.apply_with_shadowed_params(t, shadowed_params),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::SafeRecordBase(fields) => Ty {
+                kind: TyKind::SafeRecordBase(
+                    fields
+                        .iter()
+                        .map(|(n, t)| {
+                            (
+                                n.clone(),
+                                self.apply_with_shadowed_params(t, shadowed_params),
+                            )
+                        })
+                        .collect(),
+                ),
+                span: ty.span,
+            },
             TyKind::Forall(params, body) => {
                 let mut inner_shadowed = shadowed_params.to_vec();
                 inner_shadowed.extend(params.iter().enumerate().map(|(idx, _)| idx as u32));
@@ -239,6 +267,75 @@ pub fn unify(t1: &Ty, t2: &Ty, subst: &mut Substitution) -> Result<(), String> {
             }
             Ok(())
         }
+        (TyKind::DynamicRecord(required), TyKind::Record(actual))
+        | (TyKind::Record(actual), TyKind::DynamicRecord(required)) => {
+            for (required_name, required_ty) in required {
+                let Some((_, actual_ty)) = actual.iter().find(|(name, _)| name == required_name)
+                else {
+                    return Err(format!(
+                        "record is missing required field: {}",
+                        required_name
+                    ));
+                };
+                unify(required_ty, actual_ty, subst)?;
+            }
+            Ok(())
+        }
+        (TyKind::DynamicRecord(left_fields), TyKind::DynamicRecord(right_fields)) => {
+            for (left_name, left_ty) in left_fields {
+                if let Some((_, right_ty)) = right_fields.iter().find(|(name, _)| name == left_name)
+                {
+                    unify(left_ty, right_ty, subst)?;
+                }
+            }
+            Ok(())
+        }
+        (TyKind::SafeRecordBase(required), TyKind::Record(actual))
+        | (TyKind::Record(actual), TyKind::SafeRecordBase(required)) => {
+            for (required_name, required_ty) in required {
+                if let Some((_, actual_ty)) = actual.iter().find(|(name, _)| name == required_name)
+                {
+                    unify(required_ty, actual_ty, subst)?;
+                }
+            }
+            Ok(())
+        }
+        (TyKind::SafeRecordBase(required), TyKind::DynamicRecord(actual))
+        | (TyKind::DynamicRecord(actual), TyKind::SafeRecordBase(required)) => {
+            for (required_name, required_ty) in required {
+                if let Some((_, actual_ty)) = actual.iter().find(|(name, _)| name == required_name)
+                {
+                    unify(required_ty, actual_ty, subst)?;
+                }
+            }
+            Ok(())
+        }
+        (TyKind::SafeRecordBase(required), TyKind::Named(def_id, args))
+        | (TyKind::Named(def_id, args), TyKind::SafeRecordBase(required))
+            if *def_id == crate::builtin_types::OPTION_TYPE_ID =>
+        {
+            let payload_ty = args.first().cloned().unwrap_or(Ty {
+                kind: TyKind::Unknown,
+                span: t1.span,
+            });
+            unify(
+                &Ty {
+                    kind: TyKind::SafeRecordBase(required.clone()),
+                    span: t1.span,
+                },
+                &payload_ty,
+                subst,
+            )
+        }
+        (TyKind::SafeRecordBase(left_fields), TyKind::SafeRecordBase(right_fields)) => {
+            for (left_name, left_ty) in left_fields {
+                if let Some((_, right_ty)) = right_fields.iter().find(|(name, _)| name == left_name)
+                {
+                    unify(left_ty, right_ty, subst)?;
+                }
+            }
+            Ok(())
+        }
 
         // Forall types (polymorphic)
         (TyKind::Forall(params1, body1), TyKind::Forall(params2, body2)) => {
@@ -271,6 +368,8 @@ fn occurs_check(var: u32, ty: &Ty) -> bool {
         TyKind::Tuple(elems) => elems.iter().any(|t| occurs_check(var, t)),
         TyKind::Named(_, args) => args.iter().any(|t| occurs_check(var, t)),
         TyKind::Record(fields) => fields.iter().any(|(_, t)| occurs_check(var, t)),
+        TyKind::DynamicRecord(fields) => fields.iter().any(|(_, t)| occurs_check(var, t)),
+        TyKind::SafeRecordBase(fields) => fields.iter().any(|(_, t)| occurs_check(var, t)),
         TyKind::Forall(_, body) => occurs_check(var, body),
         _ => false,
     }
@@ -342,6 +441,16 @@ fn collect_free_vars(ty: &Ty, vars: &mut Vec<u32>) {
             }
         }
         TyKind::Record(fields) => {
+            for (_, t) in fields {
+                collect_free_vars(t, vars);
+            }
+        }
+        TyKind::DynamicRecord(fields) => {
+            for (_, t) in fields {
+                collect_free_vars(t, vars);
+            }
+        }
+        TyKind::SafeRecordBase(fields) => {
             for (_, t) in fields {
                 collect_free_vars(t, vars);
             }

@@ -1,10 +1,35 @@
 //! Integration tests for neve-lsp crate.
 
+use neve_diagnostic::ErrorCode;
 use neve_lexer::Lexer;
 use neve_lsp::{Document, SymbolIndex, generate_semantic_tokens};
 use neve_parser::parse;
 
 // Document tests
+
+fn normalize_inference_vars(input: &str) -> String {
+    let mut output = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        output.push(ch);
+        if ch == '?' {
+            while matches!(chars.peek(), Some(next) if next.is_ascii_digit()) {
+                chars.next();
+            }
+        }
+    }
+
+    output
+}
+
+fn nth_match_offset(source: &str, needle: &str, index: usize) -> usize {
+    source
+        .match_indices(needle)
+        .nth(index)
+        .map(|(offset, _)| offset)
+        .unwrap_or_else(|| panic!("expected occurrence {index} of '{needle}' in source"))
+}
 
 #[test]
 fn test_document_new() {
@@ -20,6 +45,111 @@ fn test_document_parse_error() {
     );
     // Should still create document even with parse errors
     let _ = doc.diagnostics.len(); // Just verify it exists
+}
+
+#[test]
+fn test_document_reports_dedicated_missing_method_diagnostic_when_no_fallback_exists() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let value = 21.missing();".to_string(),
+    );
+    let diag = doc
+        .diagnostics
+        .iter()
+        .find(|diag| diag.message.contains("no method `missing` found for `Int`"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected dedicated missing-method diagnostic, got {:?}",
+                doc.diagnostics
+            )
+        });
+    assert_eq!(diag.code, Some(ErrorCode::UnknownMethod));
+}
+
+#[test]
+fn test_document_reports_invalid_try_optional_flow_diagnostic() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let value = 41?;".to_string(),
+    );
+    let diag = doc
+        .diagnostics
+        .iter()
+        .find(|diag| {
+            diag.message
+                .contains("`?` expects Option-like or Result-like value")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "expected invalid optional-flow diagnostic, got {:?}",
+                doc.diagnostics
+            )
+        });
+    assert_eq!(diag.code, Some(ErrorCode::TypeMismatch));
+}
+
+#[test]
+fn test_document_reports_invalid_coalesce_optional_flow_diagnostic() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let value = 41 ?? 0;".to_string(),
+    );
+    let diag = doc
+        .diagnostics
+        .iter()
+        .find(|diag| diag.message.contains("`??` expects Option-like value"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected invalid coalesce diagnostic, got {:?}",
+                doc.diagnostics
+            )
+        });
+    assert_eq!(diag.code, Some(ErrorCode::TypeMismatch));
+}
+
+#[test]
+fn test_document_reports_invalid_safe_field_boundary_diagnostic() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        r#"let value = 42?.name ?? "default";"#.to_string(),
+    );
+    let diag = doc
+        .diagnostics
+        .iter()
+        .find(|diag| {
+            diag.message
+                .contains("safe field access requires a record or Option[Record]")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "expected invalid safe-field diagnostic, got {:?}",
+                doc.diagnostics
+            )
+        });
+    assert_eq!(diag.code, Some(ErrorCode::TypeMismatch));
+}
+
+#[test]
+fn test_document_reports_invalid_io_read_file_path_diagnostic() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        r#"
+            import std.io as io;
+            let value = io.readFilePath("/tmp/file.txt");
+        "#
+        .to_string(),
+    );
+    let diag = doc
+        .diagnostics
+        .iter()
+        .find(|diag| diag.message.contains("type mismatch"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected invalid io.readFilePath diagnostic, got {:?}",
+                doc.diagnostics
+            )
+        });
+    assert_eq!(diag.code, Some(ErrorCode::TypeMismatch));
 }
 
 #[test]
@@ -204,6 +334,588 @@ fn test_document_semantic_hover_includes_method_signature() {
         .semantic_hover_at(offset)
         .expect("method semantic hover should exist");
     assert_eq!(hover, "fn twice: (Int) -> Int");
+}
+
+#[test]
+fn test_document_hover_uses_canonical_assoc_return_for_method_call_binding() {
+    let source = r#"
+        trait Iterator { type Item; fn first(self) -> Self.Item; };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self) -> Self.Item = toString(self);
+        };
+        let value = 1.first();
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_hover_uses_trait_dispatch_precedence_over_callable_target_fallback() {
+    let source = r#"
+        fn twice(x: Int) -> String = "fallback";
+        trait Twice { fn twice(self) -> Int; };
+        impl Twice for Int {
+            fn twice(self) -> Int = self + self;
+        };
+        let value = 21.twice();
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Int");
+}
+
+#[test]
+fn test_document_hover_uses_callable_target_fallback_when_no_method_exists() {
+    let source = r#"
+        fn twice(x: Int) -> String = "fallback";
+        let value = 21.twice();
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_hover_uses_typed_path_adapter_binding_type() {
+    let source = r#"
+        import std.path as path;
+        let value = path.joinPath(path.fromString("/tmp"), "neve.txt");
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Path");
+}
+
+#[test]
+fn test_document_hover_uses_io_read_file_path_binding_type() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let value = io.readFilePath(path.fromString("/tmp/file.txt"));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_hover_uses_io_current_dir_path_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.currentDirPath();
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Path");
+}
+
+#[test]
+fn test_document_hover_uses_io_command_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.command("printf", ["neve"]);
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Command");
+}
+
+#[test]
+fn test_document_hover_uses_io_exec_command_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.execCommand(io.command("rustc", ["--version"]));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: ProcessResult");
+}
+
+#[test]
+fn test_document_hover_uses_io_process_success_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.processSuccess(io.execCommand(io.command("rustc", ["--version"])));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Bool");
+}
+
+#[test]
+fn test_document_hover_uses_io_process_stdout_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.processStdout(io.execCommand(io.command("rustc", ["--version"])));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_hover_uses_io_process_code_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.processCode(io.execCommand(io.command("rustc", ["--version"])));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Int");
+}
+
+#[test]
+fn test_document_hover_uses_io_process_stderr_binding_type() {
+    let source = r#"
+        import std.io as io;
+        let value = io.processStderr(io.execCommand(io.command("rustc", ["--version"])));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_hover_uses_io_path_exists_path_binding_type() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let value = io.pathExistsPath(path.fromString("/tmp/file.txt"));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Bool");
+}
+
+#[test]
+fn test_document_hover_uses_io_is_dir_path_binding_type() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let value = io.isDirPath(path.fromString("/tmp"));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Bool");
+}
+
+#[test]
+fn test_document_hover_uses_io_is_file_path_binding_type() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let value = io.isFilePath(path.fromString("/tmp/file.txt"));
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Bool");
+}
+
+#[test]
+fn test_document_hover_uses_optional_flow_result_for_try_binding() {
+    let source = r#"
+        import std.option as option;
+        let value = option.some(41)? + 1;
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    assert!(
+        doc.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        doc.diagnostics
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Int");
+}
+
+#[test]
+fn test_document_hover_uses_optional_flow_result_for_coalesce_binding() {
+    let source = r#"
+        import std.option as option;
+        let value = option.none ?? 5;
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    assert!(
+        doc.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        doc.diagnostics
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Int");
+}
+
+#[test]
+fn test_document_hover_uses_optional_flow_result_for_safe_field_coalesce_binding() {
+    let source = r#"
+        import std.option as option;
+        let value = option.some(#{ name = "test" })?.name ?? "default";
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    assert!(
+        doc.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        doc.diagnostics
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_hover_uses_canonical_default_assoc_alias_return_for_method_call_binding() {
+    let source = r#"
+        trait Iterator {
+            type Alias;
+            type Item = Self.Alias;
+            fn first(self) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Alias = String;
+            fn first(self) -> Self.Item = toString(self);
+        };
+        let value = 1.first();
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
+fn test_document_semantic_hover_uses_canonical_assoc_projection_for_impl_param_type() {
+    let source = r#"
+        trait Iterator {
+            type Item;
+            fn first(self, fallback: Self.Item) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self, fallback: Self.Item) -> Self.Item = fallback;
+        };
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = nth_match_offset(source, "Self.Item", 2);
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("impl param type hover should exist");
+    assert_eq!(hover, "String");
+}
+
+#[test]
+fn test_document_semantic_hover_uses_canonical_assoc_projection_for_impl_return_type() {
+    let source = r#"
+        trait Iterator {
+            type Item;
+            fn first(self, fallback: Self.Item) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self, fallback: Self.Item) -> Self.Item = fallback;
+        };
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = nth_match_offset(source, "Self.Item", 3);
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("impl return type hover should exist");
+    assert_eq!(hover, "String");
+}
+
+#[test]
+fn test_document_semantic_hover_preserves_trait_self_assoc_source_shape() {
+    let source = r#"
+        trait Iterator {
+            type Item;
+            fn first(self, fallback: Self.Item) -> Self.Item;
+        };
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let offset = nth_match_offset(source, "Self.Item", 0);
+
+    let (_, hover) = doc
+        .semantic_hover_at(offset)
+        .expect("trait param type hover should exist");
+    assert_eq!(hover, "Self.Item");
+}
+
+#[test]
+fn test_document_semantic_hover_keeps_trait_self_assoc_source_shape_when_impl_is_present() {
+    let source = r#"
+        trait Iterator {
+            type Item;
+            fn first(self, fallback: Self.Item) -> Self.Item;
+        };
+        impl Iterator for Int {
+            type Item = String;
+            fn first(self, fallback: Self.Item) -> Self.Item = fallback;
+        };
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+
+    let trait_offset = nth_match_offset(source, "Self.Item", 0);
+    let impl_offset = nth_match_offset(source, "Self.Item", 2);
+
+    let (_, trait_hover) = doc
+        .semantic_hover_at(trait_offset)
+        .expect("trait param type hover should exist");
+    let (_, impl_hover) = doc
+        .semantic_hover_at(impl_offset)
+        .expect("impl param type hover should exist");
+
+    assert_eq!(trait_hover, "Self.Item");
+    assert_eq!(impl_hover, "String");
+}
+
+#[test]
+fn test_document_hover_formats_dynamic_record_shape_readably() {
+    let source = "let outputs = fn(inputs) inputs.dep.packages.default;";
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("outputs")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(
+        normalize_inference_vars(hover),
+        "let outputs: ({ dep: { packages: { default: ?, .. }, .. }, .. }) -> ?"
+    );
 }
 
 #[test]

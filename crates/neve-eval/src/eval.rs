@@ -153,6 +153,12 @@ impl Evaluator {
         self.eval_module(module)
     }
 
+    /// Call a runtime function value with explicit arguments.
+    /// 使用显式参数调用运行时函数值。
+    pub fn call_value(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
+        self.apply(func, args)
+    }
+
     /// Attach additional builtin bindings.
     /// 绑定额外的内置值。
     pub fn with_extra_builtins<I>(mut self, builtins: I) -> Self
@@ -348,6 +354,9 @@ impl Evaluator {
                     arg_vals.push(self.eval(arg)?);
                 }
 
+                // Canonical dispatch order mirrors type checking:
+                // 1. use resolved inherent/trait method targets when available
+                // 2. otherwise evaluate the lowered callable fallback target
                 if let Some(method_def_id) = self.method_resolutions.get(&expr.span).copied()
                     && let Some(func_val) = self.global_callable(method_def_id)
                 {
@@ -430,12 +439,19 @@ impl Evaluator {
                     Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
                         self.eval(default)
                     }
+                    Value::VariantCtor { .. } => Err(EvalError::TypeError(
+                        "coalesce requires an option-like value".to_string(),
+                    )),
                     Value::Variant(tag, payload) => match tag.as_str() {
                         "None" => self.eval(default),
                         "Some" => Ok((*payload).clone()),
-                        _ => Ok(Value::Variant(tag, payload)),
+                        _ => Err(EvalError::TypeError(
+                            "coalesce requires an option-like value".to_string(),
+                        )),
                     },
-                    other => Ok(other),
+                    _ => Err(EvalError::TypeError(
+                        "coalesce requires an option-like value".to_string(),
+                    )),
                 }
             }
 
@@ -445,13 +461,23 @@ impl Evaluator {
                         Value::Ok(v) | Value::Some(v) => Ok((*v).clone()),
                         Value::Err(e) => Err(EvalError::TypeError(format!("{:?}", e))),
                         Value::None => Err(EvalError::TypeError("unwrap on None".to_string())),
+                        Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
+                            Err(EvalError::TypeError("unwrap on None".to_string()))
+                        }
+                        Value::VariantCtor { .. } => Err(EvalError::TypeError(
+                            "try requires an option-like or result-like value".to_string(),
+                        )),
                         Value::Variant(tag, payload) => match tag.as_str() {
                             "Ok" | "Some" => Ok((*payload).clone()),
                             "Err" => Err(EvalError::TypeError(format!("{:?}", payload))),
                             "None" => Err(EvalError::TypeError("unwrap on None".to_string())),
-                            _ => Ok(Value::Variant(tag, payload)),
+                            _ => Err(EvalError::TypeError(
+                                "try requires an option-like or result-like value".to_string(),
+                            )),
                         },
-                        other => Ok(other),
+                        _ => Err(EvalError::TypeError(
+                            "try requires an option-like or result-like value".to_string(),
+                        )),
                     }
                 }
 
@@ -750,6 +776,10 @@ impl Evaluator {
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Char(x), Value::Char(y)) => x == y,
             (Value::String(x), Value::String(y)) => x == y,
+            (Value::Path(x), Value::Path(y)) => x == y,
+            (Value::Bytes(x), Value::Bytes(y)) => x == y,
+            (Value::Command(x), Value::Command(y)) => x == y,
+            (Value::ProcessResult(x), Value::ProcessResult(y)) => x == y,
             (Value::Unit, Value::Unit) => true,
             (Value::None, Value::None) => true,
             (Value::List(x), Value::List(y)) => {
@@ -1320,6 +1350,20 @@ impl Evaluator {
             Value::Char(c) => c.to_string(),
             Value::String(s) => s.to_string(),
             Value::Unit => "()".to_string(),
+            Value::Path(path) => path.display().to_string(),
+            Value::Bytes(bytes) => format!("<bytes:{}>", bytes.len()),
+            Value::Command(command) => {
+                format!(
+                    "<command:{} {} arg(s)>",
+                    command.program(),
+                    command.args().len()
+                )
+            }
+            Value::ProcessResult(result) => format!(
+                "<process-result:{} {}>",
+                result.code(),
+                if result.is_success() { "ok" } else { "err" }
+            ),
             Value::None => "None".to_string(),
             Value::Some(v) => format!("Some({})", Self::value_to_string(v)),
             Value::Ok(v) => format!("Ok({})", Self::value_to_string(v)),

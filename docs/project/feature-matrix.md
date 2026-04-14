@@ -68,7 +68,7 @@
 | 错误传播 `?` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 已对齐并支持 Option/Result-like enum，以及 `std.option` / `std.result` builtin；完整类型与 effect 语义仍需继续收敛 |
 | Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明和部分完整性检查存在，但还不能视为完全闭环 |
 | 关联类型（声明与完整性） | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明层已稳定，`Self` / `Self.Item` 已开始在 impl/typecheck use-site 生效；但更通用的关联类型解析与工具链镜像仍需补完 |
-| 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 都已可执行方法调用，CLI 主路径已优先走 HIR，impl 方法体与 trait impl 签名一致性也开始进入 typecheck；但关联类型 use-site 与完整方法模型仍需继续收敛 |
+| 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | 当前 canonical 规则已明确为“先做接收者方法派发，再回退到 callable target `foo(x, y)`”；当两条分支都不存在时，frontend/typeck 现在会给 dedicated missing-method 诊断，但未来是否长期保留 callable fallback 仍未最终收口 |
 | Or pattern `a | b` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | HIR lowering/typecheck/runtime 已收敛，工具链覆盖仍需继续补齐 |
 | Binding pattern `x @ pat` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `name @ pattern` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | List rest pattern `[x, ..xs]` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `init/rest/tail` 语义已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
@@ -107,9 +107,9 @@
 
 | Capability / 能力 | 当前状态 | 为什么还不能叫“替代 Bash” |
 |-------------------|----------|----------------------------|
-| 一等 `Path` 类型 | ❌ | 路径仍主要是字符串 |
-| 一等 `Command` 类型 | ❌ | 命令还不是结构化对象 |
-| 一等 `ProcessResult` 类型 | ⚠️ | 现在只是 record 返回值，不是稳定 runtime type |
+| 一等 `Path` 类型 | ⚠️ | 已有稳定 runtime identity、`std.path.fromString`、最小 typed adapter，以及 `std.io.readFilePath` / `std.io.currentDirPath` / `std.io.pathExistsPath` / `std.io.isFilePath` / `std.io.isDirPath` 这类首批 host bridge，但路径字面量与大部分 stdlib 仍主要是字符串 |
+| 一等 `Command` 类型 | ⚠️ | 内部已落 runtime identity，且 `std.io.command` 与 `std.io.execCommand` 已提供最小公开构造/执行桥；但旧 `io.exec*` 仍接受 `String` / `Record`，命令执行面还没统一到 `Command` |
+| 一等 `ProcessResult` 类型 | ⚠️ | `std.io.execCommand` 已返回公开 `ProcessResult`，且 `std.io.processSuccess` / `std.io.processStdout` / `std.io.processCode` / `std.io.processStderr` 已提供首批纯 inspector bridge；`io.exec` 现在已在内部投影 canonical `Command/ProcessResult` 路径，但旧 `io.exec*` 公开面仍返回 record，执行面仍未统一到 canonical `ProcessResult` surface |
 | 一等管道 | ❌ | 还没有真实 `cmd1 |> cmd2` 的进程管道模型 |
 | 一等重定向 | ❌ | 还没有 stdin/stdout/stderr 重定向对象 |
 | 流式处理 | ❌ | 当前执行模型偏“一次性捕获”，不是流模型 |

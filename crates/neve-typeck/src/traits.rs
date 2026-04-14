@@ -303,6 +303,8 @@ impl TraitResolver {
             TyKind::Named(def_id, _) => format!("Named({})", def_id.0),
             TyKind::Tuple(elems) => format!("Tuple({})", elems.len()),
             TyKind::Record(_) => "Record".to_string(),
+            TyKind::DynamicRecord(_) => "DynamicRecord".to_string(),
+            TyKind::SafeRecordBase(_) => "SafeRecordBase".to_string(),
             TyKind::Fn(_, _) => "Fn".to_string(),
             TyKind::Var(v) => format!("Var({})", v),
             TyKind::Param(idx, name) => format!("Param({}, {})", idx, name),
@@ -367,6 +369,14 @@ impl TraitResolver {
             (TyKind::SelfType, TyKind::SelfType) => true,
             (TyKind::SelfAssoc(left), TyKind::SelfAssoc(right)) => left == right,
             (TyKind::Named(id1, _), TyKind::Named(id2, _)) => id1 == id2,
+            (TyKind::Record(_), TyKind::DynamicRecord(_))
+            | (TyKind::DynamicRecord(_), TyKind::Record(_))
+            | (TyKind::DynamicRecord(_), TyKind::DynamicRecord(_))
+            | (TyKind::SafeRecordBase(_), TyKind::Record(_))
+            | (TyKind::Record(_), TyKind::SafeRecordBase(_))
+            | (TyKind::SafeRecordBase(_), TyKind::DynamicRecord(_))
+            | (TyKind::DynamicRecord(_), TyKind::SafeRecordBase(_))
+            | (TyKind::SafeRecordBase(_), TyKind::SafeRecordBase(_)) => true,
             (TyKind::Var(_), _) | (_, TyKind::Var(_)) => true, // Type vars match anything
             _ => false,
         }
@@ -479,6 +489,42 @@ impl TraitResolver {
     /// 按 ID 获取实现信息。
     pub fn impl_info(&self, impl_id: ImplId) -> Option<&ImplInfo> {
         self.impls.get(&impl_id)
+    }
+
+    /// Replace stored associated-type resolutions for an impl with canonicalized types.
+    /// 用规范化后的类型替换实现块里已存储的关联类型解析结果。
+    pub fn normalize_impl_assoc_types(
+        &mut self,
+        impl_id: ImplId,
+        assoc_types: &HashMap<String, Ty>,
+    ) {
+        if let Some(info) = self.impls.get_mut(&impl_id) {
+            for assoc in &mut info.assoc_types {
+                if let Some(ty) = assoc_types.get(&assoc.name) {
+                    assoc.ty = ty.clone();
+                }
+            }
+        }
+    }
+
+    /// Replace one stored impl-method signature with a canonicalized signature.
+    /// 用规范化后的签名替换实现块中单个方法的已存储签名。
+    pub fn normalize_impl_method_signature(
+        &mut self,
+        impl_id: ImplId,
+        method_def_id: DefId,
+        params: Vec<Ty>,
+        return_ty: Ty,
+    ) {
+        if let Some(info) = self.impls.get_mut(&impl_id)
+            && let Some(method) = info
+                .methods
+                .iter_mut()
+                .find(|method| method.def_id == method_def_id)
+        {
+            method.params = params;
+            method.return_ty = return_ty;
+        }
     }
 
     /// Resolve an associated type for a given type and trait.

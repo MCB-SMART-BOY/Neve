@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 neve-common.workspace = true
+neve-diagnostic.workspace = true
+neve-frontend.workspace = true
 neve-lexer.workspace = true
 neve-eval.workspace = true
 neve-parser.workspace = true

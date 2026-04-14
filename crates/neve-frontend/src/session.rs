@@ -278,12 +278,14 @@ impl FrontendSession {
             checker.check(module);
             checker.clear_diagnostics();
             checker.clear_method_resolutions();
+            checker.clear_assoc_projection_resolutions();
         }
 
         for module in &self.persisted_modules {
             checker.check(module);
             checker.clear_diagnostics();
             checker.clear_method_resolutions();
+            checker.clear_assoc_projection_resolutions();
         }
 
         checker.check(current_module);

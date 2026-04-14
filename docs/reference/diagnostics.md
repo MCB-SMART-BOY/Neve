@@ -95,7 +95,7 @@
 - 描述：语句缺少分号结束
 - 建议：在语句末尾补上 `;`
 
-## Type Errors (E0200 - E0223) / 类型错误 (E0200 - E0223)
+## Type Errors (E0200 - E0224) / 类型错误 (E0200 - E0224)
 
 <a name="E0200"></a>
 ### E0200 — Type mismatch / 类型不匹配
@@ -236,6 +236,13 @@
 - Suggestion: break the cycle by restructuring the dependencies
 - 描述：检测到循环依赖
 - 建议：调整结构打破依赖环
+
+<a name="E0224"></a>
+### E0224 — Unknown method / 未知方法
+- Description: cannot resolve method call on receiver type
+- Suggestion: implement the method for the receiver type or define a matching callable fallback
+- 描述：当前接收者类型上无法解析该方法调用
+- 建议：为接收者类型实现该方法，或定义匹配的 callable fallback
 
 ## Eval Errors (E0300 - E0302) / 求值错误 (E0300 - E0302)
 

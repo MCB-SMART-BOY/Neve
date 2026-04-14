@@ -4,15 +4,18 @@
 //! Builds a package from a Neve file or flake.
 //! 从 Neve 文件或 flake 构建软件包。
 
+use crate::commands::module_graph;
 use crate::output;
 use crate::platform::{BuildBackend, PlatformCapabilities, warn_limited_sandbox};
 use neve_builder::{BuildBackend as BuilderBackend, Builder, BuilderConfig};
+use neve_config::flake::{Flake, FlakeOutput};
 use neve_derive::{Derivation, StorePath};
-use neve_diagnostic::emit;
-use neve_eval::{Value, compat::AstEvaluator};
-use neve_parser::parse;
-use neve_std::std_module_overrides;
+use neve_diagnostic::{Severity, emit};
+use neve_eval::{Evaluator, Value};
+use neve_frontend::{FrontendDriver, ProgramAnalysis};
+use neve_std::stdlib;
 use neve_store::{BinaryCache, CacheConfig, Store};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -123,35 +126,7 @@ pub fn run(args: BuildRunArgs<'_>) -> Result<(), String> {
 
     output::info(&format!("Evaluating {}", source_path));
 
-    // Parse and evaluate the file
-    // 解析并求值文件
-    let source = fs::read_to_string(path)
-        .map_err(|e| format!("cannot read file '{}': {}", source_path, e))?;
-
-    let (ast, diagnostics) = parse(&source);
-
-    for diag in &diagnostics {
-        emit(&source, &source_path, diag);
-    }
-
-    if !diagnostics.is_empty() {
-        return Err("parse error".to_string());
-    }
-
-    // Evaluate the file
-    // 求值文件
-    let mut evaluator = AstEvaluator::new().with_module_overrides(std_module_overrides());
-    if let Some(parent) = path.parent() {
-        evaluator = evaluator.with_base_path(parent.to_path_buf());
-    }
-
-    let value = evaluator
-        .eval_file(&ast)
-        .map_err(|e| format!("evaluation error: {:?}", e))?;
-
-    // Extract derivation(s) from the result
-    // 从结果中提取派生
-    let derivations = extract_derivations(&value, target_attr.as_deref())?;
+    let derivations = resolve_derivations_for_source(path, target_attr.as_deref())?;
 
     if derivations.is_empty() {
         return Err("no derivations found to build".to_string());
@@ -323,6 +298,136 @@ pub fn run(args: BuildRunArgs<'_>) -> Result<(), String> {
     }
 }
 
+fn resolve_derivations_for_source(
+    path: &Path,
+    target_attr: Option<&str>,
+) -> Result<Vec<Derivation>, String> {
+    if path.file_name().is_some_and(|name| name == "flake.neve") {
+        return resolve_flake_derivations(path, target_attr);
+    }
+
+    let value = evaluate_file_via_frontend(path)?;
+    extract_derivations(&value, target_attr)
+}
+
+fn resolve_flake_derivations(
+    flake_path: &Path,
+    target_attr: Option<&str>,
+) -> Result<Vec<Derivation>, String> {
+    let root = flake_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut flake = Flake::load(root).map_err(|e| format!("failed to load flake: {}", e))?;
+
+    if let Some(target) = target_attr {
+        let system = current_system();
+        let value = flake
+            .get_package(&system, target)
+            .map_err(|e| format!("failed to evaluate flake outputs: {}", e))?
+            .ok_or_else(|| format!("package '{}' not found for system '{}'", target, system))?;
+        return extract_derivations(&value, None);
+    }
+
+    let outputs = flake
+        .eval_outputs()
+        .map_err(|e| format!("failed to evaluate flake outputs: {}", e))?;
+    let value = flake_outputs_to_value(&outputs);
+    extract_derivations(&value, None)
+}
+
+fn flake_outputs_to_value(outputs: &HashMap<String, FlakeOutput>) -> Value {
+    let mut fields = HashMap::new();
+    for (name, output) in outputs {
+        let value = match output {
+            FlakeOutput::Package(value)
+            | FlakeOutput::DevShell(value)
+            | FlakeOutput::System(value)
+            | FlakeOutput::HomeConfig(value)
+            | FlakeOutput::Overlay(value)
+            | FlakeOutput::Module(value)
+            | FlakeOutput::Template(value)
+            | FlakeOutput::Other(value) => value.clone(),
+        };
+        fields.insert(name.clone(), value);
+    }
+    Value::Record(std::rc::Rc::new(fields))
+}
+
+fn evaluate_file_via_frontend(path: &Path) -> Result<Value, String> {
+    let (root_dir, module_path) = module_graph::resolve_module_path(path)?;
+    let analysis = FrontendDriver::new(&root_dir)
+        .analyze_module_path(&module_path)
+        .map_err(|e| format!("frontend error: {e}"))?;
+
+    emit_program_diagnostics(&analysis)?;
+    eval_program_root_value(&analysis)
+}
+
+fn emit_program_diagnostics(analysis: &ProgramAnalysis) -> Result<(), String> {
+    let mut had_errors = false;
+
+    for module_id in analysis.load_order() {
+        let Some(info) = analysis.module_info(*module_id) else {
+            continue;
+        };
+
+        let source = fs::read_to_string(&info.file_path)
+            .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
+
+        for diag in analysis.parsed_diagnostics(*module_id).unwrap_or(&[]) {
+            emit(&source, &info.file_path.display().to_string(), diag);
+            if diag.severity == Severity::Error {
+                had_errors = true;
+            }
+        }
+
+        for diag in analysis.diagnostics(*module_id).unwrap_or(&[]) {
+            emit(&source, &info.file_path.display().to_string(), diag);
+            if diag.severity == Severity::Error {
+                had_errors = true;
+            }
+        }
+    }
+
+    if had_errors {
+        Err("type error".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn eval_program_root_value(analysis: &ProgramAnalysis) -> Result<Value, String> {
+    let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
+    let mut root_value = Value::Unit;
+
+    for module_id in analysis.load_order() {
+        let Some(module) = analysis.hir_module(*module_id) else {
+            continue;
+        };
+
+        let value = evaluator
+            .eval_module_with_method_resolutions(
+                module,
+                &analysis
+                    .semantics(*module_id)
+                    .map(|semantics| &semantics.method_resolutions)
+                    .cloned()
+                    .unwrap_or_default(),
+            )
+            .map_err(|e| format!("evaluation error: {e:?}"))?;
+
+        if *module_id == analysis.root_module_id() {
+            root_value = value;
+        }
+    }
+
+    Ok(root_value)
+}
+
+fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
+    stdlib()
+        .into_iter()
+        .map(|(name, value)| (name.to_string(), value))
+}
+
 /// Extract derivations from an evaluated value.
 /// 从求值结果中提取派生。
 fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Derivation>, String> {
@@ -345,11 +450,14 @@ fn extract_derivations(value: &Value, target: Option<&str>) -> Result<Vec<Deriva
             // Look for standard output attributes
             // 查找标准输出属性
             let current_system = current_system();
+            let normalized_system = current_system.replace('-', "_");
 
             // Check for flake-style outputs
             // 检查 flake 风格的输出
             if let Some(Value::Record(packages)) = fields.get("packages")
-                && let Some(Value::Record(system_pkgs)) = packages.get(&current_system)
+                && let Some(Value::Record(system_pkgs)) = packages
+                    .get(&current_system)
+                    .or_else(|| packages.get(normalized_system.as_str()))
             {
                 // Get the default package
                 // 获取默认软件包
@@ -767,6 +875,16 @@ fn try_substitute_derivation(
 mod tests {
     use super::*;
     use neve_derive::{Hash, Output};
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn write_module(root: &Path, relative: &str, content: &str) {
+        let path = root.join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, content).unwrap();
+    }
 
     #[test]
     fn test_candidate_output_paths_for_fixed_output() {
@@ -833,5 +951,112 @@ mod tests {
         assert_eq!(key_for_cache(&many, 1).as_deref(), Some("k1"));
         assert_eq!(key_for_cache(&many, 2).as_deref(), Some("k2"));
         assert!(key_for_cache(&many, 3).is_none());
+    }
+
+    #[test]
+    fn test_resolve_derivations_for_plain_file_uses_frontend_hir() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+
+        write_module(
+            root,
+            "helpers.neve",
+            r#"pub fn mk(name) = #{
+    name = name,
+    version = "1.0.0",
+    build = "echo build"
+};"#,
+        );
+        write_module(
+            root,
+            "default.neve",
+            r#"import helpers (mk);
+let package = mk("demo");
+"#,
+        );
+
+        let derivations = resolve_derivations_for_source(&root.join("default.neve"), None).unwrap();
+        assert_eq!(derivations.len(), 1);
+        assert_eq!(derivations[0].name, "demo");
+        assert_eq!(derivations[0].version, "1.0.0");
+    }
+
+    #[test]
+    fn test_resolve_derivations_for_flake_uses_canonical_flake_path() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let system = current_system().replace('-', "_");
+
+        write_module(
+            root,
+            "helpers.neve",
+            r#"pub fn pkg(name) = #{
+    name = name,
+    version = "2.0.0",
+    build = "echo flake"
+};"#,
+        );
+        write_module(
+            root,
+            "flake.neve",
+            &format!(
+                r#"import helpers (pkg);
+
+let flake = #{{
+    outputs = fn(inputs) #{{
+        packages = #{{
+            {system} = #{{
+                default = pkg("frontend")
+            }}
+        }}
+    }}
+}};
+"#
+            ),
+        );
+
+        let derivations = resolve_derivations_for_source(&root.join("flake.neve"), None).unwrap();
+        assert_eq!(derivations.len(), 1);
+        assert_eq!(derivations[0].name, "frontend");
+        assert_eq!(derivations[0].version, "2.0.0");
+    }
+
+    #[test]
+    fn test_resolve_derivations_for_flake_target_package_uses_flake_packages() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+
+        let system = current_system().replace('-', "_");
+        write_module(
+            root,
+            "flake.neve",
+            &format!(
+                r#"let flake = #{{
+    outputs = fn(inputs) #{{
+        packages = #{{
+            {system} = #{{
+                default = #{{
+                    name = "default",
+                    version = "1.0.0",
+                    build = "echo default"
+                }},
+                demo = #{{
+                    name = "demo",
+                    version = "3.0.0",
+                    build = "echo demo"
+                }}
+            }}
+        }}
+    }}
+}};
+"#
+            ),
+        );
+
+        let derivations =
+            resolve_derivations_for_source(&root.join("flake.neve"), Some("demo")).unwrap();
+        assert_eq!(derivations.len(), 1);
+        assert_eq!(derivations[0].name, "demo");
+        assert_eq!(derivations[0].version, "3.0.0");
     }
 }

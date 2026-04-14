@@ -6,6 +6,7 @@
 //! 本模块提供构建器，用于构造带有上下文信息和建议的类型错误诊断。
 
 use crate::format_builtin_named_type;
+use crate::pattern_analysis::RedundancyReason;
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{BinOp, Ty, TyKind, UnaryOp};
@@ -44,6 +45,28 @@ pub fn format_type(ty: &Ty) -> String {
                 .map(|(name, ty)| format!("{}: {}", name, format_type(ty)))
                 .collect();
             format!("{{ {} }}", parts.join(", "))
+        }
+        TyKind::DynamicRecord(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|(name, ty)| format!("{}: {}", name, format_type(ty)))
+                .collect();
+            if parts.is_empty() {
+                "{ .. }".to_string()
+            } else {
+                format!("{{ {}, .. }}", parts.join(", "))
+            }
+        }
+        TyKind::SafeRecordBase(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|(name, ty)| format!("{}: {}", name, format_type(ty)))
+                .collect();
+            if parts.is_empty() {
+                "RecordOrOption[{ .. }]".to_string()
+            } else {
+                format!("RecordOrOption[{{ {}, .. }}]", parts.join(", "))
+            }
         }
         TyKind::Fn(params, ret) => {
             let params_str: Vec<_> = params.iter().map(format_type).collect();
@@ -458,6 +481,35 @@ pub fn unbound_variable(name: &str, span: Span, similar: Option<&str>) -> Diagno
     diag
 }
 
+/// Create an error for an unresolved method call.
+/// 创建无法解析的方法调用错误。
+pub fn unknown_method_call(method: &str, receiver_ty: &Ty, span: Span) -> Diagnostic {
+    let ty_str = format_type(receiver_ty);
+
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("no method `{}` found for `{}`", method, ty_str),
+    )
+    .with_code(ErrorCode::UnknownMethod)
+    .with_label(Label::new(
+        span,
+        format!("cannot resolve `{}(...)` for `{}`", method, ty_str),
+    ))
+    .with_note(format!(
+        "no inherent or trait method named `{}` applies to `{}`",
+        method, ty_str
+    ))
+    .with_note(format!(
+        "no callable fallback `{}(receiver, ...)` is available either",
+        method
+    ))
+    .with_help(format!(
+        "implement `{}` for `{}` or define a callable `{}` that accepts the receiver as its first argument",
+        method, ty_str, method
+    ))
+}
+
 /// Create an error for missing record field.
 /// 创建记录缺失字段的错误。
 pub fn missing_field(field: &str, record_ty: &Ty, span: Span) -> Diagnostic {
@@ -586,13 +638,26 @@ pub fn non_exhaustive_match(missing_patterns: &[String], span: Span) -> Diagnost
 
 /// Create an error for unreachable pattern.
 /// 创建不可达模式的警告。
-pub fn unreachable_pattern(span: Span, previous_span: Span) -> Diagnostic {
+pub(crate) fn unreachable_pattern(
+    span: Span,
+    previous_span: Span,
+    reason: RedundancyReason,
+) -> Diagnostic {
+    let (previous_label, note) = match reason {
+        RedundancyReason::CoveredByPreviousArms => (
+            "previous pattern matches all remaining values",
+            "an earlier arm already covers the remaining match space",
+        ),
+        RedundancyReason::SubsetShadowed => (
+            "previous pattern already covers this case",
+            "this arm is a subset of cases already matched by an earlier arm",
+        ),
+    };
+
     Diagnostic::warning(DiagnosticKind::Type, span, "unreachable pattern")
         .with_label(Label::new(span, "this pattern will never be matched"))
-        .with_label(Label::new(
-            previous_span,
-            "previous pattern matches all values",
-        ))
+        .with_label(Label::new(previous_span, previous_label))
+        .with_note(note)
         .with_help("remove this pattern or reorder the match arms")
 }
 
@@ -742,7 +807,9 @@ pub fn suggest_conversion(from: &Ty, to: &Ty) -> Option<String> {
         (TyKind::Named(_, _), TyKind::String) => Some("use `join` or `toString`".to_string()),
 
         // Record field access / 记录字段访问
-        (TyKind::Record(_), _) => Some("access a specific field with `.field`".to_string()),
+        (TyKind::Record(_), _) | (TyKind::DynamicRecord(_), _) | (TyKind::SafeRecordBase(_), _) => {
+            Some("access a specific field with `.field`".to_string())
+        }
 
         // Tuple element access / 元组元素访问
         (TyKind::Tuple(_), _) => {
@@ -790,6 +857,25 @@ pub fn field_access_on_non_record(ty: &Ty, field: &str, span: Span) -> Diagnosti
                 "functions don't have fields - did you mean to call this function first?",
             );
         }
+        TyKind::DynamicRecord(fields) => {
+            let field_names: Vec<_> = fields.iter().map(|(n, _)| n.as_str()).collect();
+            if !field_names.is_empty() {
+                diag = diag.with_help(format!(
+                    "known required fields so far: {}",
+                    field_names.join(", ")
+                ));
+            }
+        }
+        TyKind::SafeRecordBase(fields) => {
+            let field_names: Vec<_> = fields.iter().map(|(n, _)| n.as_str()).collect();
+            diag = diag.with_note("safe field access expects a record or Option[Record]");
+            if !field_names.is_empty() {
+                diag = diag.with_help(format!(
+                    "fields constrained through `?.` so far: {}",
+                    field_names.join(", ")
+                ));
+            }
+        }
         _ => {}
     }
 
@@ -814,7 +900,7 @@ pub fn tuple_index_on_non_tuple(ty: &Ty, index: u32, span: Span) -> Diagnostic {
 
     // Add context-specific help
     match &ty.kind {
-        TyKind::Record(fields) => {
+        TyKind::Record(fields) | TyKind::DynamicRecord(fields) | TyKind::SafeRecordBase(fields) => {
             let field_names: Vec<_> = fields.iter().map(|(n, _)| n.as_str()).collect();
             diag = diag
                 .with_note("records are accessed with field names, not numeric indices")
@@ -853,7 +939,7 @@ pub fn list_index_on_non_list(ty: &Ty, span: Span) -> Diagnostic {
                 elems.len().saturating_sub(1)
             ));
         }
-        TyKind::Record(_) => {
+        TyKind::Record(_) | TyKind::DynamicRecord(_) | TyKind::SafeRecordBase(_) => {
             diag = diag.with_note("records use field names, not indices");
         }
         TyKind::String => {

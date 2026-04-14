@@ -182,6 +182,33 @@ fn test_eval_hir_std_path_builtins() {
 }
 
 #[test]
+fn test_eval_hir_std_path_from_string_exposes_path_runtime_value() {
+    let source = r#"
+        import std.path as path;
+        let p = path.fromString("/tmp/file.txt");
+        let result = if typeOf(p) == "Path" then toString(p) else "nope";
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "/tmp/file.txt"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_typed_path_adapters() {
+    let source = r#"
+        import std.path as path;
+        let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
+        let parent = path.parentPath(nested) ?? path.fromString("/");
+        let result = if path.isAbsolutePath(parent) then toString(parent) else "nope";
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "/tmp"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_io_builtins() {
     let source = r#"
         import std.io as io;
@@ -193,6 +220,228 @@ fn test_eval_hir_std_io_builtins() {
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         ),
         other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_read_file_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("io-read-path.neve.txt");
+    std::fs::write(&file_path, "hello-path").unwrap();
+    let escaped = file_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let content = io.readFilePath(path.fromString("{escaped}"));
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "hello-path"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_current_dir_path_bridge() {
+    let expected = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let source = r#"
+        import std.io as io;
+        let cwd = io.currentDirPath();
+        let shown = if typeOf(cwd) == "Path" then toString(cwd) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("printf", ["neve"]);
+        let shown = if typeOf(cmd) == "Command" then toString(cmd) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<command:printf 1 arg(s)>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_matches_canonical_process_projection() {
+    let source = r#"
+        import std.io as io;
+        let legacy = io.exec("rustc", ["--version"]);
+        let canonical = io.execCommand(io.command("rustc", ["--version"]));
+        let same =
+            legacy.success == io.processSuccess(canonical) &&
+            legacy.stdout == io.processStdout(canonical) &&
+            legacy.code == io.processCode(canonical) &&
+            legacy.stderr == io.processStderr(canonical);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_command_bridge_exposes_process_result_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("rustc", ["--version"]);
+        let result = io.execCommand(cmd);
+        let shown = if typeOf(result) == "ProcessResult" then toString(result) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<process-result:0 ok>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_process_success_bridge() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("rustc", ["--version"]);
+        let result = io.execCommand(cmd);
+        let success = io.processSuccess(result);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_process_stdout_bridge() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("rustc", ["--version"]);
+        let result = io.execCommand(cmd);
+        let stdout = io.processStdout(result);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert!(s.contains("rustc"), "stdout should contain rustc"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_process_code_bridge() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("rustc", ["--version"]);
+        let result = io.execCommand(cmd);
+        let code = io.processCode(result);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::Int(code)) => assert_eq!(code, 0.into()),
+        other => panic!("expected int, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_process_stderr_bridge() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("rustc", ["--version"]);
+        let result = io.execCommand(cmd);
+        let stderr = io.processStderr(result);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(stderr)) => assert!(stderr.is_empty(), "stderr should be empty"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_path_exists_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("exists-path.neve.txt");
+    std::fs::write(&file_path, "exists").unwrap();
+    let escaped = file_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let exists = io.pathExistsPath(path.fromString("{escaped}"));
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(value)) => assert!(value),
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_is_dir_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("dir-path");
+    std::fs::create_dir_all(&dir_path).unwrap();
+    let escaped = dir_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let dir = io.isDirPath(path.fromString("{escaped}"));
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(value)) => assert!(value),
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_is_file_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("file-path.neve.txt");
+    std::fs::write(&file_path, "file").unwrap();
+    let escaped = file_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let file = io.isFilePath(path.fromString("{escaped}"));
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(value)) => assert!(value),
+        other => panic!("expected bool, got {:?}", other),
     }
 }
 
@@ -1119,6 +1368,20 @@ fn test_eval_hir_try_on_option_like_enum() {
 }
 
 #[test]
+fn test_eval_hir_try_rejects_known_non_optional_value() {
+    let result = eval_source("let x = 41?;");
+    match result {
+        Err(EvalError::TypeError(message)) => {
+            assert!(
+                message.contains("try requires"),
+                "unexpected error: {message}"
+            );
+        }
+        other => panic!("expected type error, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_coalesce_on_option_like_enum() {
     let result = eval_source(
         "
@@ -1128,6 +1391,20 @@ fn test_eval_hir_coalesce_on_option_like_enum() {
     ",
     );
     assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
+}
+
+#[test]
+fn test_eval_hir_coalesce_rejects_known_non_optional_value() {
+    let result = eval_source("let x = 41 ?? 0;");
+    match result {
+        Err(EvalError::TypeError(message)) => {
+            assert!(
+                message.contains("coalesce requires"),
+                "unexpected error: {message}"
+            );
+        }
+        other => panic!("expected type error, got {:?}", other),
+    }
 }
 
 #[test]
@@ -1154,6 +1431,34 @@ fn test_eval_hir_try_on_result_like_enum_error() {
             assert!(message.contains("boom"), "unexpected error: {message}");
         }
         other => panic!("expected propagated error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_ast_compat_try_rejects_known_non_optional_value() {
+    let result = eval_with_builtins("let x = 41?;");
+    match result {
+        Err(message) => {
+            assert!(
+                message.contains("try requires"),
+                "unexpected error: {message}"
+            );
+        }
+        other => panic!("expected error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_ast_compat_coalesce_rejects_known_non_optional_value() {
+    let result = eval_with_builtins("let x = 41 ?? 0;");
+    match result {
+        Err(message) => {
+            assert!(
+                message.contains("coalesce requires"),
+                "unexpected error: {message}"
+            );
+        }
+        other => panic!("expected error, got {:?}", other),
     }
 }
 
