@@ -992,7 +992,7 @@ let package = mk("demo");
             "helpers.neve",
             r#"pub fn pkg(name) = #{
     name = name,
-    version = "2.0.0",
+    version = "3.0.0",
     build = "echo flake"
 };"#,
         );
@@ -1018,7 +1018,7 @@ let flake = #{{
         let derivations = resolve_derivations_for_source(&root.join("flake.neve"), None).unwrap();
         assert_eq!(derivations.len(), 1);
         assert_eq!(derivations[0].name, "frontend");
-        assert_eq!(derivations[0].version, "2.0.0");
+        assert_eq!(derivations[0].version, "3.0.0");
     }
 
     #[test]

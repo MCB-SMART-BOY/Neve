@@ -88,28 +88,68 @@ isEvaluated(x: A) -> Bool
 
 
 ```neve
+list.empty -> List<A>
+list.singleton<A>(x: A) -> List<A>
 list.len<A>(xs: List<A>) -> Int
 list.isEmpty<A>(xs: List<A>) -> Bool
 list.head<A>(xs: List<A>) -> Option<A>
+list.last<A>(xs: List<A>) -> Option<A>
 list.tail<A>(xs: List<A>) -> List<A>
+list.init<A>(xs: List<A>) -> List<A>
+list.get<A>(index: Int, xs: List<A>) -> Option<A>
+list.cons<A>(x: A, xs: List<A>) -> List<A>
+list.take<A>(n: Int, xs: List<A>) -> List<A>
+list.drop<A>(n: Int, xs: List<A>) -> List<A>
+list.contains<A>(x: A, xs: List<A>) -> Bool
+list.indexOf<A>(x: A, xs: List<A>) -> Option<Int>
 list.append<A>(xs: List<A>, ys: List<A>) -> List<A>
+list.reverse<A>(xs: List<A>) -> List<A>
 list.map<A, B>(f: A -> B, xs: List<A>) -> List<B>
 list.filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
 list.fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
+list.foldRight<A, B>(init: B, f: A -> B -> B, xs: List<A>) -> B
+list.sum(xs: List<Int>) -> Int
+list.product(xs: List<Int>) -> Int
+list.sort<A>(xs: List<A>) -> List<A>
+list.max(xs: List<Int>) -> Option<Int>
+list.min(xs: List<Int>) -> Option<Int>
 list.range(start: Int, end: Int) -> List<Int>
+list.replicate<A>(n: Int, value: A) -> List<A>
+list.zip<A, B>(xs: List<A>, ys: List<B>) -> List[(A, B)]
+list.unzip<A, B>(pairs: List[(A, B)]) -> (List<A>, List<B>)
 ```
 
 
 ```neve
+list.empty -> List<A>
+list.singleton<A>(x: A) -> List<A>
 list.len<A>(xs: List<A>) -> Int
 list.isEmpty<A>(xs: List<A>) -> Bool
 list.head<A>(xs: List<A>) -> Option<A>
+list.last<A>(xs: List<A>) -> Option<A>
 list.tail<A>(xs: List<A>) -> List<A>
+list.init<A>(xs: List<A>) -> List<A>
+list.get<A>(index: Int, xs: List<A>) -> Option<A>
+list.cons<A>(x: A, xs: List<A>) -> List<A>
+list.take<A>(n: Int, xs: List<A>) -> List<A>
+list.drop<A>(n: Int, xs: List<A>) -> List<A>
+list.contains<A>(x: A, xs: List<A>) -> Bool
+list.indexOf<A>(x: A, xs: List<A>) -> Option<Int>
 list.append<A>(xs: List<A>, ys: List<A>) -> List<A>
+list.reverse<A>(xs: List<A>) -> List<A>
 list.map<A, B>(f: A -> B, xs: List<A>) -> List<B>
 list.filter<A>(pred: A -> Bool, xs: List<A>) -> List<A>
 list.fold<A, B>(init: B, f: B -> A -> B, xs: List<A>) -> B
+list.foldRight<A, B>(init: B, f: A -> B -> B, xs: List<A>) -> B
+list.sum(xs: List<Int>) -> Int
+list.product(xs: List<Int>) -> Int
+list.sort<A>(xs: List<A>) -> List<A>
+list.max(xs: List<Int>) -> Option<Int>
+list.min(xs: List<Int>) -> Option<Int>
 list.range(start: Int, end: Int) -> List<Int>
+list.replicate<A>(n: Int, value: A) -> List<A>
+list.zip<A, B>(xs: List<A>, ys: List<B>) -> List[(A, B)]
+list.unzip<A, B>(pairs: List[(A, B)]) -> (List<A>, List<B>)
 ```
 
 
@@ -118,23 +158,39 @@ list.range(start: Int, end: Int) -> List<Int>
 
 ```neve
 string.len(s: String) -> Int
+string.chars(s: String) -> List[Char]
 string.split(s: String, sep: String) -> List<String>
 string.join(xs: List<String>, sep: String) -> String
 string.trim(s: String) -> String
 string.upper(s: String) -> String
 string.lower(s: String) -> String
 string.contains(s: String, needle: String) -> Bool
+string.startsWith(s: String, prefix: String) -> Bool
+string.endsWith(s: String, suffix: String) -> Bool
+string.replace(s: String, from: String, to: String) -> String
+string.substring(s: String, start: Int, end: Int) -> String
+string.isEmpty(s: String) -> Bool
+string.repeat(s: String, n: Int) -> String
+string.lines(s: String) -> List<String>
 ```
 
 
 ```neve
 string.len(s: String) -> Int
+string.chars(s: String) -> List[Char]
 string.split(s: String, sep: String) -> List<String>
 string.join(xs: List<String>, sep: String) -> String
 string.trim(s: String) -> String
 string.upper(s: String) -> String
 string.lower(s: String) -> String
 string.contains(s: String, needle: String) -> Bool
+string.startsWith(s: String, prefix: String) -> Bool
+string.endsWith(s: String, suffix: String) -> Bool
+string.replace(s: String, from: String, to: String) -> String
+string.substring(s: String, start: Int, end: Int) -> String
+string.isEmpty(s: String) -> Bool
+string.repeat(s: String, n: Int) -> String
+string.lines(s: String) -> List<String>
 ```
 
 
@@ -207,6 +263,10 @@ math.sqrt(x: Number) -> Float
 math.pow(base: Number, exp: Number) -> Number
 math.max(x: Number, y: Number) -> Number
 math.min(x: Number, y: Number) -> Number
+math.pi -> Float
+math.e -> Float
+math.inf -> Float
+math.nan -> Float
 ```
 
 
@@ -222,6 +282,10 @@ math.sqrt(x: Number) -> Float
 math.pow(base: Number, exp: Number) -> Number
 math.max(x: Number, y: Number) -> Number
 math.min(x: Number, y: Number) -> Number
+math.pi -> Float
+math.e -> Float
+math.inf -> Float
+math.nan -> Float
 ```
 
 
@@ -233,11 +297,20 @@ I/O helpers are impure and raise runtime errors on failure.
 ```neve
 io.readFile(path: String) -> String
 io.readFilePath(path: Path) -> String
+io.readFileBytesPath(path: Path) -> Bytes
+io.readDirPath(path: Path) -> List<String>
+io.readDirEntryPaths(path: Path) -> List<Path>
+io.writeFilePath(path: Path, content: String) -> Unit
+io.appendFilePath(path: Path, content: String) -> Unit
+io.writeFileBytesPath(path: Path, bytes: Bytes) -> Unit
+io.appendFileBytesPath(path: Path, bytes: Bytes) -> Unit
 io.readDir(path: String) -> List<String>
 io.writeFile(path: String, content: String) -> Unit
 io.appendFile(path: String, content: String) -> Unit
 io.createDirAll(path: String) -> Unit
+io.createDirAllPath(path: Path) -> Unit
 io.removeDirAll(path: String) -> Unit
+io.removeDirAllPath(path: Path) -> Unit
 io.pathExists(path: String) -> Bool
 io.pathExistsPath(path: Path) -> Bool
 io.isDir(path: String) -> Bool
@@ -247,25 +320,36 @@ io.isFilePath(path: Path) -> Bool
 io.getEnv(name: String) -> Option<String>
 io.currentDir() -> String
 io.currentDirPath() -> Path
+io.homeDirPath() -> Option<Path>
 io.command(program: String, args: List<String>) -> Command
+io.commandWith(opts: #{
+  program: String,
+  args?: List<String>,
+  cwd?: String,
+  env?: #{ ...String },
+  stdin?: String
+}) -> Command
+io.commandWithRedirects(command: Command, redirects: List<Redirect>) -> Command
+io.pipeline(commands: List<Command>) -> Pipeline
+io.pipelineWithRedirects(pipeline: Pipeline, redirects: List<Redirect>) -> Pipeline
+io.redirectStdoutPath(path: Path) -> Redirect
+io.redirectStderrPath(path: Path) -> Redirect
+io.redirectStdinPath(path: Path) -> Redirect
+io.taskCommand(command: Command) -> Task[ProcessResult]
+io.taskPipeline(pipeline: Pipeline) -> Task[ProcessResult]
+io.awaitTask(task: Task[ProcessResult]) -> ProcessResult
+io.awaitTasks(tasks: List<Task[ProcessResult]>) -> List<ProcessResult>
 io.execCommand(command: Command) -> ProcessResult
+io.execPipeline(pipeline: Pipeline) -> ProcessResult
 io.processSuccess(result: ProcessResult) -> Bool
 io.processStdout(result: ProcessResult) -> String
 io.processCode(result: ProcessResult) -> Int
 io.processStderr(result: ProcessResult) -> String
 io.homeDir() -> Option<String>
 io.hashFile(path: String) -> String
+io.hashFilePath(path: Path) -> String
 io.hashString(content: String) -> String
 io.currentSystem() -> String
-io.exec(program: String, args: List<String>) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
-io.execShell(command: String) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
-io.execWith(opts: #{
-  program: String,
-  args?: List<String>,
-  cwd?: String,
-  env?: #{ ...String },
-  stdin?: String
-}) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 ```
 
 
@@ -274,11 +358,20 @@ I/O 函数是非纯的，失败会抛出运行时错误。
 ```neve
 io.readFile(path: String) -> String
 io.readFilePath(path: Path) -> String
+io.readFileBytesPath(path: Path) -> Bytes
+io.readDirPath(path: Path) -> List<String>
+io.readDirEntryPaths(path: Path) -> List<Path>
+io.writeFilePath(path: Path, content: String) -> Unit
+io.appendFilePath(path: Path, content: String) -> Unit
+io.writeFileBytesPath(path: Path, bytes: Bytes) -> Unit
+io.appendFileBytesPath(path: Path, bytes: Bytes) -> Unit
 io.readDir(path: String) -> List<String>
 io.writeFile(path: String, content: String) -> Unit
 io.appendFile(path: String, content: String) -> Unit
 io.createDirAll(path: String) -> Unit
+io.createDirAllPath(path: Path) -> Unit
 io.removeDirAll(path: String) -> Unit
+io.removeDirAllPath(path: Path) -> Unit
 io.pathExists(path: String) -> Bool
 io.pathExistsPath(path: Path) -> Bool
 io.isDir(path: String) -> Bool
@@ -288,25 +381,36 @@ io.isFilePath(path: Path) -> Bool
 io.getEnv(name: String) -> Option<String>
 io.currentDir() -> String
 io.currentDirPath() -> Path
+io.homeDirPath() -> Option<Path>
 io.command(program: String, args: List<String>) -> Command
+io.commandWith(opts: #{
+  program: String,
+  args?: List<String>,
+  cwd?: String,
+  env?: #{ ...String },
+  stdin?: String
+}) -> Command
+io.commandWithRedirects(command: Command, redirects: List<Redirect>) -> Command
+io.pipeline(commands: List<Command>) -> Pipeline
+io.pipelineWithRedirects(pipeline: Pipeline, redirects: List<Redirect>) -> Pipeline
+io.redirectStdoutPath(path: Path) -> Redirect
+io.redirectStderrPath(path: Path) -> Redirect
+io.redirectStdinPath(path: Path) -> Redirect
+io.taskCommand(command: Command) -> Task[ProcessResult]
+io.taskPipeline(pipeline: Pipeline) -> Task[ProcessResult]
+io.awaitTask(task: Task[ProcessResult]) -> ProcessResult
+io.awaitTasks(tasks: List<Task[ProcessResult]>) -> List<ProcessResult>
 io.execCommand(command: Command) -> ProcessResult
+io.execPipeline(pipeline: Pipeline) -> ProcessResult
 io.processSuccess(result: ProcessResult) -> Bool
 io.processStdout(result: ProcessResult) -> String
 io.processCode(result: ProcessResult) -> Int
 io.processStderr(result: ProcessResult) -> String
 io.homeDir() -> Option<String>
 io.hashFile(path: String) -> String
+io.hashFilePath(path: Path) -> String
 io.hashString(content: String) -> String
 io.currentSystem() -> String
-io.exec(program: String, args: List<String>) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
-io.execShell(command: String) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
-io.execWith(opts: #{
-  program: String,
-  args?: List<String>,
-  cwd?: String,
-  env?: #{ ...String },
-  stdin?: String
-}) -> #{ code: Int, success: Bool, stdout: String, stderr: String }
 ```
 
 
@@ -317,6 +421,8 @@ io.execWith(opts: #{
 path.fromString(path: String) -> Path
 path.joinPath(base: Path, child: String) -> Path
 path.parentPath(path: Path) -> Option<Path>
+path.filenamePath(path: Path) -> Option<String>
+path.extensionPath(path: Path) -> Option<String>
 path.isAbsolutePath(path: Path) -> Bool
 path.join(a: String, b: String) -> String
 path.parent(path: String) -> Option<String>
@@ -330,6 +436,8 @@ path.is_absolute(path: String) -> Bool
 path.fromString(path: String) -> Path
 path.joinPath(base: Path, child: String) -> Path
 path.parentPath(path: Path) -> Option<Path>
+path.filenamePath(path: Path) -> Option<String>
+path.extensionPath(path: Path) -> Option<String>
 path.isAbsolutePath(path: Path) -> Bool
 path.join(a: String, b: String) -> String
 path.parent(path: String) -> Option<String>
@@ -347,13 +455,31 @@ Map.empty -> Map<K, V>
 Map.singleton(key: K, value: V) -> Map<K, V>
 Map.fromList(items: List<(K, V)>) -> Map<K, V>
 Map.get(key: K, map: Map<K, V>) -> Option<V>
+Map.getWithDefault(key: K, default: V, map: Map<K, V>) -> V
 Map.contains(key: K, map: Map<K, V>) -> Bool
+Map.size(map: Map<K, V>) -> Int
+Map.isEmpty(map: Map<K, V>) -> Bool
+Map.insert(key: K, value: V, map: Map<K, V>) -> Map<K, V>
+Map.remove(key: K, map: Map<K, V>) -> Map<K, V>
+Map.union(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
+Map.intersection(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
+Map.difference(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
 
 Set.empty -> Set<A>
 Set.singleton(value: A) -> Set<A>
 Set.fromList(items: List<A>) -> Set<A>
 Set.contains(value: A, set: Set<A>) -> Bool
 Set.size(set: Set<A>) -> Int
+Set.isEmpty(set: Set<A>) -> Bool
+Set.insert(value: A, set: Set<A>) -> Set<A>
+Set.remove(value: A, set: Set<A>) -> Set<A>
+Set.union(left: Set<A>, right: Set<A>) -> Set<A>
+Set.intersection(left: Set<A>, right: Set<A>) -> Set<A>
+Set.difference(left: Set<A>, right: Set<A>) -> Set<A>
+Set.symmetricDifference(left: Set<A>, right: Set<A>) -> Set<A>
+Set.isSubset(left: Set<A>, right: Set<A>) -> Bool
+Set.isSuperset(left: Set<A>, right: Set<A>) -> Bool
+Set.isDisjoint(left: Set<A>, right: Set<A>) -> Bool
 ```
 
 
@@ -362,13 +488,31 @@ Map.empty -> Map<K, V>
 Map.singleton(key: K, value: V) -> Map<K, V>
 Map.fromList(items: List<(K, V)>) -> Map<K, V>
 Map.get(key: K, map: Map<K, V>) -> Option<V>
+Map.getWithDefault(key: K, default: V, map: Map<K, V>) -> V
 Map.contains(key: K, map: Map<K, V>) -> Bool
+Map.size(map: Map<K, V>) -> Int
+Map.isEmpty(map: Map<K, V>) -> Bool
+Map.insert(key: K, value: V, map: Map<K, V>) -> Map<K, V>
+Map.remove(key: K, map: Map<K, V>) -> Map<K, V>
+Map.union(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
+Map.intersection(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
+Map.difference(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
 
 Set.empty -> Set<A>
 Set.singleton(value: A) -> Set<A>
 Set.fromList(items: List<A>) -> Set<A>
 Set.contains(value: A, set: Set<A>) -> Bool
 Set.size(set: Set<A>) -> Int
+Set.isEmpty(set: Set<A>) -> Bool
+Set.insert(value: A, set: Set<A>) -> Set<A>
+Set.remove(value: A, set: Set<A>) -> Set<A>
+Set.union(left: Set<A>, right: Set<A>) -> Set<A>
+Set.intersection(left: Set<A>, right: Set<A>) -> Set<A>
+Set.difference(left: Set<A>, right: Set<A>) -> Set<A>
+Set.symmetricDifference(left: Set<A>, right: Set<A>) -> Set<A>
+Set.isSubset(left: Set<A>, right: Set<A>) -> Bool
+Set.isSuperset(left: Set<A>, right: Set<A>) -> Bool
+Set.isDisjoint(left: Set<A>, right: Set<A>) -> Bool
 ```
 
 

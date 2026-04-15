@@ -29,6 +29,23 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [3.0.0] - 2026-04-15
+
+### Added / 新增
+- **Object-carried process/runtime mainline**: Added the first verified public `Pipeline`, `Redirect`, `Task[ProcessResult]`, and `Bytes` bridges on the canonical pipeline, including `io.pipeline`, `io.pipelineWithRedirects`, `io.redirectStdoutPath` / `io.redirectStderrPath` / `io.redirectStdinPath`, `io.taskCommand`, `io.taskPipeline`, `io.awaitTask`, `io.awaitTasks`, and binary-safe file bridges such as `io.readFileBytesPath`, `io.writeFileBytesPath`, and `io.appendFileBytesPath`. / **对象承载的进程/运行时主线**: 在规范主线上新增首批已验证的公开 `Pipeline`、`Redirect`、`Task[ProcessResult]` 与 `Bytes` 桥接，包括 `io.pipeline`、`io.pipelineWithRedirects`、`io.redirectStdoutPath` / `io.redirectStderrPath` / `io.redirectStdinPath`、`io.taskCommand`、`io.taskPipeline`、`io.awaitTask`、`io.awaitTasks`，以及 `io.readFileBytesPath`、`io.writeFileBytesPath`、`io.appendFileBytesPath` 等二进制安全文件桥。
+- **Expanded typed path bridges**: Added a wider typed `Path` mainline across `std.path` and `std.io`, including pure adapters like `path.filenamePath` / `path.extensionPath` and host-boundary bridges such as `io.homeDirPath`, `io.createDirAllPath`, `io.removeDirAllPath`, `io.hashFilePath`, `io.writeFilePath`, `io.appendFilePath`, and `io.readDirEntryPaths`. / **扩展 typed `Path` 桥接**: 在 `std.path` 和 `std.io` 中补齐更宽的 typed `Path` 主线，包括 `path.filenamePath` / `path.extensionPath` 这类纯内存 adapter，以及 `io.homeDirPath`、`io.createDirAllPath`、`io.removeDirAllPath`、`io.hashFilePath`、`io.writeFilePath`、`io.appendFilePath`、`io.readDirEntryPaths` 等 host-boundary bridges。
+- **Tooling/documentation parity hardening**: Added broad consumer parity for the new mainline across REPL `:type`, LSP hover/completion, API docs, feature matrix, and the semantic convergence log, so canonical `std.io` / `std.path` / `std.list` / `std.fetch` / `Map` / `Set` / `string` / `option` / `result` / `math` surfaces now describe verified reality instead of stale placeholders. / **工具链与文档一致性加固**: 为新的主线补齐了 REPL `:type`、LSP hover/completion、API 文档、feature matrix 与 semantic convergence log 的广泛一致性覆盖，让 canonical `std.io` / `std.path` / `std.list` / `std.fetch` / `Map` / `Set` / `string` / `option` / `result` / `math` 表面与已验证现实重新对齐。
+
+### Changed / 变更
+- **Canonical execution surface is now object-first**: Public process execution now converges on `io.command(...)` / `io.commandWith(...)` / `io.commandWithRedirects(...)` plus `io.execCommand(...)`, and `io.pipeline(...)` / `io.pipelineWithRedirects(...)` plus `io.execPipeline(...)`; redirect execution now rides on first-class `Command` / `Pipeline` objects instead of separate wrapper paths. / **规范执行面已转为对象优先**: 公开进程执行现在收敛到 `io.command(...)` / `io.commandWith(...)` / `io.commandWithRedirects(...)` 配合 `io.execCommand(...)`，以及 `io.pipeline(...)` / `io.pipelineWithRedirects(...)` 配合 `io.execPipeline(...)`；redirect 执行也改为附着在一等 `Command` / `Pipeline` 对象上，而不是独立 wrapper 路径。
+- **Pipeline/redirect boundaries became explicit**: Pipeline construction and redirect composition now reject invalid topology earlier, including empty pipelines, non-final `stdout` redirect, non-first `stdin`, duplicate stream redirects, and boundary/stage-local redirect conflicts. / **Pipeline/redirect 边界显式化**: pipeline 构造与 redirect 组合现在会更早拒绝无效拓扑，包括空 pipeline、非最终 stage 的 `stdout` redirect、非首 stage 的 `stdin`、重复 stream redirect，以及 boundary/stage-local redirect 冲突。
+
+### Removed / 移除
+- **Legacy compat execution wrappers**: Removed public compat wrappers `io.exec`, `io.execWith`, `io.execShell`, `io.execResult`, `io.execWithResult`, `io.execShellResult`, and the old boundary redirect execution wrappers. Shell behavior is still available, but now only through explicit `Command` construction such as `io.command("sh", ["-c", ...])` or `io.command("cmd", ["/C", ...])`. / **旧兼容执行 wrapper**: 移除了公开 compat wrapper：`io.exec`、`io.execWith`、`io.execShell`、`io.execResult`、`io.execWithResult`、`io.execShellResult`，以及旧的 boundary redirect 执行 wrapper。shell 语义仍可用，但现在只能通过显式 `Command` 构造表达，例如 `io.command("sh", ["-c", ...])` 或 `io.command("cmd", ["/C", ...])`。
+
+### Improved / 改进
+- **Full-pipeline release baseline**: The release was validated against `cargo build -p neve`, `cargo test --workspace`, and `cargo clippy --workspace --all-targets -- -D warnings`, in addition to the narrower convergence slices recorded in `semantic-convergence-plan.md`. / **全流水线发布基线**: 本次发布除 convergence plan 中的窄切片验证外，还通过了 `cargo build -p neve`、`cargo test --workspace` 与 `cargo clippy --workspace --all-targets -- -D warnings` 的完整发布基线。
+
 ## [2.0.0] - 2026-04-15
 
 ### Added / 新增

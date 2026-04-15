@@ -2085,6 +2085,1235 @@ Track progress with concrete metrics rather than narrative only:
   - `cargo test --test lsp -- --nocapture`
   - `cargo test -p neve repl_ -- --nocapture`
   - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow tooling-consumer parity slice for `std.fetch` / `std.Map` / `std.Set`.
+- The change remained intentionally narrow and mainline-aligned:
+  - added LSP hover coverage for representative `fetch`, `Map`, and `Set` bindings so semantic hover now explicitly covers the surface that had already been pulled into completion metadata and explicit typeck
+  - added matching REPL `:type` coverage for representative `fetch`, `Map`, and `Set` expressions so CLI tooling parity now tracks the same explicit surface
+  - kept runtime/typeck/API surface unchanged; this slice only closed the tooling-consumer loop around already-supported mainline APIs
+- Added focused regressions for:
+  - LSP hover over representative `fetch.path(...).hash`, `Map.getWithDefault(...)`, and `Set.isDisjoint(...)` bindings
+  - REPL `:type` over representative `fetch`, `Map`, and `Set` expressions
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.math` constant tooling-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - added the missing canonical `math.inf` / `math.nan` completion entries so LSP metadata now reflects the explicit math-constant surface already present in typeck/runtime
+  - updated `docs/reference/api.md` so the published `std.math` constant list includes `math.pi` / `math.e` / `math.inf` / `math.nan`
+  - added focused consumer regressions so `typeck`, `frontend`, LSP hover, and REPL `:type` all explicitly cover the current math-constant surface
+  - deliberately did not widen the broader `std.math` function surface because that would open the separate `Number` / numeric-overload design gate
+- Added focused regressions for:
+  - LSP stdlib completion metadata including the real canonical `math.inf` / `math.nan` entries
+  - explicit consumer parity for `math.inf` / `math.nan` across typeck/frontend/LSP/REPL
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.fetch` / `std.Map` / `std.Set` tooling-surface convergence slice for LSP metadata and API docs.
+- The change remained intentionally narrow and mainline-aligned:
+  - added the canonical `fetch.path` / `fetch.pathWithHash` / `fetch.url` / `fetch.urlWithHash` / `fetch.git` / `fetch.gitWithHash` completion entries so LSP metadata now reflects the real explicit fetch surface
+  - added the canonical explicit `Map.*` / `Set.*` completion entries that already exist in the current typeck surface, including `Map.getWithDefault`, `Map.size`, `Map.isEmpty`, `Map.insert`, `Map.remove`, `Map.union`, and the corresponding `Set.*` relation/set-operation helpers
+  - updated `docs/reference/api.md` so the published `Map/Set` namespace list matches the already-supported explicit mainline surface instead of the older truncated subset
+  - explicitly omitted runtime-only `Map.keys` / `Map.values` / `Map.toList` / `Map.update` / `Map.map*` and `Set.toList` / `Set.map` / `Set.filter` / `Set.fold` / `Set.partition` because they are not part of the current explicit `typeck` surface
+- Added focused regressions for:
+  - LSP stdlib completion metadata including the real canonical `fetch` / `Map` / `Set` surface
+  - LSP stdlib completion metadata omitting runtime-only map/set helpers that are not yet on the explicit mainline surface
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.string` tooling-surface convergence slice for LSP metadata and API docs.
+- The change remained intentionally narrow and mainline-aligned:
+  - corrected LSP stdlib completion entries to reflect the real canonical `std.string` surface, including `string.chars`, `string.substring`, `string.isEmpty`, `string.repeat`, and `string.lines`
+  - removed the stale `string.concat` completion entry because it is not part of the explicit `typeck`/runtime/API surface
+  - updated `docs/reference/api.md` so the published `std.string` module list matches the already-implemented mainline API instead of the older truncated subset
+- Added focused regressions for:
+  - LSP stdlib completion metadata including the real canonical `std.string` surface
+  - LSP stdlib completion metadata omitting the stale `string.concat` entry
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.option` / `std.result` tooling-surface convergence slice for LSP metadata.
+- The change remained intentionally narrow and mainline-aligned:
+  - corrected LSP stdlib completion entries to use the canonical snake_case `option.is_some` / `option.is_none` / `option.unwrap_or` and `result.is_ok` / `result.is_err`
+  - added the missing canonical `result.unwrap_err` completion entry
+  - removed stale completion entries for `option.map` / `result.map` and the old camelCase names because they do not exist in the explicit `typeck`/API surface
+- Added focused regressions for:
+  - LSP stdlib completion metadata including the real canonical `std.option` / `std.result` surface
+  - LSP stdlib completion metadata omitting the stale camelCase and `map` entries
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.io` tooling-surface convergence slice for LSP metadata.
+- The change remained intentionally narrow and mainline-aligned:
+  - added the missing canonical `std.io` completion entries for the typed-path, command, pipeline, redirect, task, and process-result surface so LSP metadata now reflects the real `typeck`/API surface
+  - kept runtime/typeck semantics unchanged and did not widen `std.io`; this slice only aligned completion metadata with already-supported APIs
+  - explicitly omitted removed compat wrappers like `io.exec`, `io.execWith`, `io.execShell`, the old `*Result` aliases, and the old boundary redirect execution wrappers from LSP completion metadata
+- Added focused regressions for:
+  - LSP stdlib completion metadata including the real canonical `std.io` command/pipeline/redirect/task/process surface
+  - LSP stdlib completion metadata omitting removed compat wrapper names
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.path` tooling-surface convergence slice for LSP metadata.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed stale `path.fileName` and `path.isAbsolute` completion entries from LSP stdlib metadata because canonical `std.path` now exposes `path.filename` / `path.is_absolute` plus the typed `*Path` variants
+  - added the real typed-path completion entries `path.fromString`, `path.joinPath`, `path.parentPath`, `path.filenamePath`, `path.extensionPath`, and `path.isAbsolutePath`
+  - corrected legacy string-path completion metadata so `path.join` returns `String` and `path.parent` returns `Option[String]`, matching the explicit typeck/API surface
+- Added focused regressions for:
+  - LSP stdlib completion metadata including the real typed and legacy `std.path` surface
+  - LSP stdlib completion metadata omitting the stale camelCase path entries
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.sum` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.sum` the explicit canonical signature `List[Int] -> Int`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening aggregation or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.sum` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.sum(List[Int])`
+  - canonical type checking rejecting non-`Int` items instead of leaving `list.sum` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.sum(...)` as `Int`
+- Documentation now reflects the explicit `std.list.sum` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list` tooling-surface convergence slice for LSP metadata.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed stale `list.concat` and `list.elem` entries from LSP stdlib completion metadata because neither exists as a canonical `std.list` function surface
+  - added real `list.empty`, `list.singleton`, and `list.isEmpty` completion entries so LSP no longer lags behind the explicit typeck/runtime surface
+  - updated API docs to reflect the already-supported `list.empty` and `list.singleton` surface instead of widening runtime collection semantics
+- Added focused regressions for:
+  - LSP stdlib completion metadata including `list.empty`, `list.singleton`, and `list.isEmpty`
+  - LSP stdlib completion metadata omitting stale `list.concat` and `list.elem` entries
+- Documentation now reflects the explicit `std.list` constructor surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.foldRight` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.foldRight` the explicit canonical signature `forall A, B. B -> (A -> B -> B) -> List[A] -> B`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening higher-order collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.foldRight` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.foldRight(0, step, [1, 2, 3])`
+  - canonical type checking rejecting non-list arguments instead of leaving `list.foldRight` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.foldRight(...)` as `Int`
+- Documentation now reflects the explicit `std.list.foldRight` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.unzip` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.unzip` the explicit canonical signature `forall A, B. List[(A, B)] -> (List[A], List[B])`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening tuple or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.unzip` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.unzip(List[(Path, Int)])`
+  - canonical type checking rejecting non-pair items instead of leaving `list.unzip` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.unzip(...)` as `(List[Path], List[Int])`
+- Documentation now reflects the explicit `std.list.unzip` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.zip` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.zip` the explicit canonical signature `forall A, B. List[A] -> List[B] -> List[(A, B)]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening tuple or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.zip` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.zip(List[Path], List[Int])`
+  - canonical type checking rejecting non-list arguments instead of leaving `list.zip` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.zip(...)` as `List[(Path, Int)]`
+- Documentation now reflects the explicit `std.list.zip` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.replicate` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.replicate` the explicit canonical signature `forall A. Int -> A -> List[A]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening collection construction semantics
+  - updated LSP stdlib completion metadata and API docs so `list.replicate` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.replicate(Int, Path)` as `List[Path]`
+  - canonical type checking rejecting non-`Int` counts instead of leaving `list.replicate` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.replicate(...)` as `List[Path]`
+- Documentation now reflects the explicit `std.list.replicate` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.product` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.product` the explicit canonical signature `List[Int] -> Int`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening aggregation or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.product` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.product(List[Int])`
+  - canonical type checking rejecting non-`Int` items instead of leaving `list.product` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.product(...)` as `Int`
+- Documentation now reflects the explicit `std.list.product` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.indexOf` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.indexOf` the explicit canonical signature `A -> List[A] -> Option[Int]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening search or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.indexOf` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.indexOf(Path, List[Path])`
+  - canonical type checking rejecting mismatched element types instead of leaving `list.indexOf` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.indexOf(...)` as `Option[Int]`
+- Documentation now reflects the explicit `std.list.indexOf` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.contains` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.contains` the explicit canonical signature `A -> List[A] -> Bool`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening equality or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.contains` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.contains(Path, List[Path])`
+  - canonical type checking rejecting mismatched element types instead of leaving `list.contains` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.contains(...)` as `Bool`
+- Documentation now reflects the explicit `std.list.contains` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.drop` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.drop` the explicit canonical signature `Int -> List[A] -> List[A]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening slicing or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.drop` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.drop(Int, List[Path])`
+  - canonical type checking rejecting non-`Int` counts instead of leaving `list.drop` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.drop(...)` as `List[Path]`
+- Documentation now reflects the explicit `std.list.drop` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.take` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.take` the explicit canonical signature `Int -> List[A] -> List[A]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening slicing or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.take` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.take(Int, List[Path])`
+  - canonical type checking rejecting non-`Int` counts instead of leaving `list.take` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.take(...)` as `List[Path]`
+- Documentation now reflects the explicit `std.list.take` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `List[Path]` usability follow-up.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `std.list.sort` to order `Path` runtime values lexicographically by their rendered path
+  - did not widen the general comparison model for `<` / `>` or claim full `Path` comparability outside this one stdlib helper
+  - kept `io.readDirEntryPaths : Path -> List<Path>` unchanged, and only made the new typed directory-entry result more ergonomic to consume on the canonical path
+- Added focused regressions for:
+  - stdlib direct builtin behavior sorting `List[Path]` values into a stable lexical order
+  - HIR evaluation and end-to-end parity proving `list.sort(io.readDirEntryPaths(...))` now yields a deterministic `List[Path]`
+  - typeck, frontend, LSP, and REPL regression sweeps staying green after the runtime-only sorting extension
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give explicit canonical signatures to `list.sort`, `list.max`, and `list.min` instead of leaving these `std.list` entrypoints as unconstrained runtime-only holes in REPL/LSP surface typing
+  - kept runtime behavior unchanged: `list.sort` still preserves element type while `list.max` / `list.min` remain `List[Int] -> Option[Int]`
+  - updated LSP stdlib completion metadata and API docs so the public tooling/docs surface now matches the already-supported canonical entrypoints
+- Added focused regressions for:
+  - canonical type checking accepting `list.sort(List[Path])` and `list.max/min(List[Int])`
+  - canonical type checking rejecting `list.max(List[String])`
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.sort(...)` as `List[Path]` and `list.max(...)` as `Option[Int]`
+- Documentation now reflects the explicit `std.list` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list` structural-helper convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give explicit canonical signatures to `list.head`, `list.last`, `list.init`, and `list.reverse`
+  - kept runtime behavior unchanged and reused the already-existing stdlib/LSP surface instead of opening new list helpers or widening comparison semantics
+  - updated API docs so the documented `std.list` structural surface now matches the canonical type surface
+- Added focused regressions for:
+  - canonical type checking accepting `head/last/init/reverse` over `List[Path]`
+  - canonical type checking rejecting `list.head(1)` instead of leaving it as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.head(...)` as `Option[Path]` and `list.reverse(...)` as `List[Path]`
+- Documentation now reflects the widened but still precise `std.list` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.get` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.get` the explicit canonical signature `Int -> List[A] -> Option[A]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening list indexing or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.get` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.get(0, List[Path])`
+  - canonical type checking rejecting non-`Int` indexes instead of leaving `list.get` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.get(...)` as `Option[Path]`
+- Documentation now reflects the explicit `std.list.get` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow `std.list.cons` canonical-surface convergence slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - taught `neve-typeck` to give `list.cons` the explicit canonical signature `A -> List[A] -> List[A]`
+  - kept runtime behavior unchanged and reused the existing stdlib builtin instead of widening list construction or collection semantics
+  - updated LSP stdlib completion metadata and API docs so `list.cons` no longer sits outside the documented/tooling surface
+- Added focused regressions for:
+  - canonical type checking accepting `list.cons(Path, List[Path])`
+  - canonical type checking rejecting non-list tails instead of leaving `list.cons` as an unconstrained builtin hole
+  - frontend acceptance, LSP hover, and REPL `:type` all rendering `list.cons(...)` as `List[Path]`
+- Documentation now reflects the explicit `std.list.cons` surface in:
+  - `docs/reference/api.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow typed directory-entry output bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.readDirEntryPaths(path: Path) -> List<Path>` as an explicit typed directory-entry API alongside the existing `io.readDirPath(path: Path) -> List<String>` mirror
+  - kept `io.readDirPath()` unchanged for compatibility, so this slice does not silently redesign the legacy filename projection
+  - reused the already-existing `Path` runtime/type/tooling surface instead of introducing recursive traversal, metadata records, or a broader filesystem listing model
+- Added focused regressions for:
+  - stdlib direct builtin behavior returning `List<Path>` directory entries from `Value::Path` while rejecting accidental `String` input
+  - canonical type checking accepting `List<Path>` for `io.readDirEntryPaths(path.fromString(...))` while still rejecting `io.readDirEntryPaths("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, REPL `:type`, and LSP completion all recognizing `io.readDirEntryPaths(...)` as producing `List[Path]`
+- Documentation now reflects the split but explicit directory-read story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with another narrow in-memory typed-path adapter slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `path.extensionPath(path: Path) -> Option<String>` as a typed mirror of the existing `path.extension(path: String) -> Option<String>` helper
+  - kept `path.extension()` unchanged for compatibility, so this slice does not redesign path construction, filename extraction, or any `std.io` host-boundary behavior
+  - reused the already-existing `Path` runtime/type/tooling surface instead of widening directory output shapes or introducing a broader `std.path` redesign
+- Added focused regressions for:
+  - stdlib direct builtin behavior extracting an extension from `Value::Path` while rejecting accidental `String` input
+  - canonical type checking accepting `Option<String>` for `path.extensionPath(path.joinPath(...))` while still rejecting `path.extensionPath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `path.extensionPath(...)` as producing `Option[String]`
+- Documentation now reflects the widened but still staged `std.path` typed-adapter story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow in-memory typed-path adapter slice.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `path.filenamePath(path: Path) -> Option<String>` as a typed mirror of the existing `path.filename(path: String) -> Option<String>` helper
+  - kept `path.filename()` unchanged for compatibility, so this slice does not redesign `Path` construction, extension extraction, or any host-boundary behavior
+  - reused the already-existing `Path` runtime/type/tooling surface instead of widening directory output shapes or introducing a larger `std.path` redesign
+- Added focused regressions for:
+  - stdlib direct builtin behavior extracting a filename from `Value::Path` while rejecting accidental `String` input
+  - canonical type checking accepting `Option<String>` for `path.filenamePath(path.joinPath(...))` while still rejecting `path.filenamePath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `path.filenamePath(...)` as producing `Option[String]`
+- Documentation now reflects the widened but still staged `std.path` typed-adapter story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by removing the last shell execution wrapper from the public stdlib surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed `io.execShell` from `std.io`, `neve-typeck`, API docs, and tooling examples
+  - left explicit shell behavior available only through the object-carried path `io.execCommand(io.command("sh"/"cmd", ["-c"/"/C", ...]))`
+  - avoided introducing any new shell-specific constructor or sugar, so command execution now has one public execution surface instead of an extra string-only wrapper
+- Added focused regressions for:
+  - stdlib direct coverage proving `io.execShell` is no longer exported
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all converging on explicit shell-equivalent `io.execCommand(io.command(...))`
+  - continued explicit `ProcessResult` typing and inspector behavior on the shell-equivalent object path
+- Documentation now reflects that there is no remaining public `io.exec*` compatibility wrapper in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by removing the last plain non-shell execution wrapper from the public stdlib surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed `io.exec` from `std.io`, `neve-typeck`, direct stdlib coverage, and tooling examples
+  - kept `io.command` as the single plain non-shell command constructor and `io.execCommand` as the only public non-shell execution bridge
+  - preserved non-shell execution semantics by migrating callsites to `io.execCommand(io.command(...))` instead of widening the string execution surface again
+- Added focused regressions for:
+  - stdlib direct coverage proving `io.exec` is no longer exported
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all converging on `io.execCommand(io.command(...))`
+  - legacy non-record field-access rejection still holding on the plain command execution path after the wrapper removal
+- Documentation now reflects the narrower public execution surface in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by removing the last record-shaped configured execution wrapper from the public stdlib surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed `io.execWith` from `std.io`, `neve-typeck`, API docs, and tooling examples
+  - kept `io.commandWith` as the single public configured-execution constructor and `io.execCommand` as the sole configured object execution bridge
+  - preserved configured execution semantics by migrating callsites to `io.execCommand(io.commandWith(#{ ... }))` rather than introducing any new config or execution API
+- Added focused regressions for:
+  - stdlib direct coverage proving `io.execWith` is no longer exported
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all converging on `io.execCommand(io.commandWith(...))`
+  - legacy non-record field-access rejection still holding on the configured execution path after the wrapper removal
+- Documentation now reflects the narrower configured-execution public surface in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by removing the remaining boundary-level redirect execution wrappers from the public stdlib surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed `io.execCommandWithRedirects` and `io.execPipelineWithRedirects` from `std.io`, `neve-typeck`, API docs, and tooling examples
+  - kept `io.commandWithRedirects` and `io.pipelineWithRedirects` as the single public redirect attachment surface, with `io.execCommand` / `io.execPipeline` as the only execution entrypoints
+  - preserved runtime semantics by migrating callsites to `io.execCommand(io.commandWithRedirects(...))` and `io.execPipeline(io.pipelineWithRedirects(...))` instead of inventing any new redirect API or syntax
+- Added focused regressions for:
+  - stdlib direct coverage proving the removed boundary wrappers are no longer exported
+  - stdlib direct builtin coverage proving the embedded-object path still supports the same stdout/stderr/stdin redirect compositions and conflict rejections
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all converging on the object-carried redirect execution path
+- Documentation now reflects the narrower public redirect surface in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by removing the redundant single-redirect execution wrappers from the public stdlib surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed `io.execCommandWithRedirect` and `io.execPipelineWithRedirect` from `std.io`, `neve-typeck`, API docs, and tooling examples
+  - kept `io.execCommandWithRedirects` and `io.execPipelineWithRedirects` as the single explicit boundary-level redirect execution helpers, while `io.commandWithRedirects` and `io.pipelineWithRedirects` remain the object-carried mainline
+  - preserved runtime behavior by migrating all single-redirect callsites to the plural singleton-list form rather than introducing any new redirect API or syntax
+- Added focused regressions for:
+  - stdlib coverage proving the removed single-redirect wrappers are no longer exported
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all converging on the plural singleton-list form
+  - stdlib projection tests proving `io.execCommandWithRedirects(cmd, [redirect])` and `io.execPipelineWithRedirects(pipe, [redirect])` continue to match the object-carried canonical execution path
+- Documentation now reflects the narrowed public redirect execution surface in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by collapsing the remaining public redirect-execution wrappers onto the canonical object-carried execution path.
+- The change remained intentionally narrow and mainline-aligned:
+  - changed `io.execCommandWithRedirect`, `io.execCommandWithRedirects`, `io.execPipelineWithRedirect`, and `io.execPipelineWithRedirects` to first embed the supplied redirects into `Command` / `Pipeline` objects and then execute through the existing canonical `io.execCommand` / `io.execPipeline` runtime path
+  - preserved the public API surface and error prefixes; this slice only removes the last separate redirect-boundary execution branch behind those public entrypoints
+  - kept richer scheduling, stream handles, and any new redirect syntax out of scope
+- Added focused regressions for:
+  - `std.io` proving `io.execCommandWithRedirect(...)` matches `io.execCommand(io.commandWithRedirects(...))`
+  - `std.io` proving `io.execCommandWithRedirects(...)` matches `io.execCommand(io.commandWithRedirects(...))`
+  - `std.io` proving `io.execPipelineWithRedirect(...)` matches `io.execPipeline(io.pipelineWithRedirects(...))`
+  - `std.io` proving `io.execPipelineWithRedirects(...)` matches `io.execPipeline(io.pipelineWithRedirects(...))`
+  - canonical HIR evaluation and end-to-end regression suites staying green after the internal convergence
+- Documentation impact is intentionally limited to this convergence log because no new public capability or syntax was introduced.
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by making non-final stage stdout redirect truncation impossible on the canonical pipeline path.
+- The change remained intentionally narrow and mainline-aligned:
+  - kept the public API surface unchanged; this slice only tightened runtime conflict semantics where a non-final `Command` inside `io.pipeline([...])` already carried `stdout` redirection via `io.commandWithRedirects(...)`
+  - rejected that configuration explicitly in the shared pipeline execution helper instead of silently letting a non-final stage write its stdout away from the pipeline and starve downstream stages
+  - kept the rule narrow: non-final `stdout` redirect is now rejected, while final-stage redirects and non-final `stderr` redirect remain available under the already-established minimal stage-local attachment model
+- Added focused regressions for:
+  - `std.io` rejecting `io.execPipeline(io.pipeline([io.commandWithRedirects(...stdout...), io.command(...) ]))` with an explicit non-final stage stdout conflict message
+  - HIR evaluation surfacing the same non-final stage stdout conflict on the canonical checked path
+  - end-to-end AST/HIR runtime parity on the same non-final stage stdout conflict path
+- Documentation now reflects the narrowed but real dataflow hardening in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by making pipeline boundary redirects reject final-stage duplicate stream ownership explicitly.
+- The change remained intentionally narrow and mainline-aligned:
+  - kept the existing public API surface unchanged; this slice only tightened runtime conflict semantics where `io.execPipelineWithRedirect(...)` or `io.execPipelineWithRedirects(...)` tried to apply `stdout` / `stderr` boundary redirects to a pipeline whose final `Command` already carried the same redirect stream via `io.commandWithRedirects(...)`
+  - routed the check through the shared pipeline redirect helper so single-redirect and list-redirect pipeline entrypoints stay on one canonical rule rather than diverging on edge cases
+  - kept stage-local redirect attachment narrow and explicit: first-stage boundary/stdin conflicts were already rejected, and this slice adds the matching final-stage boundary/stdout|stderr conflict rejection without introducing stream handles, stage-local syntax, or a broader scheduling model
+- Added focused regressions for:
+  - `std.io` rejecting `io.execPipelineWithRedirect(io.pipeline([io.commandWithRedirects(...)]), io.redirectStdoutPath(...))` with an explicit final-stage stdout conflict message
+  - `std.io` rejecting `io.execPipelineWithRedirects(io.pipeline([io.commandWithRedirects(...)]), [io.redirectStderrPath(...)])` with an explicit final-stage stderr conflict message
+  - HIR evaluation surfacing the same final-stage stdout conflict on the canonical checked path
+  - end-to-end AST/HIR runtime parity on the final-stage stderr conflict path
+- Documentation now reflects the narrowed but real conflict-boundary hardening in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by introducing the first minimal stage-local redirect attachment bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.commandWithRedirects : Command -> List<Redirect> -> Command` to `std.io` so existing `Redirect` runtime objects can be attached directly to an existing `Command`, rather than inventing a new stage container, redirect record field, or syntax form
+  - extended `Command` runtime identity so it can carry an explicit typed redirect list while remaining opaque; `typeOf`, runtime formatting, stable keys, REPL runtime typing, and AST compat formatting all continue to treat it as a `Command`, not as a record-shaped protocol
+  - routed `io.execCommand`, `io.execPipeline`, `io.taskCommand`, and `io.awaitTask` through the existing canonical `Command -> ProcessResult` execution path, so commands with embedded redirects reuse the same mainline runtime rather than branching into a second stage-local execution engine
+  - kept the slice explicitly bounded: no new `|>` syntax, no new `PipelineStage` object, no new record-based redirect configuration surface, and no non-blocking task or stream runtime
+  - supported the narrow useful subset only: one `stdin <- Path`, one `stdout -> Path`, and one `stderr -> Path` per redirected command, with explicit rejection of duplicate stream redirects and explicit conflict rejection when redirected stdin would collide with configured stdin or pipeline-boundary stdin
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Command` runtime object from `io.commandWithRedirects(io.command(...), [io.redirectStdoutPath(...)])`
+  - `std.io` executing `io.execCommand(io.commandWithRedirects(...))` and proving embedded redirects are honored on the canonical `Command -> ProcessResult` path
+  - `std.io` executing `io.execPipeline(io.pipeline([io.commandWithRedirects(...), ...]))` and proving a stage-local stderr redirect can be honored while stdout continues through the buffered pipeline path
+  - `std.io` executing `io.awaitTask(io.taskCommand(io.commandWithRedirects(...)))` and proving task consumption reuses the same redirected command runtime
+  - dedicated type-check rejection of non-`Redirect` list items at the new `Command -> List<Redirect> -> Command` boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.commandWithRedirects(...)` as producing `Command`
+- Documentation now reflects the narrowed but real stage-local redirect attachment bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test -p neve-eval --lib`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by introducing the first minimal pipeline-level redirect composition bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execPipelineWithRedirects : Pipeline -> List<Redirect> -> ProcessResult` to `std.io` as the first public execution bridge that can consume more than one explicit `Redirect` object at a single pipeline boundary
+  - kept redirect composition typed and boundary-scoped by composing existing `Redirect` runtime objects directly, rather than inventing a new string/record protocol or stage-local redirect container
+  - supported the narrow useful subset only: one `stdin <- Path`, one `stdout -> Path`, and one `stderr -> Path` per pipeline call, with explicit rejection of duplicate stream redirects
+  - routed the new bridge onto the existing buffered pipeline execution path, so redirected stdin still feeds only the first stage and redirected stdout/stderr still apply only to the final aggregated pipeline result
+  - left stage-local redirect attachment, shell pipe syntax, and broader stream/runtime control explicitly out of scope
+- Added focused regressions for:
+  - `std.io` executing `io.execPipelineWithRedirects(io.pipeline([...]), [io.redirectStdinPath(...), io.redirectStdoutPath(...)])` and proving that redirected stdin can feed the first stage while redirected stdout is written to a real file
+  - `std.io` executing `io.execPipelineWithRedirects(io.pipeline([...]), [io.redirectStdoutPath(...), io.redirectStderrPath(...)])` and proving both final output streams can be redirected in one canonical pipeline execution
+  - explicit stdlib rejection of duplicate stream redirects at the new pipeline-level composition boundary
+  - dedicated type-check rejection of non-`Redirect` list items at the new `List<Redirect>` boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execPipelineWithRedirects(...)` as producing `ProcessResult`
+- Documentation now reflects the narrowed but real pipeline-level redirect composition bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by introducing the first minimal command-level redirect composition bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execCommandWithRedirects : Command -> List<Redirect> -> ProcessResult` to `std.io` as the first public execution bridge that can consume more than one explicit `Redirect` object at a single command boundary
+  - kept redirect composition typed and boundary-scoped by composing existing `Redirect` runtime objects directly, rather than inventing a new string/record protocol or a new redirect container object
+  - supported the narrow useful subset only: one `stdin <- Path`, one `stdout -> Path`, and one `stderr -> Path` per call, with explicit rejection of duplicate stream redirects
+  - preserved explicit effect boundaries by rejecting `commandWith(..., stdin = ...)` when it is combined with a `stdin` redirect object at the same command boundary
+  - left pipeline-level composition, stage-local redirect attachment, and broader streaming/runtime control explicitly out of scope
+- Added focused regressions for:
+  - `std.io` executing `io.execCommandWithRedirects(io.command(...), [io.redirectStdinPath(...), io.redirectStdoutPath(...)])` and proving that redirected stdin can feed the command while redirected stdout is written to a real file
+  - `std.io` executing `io.execCommandWithRedirects(io.command(...), [io.redirectStdoutPath(...), io.redirectStderrPath(...)])` and proving both output streams can be redirected in one canonical command execution
+  - explicit stdlib rejection of duplicate stream redirects at the new command-level composition boundary
+  - dedicated type-check rejection of non-`Redirect` list items at the new `List<Redirect>` boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execCommandWithRedirects(...)` as producing `ProcessResult`
+- Documentation now reflects the narrowed but real command-level redirect composition bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by closing the minimum `Redirect` family with a typed stdin bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.redirectStdinPath : Path -> Redirect` to `std.io` as the first public `stdin <- Path` redirect constructor, keeping `Redirect` typed and path-backed instead of inventing a new string payload surface
+  - extended `io.execCommandWithRedirect` and `io.execPipelineWithRedirect` so the existing canonical `Command/Pipeline -> ProcessResult` execution loops can consume `stdin <- Path` redirect objects in addition to the already-supported `stdout -> Path` / `stderr -> Path` variants
+  - kept the slice strictly boundary-scoped: no redirect composition, no stage-local redirect attachment, no new `stdin` string protocol, and no task/pipeline scheduling changes
+  - preserved explicit effect boundaries by rejecting commands that try to combine `commandWith(..., stdin = "...")` with a `stdin` redirect object at the same execution boundary
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Redirect` runtime object from `io.redirectStdinPath(path.fromString(...))`
+  - `std.io` executing `io.execCommandWithRedirect(io.command(...), io.redirectStdinPath(...))` and surfacing redirected stdin through the normal `ProcessResult.stdout`
+  - `std.io` executing `io.execPipelineWithRedirect(io.pipeline([...]), io.redirectStdinPath(...))` and feeding the redirected input into the first pipeline stage while preserving the buffered `Pipeline -> ProcessResult` semantics
+  - explicit rejection of command-level double-stdin sources when `commandWith(..., stdin = ...)` is combined with `io.redirectStdinPath(...)`
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.redirectStdinPath(...)` as producing `Redirect`
+- Documentation now reflects the narrowed but real stdin redirect bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test -p neve-eval --lib`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by introducing the first minimal public pipeline+redirect execution bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execPipelineWithRedirect : Pipeline -> Redirect -> ProcessResult` to `std.io` as the first public execution bridge that consumes both `Pipeline` and `Redirect`
+  - routed the new bridge onto the existing buffered pipeline execution path, then applied the already-existing `stdout -> Path` / `stderr -> Path` redirect semantics at the pipeline execution boundary
+  - kept the slice strictly boundary-scoped: no `|>` syntax, no stage-local redirect composition, no stdin redirect variant, and no task integration
+  - left broader stream semantics explicitly out of scope, so this slice only proves a minimal public `Pipeline + Redirect -> ProcessResult` loop for the already-existing path redirect objects
+- Added focused regressions for:
+  - `std.io` executing `io.execPipelineWithRedirect(io.pipeline([...]), io.redirectStdoutPath(...))` and writing redirected pipeline stdout to a real file
+  - `std.io` executing `io.execPipelineWithRedirect(io.pipeline([...]), io.redirectStderrPath(...))` and writing redirected pipeline stderr to a real file while clearing `ProcessResult.stderr`
+  - dedicated type-check rejection of non-`Redirect` second arguments at the new pipeline-level redirect execution boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execPipelineWithRedirect(...)` as producing `ProcessResult`
+- Documentation now reflects the narrowed but real pipeline+redirect bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by introducing the first minimal public pipeline-execution bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execPipeline : Pipeline -> ProcessResult` to `std.io` as the first public execution bridge that actually consumes `Pipeline`
+  - routed pipeline execution onto the existing canonical command runtime by evaluating each stage as a blocking buffered `Command -> ProcessResult` step and feeding captured stdout into the next stage's stdin
+  - kept the slice strictly pipeline-scoped: no `|>` syntax, no stream handles, no redirect integration, and no task integration
+  - left broader stream semantics explicitly out of scope, so this slice only proves a first real `Pipeline -> ProcessResult` loop rather than a general shell-plumbing runtime
+- Added focused regressions for:
+  - `std.io` executing `io.execPipeline(io.pipeline([...]))` and returning a `Value::ProcessResult` runtime object
+  - direct stdlib agreement between a single-command pipeline and the canonical `io.execCommand(...)` projection
+  - a real two-stage pipeline proving stdout from one stage is fed into the next stage's stdin on the public pipeline path
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execPipeline(...)` as producing `ProcessResult`
+- Documentation now reflects the narrowed but real pipeline-execution bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by removing the temporary public `*Result` transition aliases once the canonical exec surfaces had settled.
+- The change remained intentionally narrow and mainline-aligned:
+  - removed `io.execResult`, `io.execShellResult`, and `io.execWithResult` from `std.io`, leaving `io.exec`, `io.execShell`, and `io.execWith` as the single public string/record compatibility entrypoints that return `ProcessResult`
+  - removed the matching builtin signatures from `neve-typeck`, so frontend/typeck/REPL/LSP no longer advertise duplicate public process-result surfaces
+  - kept the underlying canonical execution core unchanged, so this slice is public-surface convergence rather than runtime-model churn
+  - left `Command`, `Redirect`, `Pipeline`, and `Task` semantics untouched, avoiding a mixed cleanup/feature slice
+- Added focused regressions for:
+  - `std.io` no longer exposing the three transitional alias builtins
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` continuing to recognize `io.exec`, `io.execShell`, and `io.execWith` as the only public compatibility entrypoints that return `ProcessResult`
+  - documentation no longer advertising the duplicate alias surface in API or roadmap status tables
+- Documentation now reflects the narrowed and cleaner canonical exec surface in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-011` by introducing the first minimal public `Redirect` constructor bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `Redirect` runtime identity to `neve-eval`, with `typeOf`, runtime formatting, stable keys, AST compat formatting, and REPL runtime typing all recognizing it as a first-class object rather than a path/string alias
+  - added `io.redirectStdoutPath : Path -> Redirect` as the first public constructor bridge, without wiring redirect application into command execution or pipeline execution
+  - kept the slice strictly object-oriented: no stdin/stderr redirect variants, no redirect composition, no task integration, and no change to existing process execution contracts
+  - left redirect execution explicitly out of scope, so this slice only proves canonical runtime/object identity and tooling agreement for `Redirect`
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Redirect` runtime object from `io.redirectStdoutPath(path.fromString(...))`
+  - dedicated type-check rejection of string arguments at the new `Path -> Redirect` constructor boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.redirectStdoutPath(...)` as producing `Redirect`
+  - stable-key coverage proving `Redirect` objects remain distinct from plain `Path` values
+- Documentation now reflects the narrowed but real redirect-object bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by introducing the first minimal public redirect-execution bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execCommandWithRedirect : Command -> Redirect -> ProcessResult` as the first public execution bridge that actually consumes `Redirect`
+  - routed the new bridge directly onto the existing canonical `Command -> ProcessResult` execution core, with the current `Redirect` object only controlling `stdout -> Path`, so redirect execution does not invent a second command runtime
+  - kept the slice strictly command-level and object-boundary-scoped: no pipeline execution, no stdin/stderr redirect variants, no redirect composition, and no task integration
+  - left broader stream semantics explicitly out of scope, so this slice only proves a minimal public `Command + Redirect -> ProcessResult` loop for the already-existing stdout-path redirect object
+- Added focused regressions for:
+  - `std.io` executing `io.execCommandWithRedirect(io.command(...), io.redirectStdoutPath(path.fromString(...)))` and writing redirected stdout to a real file
+  - dedicated type-check rejection of non-`Redirect` second arguments at the new command-level redirect execution boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execCommandWithRedirect(...)` as producing `ProcessResult`
+  - stdlib coverage proving redirected execution preserves `io.execCommandWithRedirect:` error prefixes while returning an empty captured `stdout` in the `ProcessResult`
+- Documentation now reflects the narrowed but real redirect-execution bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by extending the minimal public redirect family with a second concrete stream variant.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.redirectStderrPath : Path -> Redirect` as the first public `stderr -> Path` constructor bridge, keeping `Redirect` as an explicit runtime object instead of a path/string alias
+  - extended `io.execCommandWithRedirect` so the existing canonical `Command -> ProcessResult` execution loop can consume either `stdout -> Path` or `stderr -> Path` without inventing a second redirect runtime
+  - kept the slice strictly redirect-scoped: no stdin variant, no redirect composition, no pipeline integration, and no task integration
+  - left broader stream semantics explicitly out of scope, so this slice only proves a second concrete redirect stream on the already-existing command-level redirect bridge
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Redirect` runtime object from `io.redirectStderrPath(path.fromString(...))`
+  - dedicated type-check rejection of string arguments at the new `Path -> Redirect` constructor boundary
+  - `std.io` executing `io.execCommandWithRedirect(io.command(...), io.redirectStderrPath(path.fromString(...)))` and writing redirected stderr to a real file while keeping `ProcessResult.stderr` empty
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.redirectStderrPath(...)` as producing `Redirect`
+- Documentation now reflects the narrowed but real stderr-redirect bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by introducing the first minimal public `Pipeline` constructor bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `Pipeline` runtime identity to `neve-eval`, with `typeOf`, runtime formatting, stable keys, AST compat formatting, and REPL runtime typing all recognizing it as a first-class object rather than a `List<Command>` alias
+  - added `io.pipeline : List<Command> -> Pipeline` as the first public constructor bridge, without adding `|>` syntax, process spawning, or any public pipeline execution API
+  - kept the slice strictly object-oriented: no redirects, no `Task<T>`, no stream handles, and no change to existing process execution contracts
+  - left pipeline execution explicitly out of scope, so this slice only proves canonical runtime/object identity and tooling agreement for `Pipeline`
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Pipeline` runtime object from `io.pipeline([io.command(...), ...])`
+  - dedicated type-check rejection of non-`Command` items inside `io.pipeline([...])`
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.pipeline(...)` as producing `Pipeline`
+  - stable-key coverage proving `Pipeline` objects remain distinct from plain `List[Command]`
+- Documentation now reflects the narrowed but real pipeline-object bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by introducing the first minimal public `Task<T>` constructor bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `Task` runtime identity to `neve-eval`, with `typeOf`, runtime formatting, stable keys, AST compat formatting, and REPL runtime typing all recognizing it as a first-class object rather than a command/list alias
+  - added `io.taskCommand : Command -> Task[ProcessResult]` as the first public constructor bridge, without adding scheduling, `await`, cancellation, timeout, or any effect-mode execution API
+  - kept the slice strictly object-oriented: no task runners, no pipeline integration, no redirect application, and no change to existing process execution contracts
+  - left task execution explicitly out of scope, so this slice only proves canonical runtime/object identity and tooling agreement for `Task[ProcessResult]`
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Task` runtime object from `io.taskCommand(io.command(...))`
+  - dedicated type-check rejection of non-`Command` arguments at the new `Command -> Task[ProcessResult]` constructor boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.taskCommand(...)` as producing `Task[ProcessResult]`
+  - stable-key coverage proving `Task` objects remain distinct from plain `Command` values
+- Documentation now reflects the narrowed but real task-object bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by introducing the first minimal public `Task<T>` consumer bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.awaitTask : Task[ProcessResult] -> ProcessResult` as the first explicit task-consumption boundary op, without adding poll, cancellation, timeout, or background scheduling
+  - routed `io.awaitTask` directly onto the existing canonical `Command -> ProcessResult` execution path carried by the `Task` runtime object, so task consumption does not invent a second process runtime
+  - kept the slice strictly blocking and object-boundary-scoped: no task state machine, no multi-shot task handle, no redirect/pipeline integration, and no change to existing `io.exec*` public contracts
+  - left broader task execution semantics explicitly out of scope, so this slice only proves a minimal public `Command -> Task[ProcessResult] -> ProcessResult` loop
+- Added focused regressions for:
+  - `std.io` directly consuming `Value::Task` via `io.awaitTask(io.taskCommand(io.command(...)))`
+  - dedicated type-check rejection of non-`Task[ProcessResult]` arguments at the new consumer boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.awaitTask(...)` as producing `ProcessResult`
+  - stdlib parity coverage proving `io.awaitTask(io.taskCommand(cmd))` matches `io.execCommand(cmd)` and preserves `io.awaitTask:` error prefixes
+- Documentation now reflects the narrowed but real task-consumer bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by extending the minimal public `Task<T>` bridge from `Command` to `Pipeline`.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.taskPipeline : Pipeline -> Task[ProcessResult]` as a second constructor bridge without adding scheduling, poll, cancellation, timeout, or new task syntax
+  - extended the `Task` runtime object so it can carry either a `Command` or a `Pipeline`, while keeping `Task[ProcessResult]` as the only public task output surface
+  - routed `io.awaitTask` for pipeline-backed tasks directly onto the existing canonical `Pipeline -> ProcessResult` execution path, so task consumption still does not invent a second process runtime
+  - kept the slice strictly blocking and object-boundary-scoped: no background scheduler, no task state machine, no redirect/task fusion beyond what `Pipeline` already supports, and no change to existing `io.exec*` public contracts
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Task` runtime object from `io.taskPipeline(io.pipeline(...))`
+  - dedicated type-check rejection of non-`Pipeline` arguments at the new `Pipeline -> Task[ProcessResult]` constructor boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.taskPipeline(...)` as producing `Task[ProcessResult]`
+  - stdlib parity coverage proving `io.awaitTask(io.taskPipeline(pipe))` matches `io.execPipeline(pipe)` and preserves `io.awaitTask:` error prefixes
+- Documentation now reflects the narrowed but real pipeline-task bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by extending the minimal public `Task<T>` consumer bridge from single-task to bulk blocking consumption.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.awaitTasks : List<Task[ProcessResult]> -> List<ProcessResult>` as the first bulk task-consumption boundary op, without adding poll, cancellation, timeout, scheduling, or non-blocking task semantics
+  - routed `io.awaitTasks` directly onto the existing canonical `io.awaitTask` / `Command|Pipeline -> ProcessResult` execution path carried by each `Task` runtime object, so bulk consumption still does not invent a second process runtime
+  - kept the slice strictly blocking and object-boundary-scoped: tasks are awaited sequentially, the result surface is only `List<ProcessResult>`, and no new redirect/pipeline/task control model was introduced
+  - left broader task execution/control semantics explicitly out of scope, so this slice only proves a minimal public `List<Task[ProcessResult]> -> List<ProcessResult>` loop across the already-existing command-backed and pipeline-backed task objects
+- Added focused regressions for:
+  - `std.io` directly consuming mixed command-backed and pipeline-backed task lists via `io.awaitTasks([...])`
+  - dedicated type-check rejection of non-`Task[ProcessResult]` list items at the new bulk consumer boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.awaitTasks(...)` as producing `List[ProcessResult]`
+  - stdlib parity coverage proving `io.awaitTasks([t1, t2])` matches the ordered pair of individual `io.awaitTask(...)` projections and preserves indexed `io.awaitTasks[n]:` error prefixes
+- Documentation now reflects the narrowed but real bulk task-consumer bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by exposing the first minimal public `Bytes` host bridge without inventing a separate bytes module surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.readFileBytesPath : Path -> Bytes` as the first public stdlib bridge that produces the dormant `Bytes` runtime object from a real host boundary
+  - kept the existing text-oriented `io.readFile` / `io.readFilePath` contracts unchanged for compatibility, so this slice does not yet redesign file I/O around bytes-first APIs
+  - relied on the already-canonical `typeOf` / runtime formatting / REPL value typing to display and introspect `Bytes`, instead of introducing a broader `std.bytes` module or new conversion APIs
+  - left broader binary-safe stdlib design explicitly out of scope, so this slice only proves a minimal public `Path -> Bytes` loop rather than a complete bytes story
+- Added focused regressions for:
+  - stdlib direct builtin behavior returning `Value::Bytes` from `io.readFileBytesPath(path.fromString(...))` while rejecting accidental `String` input
+  - canonical type checking accepting `Bytes` annotations for `io.readFileBytesPath(...)` while still rejecting `io.readFileBytesPath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.readFileBytesPath(...)` as producing `Bytes`
+- Documentation now reflects the narrowed but real first public bytes bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by extending the first public `Bytes` bridge into a minimal binary-safe file round-trip.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.writeFileBytesPath : Path -> Bytes -> Unit` as the first public stdlib bridge that consumes the dormant `Bytes` runtime object at a real host boundary
+  - kept the existing text-oriented `io.writeFile` contract unchanged for compatibility, so this slice does not yet redesign file output around bytes-first APIs or append semantics
+  - relied on the already-existing `io.readFileBytesPath` bridge as the only public bytes constructor, avoiding a parallel `std.bytes` surface or ad hoc bytes literals
+  - left broader binary-safe stdlib design explicitly out of scope, so this slice only proves a minimal `Path -> Bytes -> Unit` file-output loop rather than a complete bytes API family
+- Added focused regressions for:
+  - stdlib direct builtin behavior writing `Value::Bytes` payloads to a `Path` and rejecting accidental `String` path or non-`Bytes` payloads
+  - canonical type checking accepting `Unit` annotations for `io.writeFileBytesPath(...)` while rejecting `io.writeFileBytesPath(path.fromString(...), "not-bytes")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.writeFileBytesPath(...)` as producing `Unit`
+- Documentation now reflects the widened but still narrow public bytes file-IO story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by extending the minimal public `Bytes` file bridges to append semantics.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.appendFileBytesPath : Path -> Bytes -> Unit` as the first public bytes append bridge at a real host boundary
+  - kept the existing text-oriented `io.appendFile` contract unchanged for compatibility, so this slice does not redesign append semantics outside the new typed file boundary
+  - reused the existing `io.readFileBytesPath` and `io.writeFileBytesPath` bridges to form the first stable binary-safe append round-trip, without introducing a separate `std.bytes` module or bytes literals
+  - left broader bytes-oriented stdlib design explicitly out of scope, so this slice only proves a minimal append-capable file boundary rather than a complete binary API family
+- Added focused regressions for:
+  - stdlib direct builtin behavior appending `Value::Bytes` payloads to a `Path` and rejecting accidental `String` path or non-`Bytes` payloads
+  - canonical type checking accepting `Unit` annotations for `io.appendFileBytesPath(...)` while rejecting `io.appendFileBytesPath(path.fromString(...), "not-bytes")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.appendFileBytesPath(...)` as producing `()`
+- Documentation now reflects the widened but still narrow public bytes append bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by introducing the first public `Pipeline` boundary-redirect constructor bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.pipelineWithRedirects : Pipeline -> List<Redirect> -> Pipeline`, so boundary-level redirect composition can now live on a first-class `Pipeline` object instead of only on execution calls
+  - extended the `Pipeline` runtime object so it can carry embedded boundary redirects while remaining opaque in `typeOf`, formatting, and tooling surfaces
+  - routed `io.execPipeline` and `io.awaitTask(io.taskPipeline(...))` through the existing canonical pipeline execution path while honoring embedded pipeline boundary redirects, so no second redirect execution model was introduced
+  - kept `io.execPipelineWithRedirect` / `io.execPipelineWithRedirects` as explicit compat-style boundary helpers and made them reject pipelines that already carry embedded boundary redirects, avoiding silent duplicate ownership
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::Pipeline` runtime object from `io.pipelineWithRedirects(io.pipeline(...), [...])`
+  - dedicated type-check rejection of non-`Pipeline` and non-`Redirect` arguments at the new constructor boundary
+  - canonical frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.pipelineWithRedirects(...)` as producing `Pipeline`
+  - stdlib parity coverage proving `io.execPipeline(pipe_with_redirects)` and `io.awaitTask(io.taskPipeline(pipe_with_redirects))` honor embedded pipeline boundary redirects, while `io.execPipelineWithRedirect(...)` rejects duplicate boundary ownership
+- Documentation now reflects the narrowed but real pipeline-boundary redirect bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by tightening `Pipeline` boundary-redirect conflicts at construction time.
+- The change remained intentionally narrow and mainline-aligned:
+  - moved the obvious `pipelineWithRedirects` conflict cases to the constructor boundary, instead of allowing an invalid `Pipeline` object and only failing later at `io.execPipeline(...)` or `io.awaitTask(...)`
+  - `io.pipelineWithRedirects(...)` now rejects empty pipelines, final-stage `stdout/stderr` boundary conflicts against stage-local redirects, and boundary `stdin` conflicts against stage-local `stdin`
+  - left non-final stage `stdout` redirect rejection on the execution path, because that remains a stage-topology rule rather than a pure boundary-redirect ownership conflict
+  - kept the slice API-neutral: no new syntax, no new runtime object kind, and no change to the blocking canonical `Pipeline -> ProcessResult` execution model
+- Added focused regressions for:
+  - `std.io` rejecting `io.pipelineWithRedirects(io.pipeline([]), [...])` with an explicit empty-pipeline constructor error
+  - `std.io` rejecting `io.pipelineWithRedirects(...)` when boundary `stdout/stderr` conflicts with a final stage that already carries the same redirect stream
+  - `std.io` rejecting `io.pipelineWithRedirects(...)` when boundary `stdin` conflicts with stage-local `stdin`
+  - canonical HIR evaluation and end-to-end parity proving these constructor-boundary failures now surface before execution
+- Documentation now reflects the tightened but still narrow pipeline constructor semantics in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by moving the remaining obvious `Pipeline` stage-topology checks to the constructor boundary.
+- The change remained intentionally narrow and mainline-aligned:
+  - added a shared `validate_pipeline_command_topology(...)` path so `io.pipeline(...)` and `io.pipelineWithRedirects(...)` now reject invalid command sequences before any execution call
+  - `io.pipeline(...)` now rejects non-final stage `stdout` redirects, non-first stage configured `stdin`, and non-first stage `stdin` redirects at construction time instead of only surfacing them later through `io.execPipeline(...)`
+  - kept the slice API-neutral: no new syntax, no new runtime object kind, no change to the blocking buffered `Pipeline -> ProcessResult` semantics, and no new stage-local redirect protocol
+- Added focused regressions for:
+  - `std.io` rejecting `io.pipeline([..., io.commandWithRedirects(...stdout...), ...])` when a non-final stage tries to redirect `stdout`
+  - `std.io` rejecting `io.pipeline([... , io.commandWith(#{ stdin = ... }), ...])` when a non-first stage tries to configure `stdin`
+  - `std.io` rejecting `io.pipeline([... , io.commandWithRedirects(...stdin...), ...])` when a non-first stage tries to carry a stage-local `stdin` redirect
+  - canonical HIR evaluation and end-to-end parity proving these failures now surface at `io.pipeline(...)` construction time rather than later on the execution path
+- Documentation now reflects the tightened but still narrow pipeline topology constructor semantics in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by making empty pipelines invalid at the public `Pipeline` constructor boundary.
+- The change remained intentionally narrow and mainline-aligned:
+  - moved the empty-pipeline check into `io.pipeline(...)`, so the language no longer constructs a public `Pipeline` object with zero stages and only rejects it later when executing or attaching redirects
+  - kept execution-side guards in place for defensive handling of manually constructed invalid runtime values, but the canonical user-facing surface now fails at construction time
+  - kept the slice API-neutral: no new syntax, no new runtime object kind, and no change to the blocking buffered `Pipeline -> ProcessResult` semantics
+- Added focused regressions for:
+  - `std.io` rejecting `io.pipeline([])` with an explicit constructor-boundary error
+  - canonical HIR evaluation and end-to-end parity proving `io.pipeline([])` now fails before execution
+  - preserving `io.execPipeline` / `io.execPipelineWithRedirect` / `io.awaitTask` empty-pipeline error-prefix guards by directly exercising invalid runtime values in unit tests
+- Documentation now reflects the narrowed but real empty-pipeline constructor rule in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by introducing the first public configured `Command` constructor bridge and routing configured execution through it.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.commandWith : #{ program, args?, cwd?, stdin?, env? } -> Command`, so configured execution can now be represented as a first-class runtime object instead of only as a record-shaped exec input
+  - extended `CommandValue` so the canonical runtime object can carry `cwd`, `stdin`, and `env` alongside `program` and `args`
+  - routed `io.execWith` / `io.execWithResult` through shared `CommandValue` construction plus `io.execCommand`-equivalent execution, so record-shaped configured execution is now an explicit compatibility entrypoint rather than a separate execution model
+  - kept `io.execWith` / `io.execWithResult` public contracts intact in the same slice, avoiding alias cleanup or broader input-surface migration while the new `Command` bridge settles
+- Added focused regressions for:
+  - `std.io` directly returning a configured `Value::Command` runtime object from `io.commandWith(#{ ... })`, including preserved `cwd` / `stdin` / `env` payload
+  - direct stdlib agreement between `io.execWith(#{ ... })` and the canonical configured-object path `io.execCommand(io.commandWith(#{ ... }))`
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.commandWith(...)` as producing `Command`
+  - stable-key coverage proving configured `Command` objects remain distinct from plain `Command` objects and from record lookalikes
+- Documentation now reflects the narrowed but real configured-command bridge in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by migrating the legacy configured `io.execWith` public contract onto the canonical `ProcessResult` surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - changed `io.execWith : #{ program, args?, cwd?, stdin?, env? } -> #{ code, success, stdout, stderr }` into `io.execWith : #{ program, args?, cwd?, stdin?, env? } -> ProcessResult`, making the long-standing configured execution entrypoint itself the public canonical configured surface
+  - kept the `io.execWith:` error prefix intact, so callers crossing the old configured-exec boundary still see the same named failure source
+  - left `io.execWithResult` in place as a transitional alias rather than removing it in the same slice, avoiding unrelated cleanup while the public migration is still fresh
+  - completed the public result-shape migration of the three legacy `io.exec*` entrypoints without widening input-surface migration to `Command` in the same step
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::ProcessResult` runtime object from `io.execWith(#{ program = "rustc", args = ["--version"] })`
+  - direct stdlib agreement between migrated `io.execWith(...)` and the canonical `io.execCommand(io.command(...))` plus `ProcessResult` accessors
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execWith(...)` as producing `ProcessResult`
+  - dedicated type-check rejection of legacy record-style field access like `io.execWith(...).code`, now that `io.execWith` is no longer a record surface
+- Documentation now reflects the narrowed but genuinely migrated configured execution story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by migrating the legacy plain shell `io.execShell` public contract onto the canonical `ProcessResult` surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - changed `io.execShell : String -> #{ code, success, stdout, stderr }` into `io.execShell : String -> ProcessResult`, making the long-standing shell entrypoint itself the public canonical shell surface
+  - kept the `io.execShell:` error prefix intact, so callers crossing the old shell boundary still see the same named failure source
+  - left `io.execShellResult` in place as a transitional alias rather than removing it in the same slice, avoiding unrelated cleanup while the public migration is still fresh
+  - left `io.execWith` on its existing public record contract, so this slice does not widen configured execution migration at the same time
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::ProcessResult` runtime object from `io.execShell("rustc --version")`
+  - direct stdlib agreement between migrated `io.execShell("...")` and the canonical shell-equivalent `io.execCommand(io.command("sh"/"cmd", ...))` plus `ProcessResult` accessors
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execShell(...)` as producing `ProcessResult`
+  - dedicated type-check rejection of legacy record-style field access like `io.execShell(...).code`, now that `io.execShell` is no longer a record surface
+- Documentation now reflects the narrowed but genuinely migrated shell execution story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by migrating the legacy plain `io.exec` public contract onto the canonical `ProcessResult` surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - changed `io.exec : String -> List[String] -> #{ code, success, stdout, stderr }` into `io.exec : String -> List[String] -> ProcessResult`, making the long-standing plain exec entrypoint itself the public canonical non-shell surface
+  - kept the `io.exec:` error prefix intact, so callers crossing the old plain-exec boundary still see the same named failure source
+  - left `io.execResult` in place as a transitional alias rather than removing it in the same slice, avoiding an unrelated cleanup while the public migration is still fresh
+  - left `io.execShell` and `io.execWith` on their existing public record contracts, so this slice does not widen shell/configured migration at the same time
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::ProcessResult` runtime object from `io.exec("rustc", ["--version"])`
+  - direct stdlib agreement between migrated `io.exec(...)` and the canonical `io.execCommand(io.command(...))` plus `ProcessResult` accessors
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.exec(...)` as producing `ProcessResult`
+  - dedicated type-check rejection of legacy record-style field access like `io.exec(...).stdout`, now that `io.exec` is no longer a record surface
+- Documentation now reflects the narrowed but genuinely migrated non-shell execution story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by exposing the first minimal public shell `String -> ProcessResult` migration bridge over the legacy `io.execShell` surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execShellResult : String -> ProcessResult` to `std.io` as the smallest public bridge from the old shell-string execution surface into the canonical process-result family
+  - kept `io.execShell : String -> #{ code, success, stdout, stderr }` unchanged as a compatibility API, so this slice does not force shell callers to migrate
+  - parameterized the shared shell-execution helper only enough to preserve `io.execShell:` errors for the legacy API while giving `io.execShellResult:` its own explicit public error boundary
+  - left `io.exec` and `io.execWith` on their existing public record contracts, so this slice only widens the shell migration surface
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::ProcessResult` runtime object from `io.execShellResult("rustc --version")`
+  - direct stdlib agreement between `io.execShellResult("...")` and the canonical shell-equivalent `io.execCommand(io.command("sh"/"cmd", ...))` plus `ProcessResult` accessors
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execShellResult(...)` as producing `ProcessResult`
+  - preservation of the legacy `io.execShell:` error boundary while introducing the new explicit `io.execShellResult:` public shell bridge
+- Documentation now reflects the widened but still staged shell execution story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by exposing the first minimal public configured `Record -> ProcessResult` migration bridge over the legacy `io.execWith` surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execWithResult : #{ program, args?, cwd?, stdin?, env? } -> ProcessResult` to `std.io` as the smallest public bridge from the old configured-execution record surface into the canonical process-result family
+  - kept `io.execWith : #{ program, args?, cwd?, stdin?, env? } -> #{ code, success, stdout, stderr }` unchanged as a compatibility API, so this slice does not force callers to migrate
+  - parameterized the shared configured-execution helper only enough to preserve `io.execWith:` errors for the legacy API while giving `io.execWithResult:` its own explicit public error boundary
+  - left `io.exec` and `io.execShell` on their existing public record contracts, so this slice does not widen the non-configured migration surfaces again
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::ProcessResult` runtime object from `io.execWithResult(#{ program = "rustc", args = ["--version"] })`
+  - direct stdlib agreement between `io.execWithResult(...)` and the canonical `io.execCommand(io.command(...))` plus `ProcessResult` accessors
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execWithResult(...)` as producing `ProcessResult`
+  - preservation of an explicit `io.execWithResult:` error prefix for configured execution failures, without mutating the legacy `io.execWith:` boundary
+- Documentation now reflects the widened but still staged configured execution story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by exposing the first minimal public `String -> ProcessResult` migration bridge over the legacy non-shell execution surface.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.execResult : String -> List[String] -> ProcessResult` to `std.io` as the smallest public bridge from the old string-based exec surface into the canonical process-result family
+  - kept `io.exec : String -> List[String] -> #{ code, success, stdout, stderr }` unchanged as a compatibility API, so this slice does not force callers to migrate
+  - reused the already-canonical internal execution path, so `io.execResult` is just a public exposure of the shared `ProcessResult` projection rather than a new execution branch
+  - left `io.execShell` and `io.execWith` on their existing public record contracts, so this slice does not widen shell/configured execution migration yet
+- Added focused regressions for:
+  - `std.io` directly returning a `Value::ProcessResult` runtime object from `io.execResult("rustc", ["--version"])`
+  - direct stdlib agreement between `io.execResult(...)` and the canonical `io.execCommand(io.command(...))` plus `ProcessResult` accessors
+  - canonical type checking, frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.execResult(...)` as producing `ProcessResult`
+- Documentation now reflects the widened but still staged non-shell execution story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by converging the legacy `io.execShell` implementation onto the canonical process-result projection path without changing its public record contract.
+- The change remained intentionally narrow and mainline-aligned:
+  - kept `io.execShell : String -> #{ code, success, stdout, stderr }` unchanged as a user-visible API
+  - reimplemented `io.execShell` internally to produce a shared `ProcessResultValue` and then project it back through the canonical record conversion path, instead of maintaining a separate shell-output-to-record branch
+  - preserved the legacy `io.execShell:` error prefix and record result shape, so this slice does not migrate callers away from the existing shell string surface
+  - left the public `io.exec*` family unchanged even though all three legacy execution entrypoints now share the canonical process-result projection path internally
+- Added focused regressions for:
+  - direct stdlib agreement between `io.execShell("...")` and the canonical shell-equivalent `io.execCommand(io.command("sh"/"cmd", ...))` plus `ProcessResult` accessors
+  - HIR evaluation and end-to-end parity confirming the legacy `io.execShell` record surface still matches the canonical process projection
+- Documentation now reflects the narrower but more canonical process-execution story in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-011` by converging the legacy `io.execWith` implementation onto the canonical process-result projection path without changing its public record contract.
+- The change remained intentionally narrow and mainline-aligned:
+  - kept `io.execWith : #{ program, args?, cwd?, stdin?, env? } -> #{ code, success, stdout, stderr }` unchanged as a user-visible API
+  - reimplemented `io.execWith` internally to produce a shared `ProcessResultValue` and then project it back through the canonical record conversion path, instead of maintaining a fully separate output-to-record branch
+  - preserved the legacy `io.execWith:` error prefix and record result shape, so this slice does not migrate callers to `Command` or public `ProcessResult`
+  - left `io.execShell` on its existing legacy string/record implementation
+- Added focused regressions for:
+  - direct stdlib agreement between `io.execWith(#{ program = ..., args = ... })` and the canonical `io.execCommand(io.command(...))` plus `ProcessResult` accessors
+  - HIR evaluation and end-to-end parity confirming the legacy `io.execWith` record surface still matches the canonical process projection
+  - compatibility of the legacy `io.execWith:` error prefix for missing-program failures
+- Documentation now reflects the narrower but more canonical process-execution story in:
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
 - Continued `PR-011` with the next dormant runtime-object skeleton slice for command/process identity.
 - The change remained intentionally narrow and mainline-aligned:
   - added opaque `Value::Command` and `Value::ProcessResult` runtime objects in `crates/neve-eval/src/value.rs`
@@ -2331,6 +3560,137 @@ Track progress with concrete metrics rather than narrative only:
   - `cargo test --test frontend -- --nocapture`
   - `cargo test --test lsp -- --nocapture`
   - `cargo test -p neve repl_ -- --nocapture`
+- Continued `PR-012` with a narrow typed-path hashing bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.hashFilePath(path: Path) -> String` as a typed mirror of the existing `io.hashFile(path: String) -> String` host boundary
+  - kept `io.hashFile()` unchanged for compatibility, so this slice does not redesign hashing semantics, `Bytes` conversion, or broader content-addressed APIs
+  - reused the already-existing `Path` runtime/type/tooling surface instead of widening file I/O or introducing a separate hashing module
+- Added focused regressions for:
+  - stdlib direct builtin behavior hashing file contents from `Value::Path` while rejecting accidental `String` input
+  - canonical type checking accepting `String` for `io.hashFilePath(path.fromString(...))` while rejecting `io.hashFilePath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.hashFilePath(...)` as producing `String`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with a narrow typed-path text write bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.writeFilePath(path: Path, content: String) -> Unit` as a typed mirror of the existing `io.writeFile(path: String, content: String) -> Unit` host boundary
+  - kept `io.writeFile()` unchanged for compatibility, so this slice does not redesign append semantics, directory enumeration, or broader text/bytes I/O contracts
+  - reused the already-existing `Path` runtime/type/tooling surface instead of widening filesystem output shapes or introducing a new text I/O module
+- Added focused regressions for:
+  - stdlib direct builtin behavior writing text through `Value::Path` while rejecting accidental `String` path input and non-`String` payloads
+  - canonical type checking accepting `Unit` for `io.writeFilePath(path.fromString(...), "...")` while still rejecting `io.writeFilePath("...", "...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.writeFilePath(...)` as producing `Unit`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-012` with a narrow typed-path text append bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.appendFilePath(path: Path, content: String) -> Unit` as a typed mirror of the existing `io.appendFile(path: String, content: String) -> Unit` host boundary
+  - kept `io.appendFile()` unchanged for compatibility, so this slice does not redesign bytes append semantics, directory listing output shapes, or broader text I/O contracts
+  - reused the already-existing `Path` runtime/type/tooling surface instead of widening filesystem output shapes or introducing a new text append API family
+- Added focused regressions for:
+  - stdlib direct builtin behavior appending text through `Value::Path` while rejecting accidental `String` path input and non-`String` payloads
+  - canonical type checking accepting `Unit` for `io.appendFilePath(path.fromString(...), "...")` while still rejecting `io.appendFilePath("...", "...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.appendFilePath(...)` as producing `Unit`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-012` with a narrow typed-path directory-read bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.readDirPath(path: Path) -> List<String>` as a typed mirror of the existing `io.readDir(path: String) -> List<String>` host boundary
+  - kept `io.readDir()` unchanged for compatibility, and intentionally preserved the legacy `List<String>` filename projection instead of redesigning the output as `List<Path>`
+  - reused the already-existing `Path` runtime/type/tooling surface instead of widening directory traversal semantics, globbing, or path-list modeling
+- Added focused regressions for:
+  - stdlib direct builtin behavior listing directory entries from `Value::Path` while rejecting accidental `String` input and preserving `String` entry names
+  - canonical type checking accepting `List<String>` for `io.readDirPath(path.fromString(...))` while still rejecting `io.readDirPath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.readDirPath(...)` as producing `List[String]`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Continued `PR-012` by completing the minimal typed-path directory pair.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.removeDirAllPath(path: Path) -> Unit` as a typed mirror of the existing `io.removeDirAll(path: String) -> Unit` host boundary
+  - kept `io.removeDirAll()` unchanged for compatibility, so this slice does not redesign directory listing, globbing, or a broader typed filesystem automation surface
+  - reused the already-existing `Path` runtime/type/tooling surface and the new `createDirAllPath` pair instead of introducing `readDirPath`, `List<Path>`, or any new path syntax
+- Added focused regressions for:
+  - stdlib direct builtin behavior removing nested directories from `Value::Path` while rejecting accidental `String` input
+  - canonical type checking accepting `Unit` for `io.removeDirAllPath(path.fromString(...))` while rejecting `io.removeDirAllPath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.removeDirAllPath(...)` as producing `()`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` with the first mutating typed-path directory bridge.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.createDirAllPath(path: Path) -> Unit` as a typed mirror of the existing `io.createDirAll(path: String) -> Unit` host boundary
+  - kept `io.createDirAll()` unchanged for compatibility, so this slice does not redesign directory removal, directory listing, or broader typed filesystem automation
+  - reused the already-existing `Path` runtime/type/tooling surface together with `io.pathExistsPath` / `io.isDirPath` for validation, instead of introducing new list/path adapters or a broader directory API family
+- Added focused regressions for:
+  - stdlib direct builtin behavior creating nested directories from `Value::Path` while rejecting accidental `String` input
+  - canonical type checking accepting `Unit` for `io.createDirAllPath(path.fromString(...))` while rejecting `io.createDirAllPath("...")`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.createDirAllPath(...)` as producing `()`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-012` by adding the next zero-argument typed-path host bridge that had been explicitly deferred after `io.currentDirPath`.
+- The change remained intentionally narrow and mainline-aligned:
+  - added `io.homeDirPath() -> Option[Path]` as a typed mirror of the existing `io.homeDir() -> Option[String]` host boundary
+  - kept `io.homeDir()` unchanged for compatibility, so this slice does not redesign home-directory lookup semantics or platform-specific environment resolution
+  - reused the already-existing `Option` + `Path` runtime/type/tooling surface instead of introducing any new path syntax, list/path adapters, or argument-taking `io.*` entrypoint
+- Added focused regressions for:
+  - stdlib direct builtin behavior returning `Some(Path)` when `HOME` exists and `None` otherwise
+  - canonical type checking accepting `Option<Path>` for `io.homeDirPath()` while rejecting annotation as plain `Path`
+  - frontend acceptance, HIR evaluation, end-to-end parity, LSP hover, and REPL `:type` all recognizing `io.homeDirPath()` as producing `Option[Path]`
+- Documentation now reflects the widened but still staged `std.io` typed-path story in:
+  - `docs/reference/api.md`
+  - `docs/project/feature-matrix.md`
+  - `docs/project/language-roadmap.md`
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test std -- --nocapture`
+  - `cargo test --test typeck -- --nocapture`
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test --test eval -- --nocapture`
+  - `cargo test --test end_to_end -- --nocapture`
+  - `cargo test --test lsp -- --nocapture`
+  - `cargo test -p neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
 - Continued `PR-012` with the zero-argument typed-path host bridge planned in `D-082`.
 - The change remained intentionally narrow and mainline-aligned:
   - added `io.currentDirPath() -> Path` as the first `std.io` entrypoint that produces a typed path runtime object directly from the host

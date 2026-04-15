@@ -1353,10 +1353,31 @@ impl Evaluator {
             Value::Path(path) => path.display().to_string(),
             Value::Bytes(bytes) => format!("<bytes:{}>", bytes.len()),
             Value::Command(command) => {
+                if command.has_effect_config() {
+                    format!(
+                        "<command:{} {} arg(s), configured>",
+                        command.program(),
+                        command.args().len()
+                    )
+                } else {
+                    format!(
+                        "<command:{} {} arg(s)>",
+                        command.program(),
+                        command.args().len()
+                    )
+                }
+            }
+            Value::Pipeline(pipeline) => {
+                format!("<pipeline:{} command(s)>", pipeline.commands().len())
+            }
+            Value::Redirect(redirect) => {
+                format!("<redirect:{}:path>", redirect.stream_name())
+            }
+            Value::Task(task) => {
                 format!(
-                    "<command:{} {} arg(s)>",
-                    command.program(),
-                    command.args().len()
+                    "<task:{}->{}>",
+                    task.target().kind_name(),
+                    task.output().type_name()
                 )
             }
             Value::ProcessResult(result) => format!(

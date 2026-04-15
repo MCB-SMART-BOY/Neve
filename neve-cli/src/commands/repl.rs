@@ -1031,7 +1031,10 @@ mod tests {
     use neve_diagnostic::{ErrorCode, Severity};
     use neve_eval::{
         Value,
-        value::{CommandValue, ProcessResultValue},
+        value::{
+            CommandValue, PipelineValue, ProcessResultValue, RedirectValue, TaskOutputKind,
+            TaskValue,
+        },
     };
     use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind, lower};
     use neve_parser::parse;
@@ -1081,9 +1084,10 @@ mod tests {
     use neve_syntax::SourceFile;
     use neve_typeck::{
         BYTES_TYPE_ID, COMMAND_TYPE_ID, LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, PATH_TYPE_ID,
-        PROCESS_RESULT_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID, builtin_bytes, builtin_command,
-        builtin_list, builtin_map, builtin_option, builtin_path, builtin_process_result,
-        builtin_result, builtin_set, format_builtin_named_type,
+        PIPELINE_TYPE_ID, PROCESS_RESULT_TYPE_ID, REDIRECT_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID,
+        TASK_TYPE_ID, builtin_bytes, builtin_command, builtin_list, builtin_map, builtin_option,
+        builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect, builtin_result,
+        builtin_set, builtin_task, format_builtin_named_type,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1171,6 +1175,9 @@ mod tests {
             Value::Path(_) => builtin_path(Span::DUMMY),
             Value::Bytes(_) => builtin_bytes(Span::DUMMY),
             Value::Command(_) => builtin_command(Span::DUMMY),
+            Value::Pipeline(_) => builtin_pipeline(Span::DUMMY),
+            Value::Redirect(_) => builtin_redirect(Span::DUMMY),
+            Value::Task(task) => builtin_task(task_output_type(task), Span::DUMMY),
             Value::ProcessResult(_) => builtin_process_result(Span::DUMMY),
             Value::List(items) => builtin_list(common_runtime_type(items.iter()), Span::DUMMY),
             Value::Tuple(items) => Ty {
@@ -1205,6 +1212,12 @@ mod tests {
                 "Err" => builtin_result(unknown_ty(), type_from_value(payload), Span::DUMMY),
                 _ => unknown_ty(),
             },
+        }
+    }
+
+    fn task_output_type(task: &TaskValue) -> Ty {
+        match task.output() {
+            TaskOutputKind::ProcessResult => builtin_process_result(Span::DUMMY),
         }
     }
 
@@ -1473,12 +1486,643 @@ mod tests {
         .expect("import should evaluate");
 
         let ty = infer_repl_type(
-            r#"path.joinPath(path.fromString("/tmp"), "neve.txt")"#,
+            r#"path.extensionPath(path.joinPath(path.fromString("/tmp"), "neve.txt"))"#,
             &runtime,
             &state,
         )
         .expect("type inference should succeed");
-        assert_eq!(ty, "Path");
+        assert_eq!(ty, "Option[String]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_sort_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.sort(io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_max_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"list.max([1, 3, 2])"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Option[Int]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_head_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.head(io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Option[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_reverse_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.reverse(io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_get_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.get(0, io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Option[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_cons_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.cons(path.fromString("/"), io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_take_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.take(2, io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_drop_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.drop(1, io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_contains_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.contains(path.fromString("/"), io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_index_of_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.indexOf(path.fromString("/"), io.readDirEntryPaths(path.fromString("/tmp")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Option[Int]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_sum_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"list.sum([1, 2, 3])"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_product_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"list.product([2, 3, 4])"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_replicate_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.replicate(2, path.fromString("/tmp"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_zip_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.zip(io.readDirEntryPaths(path.fromString("/tmp")), [1, 2])"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[(Path, Int)]");
+    }
+
+    #[test]
+    fn repl_type_uses_std_math_constant_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty =
+            infer_repl_type("math.inf", &runtime, &state).expect("type inference should succeed");
+        assert_eq!(ty, "Float");
+    }
+
+    #[test]
+    fn repl_type_uses_std_fetch_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.fetch as fetch;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"fetch.path("Cargo.toml").cached"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_std_map_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input("import std.Map;", true, &context, &mut runtime, &mut state)
+            .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"Map.getWithDefault("a", 0, Map.insert("a", 1, Map.empty))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_std_set_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input("import std.Set;", true, &context, &mut runtime, &mut state)
+            .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            "Set.isDisjoint(Set.fromList([1]), Set.fromList([2]))",
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_unzip_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"list.unzip([
+                (path.fromString("/tmp"), 1),
+                (path.fromString("/var"), 2),
+            ])"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "(List[Path], List[Int])");
+    }
+
+    #[test]
+    fn repl_type_uses_std_list_fold_right_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.list as list;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "fn step(x, acc) = x + acc;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("function should evaluate");
+
+        let ty = infer_repl_type(r#"list.foldRight(0, step, [1, 2, 3])"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
     }
 
     #[test]
@@ -1514,6 +2158,230 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_io_read_file_bytes_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.readFileBytesPath(path.fromString("/tmp/file.bin"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Bytes");
+    }
+
+    #[test]
+    fn repl_type_uses_io_read_dir_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.readDirPath(path.fromString("/tmp"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[String]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_read_dir_entry_paths_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.readDirEntryPaths(path.fromString("/tmp"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_write_file_bytes_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.writeFileBytesPath(path.fromString("/tmp/file.out"), io.readFileBytesPath(path.fromString("/tmp/file.bin")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_write_file_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.writeFilePath(path.fromString("/tmp/file.out"), "hello")"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_append_file_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.appendFilePath(path.fromString("/tmp/file.out"), "hello")"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_append_file_bytes_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.appendFileBytesPath(path.fromString("/tmp/file.out"), io.readFileBytesPath(path.fromString("/tmp/file.bin")))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
     fn repl_type_uses_io_current_dir_path_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -1531,6 +2399,98 @@ mod tests {
         let ty = infer_repl_type(r#"io.currentDirPath()"#, &runtime, &state)
             .expect("type inference should succeed");
         assert_eq!(ty, "Path");
+    }
+
+    #[test]
+    fn repl_type_uses_io_home_dir_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.homeDirPath()"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Option[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_create_dir_all_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io; import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.createDirAllPath(path.fromString("/tmp/neve-dir"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_remove_dir_all_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io; import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.removeDirAllPath(path.fromString("/tmp/neve-dir"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_hash_file_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io; import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.hashFilePath(path.fromString("/tmp/file.txt"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
     }
 
     #[test]
@@ -1554,6 +2514,30 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_io_command_with_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" })"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Command");
+    }
+
+    #[test]
     fn repl_type_uses_io_exec_command_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -1570,6 +2554,531 @@ mod tests {
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.command("rustc", ["--version"]))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_pipeline_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Pipeline");
+    }
+
+    #[test]
+    fn repl_type_uses_io_pipeline_with_redirects_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;\nimport std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.pipelineWithRedirects(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]), [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))])"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Pipeline");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_pipeline_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_pipeline_with_redirect_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execPipeline(
+                io.pipelineWithRedirects(
+                    io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+                    [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                )
+            )"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_pipeline_with_redirects_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execPipeline(
+                io.pipelineWithRedirects(
+                    io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+                    [
+                        io.redirectStdoutPath(path.fromString("/tmp/neve.out")),
+                        io.redirectStderrPath(path.fromString("/tmp/neve.err"))
+                    ]
+                )
+            )"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_command_with_redirects_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.commandWithRedirects(
+                io.command("printf", ["neve"]),
+                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            )"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Command");
+    }
+
+    #[test]
+    fn repl_type_uses_io_redirect_stdout_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.redirectStdoutPath(path.fromString("/tmp/neve.out"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Redirect");
+    }
+
+    #[test]
+    fn repl_type_uses_io_redirect_stderr_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.redirectStderrPath(path.fromString("/tmp/neve.err"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Redirect");
+    }
+
+    #[test]
+    fn repl_type_uses_io_redirect_stdin_path_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.redirectStdinPath(path.fromString("/tmp/neve.in"))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Redirect");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_command_with_redirect_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execCommand(
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                )
+            )"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_command_with_redirects_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+        evaluate_repl_input(
+            "import std.path as path;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execCommand(
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [
+                        io.redirectStdoutPath(path.fromString("/tmp/neve.out")),
+                        io.redirectStderrPath(path.fromString("/tmp/neve.err"))
+                    ]
+                )
+            )"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_task_command_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.taskCommand(io.command("printf", ["neve"]))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Task[ProcessResult]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_task_pipeline_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.taskPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "Task[ProcessResult]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_await_task_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.awaitTask(io.taskCommand(io.command("rustc", ["--version"])))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_await_pipeline_task_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.awaitTask(io.taskPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_await_tasks_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.awaitTasks([io.taskCommand(io.command("printf", ["neve"])), io.taskPipeline(io.pipeline([io.command("printf", ["lang"]), io.command("cat", [])]))])"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "List[ProcessResult]");
+    }
+
+    #[test]
+    fn repl_type_uses_explicit_shell_exec_command_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execCommand(io.command("sh", ["-c", "rustc --version"]))"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "ProcessResult");
+    }
+
+    #[test]
+    fn repl_type_uses_io_exec_with_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }))"#,
             &runtime,
             &state,
         )
@@ -1918,12 +3427,44 @@ mod tests {
     }
 
     #[test]
+    fn repl_runtime_value_type_formatting_uses_pipeline_builtin_name() {
+        let ty = type_from_value(&Value::Pipeline(std::rc::Rc::new(PipelineValue::new(
+            vec![
+                std::rc::Rc::new(CommandValue::new("printf", vec!["neve".to_string()])),
+                std::rc::Rc::new(CommandValue::new("cat", Vec::new())),
+            ],
+        ))));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == PIPELINE_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "Pipeline");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_uses_redirect_builtin_name() {
+        let ty = type_from_value(&Value::Redirect(std::rc::Rc::new(
+            RedirectValue::stdout_path("/tmp/neve.out"),
+        )));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == REDIRECT_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "Redirect");
+    }
+
+    #[test]
     fn repl_runtime_value_type_formatting_uses_process_result_builtin_name() {
         let ty = type_from_value(&Value::ProcessResult(std::rc::Rc::new(
             ProcessResultValue::new(0, true, "stdout", "stderr"),
         )));
         assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == PROCESS_RESULT_TYPE_ID));
         assert_eq!(format_repl_type(&ty), "ProcessResult");
+    }
+
+    #[test]
+    fn repl_runtime_value_type_formatting_uses_task_builtin_name() {
+        let ty = type_from_value(&Value::Task(std::rc::Rc::new(
+            neve_eval::value::TaskValue::command_process_result(std::rc::Rc::new(
+                CommandValue::new("printf", vec!["neve".to_string()]),
+            )),
+        )));
+        assert!(matches!(ty.kind, TyKind::Named(def_id, _) if def_id == TASK_TYPE_ID));
+        assert_eq!(format_repl_type(&ty), "Task[ProcessResult]");
     }
 
     #[test]

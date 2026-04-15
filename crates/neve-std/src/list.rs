@@ -385,10 +385,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::List(items) => {
                             let mut sorted: Vec<_> = items.iter().cloned().collect();
                             // Only sort if all elements are comparable (integers for now)
-                            // 仅在所有元素可比较时排序（目前支持整数）
+                            // 仅在所有元素可比较时排序（当前支持整数、字符串与 Path）
                             sorted.sort_by(|a, b| match (a, b) {
                                 (Value::Int(x), Value::Int(y)) => x.cmp(y),
                                 (Value::String(x), Value::String(y)) => x.cmp(y),
+                                (Value::Path(x), Value::Path(y)) => {
+                                    x.as_os_str().cmp(y.as_os_str())
+                                }
                                 _ => std::cmp::Ordering::Equal,
                             });
                             Ok(Value::List(Rc::new(sorted)))

@@ -98,20 +98,22 @@
 |-------------------|----------|------|
 | 文件读取 | ✅ | `std.io` 已支持 |
 | 文件写入与追加 | ✅ | `io.writeFile` / `io.appendFile` 已支持 |
-| 目录递归创建与删除 | ✅ | `io.createDirAll` / `io.removeDirAll` 已支持 |
+| 目录递归创建与删除 | ✅ | `io.createDirAll` / `io.removeDirAll` 已支持，且 `io.createDirAllPath` / `io.removeDirAllPath` 已提供首批 typed-path 目录创建/删除 bridges |
 | 环境变量读取 | ✅ | `io.getEnv` 已支持 |
-| 进程执行并捕获输出 | ✅ | `io.exec` / `io.execShell` 已支持 |
-| 可配置执行（`cwd` / `env` / `stdin`） | ✅ | `io.execWith` 已支持 |
+| 进程执行并捕获输出 | ✅ | 对象主线由 `io.execCommand` / `io.execPipeline` 承接；需要 shell 语义时，显式构造 `io.command("sh"/"cmd", ["-c"/"/C", ...])` 再执行 |
+| 可配置执行（`cwd` / `env` / `stdin` / `redirects`） | ✅ | `io.commandWith` 已能公开构造带 `cwd` / `env` / `stdin` 的 `Command`，`io.commandWithRedirects` 也已能把 typed `Redirect` 列表收进 `Command`；配置执行现在通过 `io.execCommand(io.commandWith(...))` 走 canonical 对象主线 |
 
 ### 仍然缺失的关键能力
 
 | Capability / 能力 | 当前状态 | 为什么还不能叫“替代 Bash” |
 |-------------------|----------|----------------------------|
-| 一等 `Path` 类型 | ⚠️ | 已有稳定 runtime identity、`std.path.fromString`、最小 typed adapter，以及 `std.io.readFilePath` / `std.io.currentDirPath` / `std.io.pathExistsPath` / `std.io.isFilePath` / `std.io.isDirPath` 这类首批 host bridge，但路径字面量与大部分 stdlib 仍主要是字符串 |
-| 一等 `Command` 类型 | ⚠️ | 内部已落 runtime identity，且 `std.io.command` 与 `std.io.execCommand` 已提供最小公开构造/执行桥；但旧 `io.exec*` 仍接受 `String` / `Record`，命令执行面还没统一到 `Command` |
-| 一等 `ProcessResult` 类型 | ⚠️ | `std.io.execCommand` 已返回公开 `ProcessResult`，且 `std.io.processSuccess` / `std.io.processStdout` / `std.io.processCode` / `std.io.processStderr` 已提供首批纯 inspector bridge；`io.exec` 现在已在内部投影 canonical `Command/ProcessResult` 路径，但旧 `io.exec*` 公开面仍返回 record，执行面仍未统一到 canonical `ProcessResult` surface |
-| 一等管道 | ❌ | 还没有真实 `cmd1 |> cmd2` 的进程管道模型 |
-| 一等重定向 | ❌ | 还没有 stdin/stdout/stderr 重定向对象 |
+| 一等 `Path` 类型 | ⚠️ | 已有稳定 runtime identity、`std.path.fromString` 与首批 typed adapter（`path.joinPath` / `path.parentPath` / `path.filenamePath` / `path.extensionPath` / `path.isAbsolutePath`），以及 `std.io.readFilePath` / `std.io.readDirPath` / `std.io.readDirEntryPaths` / `std.io.writeFilePath` / `std.io.appendFilePath` / `std.io.currentDirPath` / `std.io.homeDirPath` / `std.io.createDirAllPath` / `std.io.removeDirAllPath` / `std.io.hashFilePath` / `std.io.pathExistsPath` / `std.io.isFilePath` / `std.io.isDirPath` 这类首批 host bridge；其中 `io.readDirPath` 仍刻意保留 `List<String>` 文件名投影，`io.readDirEntryPaths` 才是显式的 `List<Path>` 目录条目桥，但路径字面量与大部分 stdlib 仍主要是字符串 |
+| 一等 `Bytes` 类型 | ⚠️ | 内部已落 stable runtime identity，且 `std.io.readFileBytesPath : Path -> Bytes` / `std.io.writeFileBytesPath : Path -> Bytes -> Unit` / `std.io.appendFileBytesPath : Path -> Bytes -> Unit` 已提供首批公开 file-boundary bridges；但还没有独立 `std.bytes` 模块、进程字节流桥或更完整的 binary-safe API 面 |
+| 一等 `Command` 类型 | ⚠️ | 内部已落 runtime identity，且 `std.io.command` / `std.io.commandWith` / `std.io.commandWithRedirects` 与 `std.io.execCommand` 已提供首批公开构造/执行桥；`Command` 现在已能承载 `cwd` / `env` / `stdin` 与 typed `Redirect` 列表，而 shell 行为也已收回到显式 `Command` 构造，而不是额外的 string-only wrapper |
+| 一等 `ProcessResult` 类型 | ⚠️ | `std.io.execCommand` / `std.io.execPipeline` 已能公开返回 `ProcessResult`，且 `std.io.processSuccess` / `std.io.processStdout` / `std.io.processCode` / `std.io.processStderr` 已提供首批 pure inspector bridge；当前剩余问题不再是结果对象缺失，而是更丰富的 effect model 仍未完成 |
+| 一等管道 | ⚠️ | 内部已落 runtime identity，且 `std.io.pipeline` 已提供最小公开构造桥；`std.io.pipeline` / `std.io.pipelineWithRedirects` 现在都会在构造时拒绝明显无效的 pipeline object，例如空 pipeline、non-final stage 的 `stdout` redirect、以及 non-first stage 的 configured `stdin` 或 `stdin` redirect，`std.io.pipelineWithRedirects` 也会拒绝 boundary `stdin/stdout/stderr` 与 stage-local attachment 的冲突；`std.io.execPipeline` 已提供首批阻塞、缓冲式执行桥，而 boundary-level redirect composition 也已收回到 `io.execPipeline(io.pipelineWithRedirects(...))` 这条对象携带主线上，`io.commandWithRedirects` 还让 `Pipeline` 开始拥有最小逐 stage redirect attachment，但还没有 `cmd1 |> cmd2` 语法、流式句柄或更广的进程编排模型 |
+| 一等重定向 | ⚠️ | 内部已落 runtime identity，且 `std.io.redirectStdoutPath` / `std.io.redirectStderrPath` / `std.io.redirectStdinPath` 已提供最小公开构造桥；边界级 `stdout -> Path` / `stderr -> Path` / `stdin <- Path` 组合现在通过 `io.commandWithRedirects` / `io.pipelineWithRedirects` 收进一等对象，再走 `io.execCommand` / `io.execPipeline` 的 canonical 执行主线；同时对 boundary/stage-local 重复 redirect、non-final `stdout` 截流、以及 non-first stage 的 `stdin` 配置冲突继续做显式拒绝；但还没有更广的流模型或 stage-local redirect 语法 |
+| 一等 `Task<T>` | ⚠️ | 内部已落 runtime identity，且 `std.io.taskCommand` / `std.io.taskPipeline` / `std.io.awaitTask` / `std.io.awaitTasks` 已提供最小公开构造/消费桥，让 `Command` 或 `Pipeline` 都能进入 `Task[ProcessResult] -> ProcessResult` 与 `List<Task[ProcessResult]> -> List<ProcessResult>` 的 blocking canonical path；但还没有 poll/cancel、超时控制、后台调度或任何非阻塞 task runtime |
 | 流式处理 | ❌ | 当前执行模型偏“一次性捕获”，不是流模型 |
 | timeout / cancel | ❌ | 长任务控制仍缺失 |
 | signal / TTY | ❌ | 服务和交互场景还没法认真承诺 |
