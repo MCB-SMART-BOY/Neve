@@ -759,6 +759,22 @@ fn test_frontend_accepts_std_option_and_result_builtins() {
 }
 
 #[test]
+fn test_frontend_accepts_std_math_constants() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let top = math.inf;
+            let quiet = math.nan;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_std_path_builtins() {
     let result = analyze_source(
         r#"
@@ -784,6 +800,8 @@ fn test_frontend_accepts_std_typed_path_adapters() {
             import std.path as path;
             let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
             let parent = path.parentPath(nested) ?? path.fromString("/");
+            let name = path.filenamePath(nested) ?? "missing";
+            let ext = path.extensionPath(nested) ?? "missing";
             let abs = path.isAbsolutePath(parent);
             let shown = toString(parent);
         "#,
@@ -802,8 +820,72 @@ fn test_frontend_accepts_std_io_and_fetch_builtins() {
             import std.io as io;
             import std.fetch as fetch;
             let a = io.hashString("abc");
-            let b = io.exec("printf", ["neve"]).stdout;
+            let b = io.processStdout(io.execCommand(io.command("printf", ["neve"])));
             let c = fetch.path("Cargo.toml").hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_hash_file_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let digest = io.hashFilePath(path.fromString("/tmp/file.txt"));
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_migrated_process_result_surface() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let result = io.execCommand(io.command("rustc", ["--version"]));
+            let shown = toString(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_explicit_shell_command_process_result_surface() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let result = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
+            let shown = toString(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_with_migrated_process_result_surface() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let result = io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
+            let shown = toString(result);
         "#,
     );
     assert!(
@@ -830,12 +912,428 @@ fn test_frontend_accepts_std_io_read_file_path_bridge() {
 }
 
 #[test]
+fn test_frontend_accepts_std_io_read_file_bytes_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
+            let shown = toString(bytes);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_read_dir_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            import std.list as list;
+            let entries = io.readDirPath(path.fromString("/tmp"));
+            let sorted = list.sort(entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_sort_and_extrema_builtins() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let sorted = list.sort(io.readDirEntryPaths(path.fromString("/tmp")));
+            let hi = list.max([1, 3, 2]);
+            let lo = list.min([1, 3, 2]);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_structural_helpers() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let first = list.head(entries);
+            let last = list.last(entries);
+            let init = list.init(entries);
+            let reversed = list.reverse(entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_get_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let picked = list.get(0, entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_cons_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let rooted = list.cons(path.fromString("/"), entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_take_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let prefix = list.take(2, entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_drop_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let suffix = list.drop(1, entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_contains_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let has_root = list.contains(path.fromString("/"), entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_index_of_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let root_index = list.indexOf(path.fromString("/"), entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_sum_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            let total = list.sum([1, 2, 3]);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_product_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            let total = list.product([2, 3, 4]);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_replicate_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.path as path;
+            let entries = list.replicate(2, path.fromString("/tmp"));
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_zip_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let pairs = list.zip(
+                io.readDirEntryPaths(path.fromString("/tmp")),
+                [1, 2],
+            );
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_unzip_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            import std.path as path;
+            let pairs = [
+                (path.fromString("/tmp"), 1),
+                (path.fromString("/var"), 2),
+            ];
+            let result = list.unzip(pairs);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_list_fold_right_builtin() {
+    let result = analyze_source(
+        r#"
+            import std.list as list;
+            fn step(x, acc) = x + acc;
+            let total = list.foldRight(0, step, [1, 2, 3]);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_read_dir_entry_paths_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let entries = io.readDirEntryPaths(path.fromString("/tmp"));
+            let shown = toString(entries);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_write_file_bytes_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
+            let done = io.writeFileBytesPath(path.fromString("/tmp/file.out"), bytes);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_write_file_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let done = io.writeFilePath(path.fromString("/tmp/file.out"), "hello");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_append_file_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let done = io.appendFilePath(path.fromString("/tmp/file.out"), "hello");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_append_file_bytes_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
+            let done = io.appendFileBytesPath(path.fromString("/tmp/file.out"), bytes);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_std_io_current_dir_path_bridge() {
     let result = analyze_source(
         r#"
             import std.io as io;
             let cwd = io.currentDirPath();
             let shown = toString(cwd);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_home_dir_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let home = io.homeDirPath();
+            let shown = toString(home);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let done = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let done = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
         "#,
     );
     assert!(
@@ -862,12 +1360,318 @@ fn test_frontend_accepts_std_io_command_bridge() {
 }
 
 #[test]
+fn test_frontend_accepts_std_io_command_with_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let cmd = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
+            let shown = toString(cmd);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_std_io_exec_command_bridge() {
     let result = analyze_source(
         r#"
             import std.io as io;
             let result = io.execCommand(io.command("rustc", ["--version"]));
             let shown = toString(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_pipeline_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let pipe = io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]);
+            let shown = toString(pipe);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_pipeline_with_redirects_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let pipe = io.pipelineWithRedirects(
+                io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            );
+            let shown = toString(pipe);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_pipeline_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let result = io.execPipeline(
+                io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])
+            );
+            let shown = io.processStdout(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_pipeline_with_redirect_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let result = io.execPipeline(
+                io.pipelineWithRedirects(
+                    io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+                    [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                )
+            );
+            let shown = io.processCode(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_pipeline_with_redirects_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let result = io.execPipeline(
+                io.pipelineWithRedirects(
+                    io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+                    [
+                        io.redirectStdoutPath(path.fromString("/tmp/neve.out")),
+                        io.redirectStderrPath(path.fromString("/tmp/neve.err"))
+                    ]
+                )
+            );
+            let shown = io.processCode(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_command_with_redirects_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let cmd = io.commandWithRedirects(
+                io.command("printf", ["neve"]),
+                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            );
+            let shown = toString(cmd);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_redirect_stdout_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
+            let shown = toString(redirect);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_redirect_stderr_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
+            let shown = toString(redirect);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_redirect_stdin_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
+            let shown = toString(redirect);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_command_with_redirect_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let result = io.execCommand(
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                )
+            );
+            let shown = io.processCode(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_exec_command_with_redirects_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let result = io.execCommand(
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [
+                        io.redirectStdoutPath(path.fromString("/tmp/neve.out")),
+                        io.redirectStderrPath(path.fromString("/tmp/neve.err"))
+                    ]
+                )
+            );
+            let shown = io.processCode(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_task_command_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let task = io.taskCommand(io.command("printf", ["neve"]));
+            let shown = toString(task);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_task_pipeline_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let task = io.taskPipeline(io.pipeline([
+                io.command("printf", ["neve"]),
+                io.command("cat", [])
+            ]));
+            let shown = toString(task);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_await_task_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let task = io.taskCommand(io.command("rustc", ["--version"]));
+            let result = io.awaitTask(task);
+            let shown = io.processCode(result);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_await_tasks_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let results = io.awaitTasks([
+                io.taskCommand(io.command("printf", ["neve"])),
+                io.taskPipeline(io.pipeline([io.command("printf", ["lang"]), io.command("cat", [])]))
+            ]);
+            let shown = toString(results);
         "#,
     );
     assert!(

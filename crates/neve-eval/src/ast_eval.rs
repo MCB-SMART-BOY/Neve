@@ -2244,10 +2244,31 @@ impl AstEvaluator {
             Value::Path(path) => path.display().to_string(),
             Value::Bytes(bytes) => format!("<bytes:{}>", bytes.len()),
             Value::Command(command) => {
+                if command.has_effect_config() {
+                    format!(
+                        "<command:{} {} arg(s), configured>",
+                        command.program(),
+                        command.args().len()
+                    )
+                } else {
+                    format!(
+                        "<command:{} {} arg(s)>",
+                        command.program(),
+                        command.args().len()
+                    )
+                }
+            }
+            Value::Pipeline(pipeline) => {
+                format!("<pipeline:{} command(s)>", pipeline.commands().len())
+            }
+            Value::Redirect(redirect) => {
+                format!("<redirect:{}:path>", redirect.stream_name())
+            }
+            Value::Task(task) => {
                 format!(
-                    "<command:{} {} arg(s)>",
-                    command.program(),
-                    command.args().len()
+                    "<task:{}->{}>",
+                    task.target().kind_name(),
+                    task.output().type_name()
                 )
             }
             Value::ProcessResult(result) => format!(
@@ -2359,6 +2380,9 @@ fn runtime_type_key(value: &Value) -> String {
         Value::Path(_) => "Path".to_string(),
         Value::Bytes(_) => "Bytes".to_string(),
         Value::Command(_) => "Command".to_string(),
+        Value::Pipeline(_) => "Pipeline".to_string(),
+        Value::Redirect(_) => "Redirect".to_string(),
+        Value::Task(_) => "Task".to_string(),
         Value::ProcessResult(_) => "ProcessResult".to_string(),
         Value::Unit => "()".to_string(),
         Value::List(_) => "List".to_string(),
@@ -2395,6 +2419,8 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Char(x), Value::Char(y)) => x == y,
         (Value::String(x), Value::String(y)) => x == y,
+        (Value::Path(x), Value::Path(y)) => x == y,
+        (Value::Bytes(x), Value::Bytes(y)) => x == y,
         (Value::Unit, Value::Unit) => true,
         (Value::None, Value::None) => true,
         (Value::List(x), Value::List(y)) => {

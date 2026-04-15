@@ -55,6 +55,42 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // filenamePath : Path -> Option String
+        // Gets the file name component from a structured path / 从结构化路径获取文件名组件
+        (
+            "path.filenamePath",
+            Value::Builtin(BuiltinFn {
+                name: "path.filenamePath",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(path) => match path.file_name() {
+                        Some(name) => Ok(Value::Some(Box::new(Value::String(Rc::new(
+                            name.to_string_lossy().to_string(),
+                        ))))),
+                        None => Ok(Value::None),
+                    },
+                    _ => Err("path.filenamePath expects a Path".to_string()),
+                },
+            }),
+        ),
+        // extensionPath : Path -> Option String
+        // Gets the file extension from a structured path / 从结构化路径获取文件扩展名
+        (
+            "path.extensionPath",
+            Value::Builtin(BuiltinFn {
+                name: "path.extensionPath",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(path) => match path.extension() {
+                        Some(ext) => Ok(Value::Some(Box::new(Value::String(Rc::new(
+                            ext.to_string_lossy().to_string(),
+                        ))))),
+                        None => Ok(Value::None),
+                    },
+                    _ => Err("path.extensionPath expects a Path".to_string()),
+                },
+            }),
+        ),
         // isAbsolutePath : Path -> Bool
         // Checks whether a structured path is absolute / 检查结构化路径是否为绝对路径
         (

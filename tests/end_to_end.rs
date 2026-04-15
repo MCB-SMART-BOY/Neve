@@ -11,6 +11,7 @@ use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::{AnalysisResult, analyze_source};
 use neve_std::{std_module_overrides, stdlib};
 use std::fs;
+use std::rc::Rc;
 use tempfile::TempDir;
 
 fn int(value: i64) -> Int {
@@ -73,6 +74,78 @@ fn assert_runtime_error_parity(source: &str, expected_fragment: &str) {
         }
         other => panic!("expected matching type errors, got {:?}", other),
     }
+}
+
+#[cfg(not(windows))]
+fn shell_projection_source() -> String {
+    r#"
+        import std.io as io;
+        let migrated = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
+        let canonical = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
+        let same =
+            typeOf(migrated) == "ProcessResult" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
+        let x = same;
+    "#
+    .to_string()
+}
+
+#[cfg(windows)]
+fn shell_projection_source() -> String {
+    r#"
+        import std.io as io;
+        let migrated = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
+        let canonical = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
+        let same =
+            typeOf(migrated) == "ProcessResult" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
+        let x = same;
+    "#
+    .to_string()
+}
+
+#[cfg(not(windows))]
+fn pipeline_execution_source() -> String {
+    r#"
+        import std.io as io;
+        let result = io.execPipeline(io.pipeline([
+            io.command("sh", ["-c", "printf neve"]),
+            io.command("sh", ["-c", "grep neve"])
+        ]));
+        let same =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "";
+        let x = same;
+    "#
+    .to_string()
+}
+
+#[cfg(windows)]
+fn pipeline_execution_source() -> String {
+    r#"
+        import std.io as io;
+        let result = io.execPipeline(io.pipeline([
+            io.command("cmd", ["/C", "echo neve"]),
+            io.command("cmd", ["/C", "findstr neve"])
+        ]));
+        let same =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "";
+        let x = same;
+    "#
+    .to_string()
 }
 
 #[test]
@@ -582,10 +655,11 @@ fn test_end_to_end_std_typed_path_adapter_runtime_parity() {
         "
         import std.path as path;
         let nested = path.joinPath(path.fromString(\"/tmp\"), \"neve.txt\");
-        let parent = path.parentPath(nested) ?? path.fromString(\"/\");
-        let x = if path.isAbsolutePath(parent) then toString(parent) else \"nope\";
+        let name = path.filenamePath(nested) ?? \"missing\";
+        let ext = path.extensionPath(nested) ?? \"missing\";
+        let x = if name == \"neve.txt\" && ext == \"txt\" then \"ok\" else \"nope\";
         ",
-        Value::String("/tmp".to_string().into()),
+        Value::String("ok".to_string().into()),
     );
 }
 
@@ -605,17 +679,64 @@ fn test_end_to_end_std_io_builtin_runtime_parity() {
 }
 
 #[test]
-fn test_end_to_end_std_io_exec_matches_canonical_process_projection() {
+fn test_end_to_end_std_io_hash_file_path_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"hash-file-path-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = "9c3675e0b07ef1223e4cb9afdc255c51c8557ac075e91e601978676b894c95b1";
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        import std.path as path;
+        let x = io.hashFilePath(path.fromString(\"{escaped}\"));
+        "
+        ),
+        Value::String(Rc::new(expected.to_string())),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_command_matches_canonical_process_projection() {
     assert_runtime_parity(
         "
         import std.io as io;
-        let legacy = io.exec(\"rustc\", [\"--version\"]);
+        let migrated = io.execCommand(io.command(\"rustc\", [\"--version\"]));
         let canonical = io.execCommand(io.command(\"rustc\", [\"--version\"]));
         let same =
-            legacy.success == io.processSuccess(canonical) &&
-            legacy.stdout == io.processStdout(canonical) &&
-            legacy.code == io.processCode(canonical) &&
-            legacy.stderr == io.processStderr(canonical);
+            typeOf(migrated) == \"ProcessResult\" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
+        ",
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_explicit_shell_command_matches_canonical_process_projection() {
+    let source = shell_projection_source();
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_with_matches_canonical_process_projection() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let migrated =
+            io.execCommand(io.commandWith(#{ program = \"rustc\", args = [\"--version\"] }));
+        let canonical =
+            io.execCommand(io.commandWith(#{ program = \"rustc\", args = [\"--version\"] }));
+        let same =
+            typeOf(migrated) == \"ProcessResult\" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
         ",
         Value::Bool(true),
     );
@@ -643,6 +764,218 @@ fn test_end_to_end_std_io_read_file_path_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_std_io_read_file_bytes_path_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("io-read-bytes-path.neve.bin");
+    std::fs::write(&file_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+    let escaped = file_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        let bytes = io.readFileBytesPath(path.fromString(\"{escaped}\"));
+        let x = if typeOf(bytes) == \"Bytes\" then toString(bytes) else \"nope\";
+        "
+    );
+
+    assert_runtime_parity(&source, Value::String("<bytes:4>".to_string().into()));
+}
+
+#[test]
+fn test_end_to_end_std_io_read_dir_path_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("io-read-dir-path.neve");
+    fs::create_dir_all(dir_path.join("nested")).unwrap();
+    fs::write(dir_path.join("alpha.txt"), "a").unwrap();
+    fs::write(dir_path.join("beta.txt"), "b").unwrap();
+    let escaped = dir_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        import std.list as list;
+        let entries = io.readDirPath(path.fromString(\"{escaped}\"));
+        let x = list.sort(entries);
+        "
+    );
+
+    assert_runtime_parity(
+        &source,
+        Value::List(
+            vec!["alpha.txt", "beta.txt", "nested"]
+                .into_iter()
+                .map(|name| Value::String(name.to_string().into()))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_read_dir_entry_paths_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("io-read-dir-entry-paths.neve");
+    let file_path = dir_path.join("alpha.txt");
+    let nested_path = dir_path.join("nested");
+    fs::create_dir_all(&dir_path).unwrap();
+    fs::create_dir_all(&nested_path).unwrap();
+    fs::write(&file_path, "a").unwrap();
+    let escaped = dir_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        import std.list as list;
+        list.sort(io.readDirEntryPaths(path.fromString(\"{escaped}\")))
+        "
+    );
+
+    assert_runtime_parity(
+        &source,
+        Value::List(
+            vec![
+                Value::Path(Rc::new(file_path)),
+                Value::Path(Rc::new(nested_path)),
+            ]
+            .into(),
+        ),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_write_file_bytes_path_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let src_path = temp_dir.path().join("io-write-bytes-src.neve.bin");
+    let dst_path = temp_dir.path().join("io-write-bytes-dst.neve.bin");
+    std::fs::write(&src_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+    let escaped_src = src_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        let src = path.fromString(\"{escaped_src}\");
+        let dst = path.fromString(\"{escaped_dst}\");
+        let bytes = io.readFileBytesPath(src);
+        let done = io.writeFileBytesPath(dst, bytes);
+        let copied = io.readFileBytesPath(dst);
+        let x = typeOf(copied) == \"Bytes\" && copied == bytes;
+        "
+    );
+
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_write_file_path_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-write-path-dst.neve.txt");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        let dst = path.fromString(\"{escaped_dst}\");
+        let done = io.writeFilePath(dst, \"hello-path\");
+        let x = io.readFilePath(dst);
+        "
+    );
+
+    assert_runtime_parity(&source, Value::String("hello-path".to_string().into()));
+}
+
+#[test]
+fn test_end_to_end_std_io_append_file_path_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-append-path-dst.neve.txt");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        let dst = path.fromString(\"{escaped_dst}\");
+        let reset = io.writeFilePath(dst, \"hello\");
+        let done = io.appendFilePath(dst, \"-path\");
+        let x = io.readFilePath(dst);
+        "
+    );
+
+    assert_runtime_parity(&source, Value::String("hello-path".to_string().into()));
+}
+
+#[test]
+fn test_end_to_end_std_io_append_file_bytes_path_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let init_path = temp_dir.path().join("io-append-bytes-init.neve.bin");
+    let append_path = temp_dir.path().join("io-append-bytes-src.neve.bin");
+    let dst_path = temp_dir.path().join("io-append-bytes-dst.neve.bin");
+    let expected_path = temp_dir.path().join("io-append-bytes-expected.neve.bin");
+    std::fs::write(&init_path, [0xaa]).unwrap();
+    std::fs::write(&append_path, [0xde, 0xad, 0xbe]).unwrap();
+    std::fs::write(&expected_path, [0xaa, 0xde, 0xad, 0xbe]).unwrap();
+    let escaped_init = init_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_append = append_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_expected = expected_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        import std.path as path;
+        let init = io.readFileBytesPath(path.fromString(\"{escaped_init}\"));
+        let append = io.readFileBytesPath(path.fromString(\"{escaped_append}\"));
+        let expected = io.readFileBytesPath(path.fromString(\"{escaped_expected}\"));
+        let dst = path.fromString(\"{escaped_dst}\");
+        let reset = io.writeFileBytesPath(dst, init);
+        let done = io.appendFileBytesPath(dst, append);
+        let copied = io.readFileBytesPath(dst);
+        let x = typeOf(copied) == \"Bytes\" && copied == expected;
+        "
+    );
+
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
 fn test_end_to_end_std_io_current_dir_path_runtime_parity() {
     let expected = std::env::current_dir()
         .unwrap()
@@ -659,6 +992,60 @@ fn test_end_to_end_std_io_current_dir_path_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_std_io_home_dir_path_runtime_parity() {
+    let expected = match std::env::var("HOME") {
+        Ok(home) => Value::Some(Box::new(Value::Path(Rc::new(home.into())))),
+        Err(_) => Value::None,
+    };
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        io.homeDirPath()
+        ",
+        expected,
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_create_dir_all_path_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("typed").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString(\"{escaped}\");
+        let done = io.createDirAllPath(target);
+        io.pathExistsPath(target) && io.isDirPath(target)
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_remove_dir_all_path_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("typed").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString(\"{escaped}\");
+        let created = io.createDirAllPath(target);
+        let done = io.removeDirAllPath(target);
+        !io.pathExistsPath(target)
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
 fn test_end_to_end_std_io_command_runtime_parity() {
     assert_runtime_parity(
         "
@@ -667,6 +1054,699 @@ fn test_end_to_end_std_io_command_runtime_parity() {
         let x = if typeOf(cmd) == \"Command\" then toString(cmd) else \"nope\";
         ",
         Value::String("<command:printf 1 arg(s)>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_command_with_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let cmd = io.commandWith(#{ program = \"printf\", args = [\"neve\"], cwd = \"/tmp\" });
+        let x = if typeOf(cmd) == \"Command\" then toString(cmd) else \"nope\";
+        ",
+        Value::String("<command:printf 1 arg(s), configured>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_pipeline_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let pipe = io.pipeline([io.command(\"printf\", [\"neve\"]), io.command(\"cat\", [])]);
+        let x = if typeOf(pipe) == \"Pipeline\" then toString(pipe) else \"nope\";
+        ",
+        Value::String("<pipeline:2 command(s)>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_pipeline_with_redirects_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        import std.path as path;
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([io.command(\"printf\", [\"neve\"]), io.command(\"cat\", [])]),
+            [io.redirectStdoutPath(path.fromString(\"/tmp/neve.out\"))]
+        );
+        let x = if typeOf(pipe) == \"Pipeline\" then toString(pipe) else \"nope\";
+        ",
+        Value::String("<pipeline:2 command(s)>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_runtime_parity() {
+    assert_runtime_parity(&pipeline_execution_source(), Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_with_redirect_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stdout.txt");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("cmd", ["/C", "echo neve"]),
+                    io.command("cmd", ["/C", "findstr neve"])
+                ]),
+                [io.redirectStdoutPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("sh", ["-c", "printf neve"]),
+                    io.command("sh", ["-c", "grep neve"])
+                ]),
+                [io.redirectStdoutPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+        )
+    };
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_redirect_stdout_path_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        import std.path as path;
+        let redirect = io.redirectStdoutPath(path.fromString(\"/tmp/neve.out\"));
+        let x = if typeOf(redirect) == \"Redirect\" then toString(redirect) else \"nope\";
+        ",
+        Value::String("<redirect:stdout:path>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_redirect_stderr_path_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        import std.path as path;
+        let redirect = io.redirectStderrPath(path.fromString(\"/tmp/neve.err\"));
+        let x = if typeOf(redirect) == \"Redirect\" then toString(redirect) else \"nope\";
+        ",
+        Value::String("<redirect:stderr:path>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_redirect_stdin_path_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        import std.path as path;
+        let redirect = io.redirectStdinPath(path.fromString(\"/tmp/neve.in\"));
+        let x = if typeOf(redirect) == \"Redirect\" then toString(redirect) else \"nope\";
+        ",
+        Value::String("<redirect:stdin:path>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_command_with_redirect_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdout.txt");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("rustc", ["--version"]),
+                [io.redirectStdoutPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+    );
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_command_with_stdin_redirect_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("cmd", ["/C", "findstr neve"]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+        "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("sh", ["-c", "grep neve"]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+        "#
+        )
+    };
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_command_with_redirects_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("stdin.txt");
+    let stdout_path = temp.path().join("stdout.txt");
+    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("cmd", ["/C", "findstr neve"]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("sh", ["-c", "grep neve"]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+        )
+    };
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_with_stdin_redirect_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("cmd", ["/C", "findstr neve"]),
+                    io.command("cmd", ["/C", "findstr neve"])
+                ]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+        "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("sh", ["-c", "grep neve"]),
+                    io.command("sh", ["-c", "grep neve"])
+                ]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+        "#
+        )
+    };
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_with_redirects_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-stdin.txt");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("cmd", ["/C", "findstr neve"]),
+                    io.command("cmd", ["/C", "findstr neve"])
+                ]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("sh", ["-c", "grep neve"]),
+                    io.command("sh", ["-c", "grep neve"])
+                ]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+        "#
+        )
+    };
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_pipeline_rejects_empty_pipeline() {
+    let source = r#"
+        import std.io as io;
+        let pipe = io.pipeline([]);
+        "#
+    .to_string();
+
+    assert_runtime_error_parity(&source, "io.pipeline: requires a non-empty List<Command>");
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_with_redirects_rejects_final_stage_stderr_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stderr_path = temp.path().join("pipeline-stderr.txt");
+    let stderr_path_source = stderr_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let err = path.fromString("{stderr_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.commandWithRedirects(
+                        io.command("rustc", ["--definitely-not-a-real-rustc-flag"]),
+                        [io.redirectStderrPath(err)]
+                    )
+                ]),
+                [io.redirectStderrPath(err)]
+            )
+        );
+        "#
+    );
+
+    assert_runtime_error_parity(
+        &source,
+        "final pipeline stage cannot combine boundary stderr with stage-local stderr redirect",
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_pipeline_with_redirects_rejects_final_stage_stdout_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let output = path.fromString("{stdout_path_source}");
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.redirectStdoutPath(output)]
+                )
+            ]),
+            [io.redirectStdoutPath(output)]
+        );
+        "#
+    );
+
+    assert_runtime_error_parity(
+        &source,
+        "final pipeline stage cannot combine boundary stdout with stage-local stdout redirect",
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_rejects_non_final_stage_stdout_redirect() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("stage-stdout.txt");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let out = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.redirectStdoutPath(out)]
+                ),
+                io.command("cat", [])
+            ])
+        );
+        "#
+    );
+
+    assert_runtime_error_parity(
+        &source,
+        "pipeline stage 1 cannot carry stdout redirect before final stage",
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_pipeline_with_redirects_rejects_boundary_stdin_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-stdin.txt");
+    let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([
+                io.commandWith(#{{ program = "cat", stdin = "neve" }})
+            ]),
+            [io.redirectStdinPath(input)]
+        );
+        "#
+    );
+
+    assert_runtime_error_parity(
+        &source,
+        "pipeline stage 1 cannot combine boundary stdin with stage-local stdin",
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_command_with_redirects_runtime_parity() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let cmd = io.commandWithRedirects(
+            io.command("printf", ["neve"]),
+            [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+        );
+        let x =
+            typeOf(cmd) == "Command" &&
+            toString(cmd) == "<command:printf 1 arg(s), configured>";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_pipeline_honors_stage_local_redirects_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stderr_path = temp.path().join("pipeline-stage-stderr.txt");
+    let stderr_path_source = stderr_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let err = path.fromString("{stderr_path_source}");
+        let result = io.execPipeline(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("cmd", ["/C", "(echo neve) & (echo err 1>&2)"]),
+                    [io.redirectStderrPath(err)]
+                ),
+                io.command("cmd", ["/C", "findstr neve"])
+            ])
+        );
+        let redirected = io.readFilePath(err);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "" &&
+            redirected != "";
+        "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let err = path.fromString("{stderr_path_source}");
+        let result = io.execPipeline(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("sh", ["-c", "printf neve && printf err >&2"]),
+                    [io.redirectStderrPath(err)]
+                ),
+                io.command("sh", ["-c", "grep neve"])
+            ])
+        );
+        let redirected = io.readFilePath(err);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "" &&
+            redirected != "";
+        "#
+        )
+    };
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_exec_command_with_stderr_redirect_runtime_parity() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stderr.txt");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("rustc", ["--definitely-not-a-real-rustc-flag"]),
+                [io.redirectStderrPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let x =
+            typeOf(result) == "ProcessResult" &&
+            !io.processSuccess(result) &&
+            io.processCode(result) != 0 &&
+            io.processStderr(result) == "" &&
+            redirected != "";
+        "#
+    );
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_std_io_task_command_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let task = io.taskCommand(io.command(\"printf\", [\"neve\"]));
+        let x = if typeOf(task) == \"Task\" then toString(task) else \"nope\";
+        ",
+        Value::String("<task:command->ProcessResult>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_task_pipeline_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let task = io.taskPipeline(io.pipeline([
+            io.command(\"printf\", [\"neve\"]),
+            io.command(\"cat\", [])
+        ]));
+        let x = if typeOf(task) == \"Task\" then toString(task) else \"nope\";
+        ",
+        Value::String("<task:pipeline->ProcessResult>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_await_task_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let task = io.taskCommand(io.command(\"rustc\", [\"--version\"]));
+        let result = io.awaitTask(task);
+        let x = if typeOf(result) == \"ProcessResult\" then toString(result) else \"nope\";
+        ",
+        Value::String("<process-result:0 ok>".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_await_tasks_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let results = io.awaitTasks([
+            io.taskCommand(io.command(\"printf\", [\"neve\"])),
+            io.taskPipeline(io.pipeline([
+                io.command(\"printf\", [\"lang\"]),
+                io.command(\"cat\", [])
+            ]))
+        ]);
+        match results {
+            [first, second] ->
+                io.processStdout(first) == \"neve\" &&
+                io.processStdout(second) == \"lang\" &&
+                io.processSuccess(first) &&
+                io.processSuccess(second),
+            _ -> false,
+        }
+        ",
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_await_pipeline_task_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        let pipeline = io.pipeline([
+            io.command(\"printf\", [\"neve\"]),
+            io.command(\"cat\", [])
+        ]);
+        let result = io.awaitTask(io.taskPipeline(pipeline));
+        let x = if typeOf(result) == \"ProcessResult\" then toString(result) else \"nope\";
+        ",
+        Value::String("<process-result:0 ok>".to_string().into()),
     );
 }
 

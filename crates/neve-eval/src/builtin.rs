@@ -809,6 +809,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::Path(_) => "Path",
                         Value::Bytes(_) => "Bytes",
                         Value::Command(_) => "Command",
+                        Value::Pipeline(_) => "Pipeline",
+                        Value::Redirect(_) => "Redirect",
+                        Value::Task(_) => "Task",
                         Value::ProcessResult(_) => "ProcessResult",
                         Value::Map(_) => "Map",
                         Value::Set(_) => "Set",
@@ -1801,10 +1804,31 @@ pub fn format_value(v: &Value) -> String {
         Value::Path(path) => path.display().to_string(),
         Value::Bytes(bytes) => format!("<bytes:{}>", bytes.len()),
         Value::Command(command) => {
+            if command.has_effect_config() {
+                format!(
+                    "<command:{} {} arg(s), configured>",
+                    command.program(),
+                    command.args().len()
+                )
+            } else {
+                format!(
+                    "<command:{} {} arg(s)>",
+                    command.program(),
+                    command.args().len()
+                )
+            }
+        }
+        Value::Pipeline(pipeline) => {
+            format!("<pipeline:{} command(s)>", pipeline.commands().len())
+        }
+        Value::Redirect(redirect) => {
+            format!("<redirect:{}:path>", redirect.stream_name())
+        }
+        Value::Task(task) => {
             format!(
-                "<command:{} {} arg(s)>",
-                command.program(),
-                command.args().len()
+                "<task:{}->{}>",
+                task.target().kind_name(),
+                task.output().type_name()
             )
         }
         Value::ProcessResult(result) => format!(
@@ -1926,12 +1950,44 @@ mod tests {
     }
 
     #[test]
+    fn typeof_reports_pipeline_runtime_object() {
+        let result = call_builtin(
+            typeof_builtin(),
+            &[Value::pipeline_object(vec![
+                super::super::value::CommandValue::new("printf", vec!["hello".to_string()]),
+                super::super::value::CommandValue::new("cat", Vec::new()),
+            ])],
+        );
+        assert_eq!(result, Value::String(Rc::new("Pipeline".to_string())));
+    }
+
+    #[test]
+    fn typeof_reports_redirect_runtime_object() {
+        let result = call_builtin(
+            typeof_builtin(),
+            &[Value::redirect_stdout_path_object("/tmp/neve.out")],
+        );
+        assert_eq!(result, Value::String(Rc::new("Redirect".to_string())));
+    }
+
+    #[test]
     fn typeof_reports_process_result_runtime_object() {
         let result = call_builtin(
             typeof_builtin(),
             &[Value::process_result_object(0, true, "stdout", "")],
         );
         assert_eq!(result, Value::String(Rc::new("ProcessResult".to_string())));
+    }
+
+    #[test]
+    fn typeof_reports_task_runtime_object() {
+        let result = call_builtin(
+            typeof_builtin(),
+            &[Value::task_command_process_result_object(
+                super::super::value::CommandValue::new("printf", vec!["hello".to_string()]),
+            )],
+        );
+        assert_eq!(result, Value::String(Rc::new("Task".to_string())));
     }
 
     #[test]
@@ -1944,8 +2000,45 @@ mod tests {
     }
 
     #[test]
+    fn format_value_keeps_pipeline_opaque() {
+        let rendered = super::format_value(&Value::pipeline_object(vec![
+            super::super::value::CommandValue::new("printf", vec!["hello".to_string()]),
+            super::super::value::CommandValue::new("cat", Vec::new()),
+        ]));
+        assert_eq!(rendered, "<pipeline:2 command(s)>");
+    }
+
+    #[test]
+    fn format_value_keeps_redirect_opaque() {
+        let rendered = super::format_value(&Value::redirect_stdout_path_object("/tmp/neve.out"));
+        assert_eq!(rendered, "<redirect:stdout:path>");
+    }
+
+    #[test]
     fn format_value_keeps_process_result_opaque() {
         let rendered = super::format_value(&Value::process_result_object(0, true, "out", ""));
         assert_eq!(rendered, "<process-result:0 ok>");
+    }
+
+    #[test]
+    fn format_value_keeps_task_opaque() {
+        let rendered = super::format_value(&Value::task_command_process_result_object(
+            super::super::value::CommandValue::new("printf", vec!["hello".to_string()]),
+        ));
+        assert_eq!(rendered, "<task:command->ProcessResult>");
+    }
+
+    #[test]
+    fn format_value_keeps_pipeline_task_opaque() {
+        let rendered = super::format_value(&Value::task_pipeline_process_result_object(
+            super::super::value::PipelineValue::new(vec![
+                std::rc::Rc::new(super::super::value::CommandValue::new(
+                    "printf",
+                    vec!["hello".to_string()],
+                )),
+                std::rc::Rc::new(super::super::value::CommandValue::new("cat", Vec::new())),
+            ]),
+        ));
+        assert_eq!(rendered, "<task:pipeline->ProcessResult>");
     }
 }

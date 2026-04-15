@@ -126,15 +126,48 @@ impl fmt::Debug for Thunk {
 pub struct CommandValue {
     program: Rc<String>,
     args: Rc<Vec<String>>,
+    cwd: Option<Rc<String>>,
+    stdin: Option<Rc<String>>,
+    env: Rc<HashMap<String, String>>,
+    redirects: Rc<Vec<RedirectValue>>,
 }
 
 impl CommandValue {
     /// Create a new command runtime object.
     /// 创建新的命令运行时对象。
     pub fn new(program: impl Into<String>, args: Vec<String>) -> Self {
+        Self::new_with_options_and_redirects(program, args, None, None, HashMap::new(), Vec::new())
+    }
+
+    /// Create a configured command runtime object.
+    /// 创建带配置的命令运行时对象。
+    pub fn new_with_options(
+        program: impl Into<String>,
+        args: Vec<String>,
+        cwd: Option<String>,
+        stdin: Option<String>,
+        env: HashMap<String, String>,
+    ) -> Self {
+        Self::new_with_options_and_redirects(program, args, cwd, stdin, env, Vec::new())
+    }
+
+    /// Create a configured command runtime object with embedded redirects.
+    /// 创建带配置和内嵌重定向的命令运行时对象。
+    pub fn new_with_options_and_redirects(
+        program: impl Into<String>,
+        args: Vec<String>,
+        cwd: Option<String>,
+        stdin: Option<String>,
+        env: HashMap<String, String>,
+        redirects: Vec<RedirectValue>,
+    ) -> Self {
         Self {
             program: Rc::new(program.into()),
             args: Rc::new(args),
+            cwd: cwd.map(Rc::new),
+            stdin: stdin.map(Rc::new),
+            env: Rc::new(env),
+            redirects: Rc::new(redirects),
         }
     }
 
@@ -144,6 +177,33 @@ impl CommandValue {
 
     pub fn args(&self) -> &[String] {
         self.args.as_ref()
+    }
+
+    pub fn cwd(&self) -> Option<&str> {
+        self.cwd.as_deref().map(|value| value.as_str())
+    }
+
+    pub fn stdin(&self) -> Option<&str> {
+        self.stdin.as_deref().map(|value| value.as_str())
+    }
+
+    pub fn env(&self) -> &HashMap<String, String> {
+        self.env.as_ref()
+    }
+
+    pub fn redirects(&self) -> &[RedirectValue] {
+        self.redirects.as_ref()
+    }
+
+    pub fn has_embedded_redirects(&self) -> bool {
+        !self.redirects.is_empty()
+    }
+
+    pub fn has_effect_config(&self) -> bool {
+        self.cwd.is_some()
+            || self.stdin.is_some()
+            || !self.env.is_empty()
+            || self.has_embedded_redirects()
     }
 }
 
@@ -192,6 +252,182 @@ impl ProcessResultValue {
     }
 }
 
+/// Opaque pipeline runtime object.
+/// 不透明的管道运行时对象。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PipelineValue {
+    commands: Rc<Vec<Rc<CommandValue>>>,
+    redirects: Rc<Vec<RedirectValue>>,
+}
+
+impl PipelineValue {
+    /// Create a new pipeline runtime object.
+    /// 创建新的管道运行时对象。
+    pub fn new(commands: Vec<Rc<CommandValue>>) -> Self {
+        Self::new_with_redirects(commands, Vec::new())
+    }
+
+    /// Create a new pipeline runtime object with embedded boundary redirects.
+    /// 创建带内嵌边界重定向的新管道运行时对象。
+    pub fn new_with_redirects(
+        commands: Vec<Rc<CommandValue>>,
+        redirects: Vec<RedirectValue>,
+    ) -> Self {
+        Self {
+            commands: Rc::new(commands),
+            redirects: Rc::new(redirects),
+        }
+    }
+
+    pub fn commands(&self) -> &[Rc<CommandValue>] {
+        self.commands.as_ref()
+    }
+
+    pub fn redirects(&self) -> &[RedirectValue] {
+        self.redirects.as_ref()
+    }
+
+    pub fn has_embedded_redirects(&self) -> bool {
+        !self.redirects.is_empty()
+    }
+}
+
+/// Redirect kind for the minimal runtime object bridge.
+/// 最小重定向运行时对象桥接使用的重定向种类。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RedirectStream {
+    Stdout,
+    Stderr,
+    Stdin,
+}
+
+/// Opaque redirect runtime object.
+/// 不透明的重定向运行时对象。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RedirectValue {
+    stream: RedirectStream,
+    path: Rc<PathBuf>,
+}
+
+impl RedirectValue {
+    /// Create a stdout-to-path redirect runtime object.
+    /// 创建 stdout 到路径的重定向运行时对象。
+    pub fn stdout_path(path: impl Into<PathBuf>) -> Self {
+        Self {
+            stream: RedirectStream::Stdout,
+            path: Rc::new(path.into()),
+        }
+    }
+
+    /// Create a stderr-to-path redirect runtime object.
+    /// 创建 stderr 到路径的重定向运行时对象。
+    pub fn stderr_path(path: impl Into<PathBuf>) -> Self {
+        Self {
+            stream: RedirectStream::Stderr,
+            path: Rc::new(path.into()),
+        }
+    }
+
+    /// Create a stdin-from-path redirect runtime object.
+    /// 创建 stdin 从路径读取的重定向运行时对象。
+    pub fn stdin_path(path: impl Into<PathBuf>) -> Self {
+        Self {
+            stream: RedirectStream::Stdin,
+            path: Rc::new(path.into()),
+        }
+    }
+
+    pub fn stream(&self) -> &RedirectStream {
+        &self.stream
+    }
+
+    pub fn stream_name(&self) -> &'static str {
+        match self.stream {
+            RedirectStream::Stdout => "stdout",
+            RedirectStream::Stderr => "stderr",
+            RedirectStream::Stdin => "stdin",
+        }
+    }
+
+    pub fn path(&self) -> &PathBuf {
+        self.path.as_ref()
+    }
+}
+
+/// Task output kind for the minimal runtime object bridge.
+/// 最小任务运行时对象桥接使用的任务输出种类。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TaskOutputKind {
+    ProcessResult,
+}
+
+impl TaskOutputKind {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::ProcessResult => "ProcessResult",
+        }
+    }
+}
+
+/// Task target for the minimal runtime object bridge.
+/// 最小任务运行时对象桥接使用的任务目标。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TaskTargetValue {
+    Command(Rc<CommandValue>),
+    Pipeline(Rc<PipelineValue>),
+}
+
+impl TaskTargetValue {
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Command(_) => "command",
+            Self::Pipeline(_) => "pipeline",
+        }
+    }
+}
+
+/// Opaque task runtime object.
+/// 不透明的任务运行时对象。
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskValue {
+    output: TaskOutputKind,
+    target: TaskTargetValue,
+}
+
+impl TaskValue {
+    /// Create a command-backed task that will produce a process result.
+    /// 创建一个基于命令且产出进程结果的任务对象。
+    pub fn command_process_result(command: Rc<CommandValue>) -> Self {
+        Self {
+            output: TaskOutputKind::ProcessResult,
+            target: TaskTargetValue::Command(command),
+        }
+    }
+
+    /// Create a pipeline-backed task that will produce a process result.
+    /// 创建一个基于管道且产出进程结果的任务对象。
+    pub fn pipeline_process_result(pipeline: Rc<PipelineValue>) -> Self {
+        Self {
+            output: TaskOutputKind::ProcessResult,
+            target: TaskTargetValue::Pipeline(pipeline),
+        }
+    }
+
+    pub fn output(&self) -> &TaskOutputKind {
+        &self.output
+    }
+
+    pub fn target(&self) -> &TaskTargetValue {
+        &self.target
+    }
+}
+
 /// A runtime value.
 /// 运行时值。
 ///
@@ -220,6 +456,12 @@ pub enum Value {
     Bytes(Rc<Vec<u8>>),
     /// Command runtime object / Command 运行时对象
     Command(Rc<CommandValue>),
+    /// Pipeline runtime object / Pipeline 运行时对象
+    Pipeline(Rc<PipelineValue>),
+    /// Redirect runtime object / Redirect 运行时对象
+    Redirect(Rc<RedirectValue>),
+    /// Task runtime object / Task 运行时对象
+    Task(Rc<TaskValue>),
     /// ProcessResult runtime object / ProcessResult 运行时对象
     ProcessResult(Rc<ProcessResultValue>),
 
@@ -294,11 +536,101 @@ impl fmt::Debug for Value {
             Value::Unit => write!(f, "()"),
             Value::Path(path) => write!(f, "Path({path:?})"),
             Value::Bytes(bytes) => write!(f, "Bytes({} bytes)", bytes.len()),
-            Value::Command(command) => write!(
+            Value::Command(command) => {
+                write!(
+                    f,
+                    "Command(program={:?}, args={:?}",
+                    command.program(),
+                    command.args()
+                )?;
+                if let Some(cwd) = command.cwd() {
+                    write!(f, ", cwd={cwd:?}")?;
+                }
+                if let Some(stdin) = command.stdin() {
+                    write!(f, ", stdin={stdin:?}")?;
+                }
+                if !command.env().is_empty() {
+                    let mut keys: Vec<&String> = command.env().keys().collect();
+                    keys.sort();
+                    write!(f, ", env={{")?;
+                    for (idx, key) in keys.into_iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        let value = command.env().get(key).expect("env key exists");
+                        write!(f, "{key:?}: {value:?}")?;
+                    }
+                    write!(f, "}}")?;
+                }
+                if command.has_embedded_redirects() {
+                    write!(f, ", redirects=[")?;
+                    for (idx, redirect) in command.redirects().iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(
+                            f,
+                            "Redirect(stream={}, path={:?})",
+                            redirect.stream_name(),
+                            redirect.path()
+                        )?;
+                    }
+                    write!(f, "]")?;
+                }
+                write!(f, ")")
+            }
+            Value::Pipeline(pipeline) => {
+                write!(f, "Pipeline(commands=[")?;
+                for (idx, command) in pipeline.commands().iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(
+                        f,
+                        "Command(program={:?}, args={:?})",
+                        command.program(),
+                        command.args()
+                    )?;
+                }
+                if pipeline.has_embedded_redirects() {
+                    write!(f, "], redirects=[")?;
+                    for (idx, redirect) in pipeline.redirects().iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(
+                            f,
+                            "Redirect(stream={}, path={:?})",
+                            redirect.stream_name(),
+                            redirect.path()
+                        )?;
+                    }
+                    write!(f, "]")?;
+                }
+                write!(f, "])")
+            }
+            Value::Redirect(redirect) => write!(
                 f,
-                "Command(program={:?}, args={:?})",
-                command.program(),
-                command.args()
+                "Redirect(stream={}, path={:?})",
+                redirect.stream_name(),
+                redirect.path()
+            ),
+            Value::Task(task) => write!(
+                f,
+                "{}",
+                match task.target() {
+                    TaskTargetValue::Command(command) => format!(
+                        "Task(output={}, command=Command(program={:?}, args={:?}))",
+                        task.output().type_name(),
+                        command.program(),
+                        command.args()
+                    ),
+                    TaskTargetValue::Pipeline(pipeline) => format!(
+                        "Task(output={}, pipeline=Pipeline(commands={} command(s)))",
+                        task.output().type_name(),
+                        pipeline.commands().len()
+                    ),
+                }
             ),
             Value::ProcessResult(result) => write!(
                 f,
@@ -391,6 +723,9 @@ impl PartialEq for Value {
             (Value::Path(a), Value::Path(b)) => a == b,
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::Command(a), Value::Command(b)) => a == b,
+            (Value::Pipeline(a), Value::Pipeline(b)) => a == b,
+            (Value::Redirect(a), Value::Redirect(b)) => a == b,
+            (Value::Task(a), Value::Task(b)) => a == b,
             (Value::ProcessResult(a), Value::ProcessResult(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => a == b,
@@ -427,6 +762,80 @@ impl Value {
         Self::Command(Rc::new(CommandValue::new(program, args)))
     }
 
+    /// Construct an opaque configured command runtime object.
+    /// 构造一个不透明的带配置命令运行时对象。
+    #[cfg(test)]
+    pub(crate) fn command_object_with_options(
+        program: impl Into<String>,
+        args: Vec<String>,
+        cwd: Option<String>,
+        stdin: Option<String>,
+        env: HashMap<String, String>,
+    ) -> Self {
+        Self::Command(Rc::new(CommandValue::new_with_options(
+            program, args, cwd, stdin, env,
+        )))
+    }
+
+    /// Construct an opaque configured command runtime object with embedded redirects.
+    /// 构造一个带内嵌重定向的不透明命令运行时对象。
+    #[cfg(test)]
+    pub(crate) fn command_object_with_options_and_redirects(
+        program: impl Into<String>,
+        args: Vec<String>,
+        cwd: Option<String>,
+        stdin: Option<String>,
+        env: HashMap<String, String>,
+        redirects: Vec<RedirectValue>,
+    ) -> Self {
+        Self::Command(Rc::new(CommandValue::new_with_options_and_redirects(
+            program, args, cwd, stdin, env, redirects,
+        )))
+    }
+
+    /// Construct an opaque pipeline runtime object.
+    /// 构造一个不透明的管道运行时对象。
+    #[cfg(test)]
+    pub(crate) fn pipeline_object(commands: Vec<CommandValue>) -> Self {
+        Self::Pipeline(Rc::new(PipelineValue::new(
+            commands.into_iter().map(Rc::new).collect(),
+        )))
+    }
+
+    /// Construct an opaque pipeline runtime object with embedded boundary redirects.
+    /// 构造一个带内嵌边界重定向的不透明管道运行时对象。
+    #[cfg(test)]
+    pub(crate) fn pipeline_object_with_redirects(
+        commands: Vec<CommandValue>,
+        redirects: Vec<RedirectValue>,
+    ) -> Self {
+        Self::Pipeline(Rc::new(PipelineValue::new_with_redirects(
+            commands.into_iter().map(Rc::new).collect(),
+            redirects,
+        )))
+    }
+
+    /// Construct an opaque redirect runtime object.
+    /// 构造一个不透明的重定向运行时对象。
+    #[cfg(test)]
+    pub(crate) fn redirect_stdout_path_object(path: impl Into<PathBuf>) -> Self {
+        Self::Redirect(Rc::new(RedirectValue::stdout_path(path)))
+    }
+
+    /// Construct an opaque stderr-to-path redirect runtime object.
+    /// 构造一个不透明的 stderr 到路径重定向运行时对象。
+    #[cfg(test)]
+    pub(crate) fn redirect_stderr_path_object(path: impl Into<PathBuf>) -> Self {
+        Self::Redirect(Rc::new(RedirectValue::stderr_path(path)))
+    }
+
+    /// Construct an opaque stdin-from-path redirect runtime object.
+    /// 构造一个不透明的 stdin 从路径读取重定向运行时对象。
+    #[cfg(test)]
+    pub(crate) fn redirect_stdin_path_object(path: impl Into<PathBuf>) -> Self {
+        Self::Redirect(Rc::new(RedirectValue::stdin_path(path)))
+    }
+
     /// Construct an opaque process-result runtime object.
     /// 构造一个不透明的进程结果运行时对象。
     #[cfg(test)]
@@ -439,6 +848,22 @@ impl Value {
         Self::ProcessResult(Rc::new(ProcessResultValue::new(
             code, success, stdout, stderr,
         )))
+    }
+
+    /// Construct an opaque task runtime object backed by a command.
+    /// 构造一个基于命令的不透明任务运行时对象。
+    #[cfg(test)]
+    pub(crate) fn task_command_process_result_object(command: CommandValue) -> Self {
+        Self::Task(Rc::new(TaskValue::command_process_result(Rc::new(command))))
+    }
+
+    /// Construct an opaque task runtime object backed by a pipeline.
+    /// 构造一个基于管道的不透明任务运行时对象。
+    #[cfg(test)]
+    pub(crate) fn task_pipeline_process_result_object(pipeline: PipelineValue) -> Self {
+        Self::Task(Rc::new(TaskValue::pipeline_process_result(Rc::new(
+            pipeline,
+        ))))
     }
 
     /// Check if the value is truthy.
@@ -550,10 +975,100 @@ impl KeyCtx {
                     .map(|arg| format!("\"{}\"", escape_string(arg)))
                     .collect::<Vec<_>>()
                     .join(",");
+                let cwd = match command.cwd() {
+                    Some(cwd) => format!("Some(\"{}\")", escape_string(cwd)),
+                    None => "None".to_string(),
+                };
+                let stdin = match command.stdin() {
+                    Some(stdin) => format!("Some(\"{}\")", escape_string(stdin)),
+                    None => "None".to_string(),
+                };
+                let mut env_keys: Vec<&String> = command.env().keys().collect();
+                env_keys.sort();
+                let env = env_keys
+                    .into_iter()
+                    .map(|key| {
+                        let value = command.env().get(key).expect("env key exists");
+                        format!("\"{}\"=>\"{}\"", escape_string(key), escape_string(value))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let redirects = if command.has_embedded_redirects() {
+                    let redirects = command
+                        .redirects()
+                        .iter()
+                        .map(|redirect| {
+                            format!(
+                                "Redirect{{stream={},path=\"{}\"}}",
+                                redirect.stream_name(),
+                                escape_string(&redirect.path().to_string_lossy())
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!(",redirects=[{}]", redirects)
+                } else {
+                    String::new()
+                };
                 format!(
-                    "Command{{program=\"{}\",args=[{}]}}",
+                    "Command{{program=\"{}\",args=[{}],cwd={},stdin={},env={{{}}}{}}}",
                     escape_string(command.program()),
-                    args
+                    args,
+                    cwd,
+                    stdin,
+                    env,
+                    redirects
+                )
+            }
+            Value::Pipeline(pipeline) => {
+                let commands = pipeline
+                    .commands()
+                    .iter()
+                    .map(|command| {
+                        let command_value = Value::Command(Rc::clone(command));
+                        self.value_key(&command_value)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let redirects = if pipeline.has_embedded_redirects() {
+                    let redirects = pipeline
+                        .redirects()
+                        .iter()
+                        .map(|redirect| {
+                            format!(
+                                "Redirect{{stream={},path=\"{}\"}}",
+                                redirect.stream_name(),
+                                escape_string(&redirect.path().to_string_lossy())
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!(",redirects=[{}]", redirects)
+                } else {
+                    String::new()
+                };
+                format!("Pipeline{{commands=[{}]{}}}", commands, redirects)
+            }
+            Value::Redirect(redirect) => format!(
+                "Redirect{{stream={},path=\"{}\"}}",
+                redirect.stream_name(),
+                escape_string(&redirect.path().to_string_lossy())
+            ),
+            Value::Task(task) => {
+                format!(
+                    "Task{{output={},{}={}}}",
+                    task.output().type_name(),
+                    task.target().kind_name(),
+                    match task.target() {
+                        TaskTargetValue::Command(command) => {
+                            let command_value = Value::Command(Rc::clone(command));
+                            self.value_key(&command_value)
+                        }
+                        TaskTargetValue::Pipeline(pipeline) => {
+                            let pipeline_value = Value::Pipeline(Rc::clone(pipeline));
+                            self.value_key(&pipeline_value)
+                        }
+                    }
                 )
             }
             Value::ProcessResult(result) => format!(
@@ -845,8 +1360,9 @@ pub fn stable_key(value: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Value, stable_key};
+    use super::{CommandValue, Value, stable_key};
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::rc::Rc;
 
     #[test]
@@ -868,9 +1384,155 @@ mod tests {
 
         assert_eq!(
             command_key,
-            "Command{program=\"echo\",args=[\"hello\"]}".to_string()
+            "Command{program=\"echo\",args=[\"hello\"],cwd=None,stdin=None,env={}}".to_string()
         );
         assert_ne!(command_key, record_key);
+    }
+
+    #[test]
+    fn configured_command_runtime_object_tracks_effect_config_in_key() {
+        let command = Value::command_object_with_options(
+            "echo",
+            vec!["hello".to_string()],
+            Some("/tmp".to_string()),
+            Some("stdin-text".to_string()),
+            HashMap::from([("LANG".to_string(), "C".to_string())]),
+        );
+
+        assert_eq!(
+            stable_key(&command),
+            "Command{program=\"echo\",args=[\"hello\"],cwd=Some(\"/tmp\"),stdin=Some(\"stdin-text\"),env={\"LANG\"=>\"C\"}}"
+        );
+    }
+
+    #[test]
+    fn redirected_command_runtime_object_tracks_embedded_redirects_in_key() {
+        let command = Value::command_object_with_options_and_redirects(
+            "echo",
+            vec!["hello".to_string()],
+            None,
+            None,
+            HashMap::new(),
+            vec![
+                super::RedirectValue::stdout_path("/tmp/neve.out"),
+                super::RedirectValue::stderr_path("/tmp/neve.err"),
+            ],
+        );
+
+        assert_eq!(
+            stable_key(&command),
+            "Command{program=\"echo\",args=[\"hello\"],cwd=None,stdin=None,env={},redirects=[Redirect{stream=stdout,path=\"/tmp/neve.out\"},Redirect{stream=stderr,path=\"/tmp/neve.err\"}]}"
+        );
+    }
+
+    #[test]
+    fn pipeline_runtime_object_has_stable_non_list_key() {
+        let pipeline = Value::pipeline_object(vec![
+            CommandValue::new("printf", vec!["hello".to_string()]),
+            CommandValue::new("cat", Vec::new()),
+        ]);
+        let pipeline_key = stable_key(&pipeline);
+        let list_key = stable_key(&Value::List(Rc::new(vec![
+            Value::command_object("printf", vec!["hello".to_string()]),
+            Value::command_object("cat", Vec::new()),
+        ])));
+
+        assert_eq!(
+            pipeline_key,
+            "Pipeline{commands=[Command{program=\"printf\",args=[\"hello\"],cwd=None,stdin=None,env={}},Command{program=\"cat\",args=[],cwd=None,stdin=None,env={}}]}"
+        );
+        assert_ne!(pipeline_key, list_key);
+    }
+
+    #[test]
+    fn redirected_pipeline_runtime_object_tracks_embedded_redirects_in_key() {
+        let pipeline = Value::pipeline_object_with_redirects(
+            vec![
+                CommandValue::new("printf", vec!["hello".to_string()]),
+                CommandValue::new("cat", Vec::new()),
+            ],
+            vec![
+                super::RedirectValue::stdout_path("/tmp/neve.out"),
+                super::RedirectValue::stderr_path("/tmp/neve.err"),
+            ],
+        );
+
+        assert_eq!(
+            stable_key(&pipeline),
+            "Pipeline{commands=[Command{program=\"printf\",args=[\"hello\"],cwd=None,stdin=None,env={}},Command{program=\"cat\",args=[],cwd=None,stdin=None,env={}}],redirects=[Redirect{stream=stdout,path=\"/tmp/neve.out\"},Redirect{stream=stderr,path=\"/tmp/neve.err\"}]}"
+        );
+    }
+
+    #[test]
+    fn redirect_runtime_object_has_stable_non_path_key() {
+        let redirect = Value::redirect_stdout_path_object("/tmp/neve.out");
+        let redirect_key = stable_key(&redirect);
+        let path_key = stable_key(&Value::Path(Rc::new(PathBuf::from("/tmp/neve.out"))));
+
+        assert_eq!(
+            redirect_key,
+            "Redirect{stream=stdout,path=\"/tmp/neve.out\"}"
+        );
+        assert_ne!(redirect_key, path_key);
+    }
+
+    #[test]
+    fn redirect_stderr_runtime_object_has_distinct_stable_key() {
+        let stdout_redirect = Value::redirect_stdout_path_object("/tmp/neve.out");
+        let stderr_redirect = Value::redirect_stderr_path_object("/tmp/neve.out");
+
+        assert_eq!(
+            stable_key(&stderr_redirect),
+            "Redirect{stream=stderr,path=\"/tmp/neve.out\"}"
+        );
+        assert_ne!(stable_key(&stdout_redirect), stable_key(&stderr_redirect));
+    }
+
+    #[test]
+    fn redirect_stdin_runtime_object_has_distinct_stable_key() {
+        let stdout_redirect = Value::redirect_stdout_path_object("/tmp/neve.in");
+        let stdin_redirect = Value::redirect_stdin_path_object("/tmp/neve.in");
+
+        assert_eq!(
+            stable_key(&stdin_redirect),
+            "Redirect{stream=stdin,path=\"/tmp/neve.in\"}"
+        );
+        assert_ne!(stable_key(&stdout_redirect), stable_key(&stdin_redirect));
+    }
+
+    #[test]
+    fn task_runtime_object_has_stable_non_command_key() {
+        let task = Value::task_command_process_result_object(CommandValue::new(
+            "printf",
+            vec!["hello".to_string()],
+        ));
+        let task_key = stable_key(&task);
+        let command_key = stable_key(&Value::command_object("printf", vec!["hello".to_string()]));
+
+        assert_eq!(
+            task_key,
+            "Task{output=ProcessResult,command=Command{program=\"printf\",args=[\"hello\"],cwd=None,stdin=None,env={}}}"
+        );
+        assert_ne!(task_key, command_key);
+    }
+
+    #[test]
+    fn pipeline_task_runtime_object_has_stable_non_pipeline_key() {
+        let task = Value::task_pipeline_process_result_object(super::PipelineValue::new(vec![
+            Rc::new(CommandValue::new("printf", vec!["hello".to_string()])),
+            Rc::new(CommandValue::new("cat", Vec::new())),
+        ]));
+        let task_key = stable_key(&task);
+        let pipeline_key = stable_key(&Value::pipeline_object(vec![
+            CommandValue::new("printf", vec!["hello".to_string()]),
+            CommandValue::new("cat", Vec::new()),
+        ]));
+
+        assert_eq!(
+            task_key,
+            "Task{output=ProcessResult,pipeline=Pipeline{commands=[Command{program=\"printf\",args=[\"hello\"],cwd=None,stdin=None,env={}},Command{program=\"cat\",args=[],cwd=None,stdin=None,env={}}]}}"
+        );
+        assert_ne!(task_key, pipeline_key);
     }
 
     #[test]
@@ -896,9 +1558,33 @@ mod tests {
     fn opaque_runtime_objects_compare_by_payload() {
         let left = Value::command_object("echo", vec!["hello".to_string()]);
         let right = Value::command_object("echo", vec!["hello".to_string()]);
+        let configured = Value::command_object_with_options(
+            "echo",
+            vec!["hello".to_string()],
+            Some("/tmp".to_string()),
+            None,
+            HashMap::new(),
+        );
+        let pipeline =
+            Value::pipeline_object(vec![CommandValue::new("echo", vec!["hello".to_string()])]);
+        let redirect = Value::redirect_stdout_path_object("/tmp/neve.out");
+        let task = Value::task_command_process_result_object(CommandValue::new(
+            "echo",
+            vec!["hello".to_string()],
+        ));
+        let pipeline_task =
+            Value::task_pipeline_process_result_object(super::PipelineValue::new(vec![
+                Rc::new(CommandValue::new("echo", vec!["hello".to_string()])),
+                Rc::new(CommandValue::new("cat", Vec::new())),
+            ]));
         let different = Value::process_result_object(1, false, "", "boom");
 
         assert_eq!(left, right);
+        assert_ne!(left, configured);
+        assert_ne!(left, pipeline);
+        assert_ne!(left, redirect);
+        assert_ne!(left, task);
+        assert_ne!(left, pipeline_task);
         assert_ne!(left, different);
     }
 }

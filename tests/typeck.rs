@@ -401,6 +401,8 @@ fn test_typeck_std_math_constants_have_float_type() {
             import std.math as math;
             let pi: Float = math.pi;
             let e: Float = math.e;
+            let inf: Float = math.inf;
+            let nan: Float = math.nan;
         "#,
     );
 }
@@ -411,7 +413,7 @@ fn test_typeck_std_math_constants_reject_wrong_annotation() {
         r#"
             fn expectInt(x: Int) -> Int = x;
             import std.math as math;
-            let wrong = expectInt(math.pi);
+            let wrong = expectInt(math.pi) + expectInt(math.inf) + expectInt(math.nan);
         "#,
         Severity::Error,
         "type mismatch",
@@ -464,6 +466,8 @@ fn test_typeck_std_typed_path_adapters_allow_valid_uses() {
             import std.path as path;
             let nested: Path = path.joinPath(path.fromString("/tmp"), "neve.txt");
             let parent: Path = path.parentPath(nested) ?? path.fromString("/");
+            let name: String = path.filenamePath(nested) ?? "missing";
+            let ext: String = path.extensionPath(nested) ?? "missing";
             let abs: Bool = path.isAbsolutePath(parent);
             let rendered: String = toString(parent);
         "#,
@@ -475,7 +479,360 @@ fn test_typeck_std_typed_path_adapters_reject_string_receiver() {
     assert_has_diagnostic(
         r#"
             import std.path as path;
-            let wrong = path.joinPath("/tmp", "neve.txt");
+            let wrong = path.extensionPath("neve.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_builtins_allow_sort_and_extrema() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let sorted_names: List<String> = list.sort(["b", "a"]);
+            let sorted_paths: List<Path> = list.sort(io.readDirEntryPaths(path.fromString("/tmp")));
+            let max_value: Option<Int> = list.max([1, 3, 2]);
+            let min_value: Option<Int> = list.min([1, 3, 2]);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_structural_helpers_allow_precise_uses() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let first: Option<Path> = list.head(entries);
+            let last: Option<Path> = list.last(entries);
+            let init: List<Path> = list.init(entries);
+            let reversed: List<Path> = list.reverse(entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_get_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let picked: Option<Path> = list.get(0, entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_cons_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let with_root: List<Path> = list.cons(path.fromString("/"), entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_take_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let prefix: List<Path> = list.take(2, entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_drop_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let suffix: List<Path> = list.drop(1, entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_contains_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let has_root: Bool = list.contains(path.fromString("/"), entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_index_of_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let root_index: Option<Int> = list.indexOf(path.fromString("/"), entries);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_sum_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            let total: Int = list.sum([1, 2, 3]);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_product_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            let total: Int = list.product([2, 3, 4]);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_replicate_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.path as path;
+            let entries: List<Path> = list.replicate(2, path.fromString("/tmp"));
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_zip_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let pairs = list.zip(
+                io.readDirEntryPaths(path.fromString("/tmp")),
+                [1, 2],
+            );
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_unzip_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            import std.path as path;
+            let pairs = [
+                (path.fromString("/tmp"), 1),
+                (path.fromString("/var"), 2),
+            ];
+            let result = list.unzip(pairs);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_fold_right_allows_precise_use() {
+    check_no_errors(
+        r#"
+            import std.list as list;
+            fn step(x, acc) = x + acc;
+            let total: Int = list.foldRight(0, step, [1, 2, 3]);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_list_extrema_reject_non_int_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.max(["b", "a"]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_cons_rejects_non_list_tail() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.cons(1, 2);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_take_rejects_non_int_count() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.take("2", [1, 2, 3]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_drop_rejects_non_int_count() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.drop("1", [1, 2, 3]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_contains_rejects_mismatched_element_type() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.contains(1, ["1", "2"]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_index_of_rejects_mismatched_element_type() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.indexOf(1, ["1", "2"]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_sum_rejects_non_int_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.sum(["1", "2"]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_product_rejects_non_int_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.product(["2", "3"]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_replicate_rejects_non_int_count() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            import std.path as path;
+            let wrong = list.replicate("2", path.fromString("/tmp"));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_zip_rejects_non_list_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            import std.io as io;
+            import std.path as path;
+            let wrong = list.zip(io.readDirEntryPaths(path.fromString("/tmp")), 1);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_unzip_rejects_non_pair_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.unzip([1, 2]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_fold_right_rejects_non_list_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            fn step(x, acc) = x + acc;
+            let wrong = list.foldRight(0, step, 1);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_get_rejects_non_int_index() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.get("0", [1, 2]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_list_structural_helpers_reject_non_list_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.list as list;
+            let wrong = list.head(1);
         "#,
         Severity::Error,
         "type mismatch",
@@ -490,12 +847,64 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
             import std.path as path;
             let content: String = io.readFile("/tmp/file.txt");
             let structured: String = io.readFilePath(path.fromString("/tmp/file.txt"));
+            let entries: List<String> = io.readDirPath(path.fromString("/tmp"));
+            let entry_paths: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let write_text: Unit = io.writeFilePath(path.fromString("/tmp/file.out"), "hello");
+            let append_text: Unit = io.appendFilePath(path.fromString("/tmp/file.out"), "hello");
+            let binary: Bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
+            let write_binary: Unit =
+                io.writeFileBytesPath(path.fromString("/tmp/file.out"), binary);
+            let append_binary: Unit =
+                io.appendFileBytesPath(path.fromString("/tmp/file.out"), binary);
             let cwd_path: Path = io.currentDirPath();
+            let home_path: Option<Path> = io.homeDirPath();
+            let created_dir: Unit = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
+            let removed_dir: Unit = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
             let cmd: Command = io.command("printf", ["neve"]);
+            let cmd2: Command = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
+            let cmd3: Command = io.commandWithRedirects(cmd, [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]);
+            let redirect: Redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
+            let redirect_err: Redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
+            let redirect_in: Redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
+            let pipe: Pipeline = io.pipeline([cmd, cmd2]);
+            let pipe2: Pipeline = io.pipelineWithRedirects(pipe, [redirect]);
+            let staged_pipe: Pipeline = io.pipeline([io.commandWithRedirects(cmd, [redirect_err]), cmd2]);
+            let pipe_proc: ProcessResult = io.execPipeline(pipe);
+            let pipe_proc2: ProcessResult = io.execPipeline(pipe2);
+            let staged_pipe_proc: ProcessResult = io.execPipeline(staged_pipe);
+            let redirected_pipe_proc: ProcessResult =
+                io.execPipeline(io.pipelineWithRedirects(pipe, [redirect]));
+            let redirected_many_pipe_proc: ProcessResult =
+                io.execPipeline(io.pipelineWithRedirects(pipe, [redirect_in, redirect]));
+            let task = io.taskCommand(cmd);
+            let pipe_task = io.taskPipeline(pipe2);
+            let redirected_task = io.taskCommand(cmd3);
+            let task_text: String = toString(task);
+            let proc_task: ProcessResult = io.awaitTask(task);
+            let proc_pipe_task: ProcessResult = io.awaitTask(pipe_task);
+            let proc_tasks: List<ProcessResult> = io.awaitTasks([task, pipe_task]);
+            let redirected_proc_task: ProcessResult = io.awaitTask(redirected_task);
+            let redirected_proc: ProcessResult =
+                io.execCommand(io.commandWithRedirects(cmd2, [redirect]));
+            let redirected_err_proc: ProcessResult =
+                io.execCommand(io.commandWithRedirects(cmd2, [redirect_err]));
+            let redirected_in_proc: ProcessResult =
+                io.execCommand(io.commandWithRedirects(cmd2, [redirect_in]));
+            let redirected_many_proc: ProcessResult =
+                io.execCommand(io.commandWithRedirects(cmd2, [redirect, redirect_err]));
             let proc: ProcessResult = io.execCommand(io.command("rustc", ["--version"]));
+            let proc0: ProcessResult = io.execCommand(io.command("rustc", ["--version"]));
+            let proc5: ProcessResult = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
+            let proc6: ProcessResult =
+                io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
             let proc_ok: Bool = io.processSuccess(proc);
+            let proc_out0: String =
+                io.processStdout(io.execCommand(io.command("printf", ["neve"])));
             let proc_out: String = io.processStdout(io.execCommand(io.command("rustc", ["--version"])));
             let proc_code: Int = io.processCode(io.execCommand(io.command("rustc", ["--version"])));
+            let proc_code0: Int = io.processCode(io.execCommand(io.command("sh", ["-c", "printf neve"])));
+            let proc_code1: Int =
+                io.processCode(io.execCommand(io.commandWith(#{ program = "printf", args = ["neve"] })));
             let proc_err: String = io.processStderr(io.execCommand(io.command("rustc", ["--version"])));
             let exists: Bool = io.pathExistsPath(path.fromString("/tmp/file.txt"));
             let dir: Bool = io.isDirPath(path.fromString("/tmp"));
@@ -504,10 +913,9 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
             let cmd_text: String = toString(cmd);
             let proc_text: String = toString(proc);
             let digest: String = io.hashString("abc");
+            let digest_path: String = io.hashFilePath(path.fromString("/tmp/file.txt"));
             let cwd: String = io.currentDir();
             let env = io.getEnv("HOME") ?? "";
-            let code: Int = io.execShell("printf neve").code;
-            let output: String = io.exec("printf", ["neve"]).stdout;
         "#,
     );
 }
@@ -531,6 +939,92 @@ fn test_typeck_std_io_read_file_path_rejects_string_argument() {
         r#"
             import std.io as io;
             let wrong = io.readFilePath("/tmp/file.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_read_file_bytes_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.readFileBytesPath("/tmp/file.bin");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_read_dir_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.readDirPath("/tmp");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_read_dir_entry_paths_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.readDirEntryPaths("/tmp");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_write_file_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.writeFilePath("/tmp/file.txt", "hello");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_append_file_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.appendFilePath("/tmp/file.txt", "hello");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_write_file_bytes_path_rejects_non_bytes_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let wrong = io.writeFileBytesPath(path.fromString("/tmp/file.bin"), "not-bytes");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_append_file_bytes_path_rejects_non_bytes_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let wrong = io.appendFileBytesPath(path.fromString("/tmp/file.bin"), "not-bytes");
         "#,
         Severity::Error,
         "type mismatch",
@@ -587,11 +1081,248 @@ fn test_typeck_std_io_current_dir_path_does_not_silently_fit_string_annotation()
 }
 
 #[test]
-fn test_typeck_std_io_command_does_not_silently_fit_legacy_exec_shell_api() {
+fn test_typeck_std_io_home_dir_path_does_not_silently_fit_plain_path_annotation() {
     assert_has_diagnostic(
         r#"
             import std.io as io;
-            let wrong = io.execShell(io.command("printf", ["neve"]));
+            import std.path as path;
+            let wrong = path.is_absolute(io.homeDirPath());
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_create_dir_all_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.createDirAllPath("/tmp/neve-dir");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_remove_dir_all_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.removeDirAllPath("/tmp/neve-dir");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_hash_file_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.hashFilePath("/tmp/file.txt");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_command_with_rejects_non_string_program() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.commandWith(#{ program = 1, args = ["neve"] });
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_pipeline_rejects_non_command_list_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.pipeline(["printf"]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_pipeline_with_redirects_rejects_command_argument_pair() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            import std.path as path;
+            let wrong = io.pipelineWithRedirects(
+                io.command("printf", ["neve"]),
+                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            );
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_pipeline_with_redirects_rejects_non_redirect_list_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.pipelineWithRedirects(
+                io.pipeline([io.command("printf", ["neve"])]),
+                [io.command("cat", [])]
+            );
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_exec_pipeline_rejects_command_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execPipeline(io.command("printf", ["neve"]));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_exec_pipeline_with_embedded_redirects_rejects_non_redirect_list_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execPipeline(
+                io.pipelineWithRedirects(
+                    io.pipeline([io.command("printf", ["neve"])]),
+                    [io.command("cat", [])]
+                )
+            );
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_redirect_stdout_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.redirectStdoutPath("/tmp/neve.out");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_redirect_stderr_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.redirectStderrPath("/tmp/neve.err");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_redirect_stdin_path_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.redirectStdinPath("/tmp/neve.in");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_task_command_rejects_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.taskCommand("printf");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_task_pipeline_rejects_command_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.taskPipeline(io.command("printf", ["neve"]));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_await_task_rejects_command_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.awaitTask(io.command("printf", ["neve"]));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_await_tasks_rejects_non_task_list_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.awaitTasks([io.command("printf", ["neve"])]);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_exec_command_with_embedded_redirects_rejects_non_redirect_list_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execCommand(
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.command("cat", [])]
+                )
+            );
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_command_with_redirects_rejects_non_redirect_list_items() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.commandWithRedirects(
+                io.command("printf", ["neve"]),
+                [io.command("cat", [])]
+            );
         "#,
         Severity::Error,
         "type mismatch",
@@ -607,6 +1338,30 @@ fn test_typeck_std_io_exec_command_rejects_string_argument() {
         "#,
         Severity::Error,
         "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_exec_no_longer_exposes_legacy_record_fields() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execCommand(io.command("printf", ["neve"])).stdout;
+        "#,
+        Severity::Error,
+        "field access on non-record type",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_exec_with_no_longer_exposes_legacy_record_fields() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.execCommand(io.commandWith(#{ program = "printf", args = ["neve"] })).code;
+        "#,
+        Severity::Error,
+        "field access on non-record type",
     );
 }
 

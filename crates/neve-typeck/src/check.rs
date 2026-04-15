@@ -7,9 +7,9 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::builtin_types::{
-    builtin_command, builtin_list, builtin_map, builtin_option, builtin_path,
-    builtin_process_result, builtin_result, builtin_set, is_builtin_option_type,
-    is_builtin_result_type,
+    builtin_bytes, builtin_command, builtin_list, builtin_map, builtin_option, builtin_path,
+    builtin_pipeline, builtin_process_result, builtin_redirect, builtin_result, builtin_set,
+    builtin_task, is_builtin_option_type, is_builtin_result_type,
 };
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
@@ -62,21 +62,42 @@ fn builtin_record(fields: Vec<(&str, Ty)>, span: Span) -> Ty {
     )
 }
 
+fn builtin_safe_record_base(fields: Vec<(&str, Ty)>, span: Span) -> Ty {
+    builtin_ty(
+        TyKind::SafeRecordBase(
+            fields
+                .into_iter()
+                .map(|(name, ty)| (name.to_string(), ty))
+                .collect(),
+        ),
+        span,
+    )
+}
+
 fn builtin_string_option(span: Span) -> Ty {
     builtin_option(builtin_ty(TyKind::String, span), span)
+}
+
+fn builtin_path_option(span: Span) -> Ty {
+    builtin_option(builtin_path(span), span)
 }
 
 fn builtin_string_list(span: Span) -> Ty {
     builtin_list(builtin_ty(TyKind::String, span), span)
 }
 
-fn builtin_exec_result(span: Span) -> Ty {
-    builtin_record(
+fn builtin_path_list(span: Span) -> Ty {
+    builtin_list(builtin_path(span), span)
+}
+
+fn builtin_exec_with_options(span: Span) -> Ty {
+    builtin_safe_record_base(
         vec![
-            ("code", builtin_ty(TyKind::Int, span)),
-            ("success", builtin_ty(TyKind::Bool, span)),
-            ("stdout", builtin_ty(TyKind::String, span)),
-            ("stderr", builtin_ty(TyKind::String, span)),
+            ("program", builtin_ty(TyKind::String, span)),
+            ("args", builtin_string_list(span)),
+            ("cwd", builtin_ty(TyKind::String, span)),
+            ("stdin", builtin_ty(TyKind::String, span)),
+            ("env", builtin_ty(TyKind::DynamicRecord(Vec::new()), span)),
         ],
         span,
     )
@@ -1530,6 +1551,18 @@ impl TypeChecker {
                     span,
                 )
             }
+            "list.head" | "list.last" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_list(a.clone(), span)],
+                        builtin_option(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
             "list.tail" => {
                 let a = builtin_param(0, "a", span);
                 builtin_forall(
@@ -1537,6 +1570,90 @@ impl TypeChecker {
                     builtin_fn(
                         vec![builtin_list(a.clone(), span)],
                         builtin_list(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.init" | "list.reverse" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_list(a.clone(), span)],
+                        builtin_list(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.get" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::Int, span), builtin_list(a.clone(), span)],
+                        builtin_option(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.cons" => {
+                let a = builtin_param(0, "a", span);
+                let list_a = builtin_list(a.clone(), span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a, list_a.clone()], list_a, span),
+                    span,
+                )
+            }
+            "list.take" => {
+                let a = builtin_param(0, "a", span);
+                let list_a = builtin_list(a.clone(), span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::Int, span), list_a.clone()],
+                        list_a,
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.drop" => {
+                let a = builtin_param(0, "a", span);
+                let list_a = builtin_list(a.clone(), span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::Int, span), list_a.clone()],
+                        list_a,
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.contains" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![a.clone(), builtin_list(a, span)],
+                        builtin_ty(TyKind::Bool, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.indexOf" => {
+                let a = builtin_param(0, "a", span);
+                let list_a = builtin_list(a.clone(), span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![a, list_a],
+                        builtin_option(builtin_ty(TyKind::Int, span), span),
                         span,
                     ),
                     span,
@@ -1599,11 +1716,92 @@ impl TypeChecker {
                     span,
                 )
             }
+            "list.foldRight" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(
+                        vec![
+                            b.clone(),
+                            builtin_fn(vec![a.clone(), b.clone()], b.clone(), span),
+                            builtin_list(a, span),
+                        ],
+                        b,
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.sum" => builtin_fn(
+                vec![builtin_list(builtin_ty(TyKind::Int, span), span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "list.product" => builtin_fn(
+                vec![builtin_list(builtin_ty(TyKind::Int, span), span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "list.sort" => {
+                let a = builtin_param(0, "a", span);
+                let list_a = builtin_list(a.clone(), span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![list_a.clone()], list_a, span),
+                    span,
+                )
+            }
+            "list.max" | "list.min" => builtin_fn(
+                vec![builtin_list(builtin_ty(TyKind::Int, span), span)],
+                builtin_option(builtin_ty(TyKind::Int, span), span),
+                span,
+            ),
             "list.range" => builtin_fn(
                 vec![builtin_ty(TyKind::Int, span), builtin_ty(TyKind::Int, span)],
                 builtin_list(builtin_ty(TyKind::Int, span), span),
                 span,
             ),
+            "list.replicate" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::Int, span), a.clone()],
+                        builtin_list(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.zip" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                let pair = builtin_ty(TyKind::Tuple(vec![a.clone(), b.clone()]), span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(
+                        vec![builtin_list(a, span), builtin_list(b, span)],
+                        builtin_list(pair, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "list.unzip" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                let pair = builtin_ty(TyKind::Tuple(vec![a.clone(), b.clone()]), span);
+                let result = builtin_ty(
+                    TyKind::Tuple(vec![builtin_list(a, span), builtin_list(b, span)]),
+                    span,
+                );
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(vec![builtin_list(pair, span)], result, span),
+                    span,
+                )
+            }
             "string.len" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_ty(TyKind::Int, span),
@@ -1784,6 +1982,16 @@ impl TypeChecker {
                 builtin_option(builtin_path(span), span),
                 span,
             ),
+            "path.filenamePath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_option(builtin_ty(TyKind::String, span), span),
+                span,
+            ),
+            "path.extensionPath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_option(builtin_ty(TyKind::String, span), span),
+                span,
+            ),
             "path.isAbsolutePath" => builtin_fn(
                 vec![builtin_path(span)],
                 builtin_ty(TyKind::Bool, span),
@@ -1812,6 +2020,11 @@ impl TypeChecker {
                 builtin_ty(TyKind::String, span),
                 span,
             ),
+            "io.hashFilePath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
             "io.readFilePath" => builtin_fn(
                 vec![builtin_path(span)],
                 builtin_ty(TyKind::String, span),
@@ -1822,11 +2035,37 @@ impl TypeChecker {
                 builtin_string_list(span),
                 span,
             ),
+            "io.readDirPath" => {
+                builtin_fn(vec![builtin_path(span)], builtin_string_list(span), span)
+            }
+            "io.readDirEntryPaths" => {
+                builtin_fn(vec![builtin_path(span)], builtin_path_list(span), span)
+            }
             "io.writeFile" | "io.appendFile" => builtin_fn(
                 vec![
                     builtin_ty(TyKind::String, span),
                     builtin_ty(TyKind::String, span),
                 ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.writeFilePath" => builtin_fn(
+                vec![builtin_path(span), builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.appendFilePath" => builtin_fn(
+                vec![builtin_path(span), builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.writeFileBytesPath" => builtin_fn(
+                vec![builtin_path(span), builtin_bytes(span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.appendFileBytesPath" => builtin_fn(
+                vec![builtin_path(span), builtin_bytes(span)],
                 builtin_ty(TyKind::Unit, span),
                 span,
             ),
@@ -1837,11 +2076,24 @@ impl TypeChecker {
                 };
                 builtin_fn(vec![builtin_ty(TyKind::String, span)], ret_ty, span)
             }
+            "io.createDirAllPath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.removeDirAllPath" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.pathExistsPath" => builtin_fn(
                 vec![builtin_path(span)],
                 builtin_ty(TyKind::Bool, span),
                 span,
             ),
+            "io.readFileBytesPath" => {
+                builtin_fn(vec![builtin_path(span)], builtin_bytes(span), span)
+            }
             "io.isDirPath" => builtin_fn(
                 vec![builtin_path(span)],
                 builtin_ty(TyKind::Bool, span),
@@ -1861,14 +2113,78 @@ impl TypeChecker {
                 builtin_fn(Vec::new(), builtin_ty(TyKind::String, span), span)
             }
             "io.currentDirPath" => builtin_fn(Vec::new(), builtin_path(span), span),
+            "io.homeDirPath" => builtin_fn(Vec::new(), builtin_path_option(span), span),
             "io.command" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span), builtin_string_list(span)],
+                builtin_command(span),
+                span,
+            ),
+            "io.commandWith" => builtin_fn(
+                vec![builtin_exec_with_options(span)],
+                builtin_command(span),
+                span,
+            ),
+            "io.commandWithRedirects" => builtin_fn(
+                vec![
+                    builtin_command(span),
+                    builtin_list(builtin_redirect(span), span),
+                ],
                 builtin_command(span),
                 span,
             ),
             "io.execCommand" => builtin_fn(
                 vec![builtin_command(span)],
                 builtin_process_result(span),
+                span,
+            ),
+            "io.pipeline" => builtin_fn(
+                vec![builtin_list(builtin_command(span), span)],
+                builtin_pipeline(span),
+                span,
+            ),
+            "io.pipelineWithRedirects" => builtin_fn(
+                vec![
+                    builtin_pipeline(span),
+                    builtin_list(builtin_redirect(span), span),
+                ],
+                builtin_pipeline(span),
+                span,
+            ),
+            "io.execPipeline" => builtin_fn(
+                vec![builtin_pipeline(span)],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.redirectStdoutPath" => {
+                builtin_fn(vec![builtin_path(span)], builtin_redirect(span), span)
+            }
+            "io.redirectStderrPath" => {
+                builtin_fn(vec![builtin_path(span)], builtin_redirect(span), span)
+            }
+            "io.redirectStdinPath" => {
+                builtin_fn(vec![builtin_path(span)], builtin_redirect(span), span)
+            }
+            "io.taskCommand" => builtin_fn(
+                vec![builtin_command(span)],
+                builtin_task(builtin_process_result(span), span),
+                span,
+            ),
+            "io.taskPipeline" => builtin_fn(
+                vec![builtin_pipeline(span)],
+                builtin_task(builtin_process_result(span), span),
+                span,
+            ),
+            "io.awaitTask" => builtin_fn(
+                vec![builtin_task(builtin_process_result(span), span)],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.awaitTasks" => builtin_fn(
+                vec![builtin_list(
+                    builtin_task(builtin_process_result(span), span),
+                    span,
+                )],
+                builtin_list(builtin_process_result(span), span),
                 span,
             ),
             "io.processSuccess" => builtin_fn(
@@ -1892,16 +2208,6 @@ impl TypeChecker {
                 span,
             ),
             "io.homeDir" => builtin_fn(Vec::new(), builtin_string_option(span), span),
-            "io.exec" => builtin_fn(
-                vec![builtin_ty(TyKind::String, span), builtin_string_list(span)],
-                builtin_exec_result(span),
-                span,
-            ),
-            "io.execShell" => builtin_fn(
-                vec![builtin_ty(TyKind::String, span)],
-                builtin_exec_result(span),
-                span,
-            ),
             "fetch.url" | "fetch.path" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_fetch_result(span),

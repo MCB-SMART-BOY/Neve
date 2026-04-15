@@ -2,6 +2,7 @@
 
 use neve_derive::Hash;
 use neve_eval::Value;
+use neve_eval::value::{PipelineValue, TaskValue};
 use neve_std::stdlib;
 use std::collections::HashMap;
 use std::fs;
@@ -28,6 +29,87 @@ fn call_builtin(f: &Value, args: &[Value]) -> Result<Value, String> {
         Value::BuiltinFn(_, func) => func(args.to_vec()),
         _ => Err("Not a builtin function".into()),
     }
+}
+
+fn exec_command_with_embedded_redirects(
+    command: Value,
+    redirects: Vec<Value>,
+) -> Result<Value, String> {
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let command = call_builtin(
+        &configure_builtin,
+        &[command, Value::List(Rc::new(redirects))],
+    )?;
+    call_builtin(&exec_builtin, &[command])
+}
+
+fn exec_pipeline_with_embedded_redirects(
+    pipeline: Value,
+    redirects: Vec<Value>,
+) -> Result<Value, String> {
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let exec_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+    let pipeline = call_builtin(
+        &configure_builtin,
+        &[pipeline, Value::List(Rc::new(redirects))],
+    )?;
+    call_builtin(&exec_builtin, &[pipeline])
+}
+
+#[cfg(not(windows))]
+fn pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
+    [
+        ("sh", vec!["-c", "printf neve"]),
+        ("sh", vec!["-c", "grep neve"]),
+    ]
+}
+
+#[cfg(windows)]
+fn pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
+    [
+        ("cmd", vec!["/C", "echo neve"]),
+        ("cmd", vec!["/C", "findstr neve"]),
+    ]
+}
+
+#[cfg(not(windows))]
+fn stdin_filter_projection_parts() -> (&'static str, Vec<&'static str>) {
+    ("sh", vec!["-c", "grep neve"])
+}
+
+#[cfg(windows)]
+fn stdin_filter_projection_parts() -> (&'static str, Vec<&'static str>) {
+    ("cmd", vec!["/C", "findstr neve"])
+}
+
+#[cfg(not(windows))]
+fn stdin_pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
+    [
+        ("sh", vec!["-c", "grep neve"]),
+        ("sh", vec!["-c", "grep neve"]),
+    ]
+}
+
+#[cfg(windows)]
+fn stdin_pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
+    [
+        ("cmd", vec!["/C", "findstr neve"]),
+        ("cmd", vec!["/C", "findstr neve"]),
+    ]
+}
+
+#[cfg(not(windows))]
+fn stdout_stderr_projection_parts() -> (&'static str, Vec<&'static str>) {
+    ("sh", vec!["-c", "printf neve && printf err >&2"])
+}
+
+#[cfg(windows)]
+fn stdout_stderr_projection_parts() -> (&'static str, Vec<&'static str>) {
+    ("cmd", vec!["/C", "(echo neve) & (echo err 1>&2)"])
 }
 
 // Map tests
@@ -243,6 +325,47 @@ fn test_path_parent_path_builtin_returns_option_path() {
 }
 
 #[test]
+fn test_path_filename_path_builtin_returns_option_string() {
+    let builtin = get_builtin("path.filenamePath").expect("path.filenamePath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.txt",
+        )))],
+    )
+    .expect("path.filenamePath should succeed");
+
+    match result {
+        Value::Some(inner) => match inner.as_ref() {
+            Value::String(name) => assert_eq!(name.as_str(), "neve.txt"),
+            other => panic!("expected inner String runtime value, got {:?}", other),
+        },
+        other => panic!("expected Some(String), got {:?}", other),
+    }
+}
+
+#[test]
+fn test_path_extension_path_builtin_returns_option_string() {
+    let builtin =
+        get_builtin("path.extensionPath").expect("path.extensionPath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.txt",
+        )))],
+    )
+    .expect("path.extensionPath should succeed");
+
+    match result {
+        Value::Some(inner) => match inner.as_ref() {
+            Value::String(ext) => assert_eq!(ext.as_str(), "txt"),
+            other => panic!("expected inner String runtime value, got {:?}", other),
+        },
+        other => panic!("expected Some(String), got {:?}", other),
+    }
+}
+
+#[test]
 fn test_path_is_absolute_path_builtin_reports_bool() {
     let builtin =
         get_builtin("path.isAbsolutePath").expect("path.isAbsolutePath builtin should exist");
@@ -314,140 +437,77 @@ fn test_fetch_path_with_hash_rejects_mismatch() {
 }
 
 #[test]
-fn test_io_exec_returns_structured_result() {
-    let builtin = get_builtin("io.exec").expect("io.exec builtin should exist");
-    let args = vec![
-        Value::String(Rc::new("rustc".to_string())),
-        Value::List(Rc::new(vec![Value::String(Rc::new(
-            "--version".to_string(),
-        ))])),
-    ];
+fn test_io_hash_file_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"hash-file-path-content";
+    let expected = "9c3675e0b07ef1223e4cb9afdc255c51c8557ac075e91e601978676b894c95b1";
+    fs::write(&file_path, content).unwrap();
 
-    let result = call_builtin(&builtin, &args).expect("io.exec should succeed");
+    let builtin = get_builtin("io.hashFilePath").expect("io.hashFilePath builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(file_path))])
+        .expect("io.hashFilePath should succeed");
+
     match result {
-        Value::Record(fields) => {
-            assert!(matches!(fields.get("success"), Some(Value::Bool(true))));
-            assert!(matches!(fields.get("code"), Some(Value::Int(code)) if *code == 0.into()));
-            assert!(
-                matches!(fields.get("stdout"), Some(Value::String(s)) if s.contains("rustc")),
-                "stdout should contain rustc version"
-            );
-            assert!(matches!(fields.get("stderr"), Some(Value::String(_))));
-        }
-        _ => panic!("io.exec should return a record"),
+        Value::String(hash) => assert_eq!(hash.as_str(), expected),
+        other => panic!("expected String hash, got {:?}", other),
     }
 }
 
 #[test]
-fn test_io_exec_matches_canonical_command_process_projection() {
-    let exec_builtin = get_builtin("io.exec").expect("io.exec builtin should exist");
-    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
-    let exec_command_builtin =
-        get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
-    let success_builtin =
-        get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
-    let stdout_builtin =
-        get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
-    let code_builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
-    let stderr_builtin =
-        get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+fn test_io_hash_file_path_rejects_string_argument() {
+    let builtin = get_builtin("io.hashFilePath").expect("io.hashFilePath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/source.txt".to_string()))],
+    )
+    .expect_err("io.hashFilePath should reject string arguments");
 
-    let program = Value::String(Rc::new("rustc".to_string()));
-    let argv = Value::List(Rc::new(vec![Value::String(Rc::new(
-        "--version".to_string(),
-    ))]));
-
-    let legacy = call_builtin(&exec_builtin, &[program.clone(), argv.clone()])
-        .expect("io.exec should succeed");
-    let command =
-        call_builtin(&command_builtin, &[program, argv]).expect("io.command should succeed");
-    let canonical =
-        call_builtin(&exec_command_builtin, &[command]).expect("io.execCommand should succeed");
-
-    let success =
-        call_builtin(&success_builtin, std::slice::from_ref(&canonical)).expect("success access");
-    let stdout =
-        call_builtin(&stdout_builtin, std::slice::from_ref(&canonical)).expect("stdout access");
-    let code = call_builtin(&code_builtin, std::slice::from_ref(&canonical)).expect("code access");
-    let stderr =
-        call_builtin(&stderr_builtin, std::slice::from_ref(&canonical)).expect("stderr access");
-
-    match legacy {
-        Value::Record(fields) => {
-            assert_eq!(fields.get("success"), Some(&success));
-            assert_eq!(fields.get("stdout"), Some(&stdout));
-            assert_eq!(fields.get("code"), Some(&code));
-            assert_eq!(fields.get("stderr"), Some(&stderr));
-        }
-        other => panic!("expected record from io.exec, got {:?}", other),
-    }
+    assert_eq!(err, "io.hashFilePath expects a Path");
 }
 
 #[test]
-fn test_io_exec_preserves_legacy_error_prefix() {
-    let builtin = get_builtin("io.exec").expect("io.exec builtin should exist");
-    let args = vec![
-        Value::String(Rc::new(
-            "neve-definitely-missing-command-for-tests".to_string(),
-        )),
-        Value::List(Rc::new(vec![])),
-    ];
-
-    let err = call_builtin(&builtin, &args).expect_err("io.exec should report missing program");
+fn test_io_exec_compat_wrappers_are_removed_from_stdlib() {
     assert!(
-        err.starts_with("io.exec:"),
-        "expected io.exec-prefixed error, got {err}"
+        get_builtin("io.exec").is_none(),
+        "io.exec plain-exec wrapper should be removed"
     );
-}
-
-#[test]
-fn test_io_exec_shell_returns_structured_result() {
-    let builtin = get_builtin("io.execShell").expect("io.execShell builtin should exist");
-    let args = vec![Value::String(Rc::new("rustc --version".to_string()))];
-
-    let result = call_builtin(&builtin, &args).expect("io.execShell should succeed");
-    match result {
-        Value::Record(fields) => {
-            assert!(matches!(fields.get("success"), Some(Value::Bool(true))));
-            assert!(
-                matches!(fields.get("stdout"), Some(Value::String(s)) if s.contains("rustc")),
-                "stdout should contain rustc version"
-            );
-        }
-        _ => panic!("io.execShell should return a record"),
-    }
-}
-
-#[test]
-fn test_io_exec_with_returns_structured_result() {
-    let builtin = get_builtin("io.execWith").expect("io.execWith builtin should exist");
-
-    let mut options = HashMap::new();
-    options.insert(
-        "program".to_string(),
-        Value::String(Rc::new("rustc".to_string())),
+    assert!(
+        get_builtin("io.execResult").is_none(),
+        "io.execResult transitional alias should be removed"
     );
-    options.insert(
-        "args".to_string(),
-        Value::List(Rc::new(vec![Value::String(Rc::new(
-            "--version".to_string(),
-        ))])),
+    assert!(
+        get_builtin("io.execWithResult").is_none(),
+        "io.execWithResult transitional alias should be removed"
     );
-
-    let args = vec![Value::Record(Rc::new(options))];
-    let result = call_builtin(&builtin, &args).expect("io.execWith should succeed");
-
-    match result {
-        Value::Record(fields) => {
-            assert!(matches!(fields.get("success"), Some(Value::Bool(true))));
-            assert!(matches!(fields.get("code"), Some(Value::Int(code)) if *code == 0.into()));
-            assert!(
-                matches!(fields.get("stdout"), Some(Value::String(s)) if s.contains("rustc")),
-                "stdout should contain rustc version"
-            );
-        }
-        _ => panic!("io.execWith should return a record"),
-    }
+    assert!(
+        get_builtin("io.execShellResult").is_none(),
+        "io.execShellResult transitional alias should be removed"
+    );
+    assert!(
+        get_builtin("io.execShell").is_none(),
+        "io.execShell shell wrapper should be removed"
+    );
+    assert!(
+        get_builtin("io.execWith").is_none(),
+        "io.execWith configured-exec wrapper should be removed"
+    );
+    assert!(
+        get_builtin("io.execCommandWithRedirect").is_none(),
+        "io.execCommandWithRedirect single-redirect wrapper should be removed"
+    );
+    assert!(
+        get_builtin("io.execPipelineWithRedirect").is_none(),
+        "io.execPipelineWithRedirect single-redirect wrapper should be removed"
+    );
+    assert!(
+        get_builtin("io.execCommandWithRedirects").is_none(),
+        "io.execCommandWithRedirects boundary wrapper should be removed"
+    );
+    assert!(
+        get_builtin("io.execPipelineWithRedirects").is_none(),
+        "io.execPipelineWithRedirects boundary wrapper should be removed"
+    );
 }
 
 #[test]
@@ -497,6 +557,323 @@ fn test_io_read_file_path_rejects_string_argument() {
 }
 
 #[test]
+fn test_io_read_dir_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("io-read-dir-path");
+    fs::create_dir_all(dir.join("nested")).unwrap();
+    fs::write(dir.join("alpha.txt"), "a").unwrap();
+    fs::write(dir.join("beta.txt"), "b").unwrap();
+
+    let builtin = get_builtin("io.readDirPath").expect("io.readDirPath builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(dir))])
+        .expect("io.readDirPath should succeed");
+
+    let mut names = match result {
+        Value::List(entries) => entries
+            .iter()
+            .map(|entry| match entry {
+                Value::String(name) => name.to_string(),
+                other => panic!("expected String entry, got {:?}", other),
+            })
+            .collect::<Vec<_>>(),
+        other => panic!("expected List<String>, got {:?}", other),
+    };
+    names.sort();
+    assert_eq!(names, vec!["alpha.txt", "beta.txt", "nested"]);
+}
+
+#[test]
+fn test_io_read_dir_path_rejects_string_argument() {
+    let builtin = get_builtin("io.readDirPath").expect("io.readDirPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/io-read-dir-path".to_string()))],
+    )
+    .expect_err("io.readDirPath should reject string arguments");
+
+    assert_eq!(err, "io.readDirPath expects a Path");
+}
+
+#[test]
+fn test_io_read_dir_entry_paths_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("io-read-dir-entry-paths");
+    fs::create_dir_all(dir.join("nested")).unwrap();
+    fs::write(dir.join("alpha.txt"), "a").unwrap();
+
+    let builtin =
+        get_builtin("io.readDirEntryPaths").expect("io.readDirEntryPaths builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(dir.clone()))])
+        .expect("io.readDirEntryPaths should succeed");
+
+    let mut paths = match result {
+        Value::List(entries) => entries
+            .iter()
+            .map(|entry| match entry {
+                Value::Path(path) => path.as_path().to_path_buf(),
+                other => panic!("expected Path entry, got {:?}", other),
+            })
+            .collect::<Vec<_>>(),
+        other => panic!("expected List<Path>, got {:?}", other),
+    };
+    paths.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    assert_eq!(paths, vec![dir.join("alpha.txt"), dir.join("nested")]);
+}
+
+#[test]
+fn test_io_read_dir_entry_paths_rejects_string_argument() {
+    let builtin =
+        get_builtin("io.readDirEntryPaths").expect("io.readDirEntryPaths builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(
+            "/tmp/io-read-dir-entry-paths".to_string(),
+        ))],
+    )
+    .expect_err("io.readDirEntryPaths should reject string arguments");
+
+    assert_eq!(err, "io.readDirEntryPaths expects a Path");
+}
+
+#[test]
+fn test_io_write_file_path_accepts_path_and_string_runtime_values() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("io-write-path.txt");
+
+    let write = get_builtin("io.writeFilePath").expect("io.writeFilePath builtin should exist");
+    let result = call_builtin(
+        &write,
+        &[
+            Value::Path(Rc::new(path.clone())),
+            Value::String(Rc::new("hello-path".to_string())),
+        ],
+    )
+    .expect("io.writeFilePath should succeed");
+
+    assert!(matches!(result, Value::Unit));
+    assert_eq!(fs::read_to_string(&path).unwrap(), "hello-path");
+}
+
+#[test]
+fn test_io_write_file_path_rejects_string_path_argument() {
+    let builtin = get_builtin("io.writeFilePath").expect("io.writeFilePath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("/tmp/io-write-path.txt".to_string())),
+            Value::String(Rc::new("hello-path".to_string())),
+        ],
+    )
+    .expect_err("io.writeFilePath should reject string paths");
+
+    assert_eq!(err, "io.writeFilePath expects (Path, String)");
+}
+
+#[test]
+fn test_io_write_file_path_rejects_non_string_content_argument() {
+    let builtin = get_builtin("io.writeFilePath").expect("io.writeFilePath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::Path(Rc::new(std::path::PathBuf::from("/tmp/io-write-path.txt"))),
+            Value::Int(42.into()),
+        ],
+    )
+    .expect_err("io.writeFilePath should reject non-string content");
+
+    assert_eq!(err, "io.writeFilePath expects (Path, String)");
+}
+
+#[test]
+fn test_io_append_file_path_accepts_path_and_string_runtime_values() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("io-append-path.txt");
+    fs::write(&path, "hello").unwrap();
+
+    let append = get_builtin("io.appendFilePath").expect("io.appendFilePath builtin should exist");
+    let result = call_builtin(
+        &append,
+        &[
+            Value::Path(Rc::new(path.clone())),
+            Value::String(Rc::new("-path".to_string())),
+        ],
+    )
+    .expect("io.appendFilePath should succeed");
+
+    assert!(matches!(result, Value::Unit));
+    assert_eq!(fs::read_to_string(&path).unwrap(), "hello-path");
+}
+
+#[test]
+fn test_io_append_file_path_rejects_string_path_argument() {
+    let builtin = get_builtin("io.appendFilePath").expect("io.appendFilePath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("/tmp/io-append-path.txt".to_string())),
+            Value::String(Rc::new("hello".to_string())),
+        ],
+    )
+    .expect_err("io.appendFilePath should reject string paths");
+
+    assert_eq!(err, "io.appendFilePath expects (Path, String)");
+}
+
+#[test]
+fn test_io_append_file_path_rejects_non_string_content_argument() {
+    let builtin = get_builtin("io.appendFilePath").expect("io.appendFilePath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::Path(Rc::new(std::path::PathBuf::from("/tmp/io-append-path.txt"))),
+            Value::Int(42.into()),
+        ],
+    )
+    .expect_err("io.appendFilePath should reject non-string content");
+
+    assert_eq!(err, "io.appendFilePath expects (Path, String)");
+}
+
+#[test]
+fn test_io_read_file_bytes_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("io-read-bytes-path.bin");
+    fs::write(&path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+
+    let read =
+        get_builtin("io.readFileBytesPath").expect("io.readFileBytesPath builtin should exist");
+    let read_args = vec![Value::Path(Rc::new(path.clone()))];
+    let read_result = call_builtin(&read, &read_args).expect("io.readFileBytesPath should succeed");
+
+    assert!(matches!(
+        read_result,
+        Value::Bytes(bytes) if bytes.as_ref() == &[0xde, 0xad, 0xbe, 0xef]
+    ));
+}
+
+#[test]
+fn test_io_read_file_bytes_path_rejects_string_argument() {
+    let read =
+        get_builtin("io.readFileBytesPath").expect("io.readFileBytesPath builtin should exist");
+    let err = call_builtin(
+        &read,
+        &[Value::String(Rc::new(
+            "/tmp/io-read-bytes-path.bin".to_string(),
+        ))],
+    )
+    .expect_err("io.readFileBytesPath should reject string arguments");
+
+    assert_eq!(err, "io.readFileBytesPath expects a Path");
+}
+
+#[test]
+fn test_io_write_file_bytes_path_accepts_path_and_bytes_runtime_values() {
+    let temp = TempDir::new().unwrap();
+    let src = temp.path().join("io-write-bytes-src.bin");
+    let dst = temp.path().join("io-write-bytes-dst.bin");
+    fs::write(&src, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+
+    let read =
+        get_builtin("io.readFileBytesPath").expect("io.readFileBytesPath builtin should exist");
+    let write =
+        get_builtin("io.writeFileBytesPath").expect("io.writeFileBytesPath builtin should exist");
+    let bytes = call_builtin(&read, &[Value::Path(Rc::new(src.clone()))])
+        .expect("io.readFileBytesPath should succeed");
+    let result = call_builtin(&write, &[Value::Path(Rc::new(dst.clone())), bytes])
+        .expect("io.writeFileBytesPath should succeed");
+
+    assert!(matches!(result, Value::Unit));
+    assert_eq!(fs::read(&dst).unwrap(), vec![0xde, 0xad, 0xbe, 0xef]);
+}
+
+#[test]
+fn test_io_write_file_bytes_path_rejects_string_path_argument() {
+    let builtin =
+        get_builtin("io.writeFileBytesPath").expect("io.writeFileBytesPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("/tmp/io-write-bytes.bin".to_string())),
+            Value::Bytes(Rc::new(vec![0xde, 0xad])),
+        ],
+    )
+    .expect_err("io.writeFileBytesPath should reject string paths");
+
+    assert_eq!(err, "io.writeFileBytesPath expects (Path, Bytes)");
+}
+
+#[test]
+fn test_io_write_file_bytes_path_rejects_non_bytes_argument() {
+    let builtin =
+        get_builtin("io.writeFileBytesPath").expect("io.writeFileBytesPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::Path(Rc::new(std::path::PathBuf::from("/tmp/io-write-bytes.bin"))),
+            Value::String(Rc::new("not-bytes".to_string())),
+        ],
+    )
+    .expect_err("io.writeFileBytesPath should reject non-bytes payloads");
+
+    assert_eq!(err, "io.writeFileBytesPath expects (Path, Bytes)");
+}
+
+#[test]
+fn test_io_append_file_bytes_path_appends_bytes_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let src = temp.path().join("io-append-bytes-src.bin");
+    let dst = temp.path().join("io-append-bytes-dst.bin");
+    fs::write(&src, [0xde, 0xad, 0xbe]).unwrap();
+    fs::write(&dst, [0xaa]).unwrap();
+
+    let read =
+        get_builtin("io.readFileBytesPath").expect("io.readFileBytesPath builtin should exist");
+    let append =
+        get_builtin("io.appendFileBytesPath").expect("io.appendFileBytesPath builtin should exist");
+    let bytes = call_builtin(&read, &[Value::Path(Rc::new(src.clone()))])
+        .expect("io.readFileBytesPath should succeed");
+    let result = call_builtin(&append, &[Value::Path(Rc::new(dst.clone())), bytes])
+        .expect("io.appendFileBytesPath should succeed");
+
+    assert!(matches!(result, Value::Unit));
+    assert_eq!(fs::read(&dst).unwrap(), vec![0xaa, 0xde, 0xad, 0xbe]);
+}
+
+#[test]
+fn test_io_append_file_bytes_path_rejects_string_path_argument() {
+    let builtin =
+        get_builtin("io.appendFileBytesPath").expect("io.appendFileBytesPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("/tmp/io-append-bytes.bin".to_string())),
+            Value::Bytes(Rc::new(vec![0xde, 0xad])),
+        ],
+    )
+    .expect_err("io.appendFileBytesPath should reject string paths");
+
+    assert_eq!(err, "io.appendFileBytesPath expects (Path, Bytes)");
+}
+
+#[test]
+fn test_io_append_file_bytes_path_rejects_non_bytes_argument() {
+    let builtin =
+        get_builtin("io.appendFileBytesPath").expect("io.appendFileBytesPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::Path(Rc::new(std::path::PathBuf::from(
+                "/tmp/io-append-bytes.bin",
+            ))),
+            Value::String(Rc::new("not-bytes".to_string())),
+        ],
+    )
+    .expect_err("io.appendFileBytesPath should reject non-bytes payloads");
+
+    assert_eq!(err, "io.appendFileBytesPath expects (Path, Bytes)");
+}
+
+#[test]
 fn test_io_current_dir_path_returns_path_runtime_value() {
     let current_dir = std::env::current_dir().unwrap();
     let builtin = get_builtin("io.currentDirPath").expect("io.currentDirPath builtin should exist");
@@ -505,6 +882,27 @@ fn test_io_current_dir_path_returns_path_runtime_value() {
     match result {
         Value::Path(path) => assert_eq!(path.as_path(), current_dir.as_path()),
         other => panic!("expected Path runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_home_dir_path_returns_optional_path_runtime_value() {
+    let builtin = get_builtin("io.homeDirPath").expect("io.homeDirPath builtin should exist");
+    let result = call_builtin(&builtin, &[]).expect("io.homeDirPath should succeed");
+
+    match (std::env::var("HOME").ok(), result) {
+        (Some(expected), Value::Some(inner)) => match inner.as_ref() {
+            Value::Path(path) => {
+                let expected = std::path::PathBuf::from(expected);
+                assert_eq!(path.as_path(), expected.as_path());
+            }
+            other => panic!("expected Some(Path), got {:?}", other),
+        },
+        (None, Value::None) => {}
+        (Some(expected), other) => {
+            panic!("expected Some(Path({expected})), got {:?}", other)
+        }
+        (None, other) => panic!("expected None, got {:?}", other),
     }
 }
 
@@ -527,6 +925,82 @@ fn test_io_command_returns_command_runtime_value() {
 }
 
 #[test]
+fn test_io_command_with_returns_configured_command_runtime_value() {
+    let builtin = get_builtin("io.commandWith").expect("io.commandWith builtin should exist");
+    let mut env = HashMap::new();
+    env.insert("LANG".to_string(), Value::String(Rc::new("C".to_string())));
+    let mut options = HashMap::new();
+    options.insert(
+        "program".to_string(),
+        Value::String(Rc::new("printf".to_string())),
+    );
+    options.insert(
+        "args".to_string(),
+        Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+    );
+    options.insert(
+        "cwd".to_string(),
+        Value::String(Rc::new("/tmp".to_string())),
+    );
+    options.insert(
+        "stdin".to_string(),
+        Value::String(Rc::new("stdin-text".to_string())),
+    );
+    options.insert("env".to_string(), Value::Record(Rc::new(env)));
+
+    let result = call_builtin(&builtin, &[Value::Record(Rc::new(options))])
+        .expect("io.commandWith should succeed");
+
+    match result {
+        Value::Command(command) => {
+            assert_eq!(command.program(), "printf");
+            assert_eq!(command.args(), &["neve".to_string()]);
+            assert_eq!(command.cwd(), Some("/tmp"));
+            assert_eq!(command.stdin(), Some("stdin-text"));
+            assert_eq!(command.env().get("LANG").map(String::as_str), Some("C"));
+        }
+        other => panic!("expected configured Command runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_command_with_redirects_returns_redirected_command_runtime_value() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let redirect_path = std::path::PathBuf::from("/tmp/neve.out");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let result = call_builtin(&builtin, &[command, Value::List(Rc::new(vec![redirect]))])
+        .expect("io.commandWithRedirects should succeed");
+
+    match result {
+        Value::Command(command) => {
+            assert_eq!(command.program(), "printf");
+            assert_eq!(command.redirects().len(), 1);
+            assert_eq!(command.redirects()[0].stream_name(), "stdout");
+            assert_eq!(command.redirects()[0].path(), &redirect_path);
+        }
+        other => panic!("expected redirected Command runtime value, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_io_command_rejects_non_string_argument_items() {
     let builtin = get_builtin("io.command").expect("io.command builtin should exist");
     let err = call_builtin(
@@ -539,6 +1013,2834 @@ fn test_io_command_rejects_non_string_argument_items() {
     .expect_err("io.command should reject non-string argv items");
 
     assert_eq!(err, "io.command args[0] must be String");
+}
+
+#[test]
+fn test_io_command_with_redirects_rejects_non_redirect_list_items() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let err = call_builtin(
+        &builtin,
+        &[
+            command,
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "/tmp/neve.out".to_string(),
+            ))])),
+        ],
+    )
+    .expect_err("io.commandWithRedirects should reject non-Redirect items");
+
+    assert_eq!(err, "io.commandWithRedirects redirects[0] must be Redirect");
+}
+
+#[test]
+fn test_io_command_with_preserves_error_prefix() {
+    let builtin = get_builtin("io.commandWith").expect("io.commandWith builtin should exist");
+    let err = call_builtin(&builtin, &[Value::Record(Rc::new(HashMap::new()))])
+        .expect_err("io.commandWith should report missing program");
+
+    assert_eq!(err, "io.commandWith requires 'program'");
+}
+
+#[test]
+fn test_io_command_with_redirects_preserves_error_prefix() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let err = call_builtin(&builtin, &[command, Value::List(Rc::new(Vec::new()))])
+        .expect_err("io.commandWithRedirects should require at least one redirect");
+
+    assert_eq!(
+        err,
+        "io.commandWithRedirects: requires a non-empty List<Redirect>"
+    );
+}
+
+#[test]
+fn test_io_pipeline_returns_pipeline_runtime_value() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+
+    let printf = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let cat = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(Vec::new())),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let result = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![printf, cat]))],
+    )
+    .expect("io.pipeline should succeed");
+
+    match result {
+        Value::Pipeline(pipeline) => assert_eq!(pipeline.commands().len(), 2),
+        other => panic!("expected Pipeline runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_pipeline_with_redirects_returns_pipeline_runtime_value() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+
+    let printf = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let cat = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(Vec::new())),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![printf, cat]))],
+    )
+    .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.out",
+        )))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let result = call_builtin(
+        &configure_builtin,
+        &[pipeline, Value::List(Rc::new(vec![redirect]))],
+    )
+    .expect("io.pipelineWithRedirects should succeed");
+
+    assert!(
+        matches!(result, Value::Pipeline(_)),
+        "io.pipelineWithRedirects should return a Pipeline, got {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_io_pipeline_rejects_non_command_list_items() {
+    let builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::List(Rc::new(vec![Value::String(Rc::new(
+            "printf".to_string(),
+        ))]))],
+    )
+    .expect_err("io.pipeline should reject non-command list items");
+
+    assert_eq!(err, "io.pipeline commands[0] must be Command");
+}
+
+#[test]
+fn test_io_pipeline_with_redirects_rejects_non_pipeline_argument() {
+    let builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.out",
+        )))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let err = call_builtin(
+        &builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![redirect])),
+        ],
+    )
+    .expect_err("io.pipelineWithRedirects should reject non-pipeline receivers");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects expects (Pipeline, List<Redirect>)"
+    );
+}
+
+#[test]
+fn test_io_pipeline_with_redirects_rejects_empty_pipeline() {
+    let builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+
+    let pipeline = Value::Pipeline(Rc::new(PipelineValue::new(Vec::new())));
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.out",
+        )))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let err = call_builtin(&builtin, &[pipeline, Value::List(Rc::new(vec![redirect]))])
+        .expect_err("io.pipelineWithRedirects should reject empty pipelines");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: requires a non-empty Pipeline"
+    );
+}
+
+#[test]
+fn test_io_pipeline_rejects_empty_command_list() {
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+
+    let err = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(Vec::new()))])
+        .expect_err("io.pipeline should reject empty command lists");
+
+    assert_eq!(err, "io.pipeline: requires a non-empty List<Command>");
+}
+
+#[test]
+fn test_io_exec_pipeline_returns_process_result_runtime_value() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+
+    let commands = pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(commands))])
+        .expect("io.pipeline should succeed");
+    let result =
+        call_builtin(&exec_pipeline_builtin, &[pipeline]).expect("io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success(), "pipeline should succeed");
+            assert_eq!(result.code(), 0);
+            assert!(
+                result.stdout().contains("neve"),
+                "pipeline stdout should contain piped content"
+            );
+            assert!(
+                result.stderr().is_empty(),
+                "pipeline projection should not write stderr"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_honors_embedded_pipeline_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-out.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+
+    let commands = pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(commands))])
+        .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let pipeline = call_builtin(
+        &configure_builtin,
+        &[pipeline, Value::List(Rc::new(vec![redirect]))],
+    )
+    .expect("io.pipelineWithRedirects should succeed");
+
+    let result =
+        call_builtin(&exec_pipeline_builtin, &[pipeline]).expect("io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success());
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
+            assert!(redirected.contains("neve"));
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirect_matches_embedded_pipeline_projection() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let migrated_stdout_path = temp.path().join("pipeline-migrated-out.txt");
+    let canonical_stdout_path = temp.path().join("pipeline-canonical-out.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+
+    let migrated_commands = pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+    let migrated_pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(migrated_commands))],
+    )
+    .expect("io.pipeline should succeed");
+    let migrated_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(migrated_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let migrated =
+        exec_pipeline_with_embedded_redirects(migrated_pipeline, vec![migrated_redirect])
+            .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    let canonical_commands = pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+    let canonical_pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(canonical_commands))],
+    )
+    .expect("io.pipeline should succeed");
+    let canonical_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(canonical_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let canonical_pipeline = call_builtin(
+        &configure_builtin,
+        &[
+            canonical_pipeline,
+            Value::List(Rc::new(vec![canonical_redirect])),
+        ],
+    )
+    .expect("io.pipelineWithRedirects should succeed");
+    let canonical = call_builtin(&exec_pipeline_builtin, &[canonical_pipeline])
+        .expect("io.execPipeline should succeed");
+
+    match (migrated, canonical) {
+        (Value::ProcessResult(migrated), Value::ProcessResult(canonical)) => {
+            assert_eq!(migrated.code(), canonical.code());
+            assert_eq!(migrated.is_success(), canonical.is_success());
+            assert_eq!(migrated.stdout(), canonical.stdout());
+            assert_eq!(migrated.stderr(), canonical.stderr());
+            assert_eq!(
+                fs::read_to_string(&migrated_stdout_path).expect("migrated stdout file"),
+                fs::read_to_string(&canonical_stdout_path).expect("canonical stdout file")
+            );
+        }
+        other => panic!("expected ProcessResult pair, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirects_matches_embedded_pipeline_projection() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-in.txt");
+    fs::write(&stdin_path, "neve\n").expect("stdin file should be writable");
+    let migrated_stdout_path = temp.path().join("pipeline-migrated-out.txt");
+    let canonical_stdout_path = temp.path().join("pipeline-canonical-out.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let stdin_redirect_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let stdout_redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+
+    let migrated_commands = stdin_pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+    let migrated_pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(migrated_commands))],
+    )
+    .expect("io.pipeline should succeed");
+    let migrated_stdin_redirect = call_builtin(
+        &stdin_redirect_builtin,
+        &[Value::Path(Rc::new(stdin_path.clone()))],
+    )
+    .expect("io.redirectStdinPath should succeed");
+    let migrated_stdout_redirect = call_builtin(
+        &stdout_redirect_builtin,
+        &[Value::Path(Rc::new(migrated_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let migrated = exec_pipeline_with_embedded_redirects(
+        migrated_pipeline,
+        vec![migrated_stdin_redirect, migrated_stdout_redirect],
+    )
+    .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    let canonical_commands = stdin_pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+    let canonical_pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(canonical_commands))],
+    )
+    .expect("io.pipeline should succeed");
+    let canonical_stdin_redirect =
+        call_builtin(&stdin_redirect_builtin, &[Value::Path(Rc::new(stdin_path))])
+            .expect("io.redirectStdinPath should succeed");
+    let canonical_stdout_redirect = call_builtin(
+        &stdout_redirect_builtin,
+        &[Value::Path(Rc::new(canonical_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let canonical_pipeline = call_builtin(
+        &configure_builtin,
+        &[
+            canonical_pipeline,
+            Value::List(Rc::new(vec![
+                canonical_stdin_redirect,
+                canonical_stdout_redirect,
+            ])),
+        ],
+    )
+    .expect("io.pipelineWithRedirects should succeed");
+    let canonical = call_builtin(&exec_pipeline_builtin, &[canonical_pipeline])
+        .expect("io.execPipeline should succeed");
+
+    match (migrated, canonical) {
+        (Value::ProcessResult(migrated), Value::ProcessResult(canonical)) => {
+            assert_eq!(migrated.code(), canonical.code());
+            assert_eq!(migrated.is_success(), canonical.is_success());
+            assert_eq!(migrated.stdout(), canonical.stdout());
+            assert_eq!(migrated.stderr(), canonical.stderr());
+            assert_eq!(
+                fs::read_to_string(&migrated_stdout_path).expect("migrated stdout file"),
+                fs::read_to_string(&canonical_stdout_path).expect("canonical stdout file")
+            );
+        }
+        other => panic!("expected ProcessResult pair, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_matches_single_stage_exec_command_projection() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+    let exec_command_builtin =
+        get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let success_builtin =
+        get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
+    let stdout_builtin =
+        get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
+    let code_builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
+    let stderr_builtin =
+        get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![command.clone()]))],
+    )
+    .expect("io.pipeline should succeed");
+    let migrated =
+        call_builtin(&exec_pipeline_builtin, &[pipeline]).expect("io.execPipeline should succeed");
+    let canonical =
+        call_builtin(&exec_command_builtin, &[command]).expect("io.execCommand should succeed");
+
+    let success =
+        call_builtin(&success_builtin, std::slice::from_ref(&canonical)).expect("success access");
+    let stdout =
+        call_builtin(&stdout_builtin, std::slice::from_ref(&canonical)).expect("stdout access");
+    let code = call_builtin(&code_builtin, std::slice::from_ref(&canonical)).expect("code access");
+    let stderr =
+        call_builtin(&stderr_builtin, std::slice::from_ref(&canonical)).expect("stderr access");
+
+    match migrated {
+        Value::ProcessResult(result) => {
+            assert_eq!(result.is_success(), success == Value::Bool(true));
+            assert_eq!(Value::String(Rc::new(result.stdout().to_string())), stdout);
+            assert_eq!(Value::Int(result.code().into()), code);
+            assert_eq!(Value::String(Rc::new(result.stderr().to_string())), stderr);
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_rejects_non_pipeline_argument() {
+    let builtin = get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("not-a-pipeline".to_string()))],
+    )
+    .expect_err("io.execPipeline should reject string arguments");
+
+    assert_eq!(err, "io.execPipeline expects a Pipeline");
+}
+
+#[test]
+fn test_io_exec_pipeline_preserves_error_prefix_for_empty_pipeline() {
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+
+    let pipeline = Value::Pipeline(Rc::new(PipelineValue::new(Vec::new())));
+    let err = call_builtin(&exec_pipeline_builtin, &[pipeline])
+        .expect_err("io.execPipeline should reject empty pipelines");
+
+    assert!(
+        err.starts_with("io.execPipeline:"),
+        "expected io.execPipeline-prefixed error, got {err}"
+    );
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirect_writes_stdout_to_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let commands = pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(commands))])
+        .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let result = exec_pipeline_with_embedded_redirects(pipeline, vec![redirect])
+        .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success(), "redirected pipeline should succeed");
+            assert_eq!(result.code(), 0);
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&redirect_path).expect("redirected file should exist");
+            assert!(
+                redirected.contains("neve"),
+                "redirected stdout file should contain piped content"
+            );
+            assert!(
+                result.stderr().is_empty(),
+                "pipeline projection should not write stderr"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_stderr_redirect_writes_stderr_to_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let invalid_rustc = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--definitely-not-a-real-rustc-flag".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![invalid_rustc]))],
+    )
+    .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+
+    let result = exec_pipeline_with_embedded_redirects(pipeline, vec![redirect])
+        .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                !result.is_success(),
+                "invalid rustc flag pipeline should fail"
+            );
+            assert_ne!(result.code(), 0);
+            assert_eq!(result.stderr(), "");
+            let redirected =
+                fs::read_to_string(&redirect_path).expect("redirected file should exist");
+            assert!(
+                !redirected.trim().is_empty(),
+                "redirected stderr file should contain command output"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let commands = stdin_pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(commands))])
+        .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStdinPath should succeed");
+
+    let result = exec_pipeline_with_embedded_redirects(pipeline, vec![redirect])
+        .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                result.is_success(),
+                "stdin redirected pipeline should succeed"
+            );
+            assert_eq!(result.code(), 0);
+            assert!(
+                result.stdout().contains("neve"),
+                "stdin redirected pipeline should surface filtered stdout"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_paths() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-stdin.txt");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_stdin_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let redirect_stdout_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let commands = stdin_pipeline_projection_parts()
+        .into_iter()
+        .map(|(program, args)| {
+            let argv = args
+                .into_iter()
+                .map(|arg| Value::String(Rc::new(arg.to_string())))
+                .collect::<Vec<_>>();
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new(program.to_string())),
+                    Value::List(Rc::new(argv)),
+                ],
+            )
+            .expect("io.command should succeed")
+        })
+        .collect::<Vec<_>>();
+
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(commands))])
+        .expect("io.pipeline should succeed");
+    let stdin_redirect = call_builtin(
+        &redirect_stdin_builtin,
+        &[Value::Path(Rc::new(stdin_path.clone()))],
+    )
+    .expect("io.redirectStdinPath should succeed");
+    let stdout_redirect = call_builtin(
+        &redirect_stdout_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let result =
+        exec_pipeline_with_embedded_redirects(pipeline, vec![stdin_redirect, stdout_redirect])
+            .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                result.is_success(),
+                "composed pipeline redirects should succeed"
+            );
+            assert_eq!(result.code(), 0);
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&stdout_path).expect("redirected file should exist");
+            assert!(
+                redirected.contains("neve"),
+                "stdout redirect file should contain piped stdin content"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirects_composes_stdout_and_stderr_paths() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    let stderr_path = temp.path().join("pipeline-stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_stdout_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let redirect_stderr_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let (program, args) = stdout_stderr_projection_parts();
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(program.to_string())),
+            Value::List(Rc::new(
+                args.into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let stdout_redirect = call_builtin(
+        &redirect_stdout_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let stderr_redirect = call_builtin(
+        &redirect_stderr_builtin,
+        &[Value::Path(Rc::new(stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+
+    let result =
+        exec_pipeline_with_embedded_redirects(pipeline, vec![stdout_redirect, stderr_redirect])
+            .expect("pipelineWithRedirects + io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                result.is_success(),
+                "composed pipeline redirects should succeed"
+            );
+            assert_eq!(result.stdout(), "");
+            assert_eq!(result.stderr(), "");
+            let out = fs::read_to_string(&stdout_path).expect("stdout redirect file should exist");
+            let err = fs::read_to_string(&stderr_path).expect("stderr redirect file should exist");
+            assert!(
+                !out.trim().is_empty(),
+                "stdout file should contain command output"
+            );
+            assert!(
+                !err.trim().is_empty(),
+                "stderr file should contain command output"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirects_rejects_duplicate_stdout_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let stdout_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let duplicate_stdout_redirect =
+        call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdout_path))])
+            .expect("io.redirectStdoutPath should succeed");
+
+    let err = exec_pipeline_with_embedded_redirects(
+        pipeline,
+        vec![stdout_redirect, duplicate_stdout_redirect],
+    )
+    .expect_err("pipelineWithRedirects should reject duplicate stdout redirects");
+
+    assert_eq!(err, "io.pipelineWithRedirects: duplicate stdout redirect");
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirect_rejects_final_stage_stdout_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let embedded_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let command = call_builtin(
+        &configure_builtin,
+        &[command, Value::List(Rc::new(vec![embedded_redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let boundary_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdout_path))])
+        .expect("io.redirectStdoutPath should succeed");
+
+    let err = exec_pipeline_with_embedded_redirects(pipeline, vec![boundary_redirect])
+        .expect_err("pipelineWithRedirects should reject final-stage stdout redirect conflicts");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: final pipeline stage cannot combine boundary stdout with stage-local stdout redirect"
+    );
+}
+
+#[test]
+fn test_io_pipeline_with_redirects_rejects_final_stage_stdout_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_command_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_pipeline_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let embedded_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let command = call_builtin(
+        &configure_command_builtin,
+        &[command, Value::List(Rc::new(vec![embedded_redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let boundary_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdout_path))])
+        .expect("io.redirectStdoutPath should succeed");
+
+    let err = call_builtin(
+        &configure_pipeline_builtin,
+        &[pipeline, Value::List(Rc::new(vec![boundary_redirect]))],
+    )
+    .expect_err("io.pipelineWithRedirects should reject final-stage stdout conflicts");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: final pipeline stage cannot combine boundary stdout with stage-local stdout redirect"
+    );
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirects_rejects_final_stage_stderr_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stderr_path = temp.path().join("pipeline-stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--definitely-not-a-real-rustc-flag".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let embedded_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+    let command = call_builtin(
+        &configure_builtin,
+        &[command, Value::List(Rc::new(vec![embedded_redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let boundary_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stderr_path))])
+        .expect("io.redirectStderrPath should succeed");
+
+    let err = exec_pipeline_with_embedded_redirects(pipeline, vec![boundary_redirect])
+        .expect_err("pipelineWithRedirects should reject final-stage stderr redirect conflicts");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: final pipeline stage cannot combine boundary stderr with stage-local stderr redirect"
+    );
+}
+
+#[test]
+fn test_io_pipeline_with_redirects_rejects_final_stage_stderr_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stderr_path = temp.path().join("pipeline-stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_command_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_pipeline_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--definitely-not-a-real-rustc-flag".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let embedded_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+    let command = call_builtin(
+        &configure_command_builtin,
+        &[command, Value::List(Rc::new(vec![embedded_redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let boundary_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stderr_path))])
+        .expect("io.redirectStderrPath should succeed");
+
+    let err = call_builtin(
+        &configure_pipeline_builtin,
+        &[pipeline, Value::List(Rc::new(vec![boundary_redirect]))],
+    )
+    .expect_err("io.pipelineWithRedirects should reject final-stage stderr conflicts");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: final pipeline stage cannot combine boundary stderr with stage-local stderr redirect"
+    );
+}
+
+#[test]
+fn test_io_pipeline_rejects_non_final_stage_stdout_redirect() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("stage-stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+
+    let stage1 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("stage1 command should succeed");
+    let embedded_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdout_path))])
+        .expect("io.redirectStdoutPath should succeed");
+    let stage1 = call_builtin(
+        &configure_builtin,
+        &[stage1, Value::List(Rc::new(vec![embedded_redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+
+    let stage2 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(Vec::new())),
+        ],
+    )
+    .expect("stage2 command should succeed");
+
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![stage1, stage2]))],
+    )
+    .expect_err("io.pipeline should reject non-final stage stdout redirect");
+
+    assert_eq!(
+        pipeline,
+        "io.pipeline: pipeline stage 1 cannot carry stdout redirect before final stage"
+    );
+}
+
+#[test]
+fn test_io_pipeline_rejects_non_initial_stage_configured_stdin() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let command_with_builtin =
+        get_builtin("io.commandWith").expect("io.commandWith builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+
+    let stage1 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let stage2 = call_builtin(
+        &command_with_builtin,
+        &[Value::Record(Rc::new(std::collections::HashMap::from([
+            (
+                "program".to_string(),
+                Value::String(Rc::new("cat".to_string())),
+            ),
+            ("args".to_string(), Value::List(Rc::new(Vec::new()))),
+            (
+                "stdin".to_string(),
+                Value::String(Rc::new("neve".to_string())),
+            ),
+        ])))],
+    )
+    .expect("io.commandWith should succeed");
+
+    let err = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![stage1, stage2]))],
+    )
+    .expect_err("io.pipeline should reject configured stdin on non-initial stages");
+
+    assert_eq!(err, "io.pipeline: pipeline stage 2 cannot specify stdin");
+}
+
+#[test]
+fn test_io_pipeline_rejects_non_initial_stage_stdin_redirect() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("stage-stdin.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+
+    let stage1 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let embedded_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdin_path))])
+        .expect("io.redirectStdinPath should succeed");
+    let stage2 = call_builtin(
+        &configure_builtin,
+        &[
+            call_builtin(
+                &command_builtin,
+                &[
+                    Value::String(Rc::new("cat".to_string())),
+                    Value::List(Rc::new(Vec::new())),
+                ],
+            )
+            .expect("io.command should succeed"),
+            Value::List(Rc::new(vec![embedded_redirect])),
+        ],
+    )
+    .expect("io.commandWithRedirects should succeed");
+
+    let err = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![stage1, stage2]))],
+    )
+    .expect_err("io.pipeline should reject stdin redirects on non-initial stages");
+
+    assert_eq!(
+        err,
+        "io.pipeline: pipeline stage 2 cannot carry stdin redirect"
+    );
+}
+
+#[test]
+fn test_io_pipeline_with_redirects_rejects_boundary_stdin_with_stage_local_stdin() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-stdin.txt");
+
+    let command_with_builtin =
+        get_builtin("io.commandWith").expect("io.commandWith builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_pipeline_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+
+    let command = call_builtin(
+        &command_with_builtin,
+        &[Value::Record(Rc::new(std::collections::HashMap::from([
+            (
+                "program".to_string(),
+                Value::String(Rc::new("cat".to_string())),
+            ),
+            ("args".to_string(), Value::List(Rc::new(Vec::new()))),
+            (
+                "stdin".to_string(),
+                Value::String(Rc::new("neve".to_string())),
+            ),
+        ])))],
+    )
+    .expect("io.commandWith should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let boundary_redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdin_path))])
+        .expect("io.redirectStdinPath should succeed");
+
+    let err = call_builtin(
+        &configure_pipeline_builtin,
+        &[pipeline, Value::List(Rc::new(vec![boundary_redirect]))],
+    )
+    .expect_err("io.pipelineWithRedirects should reject boundary stdin conflicts");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: pipeline stage 1 cannot combine boundary stdin with stage-local stdin"
+    );
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirect_rejects_non_redirect_argument() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+
+    let err = exec_pipeline_with_embedded_redirects(
+        pipeline,
+        vec![Value::String(Rc::new("/tmp/out.txt".to_string()))],
+    )
+    .expect_err("pipelineWithRedirects should reject string redirect arguments");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects redirects[0] must be Redirect"
+    );
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirect_rejects_pipeline_with_embedded_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-out.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let pipeline = call_builtin(
+        &configure_builtin,
+        &[pipeline, Value::List(Rc::new(vec![redirect.clone()]))],
+    )
+    .expect("io.pipelineWithRedirects should succeed");
+
+    let err = exec_pipeline_with_embedded_redirects(pipeline, vec![redirect])
+        .expect_err("pipelineWithRedirects should reject embedded boundary redirects");
+
+    assert_eq!(
+        err,
+        "io.pipelineWithRedirects: pipeline already carries embedded redirects"
+    );
+}
+
+#[test]
+fn test_io_exec_pipeline_with_redirect_preserves_error_prefix() {
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-out.txt");
+
+    let pipeline = Value::Pipeline(Rc::new(PipelineValue::new(Vec::new())));
+    let redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(redirect_path))])
+        .expect("io.redirectStdoutPath should succeed");
+    let err = exec_pipeline_with_embedded_redirects(pipeline, vec![redirect])
+        .expect_err("pipelineWithRedirects should reject empty pipelines");
+
+    assert!(
+        err.starts_with("io.pipelineWithRedirects:"),
+        "expected io.pipelineWithRedirects-prefixed error, got {err}"
+    );
+}
+
+#[test]
+fn test_io_task_command_returns_task_runtime_value() {
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let result = call_builtin(&task_builtin, &[command]).expect("io.taskCommand should succeed");
+    assert!(
+        matches!(result, Value::Task(_)),
+        "io.taskCommand should return a Task, got {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_io_task_command_rejects_non_command_argument() {
+    let builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+
+    let err = call_builtin(&builtin, &[Value::String(Rc::new("printf".to_string()))])
+        .expect_err("io.taskCommand should reject string arguments");
+    assert_eq!(err, "io.taskCommand expects a Command");
+}
+
+#[test]
+fn test_io_task_pipeline_returns_task_runtime_value() {
+    let task_builtin =
+        get_builtin("io.taskPipeline").expect("io.taskPipeline builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(&pipeline_builtin, &[Value::List(Rc::new(vec![command]))])
+        .expect("io.pipeline should succeed");
+
+    let result = call_builtin(&task_builtin, &[pipeline]).expect("io.taskPipeline should succeed");
+    assert!(
+        matches!(result, Value::Task(_)),
+        "io.taskPipeline should return a Task, got {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_io_task_pipeline_rejects_non_pipeline_argument() {
+    let builtin = get_builtin("io.taskPipeline").expect("io.taskPipeline builtin should exist");
+
+    let err = call_builtin(&builtin, &[Value::String(Rc::new("printf".to_string()))])
+        .expect_err("io.taskPipeline should reject string arguments");
+    assert_eq!(err, "io.taskPipeline expects a Pipeline");
+}
+
+#[test]
+fn test_io_await_pipeline_task_honors_embedded_pipeline_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("task-pipeline-stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let configure_builtin = get_builtin("io.pipelineWithRedirects")
+        .expect("io.pipelineWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let task_builtin =
+        get_builtin("io.taskPipeline").expect("io.taskPipeline builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+
+    let printf = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let cat = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(Vec::new())),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![printf, cat]))],
+    )
+    .expect("io.pipeline should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let pipeline = call_builtin(
+        &configure_builtin,
+        &[pipeline, Value::List(Rc::new(vec![redirect]))],
+    )
+    .expect("io.pipelineWithRedirects should succeed");
+    let task = call_builtin(&task_builtin, &[pipeline]).expect("io.taskPipeline should succeed");
+
+    let result = call_builtin(&await_builtin, &[task]).expect("io.awaitTask should succeed");
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success());
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
+            assert!(redirected.contains("neve"));
+        }
+        other => panic!("expected ProcessResult from io.awaitTask, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_await_task_returns_process_result_runtime_value() {
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let task = call_builtin(&task_builtin, &[command]).expect("io.taskCommand should succeed");
+
+    let result = call_builtin(&await_builtin, &[task]).expect("io.awaitTask should succeed");
+    assert!(
+        matches!(result, Value::ProcessResult(_)),
+        "io.awaitTask should return a ProcessResult, got {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_io_await_pipeline_task_returns_process_result_runtime_value() {
+    let task_builtin =
+        get_builtin("io.taskPipeline").expect("io.taskPipeline builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+
+    let printf = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let cat = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(vec![])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![printf, cat]))],
+    )
+    .expect("io.pipeline should succeed");
+    let task = call_builtin(&task_builtin, &[pipeline]).expect("io.taskPipeline should succeed");
+
+    let result = call_builtin(&await_builtin, &[task]).expect("io.awaitTask should succeed");
+    assert!(
+        matches!(result, Value::ProcessResult(_)),
+        "io.awaitTask should return a ProcessResult, got {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_io_await_task_honors_embedded_command_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("task-stdout.txt");
+
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let command = call_builtin(
+        &configure_builtin,
+        &[command, Value::List(Rc::new(vec![redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let task = call_builtin(&task_builtin, &[command]).expect("io.taskCommand should succeed");
+    let result = call_builtin(&await_builtin, &[task]).expect("io.awaitTask should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success());
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
+            assert!(redirected.contains("neve"));
+        }
+        other => panic!("expected ProcessResult from io.awaitTask, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_await_task_rejects_non_task_argument() {
+    let builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+
+    let err = call_builtin(&builtin, &[Value::String(Rc::new("printf".to_string()))])
+        .expect_err("io.awaitTask should reject string arguments");
+    assert_eq!(err, "io.awaitTask expects a Task[ProcessResult]");
+}
+
+#[test]
+fn test_io_await_tasks_returns_process_result_list_runtime_value() {
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let await_builtin = get_builtin("io.awaitTasks").expect("io.awaitTasks builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+
+    let command1 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let command2 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("lang".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let task1 = call_builtin(&task_builtin, &[command1]).expect("io.taskCommand should succeed");
+    let task2 = call_builtin(&task_builtin, &[command2]).expect("io.taskCommand should succeed");
+
+    let result = call_builtin(&await_builtin, &[Value::List(Rc::new(vec![task1, task2]))])
+        .expect("io.awaitTasks should succeed");
+
+    match result {
+        Value::List(items) => {
+            assert_eq!(items.len(), 2);
+            assert!(matches!(items[0], Value::ProcessResult(_)));
+            assert!(matches!(items[1], Value::ProcessResult(_)));
+        }
+        other => panic!(
+            "expected List<ProcessResult> from io.awaitTasks, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_await_tasks_rejects_non_task_list_items() {
+    let builtin = get_builtin("io.awaitTasks").expect("io.awaitTasks builtin should exist");
+
+    let err = call_builtin(
+        &builtin,
+        &[Value::List(Rc::new(vec![Value::String(Rc::new(
+            "printf".to_string(),
+        ))]))],
+    )
+    .expect_err("io.awaitTasks should reject non-task list items");
+    assert_eq!(err, "io.awaitTasks tasks[0] must be Task[ProcessResult]");
+}
+
+#[test]
+fn test_io_await_tasks_matches_individual_await_projection() {
+    let task_command_builtin =
+        get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let task_pipeline_builtin =
+        get_builtin("io.taskPipeline").expect("io.taskPipeline builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let await_tasks_builtin =
+        get_builtin("io.awaitTasks").expect("io.awaitTasks builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let printf_lang = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("lang".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let cat = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(vec![])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![printf_lang, cat]))],
+    )
+    .expect("io.pipeline should succeed");
+
+    let task1 =
+        call_builtin(&task_command_builtin, &[command]).expect("io.taskCommand should succeed");
+    let task2 =
+        call_builtin(&task_pipeline_builtin, &[pipeline]).expect("io.taskPipeline should succeed");
+
+    let awaited_many = call_builtin(
+        &await_tasks_builtin,
+        &[Value::List(Rc::new(vec![task1.clone(), task2.clone()]))],
+    )
+    .expect("io.awaitTasks should succeed");
+    let awaited_one = call_builtin(&await_builtin, &[task1]).expect("io.awaitTask should succeed");
+    let awaited_two = call_builtin(&await_builtin, &[task2]).expect("io.awaitTask should succeed");
+
+    match (awaited_many, awaited_one, awaited_two) {
+        (Value::List(items), Value::ProcessResult(first), Value::ProcessResult(second)) => {
+            assert_eq!(items.len(), 2);
+            match (&items[0], &items[1]) {
+                (Value::ProcessResult(first_many), Value::ProcessResult(second_many)) => {
+                    assert_eq!(first_many.code(), first.code());
+                    assert_eq!(first_many.is_success(), first.is_success());
+                    assert_eq!(first_many.stdout(), first.stdout());
+                    assert_eq!(first_many.stderr(), first.stderr());
+                    assert_eq!(second_many.code(), second.code());
+                    assert_eq!(second_many.is_success(), second.is_success());
+                    assert_eq!(second_many.stdout(), second.stdout());
+                    assert_eq!(second_many.stderr(), second.stderr());
+                }
+                other => panic!(
+                    "expected ProcessResult pair from io.awaitTasks, got {:?}",
+                    other
+                ),
+            }
+        }
+        other => panic!("expected awaited ProcessResults, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_await_tasks_preserves_indexed_error_prefix() {
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let await_builtin = get_builtin("io.awaitTasks").expect("io.awaitTasks builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+
+    let good = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let bad = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(
+                "neve-definitely-missing-command-for-tests".to_string(),
+            )),
+            Value::List(Rc::new(vec![])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let good = call_builtin(&task_builtin, &[good]).expect("io.taskCommand should succeed");
+    let bad = call_builtin(&task_builtin, &[bad]).expect("io.taskCommand should succeed");
+
+    let err = call_builtin(&await_builtin, &[Value::List(Rc::new(vec![good, bad]))])
+        .expect_err("io.awaitTasks should report failing task index");
+    assert!(
+        err.starts_with("io.awaitTasks[1]:"),
+        "expected io.awaitTasks[1]-prefixed error, got {err}"
+    );
+}
+
+#[test]
+fn test_io_await_task_matches_canonical_exec_command_projection() {
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let exec_command_builtin =
+        get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+    let success_builtin =
+        get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
+    let stdout_builtin =
+        get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
+    let code_builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
+    let stderr_builtin =
+        get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+
+    let program = Value::String(Rc::new("rustc".to_string()));
+    let argv = Value::List(Rc::new(vec![Value::String(Rc::new(
+        "--version".to_string(),
+    ))]));
+
+    let command = call_builtin(&command_builtin, &[program.clone(), argv.clone()])
+        .expect("io.command should succeed");
+    let task = call_builtin(&task_builtin, std::slice::from_ref(&command))
+        .expect("io.taskCommand should succeed");
+    let awaited = call_builtin(&await_builtin, &[task]).expect("io.awaitTask should succeed");
+    let canonical =
+        call_builtin(&exec_command_builtin, &[command]).expect("io.execCommand should succeed");
+
+    let success =
+        call_builtin(&success_builtin, std::slice::from_ref(&canonical)).expect("success access");
+    let stdout =
+        call_builtin(&stdout_builtin, std::slice::from_ref(&canonical)).expect("stdout access");
+    let code = call_builtin(&code_builtin, std::slice::from_ref(&canonical)).expect("code access");
+    let stderr =
+        call_builtin(&stderr_builtin, std::slice::from_ref(&canonical)).expect("stderr access");
+
+    match awaited {
+        Value::ProcessResult(result) => {
+            assert_eq!(result.is_success(), success == Value::Bool(true));
+            assert_eq!(Value::String(Rc::new(result.stdout().to_string())), stdout);
+            assert_eq!(Value::Int(result.code().into()), code);
+            assert_eq!(Value::String(Rc::new(result.stderr().to_string())), stderr);
+        }
+        other => panic!("expected ProcessResult from io.awaitTask, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_await_pipeline_task_matches_canonical_exec_pipeline_projection() {
+    let task_builtin =
+        get_builtin("io.taskPipeline").expect("io.taskPipeline builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let exec_pipeline_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+    let success_builtin =
+        get_builtin("io.processSuccess").expect("io.processSuccess builtin should exist");
+    let stdout_builtin =
+        get_builtin("io.processStdout").expect("io.processStdout builtin should exist");
+    let code_builtin = get_builtin("io.processCode").expect("io.processCode builtin should exist");
+    let stderr_builtin =
+        get_builtin("io.processStderr").expect("io.processStderr builtin should exist");
+
+    let printf = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let cat = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("cat".to_string())),
+            Value::List(Rc::new(vec![])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![printf, cat]))],
+    )
+    .expect("io.pipeline should succeed");
+    let task = call_builtin(&task_builtin, std::slice::from_ref(&pipeline))
+        .expect("io.taskPipeline should succeed");
+    let awaited = call_builtin(&await_builtin, &[task]).expect("io.awaitTask should succeed");
+    let canonical =
+        call_builtin(&exec_pipeline_builtin, &[pipeline]).expect("io.execPipeline should succeed");
+
+    let success =
+        call_builtin(&success_builtin, std::slice::from_ref(&canonical)).expect("success access");
+    let stdout =
+        call_builtin(&stdout_builtin, std::slice::from_ref(&canonical)).expect("stdout access");
+    let code = call_builtin(&code_builtin, std::slice::from_ref(&canonical)).expect("code access");
+    let stderr =
+        call_builtin(&stderr_builtin, std::slice::from_ref(&canonical)).expect("stderr access");
+
+    match awaited {
+        Value::ProcessResult(result) => {
+            assert_eq!(result.is_success(), success == Value::Bool(true));
+            assert_eq!(Value::String(Rc::new(result.stdout().to_string())), stdout);
+            assert_eq!(Value::Int(result.code().into()), code);
+            assert_eq!(Value::String(Rc::new(result.stderr().to_string())), stderr);
+        }
+        other => panic!("expected ProcessResult from io.awaitTask, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_await_task_preserves_error_prefix() {
+    let task_builtin = get_builtin("io.taskCommand").expect("io.taskCommand builtin should exist");
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(
+                "neve-definitely-missing-command-for-tests".to_string(),
+            )),
+            Value::List(Rc::new(vec![])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let task = call_builtin(&task_builtin, &[command]).expect("io.taskCommand should succeed");
+
+    let err = call_builtin(&await_builtin, &[task])
+        .expect_err("io.awaitTask should report missing program");
+    assert!(
+        err.starts_with("io.awaitTask:"),
+        "expected io.awaitTask-prefixed error, got {err}"
+    );
+}
+
+#[test]
+fn test_io_await_pipeline_task_preserves_error_prefix() {
+    let await_builtin = get_builtin("io.awaitTask").expect("io.awaitTask builtin should exist");
+    let task = Value::Task(Rc::new(TaskValue::pipeline_process_result(Rc::new(
+        PipelineValue::new(Vec::new()),
+    ))));
+
+    let err = call_builtin(&await_builtin, &[task])
+        .expect_err("io.awaitTask should report empty pipeline");
+    assert!(
+        err.starts_with("io.awaitTask:"),
+        "expected io.awaitTask-prefixed error, got {err}"
+    );
+}
+
+#[test]
+fn test_io_redirect_stdout_path_returns_redirect_runtime_value() {
+    let builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.out",
+        )))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    match result {
+        Value::Redirect(redirect) => {
+            assert_eq!(redirect.stream_name(), "stdout");
+            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/neve.out"));
+        }
+        other => panic!("expected Redirect runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_redirect_stdout_path_rejects_string_argument() {
+    let builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/neve.out".to_string()))],
+    )
+    .expect_err("io.redirectStdoutPath should reject string arguments");
+
+    assert_eq!(err, "io.redirectStdoutPath expects a Path");
+}
+
+#[test]
+fn test_io_redirect_stderr_path_returns_redirect_runtime_value() {
+    let builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.err",
+        )))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+
+    match result {
+        Value::Redirect(redirect) => {
+            assert_eq!(redirect.stream_name(), "stderr");
+            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/neve.err"));
+        }
+        other => panic!("expected Redirect runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_redirect_stdin_path_returns_redirect_runtime_value() {
+    let builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "/tmp/neve.in",
+        )))],
+    )
+    .expect("io.redirectStdinPath should succeed");
+
+    match result {
+        Value::Redirect(redirect) => {
+            assert_eq!(redirect.stream_name(), "stdin");
+            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/neve.in"));
+        }
+        other => panic!("expected Redirect runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_redirect_stderr_path_rejects_string_argument() {
+    let builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/neve.err".to_string()))],
+    )
+    .expect_err("io.redirectStderrPath should reject string arguments");
+
+    assert_eq!(err, "io.redirectStderrPath expects a Path");
+}
+
+#[test]
+fn test_io_redirect_stdin_path_rejects_string_argument() {
+    let builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new("/tmp/neve.in".to_string()))],
+    )
+    .expect_err("io.redirectStdinPath should reject string arguments");
+
+    assert_eq!(err, "io.redirectStdinPath expects a Path");
+}
+
+#[test]
+fn test_io_exec_command_with_redirect_writes_stdout_to_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let result = exec_command_with_embedded_redirects(command, vec![redirect])
+        .expect("commandWithRedirects + io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success(), "redirected command should succeed");
+            assert_eq!(result.code(), 0);
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&redirect_path).expect("redirected file should exist");
+            assert!(
+                !redirected.trim().is_empty(),
+                "redirected stdout file should contain command output"
+            );
+            assert!(
+                result.stderr().is_empty(),
+                "rustc --version should not write stderr"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execCommand, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_stderr_redirect_writes_stderr_to_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--definitely-not-a-real-rustc-flag".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+
+    let result = exec_command_with_embedded_redirects(command, vec![redirect])
+        .expect("commandWithRedirects + io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                !result.is_success(),
+                "invalid rustc flag should produce a failed process result"
+            );
+            assert_ne!(result.code(), 0);
+            assert_eq!(result.stderr(), "");
+            let redirected =
+                fs::read_to_string(&redirect_path).expect("redirected file should exist");
+            assert!(
+                !redirected.trim().is_empty(),
+                "redirected stderr file should contain command output"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execCommand, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_stdin_redirect_reads_stdin_from_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let (program, args) = stdin_filter_projection_parts();
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(program.to_string())),
+            Value::List(Rc::new(
+                args.into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(redirect_path.clone()))],
+    )
+    .expect("io.redirectStdinPath should succeed");
+
+    let result = exec_command_with_embedded_redirects(command, vec![redirect])
+        .expect("commandWithRedirects + io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                result.is_success(),
+                "stdin redirected command should succeed"
+            );
+            assert_eq!(result.code(), 0);
+            assert!(
+                result.stdout().contains("neve"),
+                "stdin redirected command should surface matching stdout"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execCommand, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_stdin_redirect_rejects_configured_stdin() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+
+    let command_builtin =
+        get_builtin("io.commandWith").expect("io.commandWith builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let (program, args) = stdin_filter_projection_parts();
+    let command = call_builtin(
+        &command_builtin,
+        &[Value::Record(Rc::new(HashMap::from([
+            (
+                "program".to_string(),
+                Value::String(Rc::new(program.to_string())),
+            ),
+            (
+                "args".to_string(),
+                Value::List(Rc::new(
+                    args.into_iter()
+                        .map(|arg| Value::String(Rc::new(arg.to_string())))
+                        .collect(),
+                )),
+            ),
+            (
+                "stdin".to_string(),
+                Value::String(Rc::new("inline stdin".to_string())),
+            ),
+        ])))],
+    )
+    .expect("io.commandWith should succeed");
+    let redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(redirect_path))])
+        .expect("io.redirectStdinPath should succeed");
+
+    let err = exec_command_with_embedded_redirects(command, vec![redirect])
+        .expect_err("commandWithRedirects should reject combined stdin sources");
+
+    assert_eq!(
+        err,
+        "io.commandWithRedirects: command cannot combine redirect stdin with configured stdin"
+    );
+}
+
+#[test]
+fn test_io_exec_command_with_redirects_composes_stdin_and_stdout_paths() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("stdin.txt");
+    let stdout_path = temp.path().join("stdout.txt");
+    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_stdin_builtin =
+        get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
+    let redirect_stdout_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let (program, args) = stdin_filter_projection_parts();
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(program.to_string())),
+            Value::List(Rc::new(
+                args.into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("io.command should succeed");
+    let stdin_redirect = call_builtin(
+        &redirect_stdin_builtin,
+        &[Value::Path(Rc::new(stdin_path.clone()))],
+    )
+    .expect("io.redirectStdinPath should succeed");
+    let stdout_redirect = call_builtin(
+        &redirect_stdout_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+
+    let result =
+        exec_command_with_embedded_redirects(command, vec![stdin_redirect, stdout_redirect])
+            .expect("commandWithRedirects + io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success(), "composed redirects should succeed");
+            assert_eq!(result.code(), 0);
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&stdout_path).expect("redirected file should exist");
+            assert!(
+                redirected.contains("neve"),
+                "stdout redirect file should contain filtered stdin content"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execCommand, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_redirects_composes_stdout_and_stderr_paths() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("stdout.txt");
+    let stderr_path = temp.path().join("stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_stdout_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let redirect_stderr_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let (program, args) = stdout_stderr_projection_parts();
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(program.to_string())),
+            Value::List(Rc::new(
+                args.into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("io.command should succeed");
+    let stdout_redirect = call_builtin(
+        &redirect_stdout_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let stderr_redirect = call_builtin(
+        &redirect_stderr_builtin,
+        &[Value::Path(Rc::new(stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+
+    let result =
+        exec_command_with_embedded_redirects(command, vec![stdout_redirect, stderr_redirect])
+            .expect("commandWithRedirects + io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success(), "composed redirects should succeed");
+            assert_eq!(result.stdout(), "");
+            assert_eq!(result.stderr(), "");
+            let out = fs::read_to_string(&stdout_path).expect("stdout redirect file should exist");
+            let err = fs::read_to_string(&stderr_path).expect("stderr redirect file should exist");
+            assert!(
+                !out.trim().is_empty(),
+                "stdout file should contain command output"
+            );
+            assert!(
+                !err.trim().is_empty(),
+                "stderr file should contain command output"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execCommand, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_redirects_rejects_duplicate_stdout_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("rustc".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new(
+                "--version".to_string(),
+            ))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let stdout_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let duplicate_stdout_redirect =
+        call_builtin(&redirect_builtin, &[Value::Path(Rc::new(stdout_path))])
+            .expect("io.redirectStdoutPath should succeed");
+
+    let err = exec_command_with_embedded_redirects(
+        command,
+        vec![stdout_redirect, duplicate_stdout_redirect],
+    )
+    .expect_err("commandWithRedirects should reject duplicate stdout redirects");
+
+    assert_eq!(err, "io.commandWithRedirects: duplicate stdout redirect");
+}
+
+#[test]
+fn test_io_exec_command_honors_embedded_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let exec_builtin = get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let redirected_command = call_builtin(
+        &configure_builtin,
+        &[command, Value::List(Rc::new(vec![redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+
+    let result =
+        call_builtin(&exec_builtin, &[redirected_command]).expect("io.execCommand should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(result.is_success());
+            assert_eq!(result.stdout(), "");
+            let redirected =
+                fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
+            assert!(
+                redirected.contains("neve"),
+                "redirected stdout file should contain command output"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execCommand, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_redirect_matches_embedded_command_projection() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let migrated_stdout_path = temp.path().join("command-migrated-out.txt");
+    let canonical_stdout_path = temp.path().join("command-canonical-out.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let exec_command_builtin =
+        get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+
+    let migrated_command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let migrated_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(migrated_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let migrated = exec_command_with_embedded_redirects(migrated_command, vec![migrated_redirect])
+        .expect("commandWithRedirects + io.execCommand should succeed");
+
+    let canonical_command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let canonical_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(canonical_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let canonical_command = call_builtin(
+        &configure_builtin,
+        &[
+            canonical_command,
+            Value::List(Rc::new(vec![canonical_redirect])),
+        ],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let canonical = call_builtin(&exec_command_builtin, &[canonical_command])
+        .expect("io.execCommand should succeed");
+
+    match (migrated, canonical) {
+        (Value::ProcessResult(migrated), Value::ProcessResult(canonical)) => {
+            assert_eq!(migrated.code(), canonical.code());
+            assert_eq!(migrated.is_success(), canonical.is_success());
+            assert_eq!(migrated.stdout(), canonical.stdout());
+            assert_eq!(migrated.stderr(), canonical.stderr());
+            assert_eq!(
+                fs::read_to_string(&migrated_stdout_path).expect("migrated stdout file"),
+                fs::read_to_string(&canonical_stdout_path).expect("canonical stdout file")
+            );
+        }
+        other => panic!("expected ProcessResult pair, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_redirects_matches_embedded_command_projection() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let migrated_stdout_path = temp.path().join("command-migrated-out.txt");
+    let migrated_stderr_path = temp.path().join("command-migrated-err.txt");
+    let canonical_stdout_path = temp.path().join("command-canonical-out.txt");
+    let canonical_stderr_path = temp.path().join("command-canonical-err.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let stdout_redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let stderr_redirect_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let exec_command_builtin =
+        get_builtin("io.execCommand").expect("io.execCommand builtin should exist");
+
+    let (program, args) = stdout_stderr_projection_parts();
+    let migrated_command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(program.to_string())),
+            Value::List(Rc::new(
+                args.into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("io.command should succeed");
+    let migrated_stdout_redirect = call_builtin(
+        &stdout_redirect_builtin,
+        &[Value::Path(Rc::new(migrated_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let migrated_stderr_redirect = call_builtin(
+        &stderr_redirect_builtin,
+        &[Value::Path(Rc::new(migrated_stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+    let migrated = exec_command_with_embedded_redirects(
+        migrated_command,
+        vec![migrated_stdout_redirect, migrated_stderr_redirect],
+    )
+    .expect("commandWithRedirects + io.execCommand should succeed");
+
+    let (program, args) = stdout_stderr_projection_parts();
+    let canonical_command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(program.to_string())),
+            Value::List(Rc::new(
+                args.into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("io.command should succeed");
+    let canonical_stdout_redirect = call_builtin(
+        &stdout_redirect_builtin,
+        &[Value::Path(Rc::new(canonical_stdout_path.clone()))],
+    )
+    .expect("io.redirectStdoutPath should succeed");
+    let canonical_stderr_redirect = call_builtin(
+        &stderr_redirect_builtin,
+        &[Value::Path(Rc::new(canonical_stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+    let canonical_command = call_builtin(
+        &configure_builtin,
+        &[
+            canonical_command,
+            Value::List(Rc::new(vec![
+                canonical_stdout_redirect,
+                canonical_stderr_redirect,
+            ])),
+        ],
+    )
+    .expect("io.commandWithRedirects should succeed");
+    let canonical = call_builtin(&exec_command_builtin, &[canonical_command])
+        .expect("io.execCommand should succeed");
+
+    match (migrated, canonical) {
+        (Value::ProcessResult(migrated), Value::ProcessResult(canonical)) => {
+            assert_eq!(migrated.code(), canonical.code());
+            assert_eq!(migrated.is_success(), canonical.is_success());
+            assert_eq!(migrated.stdout(), canonical.stdout());
+            assert_eq!(migrated.stderr(), canonical.stderr());
+            assert_eq!(
+                fs::read_to_string(&migrated_stdout_path).expect("migrated stdout file"),
+                fs::read_to_string(&canonical_stdout_path).expect("canonical stdout file")
+            );
+            assert_eq!(
+                fs::read_to_string(&migrated_stderr_path).expect("migrated stderr file"),
+                fs::read_to_string(&canonical_stderr_path).expect("canonical stderr file")
+            );
+        }
+        other => panic!("expected ProcessResult pair, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_exec_pipeline_honors_stage_local_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stderr_path = temp.path().join("stderr.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
+    let configure_builtin = get_builtin("io.commandWithRedirects")
+        .expect("io.commandWithRedirects builtin should exist");
+    let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
+    let exec_builtin =
+        get_builtin("io.execPipeline").expect("io.execPipeline builtin should exist");
+
+    let (stage1_program, stage1_args) = stdout_stderr_projection_parts();
+    let stage1 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(stage1_program.to_string())),
+            Value::List(Rc::new(
+                stage1_args
+                    .into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("stage1 command should succeed");
+    let stderr_redirect = call_builtin(
+        &redirect_builtin,
+        &[Value::Path(Rc::new(stderr_path.clone()))],
+    )
+    .expect("io.redirectStderrPath should succeed");
+    let stage1 = call_builtin(
+        &configure_builtin,
+        &[stage1, Value::List(Rc::new(vec![stderr_redirect]))],
+    )
+    .expect("io.commandWithRedirects should succeed");
+
+    let (stage2_program, stage2_args) = stdin_filter_projection_parts();
+    let stage2 = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(stage2_program.to_string())),
+            Value::List(Rc::new(
+                stage2_args
+                    .into_iter()
+                    .map(|arg| Value::String(Rc::new(arg.to_string())))
+                    .collect(),
+            )),
+        ],
+    )
+    .expect("stage2 command should succeed");
+
+    let pipeline = call_builtin(
+        &pipeline_builtin,
+        &[Value::List(Rc::new(vec![stage1, stage2]))],
+    )
+    .expect("io.pipeline should succeed");
+    let result = call_builtin(&exec_builtin, &[pipeline]).expect("io.execPipeline should succeed");
+
+    match result {
+        Value::ProcessResult(result) => {
+            assert!(
+                result.is_success(),
+                "stage-local redirect pipeline should succeed"
+            );
+            assert_eq!(result.code(), 0);
+            assert!(result.stdout().contains("neve"));
+            assert_eq!(result.stderr(), "");
+            let redirected =
+                fs::read_to_string(&stderr_path).expect("redirected stderr file should exist");
+            assert!(
+                !redirected.trim().is_empty(),
+                "stage-local redirected stderr file should contain output"
+            );
+        }
+        other => panic!(
+            "expected ProcessResult from io.execPipeline, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_io_exec_command_with_redirect_rejects_non_redirect_argument() {
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new("printf".to_string())),
+            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        ],
+    )
+    .expect("io.command should succeed");
+
+    let err = exec_command_with_embedded_redirects(
+        command,
+        vec![Value::String(Rc::new("/tmp/out.txt".to_string()))],
+    )
+    .expect_err("commandWithRedirects should reject string redirect arguments");
+    assert_eq!(err, "io.commandWithRedirects redirects[0] must be Redirect");
+}
+
+#[test]
+fn test_io_exec_command_with_redirect_preserves_error_prefix() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdout.txt");
+
+    let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
+    let redirect_builtin =
+        get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
+    let command = call_builtin(
+        &command_builtin,
+        &[
+            Value::String(Rc::new(
+                "neve-definitely-missing-command-for-tests".to_string(),
+            )),
+            Value::List(Rc::new(vec![])),
+        ],
+    )
+    .expect("io.command should succeed");
+    let redirect = call_builtin(&redirect_builtin, &[Value::Path(Rc::new(redirect_path))])
+        .expect("io.redirectStdoutPath should succeed");
+
+    let err = exec_command_with_embedded_redirects(command, vec![redirect])
+        .expect_err("commandWithRedirects + io.execCommand should report missing program");
+    assert!(
+        err.starts_with("io.execCommand:"),
+        "expected io.execCommand-prefixed error, got {err}"
+    );
 }
 
 #[test]
@@ -854,6 +4156,64 @@ fn test_io_create_and_remove_dir_all() {
         call_builtin(&exists, &exists_after_args).unwrap(),
         Value::Bool(false)
     ));
+}
+
+#[test]
+fn test_io_create_dir_all_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let nested = temp.path().join("typed").join("a").join("b");
+    let builtin =
+        get_builtin("io.createDirAllPath").expect("io.createDirAllPath builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(nested.clone()))])
+        .expect("io.createDirAllPath should work");
+
+    assert!(matches!(result, Value::Unit));
+    assert!(nested.exists());
+    assert!(nested.is_dir());
+}
+
+#[test]
+fn test_io_create_dir_all_path_rejects_string_argument() {
+    let temp = TempDir::new().unwrap();
+    let nested = temp.path().join("typed").join("a").join("b");
+    let builtin =
+        get_builtin("io.createDirAllPath").expect("io.createDirAllPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(nested.to_string_lossy().to_string()))],
+    )
+    .expect_err("io.createDirAllPath should reject string arguments");
+
+    assert_eq!(err, "io.createDirAllPath expects a Path");
+}
+
+#[test]
+fn test_io_remove_dir_all_path_accepts_path_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let nested = temp.path().join("typed").join("a").join("b");
+    fs::create_dir_all(&nested).unwrap();
+    let builtin =
+        get_builtin("io.removeDirAllPath").expect("io.removeDirAllPath builtin should exist");
+    let result = call_builtin(&builtin, &[Value::Path(Rc::new(nested.clone()))])
+        .expect("io.removeDirAllPath should work");
+
+    assert!(matches!(result, Value::Unit));
+    assert!(!nested.exists());
+}
+
+#[test]
+fn test_io_remove_dir_all_path_rejects_string_argument() {
+    let temp = TempDir::new().unwrap();
+    let nested = temp.path().join("typed").join("a").join("b");
+    let builtin =
+        get_builtin("io.removeDirAllPath").expect("io.removeDirAllPath builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(nested.to_string_lossy().to_string()))],
+    )
+    .expect_err("io.removeDirAllPath should reject string arguments");
+
+    assert_eq!(err, "io.removeDirAllPath expects a Path");
 }
 
 // ============================================================================
@@ -1818,6 +5178,39 @@ fn test_list_sort_strings() {
                     }
                     _ => panic!("Expected strings"),
                 },
+                _ => panic!("Expected List"),
+            }
+        }
+        _ => panic!("Expected Builtin"),
+    }
+}
+
+#[test]
+fn test_list_sort_paths() {
+    let sort_fn = get_builtin("list.sort").unwrap();
+
+    match sort_fn {
+        Value::Builtin(builtin) => {
+            let list = Value::List(Rc::new(vec![
+                Value::Path(Rc::new(std::path::PathBuf::from("/tmp/zeta.txt"))),
+                Value::Path(Rc::new(std::path::PathBuf::from("/tmp/alpha.txt"))),
+                Value::Path(Rc::new(std::path::PathBuf::from("/tmp/mid.txt"))),
+            ]));
+            let result = (builtin.func)(&[list]).unwrap();
+            match result {
+                Value::List(l) => {
+                    let rendered = l
+                        .iter()
+                        .map(|value| match value {
+                            Value::Path(path) => path.to_string_lossy().to_string(),
+                            other => panic!("Expected Path, got {:?}", other),
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(
+                        rendered,
+                        vec!["/tmp/alpha.txt", "/tmp/mid.txt", "/tmp/zeta.txt"]
+                    );
+                }
                 _ => panic!("Expected List"),
             }
         }

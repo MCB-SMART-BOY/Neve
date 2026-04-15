@@ -10,6 +10,7 @@ use neve_parser::parse;
 use neve_std::{std_module_overrides, stdlib};
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 use tempfile::TempDir;
 
 fn eval_source(source: &str) -> Result<Value, EvalError> {
@@ -68,6 +69,74 @@ fn create_test_module(dir: &Path, path: &[&str], content: &str) {
     }
     full_path.set_extension("neve");
     fs::write(full_path, content).unwrap();
+}
+
+#[cfg(not(windows))]
+fn shell_projection_source() -> String {
+    r#"
+        import std.io as io;
+        let migrated = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
+        let canonical = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
+        let same =
+            typeOf(migrated) == "ProcessResult" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
+    "#
+    .to_string()
+}
+
+#[cfg(windows)]
+fn shell_projection_source() -> String {
+    r#"
+        import std.io as io;
+        let migrated = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
+        let canonical = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
+        let same =
+            typeOf(migrated) == "ProcessResult" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
+    "#
+    .to_string()
+}
+
+#[cfg(not(windows))]
+fn pipeline_execution_source() -> String {
+    r#"
+        import std.io as io;
+        let result = io.execPipeline(io.pipeline([
+            io.command("sh", ["-c", "printf neve"]),
+            io.command("sh", ["-c", "grep neve"])
+        ]));
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "";
+    "#
+    .to_string()
+}
+
+#[cfg(windows)]
+fn pipeline_execution_source() -> String {
+    r#"
+        import std.io as io;
+        let result = io.execPipeline(io.pipeline([
+            io.command("cmd", ["/C", "echo neve"]),
+            io.command("cmd", ["/C", "findstr neve"])
+        ]));
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "";
+    "#
+    .to_string()
 }
 
 // ============================================================================
@@ -199,11 +268,12 @@ fn test_eval_hir_std_typed_path_adapters() {
     let source = r#"
         import std.path as path;
         let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
-        let parent = path.parentPath(nested) ?? path.fromString("/");
-        let result = if path.isAbsolutePath(parent) then toString(parent) else "nope";
+        let name = path.filenamePath(nested) ?? "missing";
+        let ext = path.extensionPath(nested) ?? "missing";
+        let result = if name == "neve.txt" && ext == "txt" then "ok" else "nope";
     "#;
     match eval_checked_hir(source) {
-        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "/tmp"),
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "ok"),
         other => panic!("expected string, got {:?}", other),
     }
 }
@@ -219,6 +289,28 @@ fn test_eval_hir_std_io_builtins() {
             s.as_ref(),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         ),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_hash_file_path_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"hash-file-path-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = "9c3675e0b07ef1223e4cb9afdc255c51c8557ac075e91e601978676b894c95b1";
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        io.hashFilePath(path.fromString("{escaped}"))
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected),
         other => panic!("expected string, got {:?}", other),
     }
 }
@@ -248,6 +340,236 @@ fn test_eval_hir_std_io_read_file_path_bridge() {
 }
 
 #[test]
+fn test_eval_hir_std_io_read_file_bytes_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("io-read-bytes-path.neve.bin");
+    std::fs::write(&file_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+    let escaped = file_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let bytes = io.readFileBytesPath(path.fromString("{escaped}"));
+        let shown = if typeOf(bytes) == "Bytes" then toString(bytes) else "nope";
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<bytes:4>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_read_dir_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("io-read-dir-path.neve");
+    std::fs::create_dir_all(dir_path.join("nested")).unwrap();
+    std::fs::write(dir_path.join("alpha.txt"), "a").unwrap();
+    std::fs::write(dir_path.join("beta.txt"), "b").unwrap();
+    let escaped = dir_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        import std.list as list;
+        let entries = io.readDirPath(path.fromString("{escaped}"));
+        list.sort(entries)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::List(entries)) => {
+            let names = entries
+                .iter()
+                .map(|entry| match entry {
+                    Value::String(name) => name.to_string(),
+                    other => panic!("expected String entry, got {:?}", other),
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(names, vec!["alpha.txt", "beta.txt", "nested"]);
+        }
+        other => panic!("expected List<String>, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_read_dir_entry_paths_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("io-read-dir-entry-paths.neve");
+    let file_path = dir_path.join("alpha.txt");
+    let nested_path = dir_path.join("nested");
+    std::fs::create_dir_all(&dir_path).unwrap();
+    std::fs::create_dir_all(&nested_path).unwrap();
+    std::fs::write(&file_path, "a").unwrap();
+    let escaped = dir_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        import std.list as list;
+        list.sort(io.readDirEntryPaths(path.fromString("{escaped}")))
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::List(entries)) => assert_eq!(
+            entries.as_ref(),
+            &[
+                Value::Path(Rc::new(file_path)),
+                Value::Path(Rc::new(nested_path)),
+            ]
+        ),
+        other => panic!("expected List<Path>, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_write_file_bytes_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let src_path = temp_dir.path().join("io-write-bytes-src.neve.bin");
+    let dst_path = temp_dir.path().join("io-write-bytes-dst.neve.bin");
+    std::fs::write(&src_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+    let escaped_src = src_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let src = path.fromString("{escaped_src}");
+        let dst = path.fromString("{escaped_dst}");
+        let bytes = io.readFileBytesPath(src);
+        let done = io.writeFileBytesPath(dst, bytes);
+        let copied = io.readFileBytesPath(dst);
+        let ok = typeOf(copied) == "Bytes" && copied == bytes;
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_write_file_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-write-path-dst.neve.txt");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let dst = path.fromString("{escaped_dst}");
+        let done = io.writeFilePath(dst, "hello-path");
+        io.readFilePath(dst)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "hello-path"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_append_file_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-append-path-dst.neve.txt");
+    std::fs::write(&dst_path, "hello").unwrap();
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let dst = path.fromString("{escaped_dst}");
+        let done = io.appendFilePath(dst, "-path");
+        io.readFilePath(dst)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "hello-path"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_append_file_bytes_path_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let init_path = temp_dir.path().join("io-append-bytes-init.neve.bin");
+    let append_path = temp_dir.path().join("io-append-bytes-src.neve.bin");
+    let dst_path = temp_dir.path().join("io-append-bytes-dst.neve.bin");
+    let expected_path = temp_dir.path().join("io-append-bytes-expected.neve.bin");
+    std::fs::write(&init_path, [0xaa]).unwrap();
+    std::fs::write(&append_path, [0xde, 0xad, 0xbe]).unwrap();
+    std::fs::write(&expected_path, [0xaa, 0xde, 0xad, 0xbe]).unwrap();
+    let escaped_init = init_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_append = append_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+    let escaped_expected = expected_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let init = io.readFileBytesPath(path.fromString("{escaped_init}"));
+        let append = io.readFileBytesPath(path.fromString("{escaped_append}"));
+        let expected = io.readFileBytesPath(path.fromString("{escaped_expected}"));
+        let dst = path.fromString("{escaped_dst}");
+        let reset = io.writeFileBytesPath(dst, init);
+        let done = io.appendFileBytesPath(dst, append);
+        let copied = io.readFileBytesPath(dst);
+        let ok = typeOf(copied) == "Bytes" && copied == expected;
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_io_current_dir_path_bridge() {
     let expected = std::env::current_dir()
         .unwrap()
@@ -266,6 +588,67 @@ fn test_eval_hir_std_io_current_dir_path_bridge() {
 }
 
 #[test]
+fn test_eval_hir_std_io_home_dir_path_bridge() {
+    let source = r#"
+        import std.io as io;
+        io.homeDirPath()
+    "#;
+
+    let expected = match std::env::var("HOME") {
+        Ok(home) => Value::Some(Box::new(Value::Path(Rc::new(home.into())))),
+        Err(_) => Value::None,
+    };
+
+    match eval_checked_hir(source) {
+        Ok(value) => assert_eq!(value, expected),
+        other => panic!("expected optional path, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_create_dir_all_path_bridge() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("typed").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{escaped}");
+        let done = io.createDirAllPath(target);
+        io.pathExistsPath(target) && io.isDirPath(target)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_remove_dir_all_path_bridge() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("typed").join("a").join("b");
+    fs::create_dir_all(&target).unwrap();
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{escaped}");
+        let done = io.removeDirAllPath(target);
+        !io.pathExistsPath(target)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
     let source = r#"
         import std.io as io;
@@ -280,16 +663,857 @@ fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
 }
 
 #[test]
+fn test_eval_hir_std_io_command_with_bridge_exposes_configured_command_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
+        let shown = if typeOf(cmd) == "Command" then toString(cmd) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => {
+            assert_eq!(s.as_ref(), "<command:printf 1 arg(s), configured>")
+        }
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_pipeline_bridge_exposes_pipeline_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let pipe = io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]);
+        let shown = if typeOf(pipe) == "Pipeline" then toString(pipe) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<pipeline:2 command(s)>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_pipeline_with_redirects_bridge_exposes_pipeline_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+            [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+        );
+        let shown = if typeOf(pipe) == "Pipeline" then toString(pipe) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<pipeline:2 command(s)>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_bridge_exposes_process_result_runtime_value() {
+    match eval_checked_hir(&pipeline_execution_source()) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_with_redirect_bridge_exposes_process_result_runtime_value() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stdout.txt");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("cmd", ["/C", "echo neve"]),
+                    io.command("cmd", ["/C", "findstr neve"])
+                ]),
+                [io.redirectStdoutPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("sh", ["-c", "printf neve"]),
+                    io.command("sh", ["-c", "grep neve"])
+                ]),
+                [io.redirectStdoutPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+        )
+    };
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_redirect_stdout_path_bridge_exposes_redirect_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
+        let shown = if typeOf(redirect) == "Redirect" then toString(redirect) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<redirect:stdout:path>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_redirect_stderr_path_bridge_exposes_redirect_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
+        let shown = if typeOf(redirect) == "Redirect" then toString(redirect) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<redirect:stderr:path>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_redirect_stdin_path_bridge_exposes_redirect_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
+        let shown = if typeOf(redirect) == "Redirect" then toString(redirect) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<redirect:stdin:path>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_command_with_redirect_writes_stdout_to_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdout.txt");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("rustc", ["--version"]),
+                [io.redirectStdoutPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_command_with_stderr_redirect_writes_stderr_to_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stderr.txt");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("rustc", ["--definitely-not-a-real-rustc-flag"]),
+                [io.redirectStderrPath(target)]
+            )
+        );
+        let redirected = io.readFilePath(target);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            !io.processSuccess(result) &&
+            io.processCode(result) != 0 &&
+            io.processStderr(result) == "" &&
+            redirected != "";
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_command_with_stdin_redirect_reads_stdin_from_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("cmd", ["/C", "findstr neve"]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+    "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("sh", ["-c", "grep neve"]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+    "#
+        )
+    };
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_paths() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("stdin.txt");
+    let stdout_path = temp.path().join("stdout.txt");
+    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("cmd", ["/C", "findstr neve"]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execCommand(
+            io.commandWithRedirects(
+                io.command("sh", ["-c", "grep neve"]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+        )
+    };
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let redirect_path = temp.path().join("pipeline-stdin.txt");
+    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("cmd", ["/C", "findstr neve"]),
+                    io.command("cmd", ["/C", "findstr neve"])
+                ]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+    "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let target = path.fromString("{redirect_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("sh", ["-c", "grep neve"]),
+                    io.command("sh", ["-c", "grep neve"])
+                ]),
+                [io.redirectStdinPath(target)]
+            )
+        );
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) != "";
+    "#
+        )
+    };
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_paths() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-stdin.txt");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("cmd", ["/C", "findstr neve"]),
+                    io.command("cmd", ["/C", "findstr neve"])
+                ]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.command("sh", ["-c", "grep neve"]),
+                    io.command("sh", ["-c", "grep neve"])
+                ]),
+                [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
+            )
+        );
+        let redirected = io.readFilePath(output);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processCode(result) == 0 &&
+            io.processStdout(result) == "" &&
+            redirected != "";
+    "#
+        )
+    };
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_pipeline_rejects_empty_pipeline() {
+    let source = r#"
+        import std.io as io;
+        let pipe = io.pipeline([]);
+    "#;
+
+    match eval_checked_hir(source) {
+        Err(EvalError::TypeError(message)) => assert!(
+            message.contains("io.pipeline: requires a non-empty List<Command>"),
+            "unexpected error: {message}"
+        ),
+        other => panic!("expected type error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_with_redirect_rejects_final_stage_stdout_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let output = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipelineWithRedirects(
+                io.pipeline([
+                    io.commandWithRedirects(
+                        io.command("printf", ["neve"]),
+                        [io.redirectStdoutPath(output)]
+                    )
+                ]),
+                [io.redirectStdoutPath(output)]
+            )
+        );
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Err(EvalError::TypeError(message)) => assert!(
+            message.contains(
+                "final pipeline stage cannot combine boundary stdout with stage-local stdout redirect"
+            ),
+            "unexpected error: {message}"
+        ),
+        other => panic!("expected type error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_pipeline_with_redirects_rejects_final_stage_stdout_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-stdout.txt");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let output = path.fromString("{stdout_path_source}");
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.redirectStdoutPath(output)]
+                )
+            ]),
+            [io.redirectStdoutPath(output)]
+        );
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Err(EvalError::TypeError(message)) => assert!(
+            message.contains(
+                "final pipeline stage cannot combine boundary stdout with stage-local stdout redirect"
+            ),
+            "unexpected error: {message}"
+        ),
+        other => panic!("expected type error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_rejects_non_final_stage_stdout_redirect() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("stage-stdout.txt");
+    let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let out = path.fromString("{stdout_path_source}");
+        let result = io.execPipeline(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("printf", ["neve"]),
+                    [io.redirectStdoutPath(out)]
+                ),
+                io.command("cat", [])
+            ])
+        );
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Err(EvalError::TypeError(message)) => assert!(
+            message.contains("pipeline stage 1 cannot carry stdout redirect before final stage"),
+            "unexpected error: {message}"
+        ),
+        other => panic!("expected type error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_pipeline_with_redirects_rejects_boundary_stdin_conflict() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdin_path = temp.path().join("pipeline-stdin.txt");
+    let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let input = path.fromString("{stdin_path_source}");
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([
+                io.commandWith(#{{ program = "cat", stdin = "neve" }})
+            ]),
+            [io.redirectStdinPath(input)]
+        );
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Err(EvalError::TypeError(message)) => assert!(
+            message
+                .contains("pipeline stage 1 cannot combine boundary stdin with stage-local stdin"),
+            "unexpected error: {message}"
+        ),
+        other => panic!("expected type error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_command_with_redirects_bridge_exposes_command_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        import std.path as path;
+        let cmd = io.commandWithRedirects(
+            io.command("printf", ["neve"]),
+            [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+        );
+        let shown = if typeOf(cmd) == "Command" then toString(cmd) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<command:printf 1 arg(s), configured>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stderr_path = temp.path().join("pipeline-stage-stderr.txt");
+    let stderr_path_source = stderr_path.to_string_lossy().replace('\\', "\\\\");
+    let source = if cfg!(windows) {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let err = path.fromString("{stderr_path_source}");
+        let result = io.execPipeline(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("cmd", ["/C", "(echo neve) & (echo err 1>&2)"]),
+                    [io.redirectStderrPath(err)]
+                ),
+                io.command("cmd", ["/C", "findstr neve"])
+            ])
+        );
+        let redirected = io.readFilePath(err);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "" &&
+            redirected != "";
+    "#
+        )
+    } else {
+        format!(
+            r#"
+        import std.io as io;
+        import std.path as path;
+        let err = path.fromString("{stderr_path_source}");
+        let result = io.execPipeline(
+            io.pipeline([
+                io.commandWithRedirects(
+                    io.command("sh", ["-c", "printf neve && printf err >&2"]),
+                    [io.redirectStderrPath(err)]
+                ),
+                io.command("sh", ["-c", "grep neve"])
+            ])
+        );
+        let redirected = io.readFilePath(err);
+        let ok =
+            typeOf(result) == "ProcessResult" &&
+            io.processSuccess(result) &&
+            io.processStdout(result) != "" &&
+            io.processStderr(result) == "" &&
+            redirected != "";
+    "#
+        )
+    };
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_task_command_bridge_exposes_task_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let task = io.taskCommand(io.command("printf", ["neve"]));
+        let shown = if typeOf(task) == "Task" then toString(task) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<task:command->ProcessResult>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_task_pipeline_bridge_exposes_task_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let task = io.taskPipeline(io.pipeline([
+            io.command("printf", ["neve"]),
+            io.command("cat", [])
+        ]));
+        let shown = if typeOf(task) == "Task" then toString(task) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<task:pipeline->ProcessResult>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_await_task_bridge_exposes_process_result_runtime_value() {
+    let source = r#"
+        import std.io as io;
+        let task = io.taskCommand(io.command("rustc", ["--version"]));
+        let result = io.awaitTask(task);
+        let shown = if typeOf(result) == "ProcessResult" then toString(result) else "nope";
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "<process-result:0 ok>"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_await_tasks_bridge_exposes_process_result_list() {
+    let source = r#"
+        import std.io as io;
+        let results = io.awaitTasks([
+            io.taskCommand(io.command("printf", ["neve"])),
+            io.taskPipeline(io.pipeline([
+                io.command("printf", ["lang"]),
+                io.command("cat", [])
+            ]))
+        ]);
+        match results {
+            [first, second] ->
+                io.processStdout(first) == "neve" &&
+                io.processStdout(second) == "lang" &&
+                io.processSuccess(first) &&
+                io.processSuccess(second),
+            _ -> false,
+        }
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_await_pipeline_task_matches_exec_pipeline() {
+    let source = r#"
+        import std.io as io;
+        let pipeline = io.pipeline([
+            io.command("printf", ["neve"]),
+            io.command("cat", [])
+        ]);
+        let awaited = io.awaitTask(io.taskPipeline(pipeline));
+        let direct = io.execPipeline(pipeline);
+        io.processStdout(awaited) == io.processStdout(direct) &&
+            io.processCode(awaited) == io.processCode(direct) &&
+            io.processStderr(awaited) == io.processStderr(direct) &&
+            io.processSuccess(awaited) == io.processSuccess(direct);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_pipeline_honors_embedded_pipeline_redirects() {
+    let temp = TempDir::new().expect("temp dir should exist");
+    let stdout_path = temp.path().join("pipeline-embedded-stdout.txt");
+    let path_literal = stdout_path.to_string_lossy();
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.path as path;
+        let pipe = io.pipelineWithRedirects(
+            io.pipeline([
+                io.command("printf", ["neve"]),
+                io.command("cat", [])
+            ]),
+            [io.redirectStdoutPath(path.fromString("{path_literal}"))]
+        );
+        let result = io.execPipeline(pipe);
+        io.processSuccess(result) && io.processStdout(result) == "";
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_io_exec_matches_canonical_process_projection() {
     let source = r#"
         import std.io as io;
-        let legacy = io.exec("rustc", ["--version"]);
+        let migrated = io.execCommand(io.command("rustc", ["--version"]));
         let canonical = io.execCommand(io.command("rustc", ["--version"]));
         let same =
-            legacy.success == io.processSuccess(canonical) &&
-            legacy.stdout == io.processStdout(canonical) &&
-            legacy.code == io.processCode(canonical) &&
-            legacy.stderr == io.processStderr(canonical);
+            typeOf(migrated) == "ProcessResult" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
+    "#;
+
+    match eval_checked_hir(source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_explicit_shell_command_matches_canonical_process_projection() {
+    let source = shell_projection_source();
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_exec_with_matches_canonical_process_projection() {
+    let source = r#"
+        import std.io as io;
+        let migrated =
+            io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
+        let canonical =
+            io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
+        let same =
+            typeOf(migrated) == "ProcessResult" &&
+            io.processSuccess(migrated) == io.processSuccess(canonical) &&
+            io.processStdout(migrated) == io.processStdout(canonical) &&
+            io.processCode(migrated) == io.processCode(canonical) &&
+            io.processStderr(migrated) == io.processStderr(canonical);
     "#;
 
     match eval_checked_hir(source) {
