@@ -1966,6 +1966,42 @@ impl TypeChecker {
                     span,
                 )
             }
+            "math.toInt" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::Int, span), span),
+                    span,
+                )
+            }
+            "math.toFloat" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a], builtin_ty(TyKind::Float, span), span),
+                    span,
+                )
+            }
+            "math.isNan" | "math.isInf" => builtin_fn(
+                vec![builtin_ty(TyKind::Float, span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "math.floor" | "math.ceil" | "math.round" => builtin_fn(
+                vec![builtin_ty(TyKind::Float, span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "math.sqrt" | "math.log" | "math.log10" | "math.exp" => builtin_fn(
+                vec![builtin_ty(TyKind::Float, span)],
+                builtin_ty(TyKind::Float, span),
+                span,
+            ),
+            "math.sin" | "math.cos" | "math.tan" => builtin_fn(
+                vec![builtin_ty(TyKind::Float, span)],
+                builtin_ty(TyKind::Float, span),
+                span,
+            ),
             "math.pi" | "math.e" | "math.inf" | "math.nan" => builtin_ty(TyKind::Float, span),
             "path.fromString" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
@@ -2015,7 +2051,7 @@ impl TypeChecker {
                 builtin_ty(TyKind::Bool, span),
                 span,
             ),
-            "io.readFile" | "io.hashFile" => builtin_fn(
+            "io.readFile" | "io.hashFile" | "io.hashString" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_ty(TyKind::String, span),
                 span,
@@ -2307,6 +2343,19 @@ impl TypeChecker {
                 builtin_forall(
                     Vec::from(["k", "v"]),
                     builtin_fn(vec![builtin_map(k, v, span)], ret_ty, span),
+                    span,
+                )
+            }
+            "Map.values" => {
+                let k = builtin_param(0, "k", span);
+                let v = builtin_param(1, "v", span);
+                builtin_forall(
+                    Vec::from(["k", "v"]),
+                    builtin_fn(
+                        vec![builtin_map(k, v.clone(), span)],
+                        builtin_list(v, span),
+                        span,
+                    ),
                     span,
                 )
             }

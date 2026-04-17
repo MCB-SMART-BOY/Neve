@@ -2,9 +2,8 @@
 //! `neve check` 命令。
 
 use crate::{commands::module_graph, output};
-use neve_diagnostic::emit;
+use neve_diagnostic::{DiagnosticKind, emit};
 use neve_frontend::FrontendDriver;
-use std::fs;
 use std::path::Path;
 
 /// Run type checking on a Neve file.
@@ -20,51 +19,40 @@ pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let mut parse_errors = 0usize;
     let mut type_errors = 0usize;
 
-    for module_id in analysis.load_order() {
-        let Some(module) = analysis.hir_module(*module_id) else {
-            continue;
-        };
-
-        let Some(info) = analysis.module_info(*module_id) else {
-            continue;
-        };
-
-        let file_path = &info.file_path;
-        let source = fs::read_to_string(file_path)
-            .map_err(|e| format!("cannot read file '{}': {}", file_path.display(), e))?;
-
-        // Reuse cached parse diagnostics from the module loader.
-        // 复用模块加载器缓存的解析诊断。
-        let parse_diagnostics = analysis.parsed_diagnostics(*module_id).unwrap_or(&[]);
-        let diagnostics = analysis.diagnostics(*module_id).unwrap_or(&[]);
-        for diag in diagnostics {
-            emit(&source, &file_path.display().to_string(), diag);
+    for entry in analysis.diagnostic_modules_in_order() {
+        for diag in &entry.diagnostics {
+            emit(&entry.source, &entry.file_path.display().to_string(), diag);
         }
 
-        if !parse_diagnostics.is_empty() {
-            parse_errors += parse_diagnostics.len();
+        let parse_diagnostics = entry
+            .diagnostics
+            .iter()
+            .filter(|diag| diag.kind == DiagnosticKind::Parser)
+            .count();
+        if parse_diagnostics > 0 {
+            parse_errors += parse_diagnostics;
             continue;
         }
 
-        if verbose && let Some(ast) = analysis.parsed_source(*module_id) {
+        if verbose && let Some(ast) = analysis.parsed_source(entry.module_id) {
             let form_count = ast.items.len() + usize::from(ast.tail_expr.is_some());
             output::info(&format!(
                 "Parsed {} top-level form(s) in {}",
                 form_count,
-                file_path.display()
+                entry.file_path.display()
             ));
         }
 
-        if verbose {
+        if verbose && let Some(module) = analysis.hir_module(entry.module_id) {
             output::info(&format!(
                 "Lowered to {} HIR items in {}",
                 module.items.len(),
-                file_path.display()
+                entry.file_path.display()
             ));
         }
 
-        if !diagnostics.is_empty() {
-            type_errors += diagnostics.len();
+        if !entry.diagnostics.is_empty() {
+            type_errors += entry.diagnostics.len();
         }
     }
 

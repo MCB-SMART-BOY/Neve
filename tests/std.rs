@@ -1,5 +1,7 @@
 //! Integration tests for neve-std crate.
 
+mod support;
+
 use neve_derive::Hash;
 use neve_eval::Value;
 use neve_eval::value::{PipelineValue, TaskValue};
@@ -7,6 +9,7 @@ use neve_std::stdlib;
 use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
+use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
 use tempfile::TempDir;
 
 fn get_builtin(name: &str) -> Option<Value> {
@@ -112,6 +115,183 @@ fn stdout_stderr_projection_parts() -> (&'static str, Vec<&'static str>) {
     ("cmd", vec!["/C", "(echo neve) & (echo err 1>&2)"])
 }
 
+#[test]
+fn test_math_to_int_bridge_accepts_bool() {
+    let builtin = get_builtin("math.toInt").expect("math.toInt not found");
+    let value = call_builtin(&builtin, &[Value::Bool(true)]).expect("math.toInt should succeed");
+    assert_eq!(value, Value::Int(1.into()));
+}
+
+#[test]
+fn test_math_to_float_bridge_accepts_string() {
+    let builtin = get_builtin("math.toFloat").expect("math.toFloat not found");
+    let value = call_builtin(&builtin, &[Value::String(Rc::new("1.5".to_string()))])
+        .expect("math.toFloat should succeed");
+    assert_eq!(value, Value::Float(1.5));
+}
+
+#[test]
+fn test_math_is_nan_bridge_accepts_float() {
+    let builtin = get_builtin("math.isNan").expect("math.isNan not found");
+    let value =
+        call_builtin(&builtin, &[Value::Float(f64::NAN)]).expect("math.isNan should succeed");
+    assert_eq!(value, Value::Bool(true));
+}
+
+#[test]
+fn test_math_is_inf_bridge_accepts_float() {
+    let builtin = get_builtin("math.isInf").expect("math.isInf not found");
+    let value =
+        call_builtin(&builtin, &[Value::Float(f64::INFINITY)]).expect("math.isInf should succeed");
+    assert_eq!(value, Value::Bool(true));
+}
+
+#[test]
+fn test_math_is_nan_bridge_rejects_int() {
+    let builtin = get_builtin("math.isNan").expect("math.isNan not found");
+    let err =
+        call_builtin(&builtin, &[Value::Int(1.into())]).expect_err("math.isNan should reject Int");
+    assert_eq!(err, "math.isNan expects a Float");
+}
+
+#[test]
+fn test_math_is_inf_bridge_rejects_int() {
+    let builtin = get_builtin("math.isInf").expect("math.isInf not found");
+    let err =
+        call_builtin(&builtin, &[Value::Int(1.into())]).expect_err("math.isInf should reject Int");
+    assert_eq!(err, "math.isInf expects a Float");
+}
+
+#[test]
+fn test_math_rounding_bridges_accept_float() {
+    let floor = get_builtin("math.floor").expect("math.floor not found");
+    let ceil = get_builtin("math.ceil").expect("math.ceil not found");
+    let round = get_builtin("math.round").expect("math.round not found");
+
+    assert_eq!(
+        call_builtin(&floor, &[Value::Float(1.9)]).expect("math.floor should succeed"),
+        Value::Int(1.into())
+    );
+    assert_eq!(
+        call_builtin(&ceil, &[Value::Float(1.1)]).expect("math.ceil should succeed"),
+        Value::Int(2.into())
+    );
+    assert_eq!(
+        call_builtin(&round, &[Value::Float(1.6)]).expect("math.round should succeed"),
+        Value::Int(2.into())
+    );
+}
+
+#[test]
+fn test_math_rounding_bridges_reject_int() {
+    let floor = get_builtin("math.floor").expect("math.floor not found");
+    let ceil = get_builtin("math.ceil").expect("math.ceil not found");
+    let round = get_builtin("math.round").expect("math.round not found");
+
+    assert_eq!(
+        call_builtin(&floor, &[Value::Int(1.into())]).expect_err("math.floor should reject Int"),
+        "math.floor expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&ceil, &[Value::Int(1.into())]).expect_err("math.ceil should reject Int"),
+        "math.ceil expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&round, &[Value::Int(1.into())]).expect_err("math.round should reject Int"),
+        "math.round expects a Float"
+    );
+}
+
+#[test]
+fn test_math_unary_float_transforms_accept_float() {
+    let sqrt = get_builtin("math.sqrt").expect("math.sqrt not found");
+    let log = get_builtin("math.log").expect("math.log not found");
+    let log10 = get_builtin("math.log10").expect("math.log10 not found");
+    let exp = get_builtin("math.exp").expect("math.exp not found");
+
+    assert_eq!(
+        call_builtin(&sqrt, &[Value::Float(9.0)]).expect("math.sqrt should succeed"),
+        Value::Float(3.0)
+    );
+    assert_eq!(
+        call_builtin(&log, &[Value::Float(1.0)]).expect("math.log should succeed"),
+        Value::Float(0.0)
+    );
+    assert_eq!(
+        call_builtin(&log10, &[Value::Float(1000.0)]).expect("math.log10 should succeed"),
+        Value::Float(3.0)
+    );
+    assert_eq!(
+        call_builtin(&exp, &[Value::Float(0.0)]).expect("math.exp should succeed"),
+        Value::Float(1.0)
+    );
+}
+
+#[test]
+fn test_math_unary_float_transforms_reject_int() {
+    let sqrt = get_builtin("math.sqrt").expect("math.sqrt not found");
+    let log = get_builtin("math.log").expect("math.log not found");
+    let log10 = get_builtin("math.log10").expect("math.log10 not found");
+    let exp = get_builtin("math.exp").expect("math.exp not found");
+
+    assert_eq!(
+        call_builtin(&sqrt, &[Value::Int(1.into())]).expect_err("math.sqrt should reject Int"),
+        "math.sqrt expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&log, &[Value::Int(1.into())]).expect_err("math.log should reject Int"),
+        "math.log expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&log10, &[Value::Int(1.into())]).expect_err("math.log10 should reject Int"),
+        "math.log10 expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&exp, &[Value::Int(1.into())]).expect_err("math.exp should reject Int"),
+        "math.exp expects a Float"
+    );
+}
+
+#[test]
+fn test_math_trigonometric_bridges_accept_float() {
+    let sin = get_builtin("math.sin").expect("math.sin not found");
+    let cos = get_builtin("math.cos").expect("math.cos not found");
+    let tan = get_builtin("math.tan").expect("math.tan not found");
+
+    assert_eq!(
+        call_builtin(&sin, &[Value::Float(0.0)]).expect("math.sin should succeed"),
+        Value::Float(0.0)
+    );
+    assert_eq!(
+        call_builtin(&cos, &[Value::Float(0.0)]).expect("math.cos should succeed"),
+        Value::Float(1.0)
+    );
+    assert_eq!(
+        call_builtin(&tan, &[Value::Float(0.0)]).expect("math.tan should succeed"),
+        Value::Float(0.0)
+    );
+}
+
+#[test]
+fn test_math_trigonometric_bridges_reject_int() {
+    let sin = get_builtin("math.sin").expect("math.sin not found");
+    let cos = get_builtin("math.cos").expect("math.cos not found");
+    let tan = get_builtin("math.tan").expect("math.tan not found");
+
+    assert_eq!(
+        call_builtin(&sin, &[Value::Int(1.into())]).expect_err("math.sin should reject Int"),
+        "math.sin expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&cos, &[Value::Int(1.into())]).expect_err("math.cos should reject Int"),
+        "math.cos expects a Float"
+    );
+    assert_eq!(
+        call_builtin(&tan, &[Value::Int(1.into())]).expect_err("math.tan should reject Int"),
+        "math.tan expects a Float"
+    );
+}
+
 // Map tests
 
 #[test]
@@ -142,6 +322,32 @@ fn test_map_singleton() {
         Value::Map(m) => assert_eq!(m.len(), 1),
         _ => panic!("Expected Map"),
     }
+}
+
+#[test]
+fn test_map_values_returns_list_of_values() {
+    let insert = get_builtin("Map.insert").expect("Map.insert not found");
+    let values = get_builtin("Map.values").expect("Map.values not found");
+    let map = call_builtin_fn(
+        &insert,
+        vec![
+            Value::String(Rc::new("key".to_string())),
+            Value::Int(42.into()),
+            get_builtin("Map.empty").expect("Map.empty not found"),
+        ],
+    )
+    .expect("Map.insert should succeed");
+
+    let result = call_builtin_fn(&values, vec![map]).expect("Map.values should succeed");
+    assert_eq!(result, Value::List(Rc::new(vec![Value::Int(42.into())])));
+}
+
+#[test]
+fn test_map_values_rejects_non_map() {
+    let values = get_builtin("Map.values").expect("Map.values not found");
+    let err = call_builtin_fn(&values, vec![Value::Int(1.into())])
+        .expect_err("Map.values should reject non-map");
+    assert_eq!(err, "Map.values expects a map");
 }
 
 // Set tests
@@ -417,6 +623,117 @@ fn test_fetch_path_builtin_returns_metadata_record() {
 }
 
 #[test]
+fn test_fetch_path_with_hash_builtin_returns_metadata_record() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"fetch-path-content";
+    fs::write(&file_path, content).unwrap();
+
+    let expected_hash = Hash::of(content).to_hex();
+    let builtin = get_builtin("fetch.pathWithHash").expect("fetch.pathWithHash should exist");
+    let args = vec![
+        Value::String(Rc::new(file_path.to_string_lossy().to_string())),
+        Value::String(Rc::new(expected_hash.clone())),
+    ];
+    let result = call_builtin(&builtin, &args).expect("fetch.pathWithHash should succeed");
+
+    match result {
+        Value::Record(fields) => {
+            match fields.get("path").expect("path field should exist") {
+                Value::String(path) => {
+                    assert_eq!(path.as_str(), file_path.to_string_lossy().as_ref())
+                }
+                _ => panic!("path field should be a string"),
+            }
+
+            match fields.get("hash").expect("hash field should exist") {
+                Value::String(hash) => assert_eq!(hash.as_str(), expected_hash),
+                _ => panic!("hash field should be a string"),
+            }
+
+            match fields.get("cached").expect("cached field should exist") {
+                Value::Bool(cached) => assert!(*cached),
+                _ => panic!("cached field should be a bool"),
+            }
+        }
+        _ => panic!("fetch.pathWithHash should return a record"),
+    }
+}
+
+#[test]
+fn test_fetch_url_with_hash_builtin_returns_metadata_record() {
+    let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
+
+    let builtin = get_builtin("fetch.urlWithHash").expect("fetch.urlWithHash should exist");
+    let args = vec![
+        Value::String(Rc::new(url)),
+        Value::String(Rc::new(expected_hash.clone())),
+    ];
+    let result = call_builtin(&builtin, &args).expect("fetch.urlWithHash should succeed");
+    server.join().expect("fixture server should exit cleanly");
+
+    match result {
+        Value::Record(fields) => {
+            match fields.get("path").expect("path field should exist") {
+                Value::String(path) => {
+                    assert!(
+                        std::path::Path::new(path.as_str()).exists(),
+                        "cached path should exist: {path}"
+                    );
+                }
+                _ => panic!("path field should be a string"),
+            }
+
+            match fields.get("hash").expect("hash field should exist") {
+                Value::String(hash) => assert_eq!(hash.as_str(), expected_hash),
+                _ => panic!("hash field should be a string"),
+            }
+
+            match fields.get("cached").expect("cached field should exist") {
+                Value::Bool(cached) => assert!(!cached),
+                _ => panic!("cached field should be a bool"),
+            }
+        }
+        _ => panic!("fetch.urlWithHash should return a record"),
+    }
+}
+
+#[test]
+fn test_fetch_url_builtin_returns_metadata_record() {
+    let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
+
+    let builtin = get_builtin("fetch.url").expect("fetch.url should exist");
+    let args = vec![Value::String(Rc::new(url))];
+    let result = call_builtin(&builtin, &args).expect("fetch.url should succeed");
+    server.join().expect("fixture server should exit cleanly");
+
+    match result {
+        Value::Record(fields) => {
+            match fields.get("path").expect("path field should exist") {
+                Value::String(path) => {
+                    assert!(
+                        std::path::Path::new(path.as_str()).exists(),
+                        "cached path should exist: {path}"
+                    );
+                }
+                _ => panic!("path field should be a string"),
+            }
+
+            match fields.get("hash").expect("hash field should exist") {
+                Value::String(hash) => assert_eq!(hash.as_str(), expected_hash),
+                _ => panic!("hash field should be a string"),
+            }
+
+            match fields.get("cached").expect("cached field should exist") {
+                Value::Bool(cached) => assert!(!cached),
+                _ => panic!("cached field should be a bool"),
+            }
+        }
+        _ => panic!("fetch.url should return a record"),
+    }
+}
+
+#[test]
 fn test_fetch_path_with_hash_rejects_mismatch() {
     let temp = TempDir::new().unwrap();
     let file_path = temp.path().join("source.txt");
@@ -434,6 +751,119 @@ fn test_fetch_path_with_hash_rejects_mismatch() {
         err.contains("hash mismatch"),
         "expected hash mismatch error, got: {err}"
     );
+}
+
+#[test]
+fn test_fetch_git_builtin_returns_metadata_record() {
+    let (_temp, repo_path, expected_hash) = init_local_git_repo();
+
+    let builtin = get_builtin("fetch.git").expect("fetch.git builtin should exist");
+    let args = vec![
+        Value::String(Rc::new(repo_path)),
+        Value::String(Rc::new("main".to_string())),
+    ];
+    let result = call_builtin(&builtin, &args).expect("fetch.git should succeed");
+
+    match result {
+        Value::Record(fields) => {
+            match fields.get("path").expect("path field should exist") {
+                Value::String(path) => {
+                    assert!(
+                        std::path::Path::new(path.as_str()).exists(),
+                        "cached path should exist: {path}"
+                    );
+                }
+                _ => panic!("path field should be a string"),
+            }
+
+            match fields.get("hash").expect("hash field should exist") {
+                Value::String(hash) => assert_eq!(hash.as_str(), expected_hash),
+                _ => panic!("hash field should be a string"),
+            }
+
+            match fields.get("cached").expect("cached field should exist") {
+                Value::Bool(cached) => assert!(!cached),
+                _ => panic!("cached field should be a bool"),
+            }
+        }
+        _ => panic!("fetch.git should return a record"),
+    }
+}
+
+#[test]
+fn test_fetch_git_with_hash_builtin_returns_metadata_record() {
+    let (_temp, repo_path, expected_hash) = init_local_git_repo();
+
+    let builtin = get_builtin("fetch.gitWithHash").expect("fetch.gitWithHash builtin should exist");
+    let args = vec![
+        Value::String(Rc::new(repo_path)),
+        Value::String(Rc::new("main".to_string())),
+        Value::String(Rc::new(expected_hash.clone())),
+    ];
+    let result = call_builtin(&builtin, &args).expect("fetch.gitWithHash should succeed");
+
+    match result {
+        Value::Record(fields) => {
+            match fields.get("path").expect("path field should exist") {
+                Value::String(path) => {
+                    assert!(
+                        std::path::Path::new(path.as_str()).exists(),
+                        "cached path should exist: {path}"
+                    );
+                }
+                _ => panic!("path field should be a string"),
+            }
+
+            match fields.get("hash").expect("hash field should exist") {
+                Value::String(hash) => assert_eq!(hash.as_str(), expected_hash),
+                _ => panic!("hash field should be a string"),
+            }
+
+            match fields.get("cached").expect("cached field should exist") {
+                Value::Bool(cached) => assert!(*cached),
+                _ => panic!("cached field should be a bool"),
+            }
+        }
+        _ => panic!("fetch.gitWithHash should return a record"),
+    }
+}
+
+#[test]
+fn test_io_hash_file_accepts_string_path_argument() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"hash-file-content";
+    let expected = "09f00a4ba8e49c5a253e1af9ff6c40f8151754ccd88f95ef162981960b2ad8f7";
+    fs::write(&file_path, content).unwrap();
+
+    let builtin = get_builtin("io.hashFile").expect("io.hashFile builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(
+            file_path.to_string_lossy().to_string(),
+        ))],
+    )
+    .expect("io.hashFile should succeed");
+
+    match result {
+        Value::String(hash) => assert_eq!(hash.as_str(), expected),
+        other => panic!("expected String hash, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_hash_string_accepts_string_runtime_value() {
+    let builtin = get_builtin("io.hashString").expect("io.hashString builtin should exist");
+    let result = call_builtin(&builtin, &[Value::String(Rc::new("abc".to_string()))])
+        .expect("io.hashString should succeed");
+
+    match result {
+        Value::String(hash) => assert_eq!(
+            hash.as_str(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        ),
+        other => panic!("expected String hash, got {:?}", other),
+    }
 }
 
 #[test]
@@ -554,6 +984,35 @@ fn test_io_read_file_path_rejects_string_argument() {
     .expect_err("io.readFilePath should reject string arguments");
 
     assert_eq!(err, "io.readFilePath expects a Path");
+}
+
+#[test]
+fn test_io_read_dir_accepts_string_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("io-read-dir");
+    fs::create_dir_all(dir.join("nested")).unwrap();
+    fs::write(dir.join("alpha.txt"), "a").unwrap();
+    fs::write(dir.join("beta.txt"), "b").unwrap();
+
+    let builtin = get_builtin("io.readDir").expect("io.readDir builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(dir.to_string_lossy().to_string()))],
+    )
+    .expect("io.readDir should succeed");
+
+    let mut names = match result {
+        Value::List(entries) => entries
+            .iter()
+            .map(|entry| match entry {
+                Value::String(name) => name.to_string(),
+                other => panic!("expected String entry, got {:?}", other),
+            })
+            .collect::<Vec<_>>(),
+        other => panic!("expected List<String>, got {:?}", other),
+    };
+    names.sort();
+    assert_eq!(names, vec!["alpha.txt", "beta.txt", "nested"]);
 }
 
 #[test]
@@ -886,6 +1345,36 @@ fn test_io_current_dir_path_returns_path_runtime_value() {
 }
 
 #[test]
+fn test_io_current_dir_returns_host_directory_string() {
+    let current_dir = std::env::current_dir().unwrap();
+    let builtin = get_builtin("io.currentDir").expect("io.currentDir builtin should exist");
+    let result = call_builtin(&builtin, &[]).expect("io.currentDir should succeed");
+
+    match result {
+        Value::String(dir) => assert_eq!(dir.as_ref(), current_dir.to_string_lossy().as_ref()),
+        other => panic!("expected String runtime value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_get_env_returns_none_for_missing_variable() {
+    let missing = "__NEVE_TEST_MISSING_ENV_37C93B7C__";
+    assert!(
+        std::env::var_os(missing).is_none(),
+        "test environment unexpectedly defines {missing}"
+    );
+
+    let builtin = get_builtin("io.getEnv").expect("io.getEnv builtin should exist");
+    let result = call_builtin(&builtin, &[Value::String(Rc::new(missing.to_string()))])
+        .expect("io.getEnv should succeed");
+
+    match result {
+        Value::None => {}
+        other => panic!("expected None runtime value, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_io_home_dir_path_returns_optional_path_runtime_value() {
     let builtin = get_builtin("io.homeDirPath").expect("io.homeDirPath builtin should exist");
     let result = call_builtin(&builtin, &[]).expect("io.homeDirPath should succeed");
@@ -903,6 +1392,36 @@ fn test_io_home_dir_path_returns_optional_path_runtime_value() {
             panic!("expected Some(Path({expected})), got {:?}", other)
         }
         (None, other) => panic!("expected None, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_home_dir_returns_optional_string_runtime_value() {
+    let builtin = get_builtin("io.homeDir").expect("io.homeDir builtin should exist");
+    let result = call_builtin(&builtin, &[]).expect("io.homeDir should succeed");
+
+    match (std::env::var("HOME").ok(), result) {
+        (Some(expected), Value::Some(inner)) => match inner.as_ref() {
+            Value::String(home) => assert_eq!(home.as_ref(), expected.as_str()),
+            other => panic!("expected Some(String), got {:?}", other),
+        },
+        (None, Value::None) => {}
+        (Some(expected), other) => {
+            panic!("expected Some(String({expected})), got {:?}", other)
+        }
+        (None, other) => panic!("expected None, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_io_current_system_returns_host_system_string() {
+    let builtin = get_builtin("io.currentSystem").expect("io.currentSystem builtin should exist");
+    let result = call_builtin(&builtin, &[]).expect("io.currentSystem should succeed");
+    let expected = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
+
+    match result {
+        Value::String(system) => assert_eq!(system.as_ref(), expected.as_str()),
+        other => panic!("expected String runtime value, got {:?}", other),
     }
 }
 
@@ -4156,6 +4675,51 @@ fn test_io_create_and_remove_dir_all() {
         call_builtin(&exists, &exists_after_args).unwrap(),
         Value::Bool(false)
     ));
+}
+
+#[test]
+fn test_io_path_exists_accepts_string_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("exists.txt");
+    fs::write(&file, "neve").unwrap();
+    let builtin = get_builtin("io.pathExists").expect("io.pathExists builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(file.to_string_lossy().to_string()))],
+    )
+    .expect("io.pathExists should succeed");
+
+    assert!(matches!(result, Value::Bool(true)));
+}
+
+#[test]
+fn test_io_is_dir_accepts_string_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("nested");
+    fs::create_dir_all(&dir).unwrap();
+    let builtin = get_builtin("io.isDir").expect("io.isDir builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(dir.to_string_lossy().to_string()))],
+    )
+    .expect("io.isDir should succeed");
+
+    assert!(matches!(result, Value::Bool(true)));
+}
+
+#[test]
+fn test_io_is_file_accepts_string_runtime_value() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("nested.txt");
+    fs::write(&file, "neve").unwrap();
+    let builtin = get_builtin("io.isFile").expect("io.isFile builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::String(Rc::new(file.to_string_lossy().to_string()))],
+    )
+    .expect("io.isFile should succeed");
+
+    assert!(matches!(result, Value::Bool(true)));
 }
 
 #[test]

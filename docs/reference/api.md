@@ -251,18 +251,26 @@ result.unwrap_err<T, E>(res: Result<T, E>) -> E
 ## Math Module (std.math) / 数学模块（std.math）
 
 
-Math helpers accept Int or Float where it makes sense. In this doc, `Number`
-means Int or Float.
+The current explicit `std.math` surface is intentionally narrow. Today it
+contains only the canonical conversion bridges, float predicates, rounding
+helpers, unary float transforms, trigonometric helpers, and constant bindings
+below.
 
 ```neve
-math.abs(x: Number) -> Number
-math.floor(x: Number) -> Int
-math.ceil(x: Number) -> Int
-math.round(x: Number) -> Int
-math.sqrt(x: Number) -> Float
-math.pow(base: Number, exp: Number) -> Number
-math.max(x: Number, y: Number) -> Number
-math.min(x: Number, y: Number) -> Number
+math.toInt(x: A) -> Int
+math.toFloat(x: A) -> Float
+math.isNan(x: Float) -> Bool
+math.isInf(x: Float) -> Bool
+math.floor(x: Float) -> Int
+math.ceil(x: Float) -> Int
+math.round(x: Float) -> Int
+math.sqrt(x: Float) -> Float
+math.log(x: Float) -> Float
+math.log10(x: Float) -> Float
+math.exp(x: Float) -> Float
+math.sin(x: Float) -> Float
+math.cos(x: Float) -> Float
+math.tan(x: Float) -> Float
 math.pi -> Float
 math.e -> Float
 math.inf -> Float
@@ -270,18 +278,24 @@ math.nan -> Float
 ```
 
 
-数学函数在合适的情况下支持 Int 和 Float。这里的 `Number`
-表示 Int 或 Float。
+当前显式公开的 `std.math` surface 刻意保持很窄。现在只有下面这些
+canonical 转换桥、浮点谓词、取整 helper、一元浮点变换、三角 helper 和常量绑定属于 typed public API。
 
 ```neve
-math.abs(x: Number) -> Number
-math.floor(x: Number) -> Int
-math.ceil(x: Number) -> Int
-math.round(x: Number) -> Int
-math.sqrt(x: Number) -> Float
-math.pow(base: Number, exp: Number) -> Number
-math.max(x: Number, y: Number) -> Number
-math.min(x: Number, y: Number) -> Number
+math.toInt(x: A) -> Int
+math.toFloat(x: A) -> Float
+math.isNan(x: Float) -> Bool
+math.isInf(x: Float) -> Bool
+math.floor(x: Float) -> Int
+math.ceil(x: Float) -> Int
+math.round(x: Float) -> Int
+math.sqrt(x: Float) -> Float
+math.log(x: Float) -> Float
+math.log10(x: Float) -> Float
+math.exp(x: Float) -> Float
+math.sin(x: Float) -> Float
+math.cos(x: Float) -> Float
+math.tan(x: Float) -> Float
 math.pi -> Float
 math.e -> Float
 math.inf -> Float
@@ -459,6 +473,7 @@ Map.getWithDefault(key: K, default: V, map: Map<K, V>) -> V
 Map.contains(key: K, map: Map<K, V>) -> Bool
 Map.size(map: Map<K, V>) -> Int
 Map.isEmpty(map: Map<K, V>) -> Bool
+Map.values(map: Map<K, V>) -> List<V>
 Map.insert(key: K, value: V, map: Map<K, V>) -> Map<K, V>
 Map.remove(key: K, map: Map<K, V>) -> Map<K, V>
 Map.union(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>
@@ -492,6 +507,7 @@ Map.getWithDefault(key: K, default: V, map: Map<K, V>) -> V
 Map.contains(key: K, map: Map<K, V>) -> Bool
 Map.size(map: Map<K, V>) -> Int
 Map.isEmpty(map: Map<K, V>) -> Bool
+Map.values(map: Map<K, V>) -> List<V>
 Map.insert(key: K, value: V, map: Map<K, V>) -> Map<K, V>
 Map.remove(key: K, map: Map<K, V>) -> Map<K, V>
 Map.union(left: Map<K, V>, right: Map<K, V>) -> Map<K, V>

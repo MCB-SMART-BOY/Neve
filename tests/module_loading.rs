@@ -3,23 +3,12 @@
 // Tests the module system including circular dependency detection,
 // path resolution, and import chains.
 
+mod support;
+
 use neve_hir::{ModuleLoadError, ModuleLoader};
 use std::fs;
-use std::path::Path;
+use support::module_fixtures::create_test_module;
 use tempfile::TempDir;
-
-/// Helper to create a test module file
-fn create_test_module(dir: &Path, path: &[&str], content: &str) {
-    let mut full_path = dir.to_path_buf();
-    for (i, segment) in path.iter().enumerate() {
-        full_path.push(segment);
-        if i < path.len() - 1 {
-            fs::create_dir_all(&full_path).unwrap();
-        }
-    }
-    full_path.set_extension("neve");
-    fs::write(full_path, content).unwrap();
-}
 
 #[test]
 fn test_simple_module_loading() {

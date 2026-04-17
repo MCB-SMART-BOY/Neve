@@ -16,7 +16,6 @@ use neve_frontend::{FrontendDriver, ProgramAnalysis};
 use neve_std::stdlib;
 use neve_store::{BinaryCache, CacheConfig, Store};
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -364,23 +363,9 @@ fn evaluate_file_via_frontend(path: &Path) -> Result<Value, String> {
 fn emit_program_diagnostics(analysis: &ProgramAnalysis) -> Result<(), String> {
     let mut had_errors = false;
 
-    for module_id in analysis.load_order() {
-        let Some(info) = analysis.module_info(*module_id) else {
-            continue;
-        };
-
-        let source = fs::read_to_string(&info.file_path)
-            .map_err(|e| format!("cannot read file '{}': {}", info.file_path.display(), e))?;
-
-        for diag in analysis.parsed_diagnostics(*module_id).unwrap_or(&[]) {
-            emit(&source, &info.file_path.display().to_string(), diag);
-            if diag.severity == Severity::Error {
-                had_errors = true;
-            }
-        }
-
-        for diag in analysis.diagnostics(*module_id).unwrap_or(&[]) {
-            emit(&source, &info.file_path.display().to_string(), diag);
+    for entry in analysis.diagnostic_modules_in_order() {
+        for diag in &entry.diagnostics {
+            emit(&entry.source, &entry.file_path.display().to_string(), diag);
             if diag.severity == Severity::Error {
                 had_errors = true;
             }
@@ -398,23 +383,12 @@ fn eval_program_root_value(analysis: &ProgramAnalysis) -> Result<Value, String> 
     let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
     let mut root_value = Value::Unit;
 
-    for module_id in analysis.load_order() {
-        let Some(module) = analysis.hir_module(*module_id) else {
-            continue;
-        };
-
+    for entry in analysis.evaluable_modules_in_order() {
         let value = evaluator
-            .eval_module_with_method_resolutions(
-                module,
-                &analysis
-                    .semantics(*module_id)
-                    .map(|semantics| &semantics.method_resolutions)
-                    .cloned()
-                    .unwrap_or_default(),
-            )
+            .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
             .map_err(|e| format!("evaluation error: {e:?}"))?;
 
-        if *module_id == analysis.root_module_id() {
+        if entry.module_id == analysis.root_module_id() {
             root_value = value;
         }
     }
@@ -992,7 +966,7 @@ let package = mk("demo");
             "helpers.neve",
             r#"pub fn pkg(name) = #{
     name = name,
-    version = "3.0.0",
+    version = "3.1.0",
     build = "echo flake"
 };"#,
         );
@@ -1018,7 +992,7 @@ let flake = #{{
         let derivations = resolve_derivations_for_source(&root.join("flake.neve"), None).unwrap();
         assert_eq!(derivations.len(), 1);
         assert_eq!(derivations[0].name, "frontend");
-        assert_eq!(derivations[0].version, "3.0.0");
+        assert_eq!(derivations[0].version, "3.1.0");
     }
 
     #[test]
@@ -1042,7 +1016,7 @@ let flake = #{{
                 }},
                 demo = #{{
                     name = "demo",
-                    version = "3.0.0",
+                    version = "3.1.0",
                     build = "echo demo"
                 }}
             }}
@@ -1057,6 +1031,6 @@ let flake = #{{
             resolve_derivations_for_source(&root.join("flake.neve"), Some("demo")).unwrap();
         assert_eq!(derivations.len(), 1);
         assert_eq!(derivations[0].name, "demo");
-        assert_eq!(derivations[0].version, "3.0.0");
+        assert_eq!(derivations[0].version, "3.1.0");
     }
 }

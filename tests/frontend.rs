@@ -5,6 +5,7 @@ use neve_diagnostic::{DiagnosticKind, ErrorCode};
 use neve_frontend::{analyze_snippet_ast, analyze_source};
 use neve_hir::ItemKind;
 use neve_parser::parse;
+use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 
@@ -631,6 +632,111 @@ fn test_frontend_snippet_reports_loaded_module_diagnostics() {
 }
 
 #[test]
+fn test_frontend_snippet_preserves_dependency_first_loaded_module_order() {
+    let temp_dir = TempDir::new().unwrap();
+    fs::write(temp_dir.path().join("util.neve"), "pub fn inc(x) = x + 1;").unwrap();
+    fs::write(
+        temp_dir.path().join("math.neve"),
+        "import util (inc); pub fn add_one(x) = inc(x);",
+    )
+    .unwrap();
+
+    let source = "import math (add_one); let result = add_one(1);";
+    let (ast, diagnostics) = parse(source);
+    assert!(
+        diagnostics.is_empty(),
+        "unexpected parse diagnostics: {:?}",
+        diagnostics
+    );
+
+    let analysis =
+        analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
+    let loaded_paths: Vec<_> = analysis
+        .loaded_modules
+        .iter()
+        .map(|entry| {
+            entry
+                .file_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(loaded_paths, vec!["util.neve", "math.neve"]);
+}
+
+#[test]
+fn test_frontend_snippet_returns_only_evaluable_loaded_modules_in_dependency_order() {
+    let temp_dir = TempDir::new().unwrap();
+    fs::write(temp_dir.path().join("util.neve"), "pub fn inc(x) = x + 1;").unwrap();
+    fs::write(
+        temp_dir.path().join("math.neve"),
+        "import util (inc); pub fn add_one(x) = inc(x);",
+    )
+    .unwrap();
+    fs::write(
+        temp_dir.path().join("broken.neve"),
+        "pub fn bad() = 1 + true;",
+    )
+    .unwrap();
+
+    let source = "import math (add_one); import broken (bad); let result = add_one(1);";
+    let (ast, diagnostics) = parse(source);
+    assert!(
+        diagnostics.is_empty(),
+        "unexpected parse diagnostics: {:?}",
+        diagnostics
+    );
+
+    let analysis =
+        analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
+    assert!(
+        analysis.loaded_modules.iter().any(|entry| {
+            entry.file_path.ends_with("broken.neve")
+                && entry
+                    .diagnostics
+                    .iter()
+                    .any(|diag| diag.kind == DiagnosticKind::Type)
+        }),
+        "expected broken loaded dependency diagnostics, got {:?}",
+        analysis.loaded_modules
+    );
+
+    let names_by_module_id: HashMap<_, _> = analysis
+        .loaded_modules
+        .iter()
+        .map(|entry| {
+            (
+                entry.module_id,
+                entry
+                    .file_path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+            )
+        })
+        .collect();
+    let evaluable_paths: Vec<_> = analysis
+        .evaluable_loaded_modules
+        .iter()
+        .map(|entry| names_by_module_id.get(&entry.module_id).unwrap().clone())
+        .collect();
+
+    assert_eq!(evaluable_paths, vec!["util.neve", "math.neve"]);
+    assert!(
+        analysis
+            .evaluable_loaded_modules
+            .iter()
+            .all(|entry| !entry.module.items.is_empty()),
+        "expected evaluable modules to include lowered HIR, got {:?}",
+        analysis.evaluable_loaded_modules
+    );
+}
+
+#[test]
 fn test_frontend_accepts_trait_method_call_analysis() {
     let result = analyze_source(
         r#"
@@ -775,6 +881,105 @@ fn test_frontend_accepts_std_math_constants() {
 }
 
 #[test]
+fn test_frontend_accepts_std_math_conversion_bridges() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let count = math.toInt(true);
+            let ratio = math.toFloat("1.5");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_math_float_predicates() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let a = math.isNan(math.nan);
+            let b = math.isInf(math.inf);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_math_rounding_bridges() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let a = math.floor(1.9);
+            let b = math.ceil(1.1);
+            let c = math.round(1.6);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_math_unary_float_transforms() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let a = math.sqrt(9.0);
+            let b = math.log(1.0);
+            let c = math.log10(1000.0);
+            let d = math.exp(0.0);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_math_trigonometric_bridges() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let a = math.sin(0.0);
+            let b = math.cos(0.0);
+            let c = math.tan(0.0);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_math_function_pending_explicit_surface() {
+    let result = analyze_source(
+        r#"
+            import std.math as math;
+            let value = math.abs(1);
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_std_path_builtins() {
     let result = analyze_source(
         r#"
@@ -814,14 +1019,198 @@ fn test_frontend_accepts_std_typed_path_adapters() {
 }
 
 #[test]
-fn test_frontend_accepts_std_io_and_fetch_builtins() {
+fn test_frontend_accepts_std_fetch_path_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.fetch as fetch;
+            let value = fetch.path("Cargo.toml").hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_fetch_path_with_hash_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.fetch as fetch;
+            let value = fetch.pathWithHash(
+                "Cargo.toml",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ).hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_fetch_url_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.fetch as fetch;
+            let value = fetch.url("https://example.com/archive.tar.gz").hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_fetch_url_with_hash_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.fetch as fetch;
+            let value = fetch.urlWithHash(
+                "https://example.com/archive.tar.gz",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ).hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_fetch_git_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.fetch as fetch;
+            let value = fetch.git("/tmp/repo", "main").hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_fetch_git_with_hash_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.fetch as fetch;
+            let value = fetch.gitWithHash("/tmp/repo", "main", "0000000000000000000000000000000000000000000000000000000000000000").hash;
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_current_system_bridge() {
     let result = analyze_source(
         r#"
             import std.io as io;
-            import std.fetch as fetch;
-            let a = io.hashString("abc");
-            let b = io.processStdout(io.execCommand(io.command("printf", ["neve"])));
-            let c = fetch.path("Cargo.toml").hash;
+            let system = io.currentSystem();
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_current_dir_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let cwd = io.currentDir();
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_get_env_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let value = io.getEnv("HOME");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_hash_file_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let digest = io.hashFile("/tmp/file.txt");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_hash_string_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let digest = io.hashString("abc");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_read_file_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let content = io.readFile("/tmp/file.txt");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_read_dir_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            import std.list as list;
+            let entries = list.sort(io.readDir("/tmp"));
         "#,
     );
     assert!(
@@ -1247,6 +1636,36 @@ fn test_frontend_accepts_std_io_write_file_path_bridge() {
 }
 
 #[test]
+fn test_frontend_accepts_std_io_write_file_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let done = io.writeFile("/tmp/file.out", "hello");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_append_file_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let done = io.appendFile("/tmp/file.out", "hello");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_std_io_append_file_path_bridge() {
     let result = analyze_source(
         r#"
@@ -1312,6 +1731,37 @@ fn test_frontend_accepts_std_io_home_dir_path_bridge() {
 }
 
 #[test]
+fn test_frontend_accepts_std_io_home_dir_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let home = io.homeDir();
+            let shown = home ?? "missing";
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_create_dir_all_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let done = io.createDirAll("/tmp/neve-dir");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
     let result = analyze_source(
         r#"
@@ -1334,6 +1784,66 @@ fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
             import std.io as io;
             import std.path as path;
             let done = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_remove_dir_all_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let done = io.removeDirAll("/tmp/neve-dir");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_path_exists_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let exists = io.pathExists("/tmp/file.txt");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_is_dir_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let dir = io.isDir("/tmp");
+        "#,
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_accepts_std_io_is_file_bridge() {
+    let result = analyze_source(
+        r#"
+            import std.io as io;
+            let file = io.isFile("/tmp/file.txt");
         "#,
     );
     assert!(
@@ -1795,9 +2305,11 @@ fn test_frontend_accepts_std_map_and_set_builtins() {
         r#"
             import std.Map;
             import std.Set;
+            import std.list as list;
             let map = Map.insert("a", 1, Map.empty);
+            let values = Map.values(map);
             let set = Set.insert(1, Set.empty);
-            let value = Map.getWithDefault("a", 0, map) + Set.size(set);
+            let value = Map.getWithDefault("a", 0, map) + Set.size(set) + list.sum(values);
         "#,
     );
     assert!(

@@ -2,15 +2,23 @@
 //!
 //! This file contains extensive edge case tests for the evaluator.
 
+mod support;
+
 use neve_common::Int;
+use neve_derive::Hash;
 use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
 use neve_std::{std_module_overrides, stdlib};
 use std::fs;
-use std::path::Path;
 use std::rc::Rc;
+use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
+use support::module_fixtures::create_test_module;
+use support::source_fixtures::{
+    pipeline_execution_source as shared_pipeline_execution_source,
+    shell_projection_source as shared_shell_projection_source,
+};
 use tempfile::TempDir;
 
 fn eval_source(source: &str) -> Result<Value, EvalError> {
@@ -59,84 +67,12 @@ fn int(value: i64) -> Int {
     value.into()
 }
 
-fn create_test_module(dir: &Path, path: &[&str], content: &str) {
-    let mut full_path = dir.to_path_buf();
-    for (i, segment) in path.iter().enumerate() {
-        full_path.push(segment);
-        if i < path.len() - 1 {
-            fs::create_dir_all(&full_path).unwrap();
-        }
-    }
-    full_path.set_extension("neve");
-    fs::write(full_path, content).unwrap();
-}
-
-#[cfg(not(windows))]
 fn shell_projection_source() -> String {
-    r#"
-        import std.io as io;
-        let migrated = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
-        let canonical = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
-        let same =
-            typeOf(migrated) == "ProcessResult" &&
-            io.processSuccess(migrated) == io.processSuccess(canonical) &&
-            io.processStdout(migrated) == io.processStdout(canonical) &&
-            io.processCode(migrated) == io.processCode(canonical) &&
-            io.processStderr(migrated) == io.processStderr(canonical);
-    "#
-    .to_string()
+    shared_shell_projection_source(None)
 }
 
-#[cfg(windows)]
-fn shell_projection_source() -> String {
-    r#"
-        import std.io as io;
-        let migrated = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
-        let canonical = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
-        let same =
-            typeOf(migrated) == "ProcessResult" &&
-            io.processSuccess(migrated) == io.processSuccess(canonical) &&
-            io.processStdout(migrated) == io.processStdout(canonical) &&
-            io.processCode(migrated) == io.processCode(canonical) &&
-            io.processStderr(migrated) == io.processStderr(canonical);
-    "#
-    .to_string()
-}
-
-#[cfg(not(windows))]
 fn pipeline_execution_source() -> String {
-    r#"
-        import std.io as io;
-        let result = io.execPipeline(io.pipeline([
-            io.command("sh", ["-c", "printf neve"]),
-            io.command("sh", ["-c", "grep neve"])
-        ]));
-        let ok =
-            typeOf(result) == "ProcessResult" &&
-            io.processSuccess(result) &&
-            io.processCode(result) == 0 &&
-            io.processStdout(result) != "" &&
-            io.processStderr(result) == "";
-    "#
-    .to_string()
-}
-
-#[cfg(windows)]
-fn pipeline_execution_source() -> String {
-    r#"
-        import std.io as io;
-        let result = io.execPipeline(io.pipeline([
-            io.command("cmd", ["/C", "echo neve"]),
-            io.command("cmd", ["/C", "findstr neve"])
-        ]));
-        let ok =
-            typeOf(result) == "ProcessResult" &&
-            io.processSuccess(result) &&
-            io.processCode(result) == 0 &&
-            io.processStdout(result) != "" &&
-            io.processStderr(result) == "";
-    "#
-    .to_string()
+    shared_pipeline_execution_source(None)
 }
 
 // ============================================================================
@@ -289,6 +225,239 @@ fn test_eval_hir_std_io_builtins() {
             s.as_ref(),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         ),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_current_system_bridge() {
+    let expected = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
+    let source = r#"
+        import std.io as io;
+        io.currentSystem()
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_current_dir_string_bridge() {
+    let expected = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = r#"
+        import std.io as io;
+        io.currentDir()
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_get_env_bridge() {
+    let missing = "__NEVE_TEST_MISSING_ENV_37C93B7C__";
+    assert!(
+        std::env::var_os(missing).is_none(),
+        "test environment unexpectedly defines {missing}"
+    );
+    let source = format!(
+        r#"
+        import std.io as io;
+        io.getEnv("{missing}") ?? "missing"
+    "#
+    );
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "missing"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_fetch_path_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"fetch-path-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = Hash::of(content).to_hex();
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.fetch as fetch;
+        fetch.path("{escaped}").hash
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_fetch_path_with_hash_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"fetch-path-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = Hash::of(content).to_hex();
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.fetch as fetch;
+        fetch.pathWithHash("{escaped}", "{expected}").hash
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_fetch_url_with_hash_bridge() {
+    let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
+    let source = format!(
+        r#"
+        import std.fetch as fetch;
+        fetch.urlWithHash("{url}", "{expected_hash}").hash
+    "#
+    );
+
+    let result = eval_checked_hir(&source);
+    server.join().expect("fixture server should exit cleanly");
+
+    match result {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected_hash.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_fetch_url_bridge() {
+    let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
+    let source = format!(
+        r#"
+        import std.fetch as fetch;
+        fetch.url("{url}").hash
+    "#
+    );
+
+    let result = eval_checked_hir(&source);
+    server.join().expect("fixture server should exit cleanly");
+
+    match result {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected_hash.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_fetch_git_bridge() {
+    let (_temp, repo_path, expected_hash) = init_local_git_repo();
+    let escaped = repo_path.replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.fetch as fetch;
+        fetch.git("{escaped}", "main").hash
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected_hash.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_fetch_git_with_hash_bridge() {
+    let (_temp, repo_path, expected_hash) = init_local_git_repo();
+    let escaped = repo_path.replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.fetch as fetch;
+        fetch.gitWithHash("{escaped}", "main", "{expected_hash}").hash
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected_hash.as_str()),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_read_file_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    std::fs::write(&file_path, "read-file-content").unwrap();
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        io.readFile("{escaped}")
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "read-file-content"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_read_dir_bridge() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("io-read-dir");
+    std::fs::create_dir_all(dir.join("nested")).unwrap();
+    std::fs::write(dir.join("alpha.txt"), "a").unwrap();
+    std::fs::write(dir.join("beta.txt"), "b").unwrap();
+    let escaped = dir.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        import std.list as list;
+        list.sort(io.readDir("{escaped}"))
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::List(entries)) => {
+            let names = entries
+                .iter()
+                .map(|entry| match entry {
+                    Value::String(name) => name.to_string(),
+                    other => panic!("expected String entry, got {:?}", other),
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(names, vec!["alpha.txt", "beta.txt", "nested"]);
+        }
+        other => panic!("expected list, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_hash_file_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"hash-file-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = "09f00a4ba8e49c5a253e1af9ff6c40f8151754ccd88f95ef162981960b2ad8f7";
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        io.hashFile("{escaped}")
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), expected),
         other => panic!("expected string, got {:?}", other),
     }
 }
@@ -496,6 +665,29 @@ fn test_eval_hir_std_io_write_file_path_bridge() {
 }
 
 #[test]
+fn test_eval_hir_std_io_write_file_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-write-dst.neve.txt");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        let done = io.writeFile("{escaped_dst}", "hello");
+        io.readFile("{escaped_dst}")
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "hello"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_io_append_file_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
     let dst_path = temp_dir.path().join("io-append-path-dst.neve.txt");
@@ -512,6 +704,30 @@ fn test_eval_hir_std_io_append_file_path_bridge() {
         let dst = path.fromString("{escaped_dst}");
         let done = io.appendFilePath(dst, "-path");
         io.readFilePath(dst)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "hello-path"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_append_file_bridge() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-append-dst.neve.txt");
+    std::fs::write(&dst_path, "hello").unwrap();
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        let done = io.appendFile("{escaped_dst}", "-path");
+        io.readFile("{escaped_dst}")
     "#
     );
 
@@ -606,6 +822,44 @@ fn test_eval_hir_std_io_home_dir_path_bridge() {
 }
 
 #[test]
+fn test_eval_hir_std_io_home_dir_bridge() {
+    let source = r#"
+        import std.io as io;
+        io.homeDir()
+    "#;
+
+    let expected = match std::env::var("HOME") {
+        Ok(home) => Value::Some(Box::new(Value::String(Rc::new(home)))),
+        Err(_) => Value::None,
+    };
+
+    match eval_checked_hir(source) {
+        Ok(value) => assert_eq!(value, expected),
+        other => panic!("expected optional string, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_create_dir_all_bridge() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("legacy").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        let target = "{escaped}";
+        let done = io.createDirAll(target);
+        io.pathExists(target) && io.isDir(target)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_eval_hir_std_io_create_dir_all_path_bridge() {
     let temp = TempDir::new().unwrap();
     let target = temp.path().join("typed").join("a").join("b");
@@ -639,6 +893,84 @@ fn test_eval_hir_std_io_remove_dir_all_path_bridge() {
         let target = path.fromString("{escaped}");
         let done = io.removeDirAllPath(target);
         !io.pathExistsPath(target)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_remove_dir_all_bridge() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("legacy").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        let target = "{escaped}";
+        let created = io.createDirAll(target);
+        let done = io.removeDirAll(target);
+        !io.pathExists(target)
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_path_exists_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("exists.txt");
+    fs::write(&file, "neve").unwrap();
+    let escaped = file.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        io.pathExists("{escaped}")
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_is_dir_bridge() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("nested");
+    fs::create_dir_all(&dir).unwrap();
+    let escaped = dir.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        io.isDir("{escaped}")
+    "#
+    );
+
+    match eval_checked_hir(&source) {
+        Ok(Value::Bool(true)) => {}
+        other => panic!("expected bool true, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_io_is_file_bridge() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("nested.txt");
+    fs::write(&file, "neve").unwrap();
+    let escaped = file.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        r#"
+        import std.io as io;
+        io.isFile("{escaped}")
     "#
     );
 
@@ -1674,12 +2006,13 @@ fn test_eval_hir_std_map_and_set_builtins() {
     let source = r#"
         import std.Map;
         import std.Set;
+        import std.list as list;
         let map = Map.insert("a", 41, Map.empty);
         let set = Set.insert(1, Set.empty);
-        let result = Map.getWithDefault("a", 0, map) + Set.size(set);
+        let result = Map.getWithDefault("a", 0, map) + Set.size(set) + list.sum(Map.values(map));
     "#;
     match eval_checked_hir(source) {
-        Ok(Value::Int(n)) => assert_eq!(n, int(42)),
+        Ok(Value::Int(n)) => assert_eq!(n, int(83)),
         other => panic!("expected int, got {:?}", other),
     }
 }
@@ -3466,5 +3799,99 @@ fn test_eval_path_lit_absolute() {
     match result {
         Ok(Value::String(s)) => assert_eq!(s.as_str(), "/absolute/path"),
         other => panic!("expected String, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_math_conversion_bridges() {
+    let result = eval_checked_hir(
+        r#"
+            import std.math as math;
+            let x = (math.toInt(true), math.toFloat("1.5"));
+        "#,
+    );
+    match result {
+        Ok(Value::Tuple(items)) => {
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0], Value::Int(1.into()));
+            assert_eq!(items[1], Value::Float(1.5));
+        }
+        other => panic!("expected Tuple, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_math_float_predicates() {
+    let result = eval_checked_hir(
+        r#"
+            import std.math as math;
+            let x = (math.isNan(math.nan), math.isInf(math.inf));
+        "#,
+    );
+    match result {
+        Ok(Value::Tuple(items)) => {
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0], Value::Bool(true));
+            assert_eq!(items[1], Value::Bool(true));
+        }
+        other => panic!("expected Tuple, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_math_rounding_bridges() {
+    let result = eval_checked_hir(
+        r#"
+            import std.math as math;
+            let x = (math.floor(1.9), math.ceil(1.1), math.round(1.6));
+        "#,
+    );
+    match result {
+        Ok(Value::Tuple(items)) => {
+            assert_eq!(items.len(), 3);
+            assert_eq!(items[0], Value::Int(1.into()));
+            assert_eq!(items[1], Value::Int(2.into()));
+            assert_eq!(items[2], Value::Int(2.into()));
+        }
+        other => panic!("expected Tuple, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_math_unary_float_transforms() {
+    let result = eval_checked_hir(
+        r#"
+            import std.math as math;
+            let x = (math.sqrt(9.0), math.log(1.0), math.log10(1000.0), math.exp(0.0));
+        "#,
+    );
+    match result {
+        Ok(Value::Tuple(items)) => {
+            assert_eq!(items.len(), 4);
+            assert_eq!(items[0], Value::Float(3.0));
+            assert_eq!(items[1], Value::Float(0.0));
+            assert_eq!(items[2], Value::Float(3.0));
+            assert_eq!(items[3], Value::Float(1.0));
+        }
+        other => panic!("expected Tuple, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_hir_std_math_trigonometric_bridges() {
+    let result = eval_checked_hir(
+        r#"
+            import std.math as math;
+            let x = (math.sin(0.0), math.cos(0.0), math.tan(0.0));
+        "#,
+    );
+    match result {
+        Ok(Value::Tuple(items)) => {
+            assert_eq!(items.len(), 3);
+            assert_eq!(items[0], Value::Float(0.0));
+            assert_eq!(items[1], Value::Float(1.0));
+            assert_eq!(items[2], Value::Float(0.0));
+        }
+        other => panic!("expected Tuple, got {:?}", other),
     }
 }

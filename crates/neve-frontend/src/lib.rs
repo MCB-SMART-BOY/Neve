@@ -10,15 +10,21 @@ mod driver;
 mod session;
 
 pub use driver::{
-    FrontendDriver, FrontendError, ModuleAnalysis, ProgramAnalysis, analyze_module_path,
+    FrontendDriver, FrontendError, ModuleAnalysis, ModuleParseResult, ProgramAnalysis,
+    ProgramDiagnosticModule, ProgramEvaluableModule, ProgramParsedModule, analyze_module_path,
+    parse_module_file,
 };
 pub use neve_diagnostic::Diagnostic;
 pub use neve_hir::Module;
 use neve_hir::{DefId, ItemKind as HirItemKind, LocalId, Ty, TyKind};
 pub use neve_syntax::SourceFile;
 pub use session::{
-    FrontendSession, SessionBuildInputs, SessionBuildResult, SessionError,
-    SessionLoadedDiagnostics, SessionResolvedImports,
+    FrontendSession, SessionBuildInputs, SessionBuildResult, SessionCheckError,
+    SessionCheckedModule, SessionCheckedSource, SessionDefinedBinding, SessionDisplayError,
+    SessionError, SessionEvaluableModule, SessionLoadedDiagnostics, SessionLoadedModule,
+    SessionModuleContext, SessionPreparedModule, SessionPreparedReplInput,
+    SessionPreparedReplSource, SessionReplFileInput, SessionResolvedImports,
+    SessionSourceCheckError, SessionVisibleState,
 };
 
 use neve_common::Span;
@@ -124,6 +130,9 @@ pub struct SnippetAnalysis {
     /// Loaded dependency modules and their diagnostics/semantics.
     /// 已加载依赖模块及其诊断/语义结果。
     pub loaded_modules: Vec<LoadedSnippetModule>,
+    /// Loaded dependency modules ready for HIR evaluation.
+    /// 已可用于 HIR 求值的依赖模块。
+    pub evaluable_loaded_modules: Vec<SessionEvaluableModule>,
 }
 
 /// One dependency module loaded while analyzing a snippet.
@@ -206,40 +215,31 @@ pub fn analyze_snippet_ast(
         &SessionBuildInputs::default(),
     )?;
     let analysis = session.analyze_module(&build.module);
-    let loaded_analyses = session.analyze_loaded_modules();
     let loaded_pending: std::collections::HashSet<_> = build.newly_loaded.iter().copied().collect();
-    let mut loaded_modules = Vec::new();
-
-    for module_id in session.load_order() {
-        if !loaded_pending.contains(module_id) {
-            continue;
-        }
-
-        let Some(info) = session.module_info(*module_id) else {
-            continue;
-        };
-        let analysis = loaded_analyses
-            .get(module_id)
-            .cloned()
-            .unwrap_or(ModuleAnalysis {
-                diagnostics: Vec::new(),
-                semantics: ModuleSemantics::default(),
-            });
-
-        loaded_modules.push(LoadedSnippetModule {
-            module_id: *module_id,
-            file_path: info.file_path.clone(),
-            hir: session.hir_module(*module_id).cloned(),
-            diagnostics: analysis.diagnostics,
-            semantics: analysis.semantics,
-        });
-    }
+    let loaded_modules = session
+        .loaded_modules_in_order()
+        .into_iter()
+        .filter(|entry| loaded_pending.contains(&entry.module_id))
+        .map(|entry| LoadedSnippetModule {
+            module_id: entry.module_id,
+            file_path: entry.file_path,
+            hir: entry.module,
+            diagnostics: entry.analysis.diagnostics,
+            semantics: entry.analysis.semantics,
+        })
+        .collect();
+    let evaluable_loaded_modules = session
+        .evaluable_loaded_modules_in_order()
+        .into_iter()
+        .filter(|entry| loaded_pending.contains(&entry.module_id))
+        .collect();
 
     Ok(SnippetAnalysis {
         hir: build.module,
         semantics: analysis.semantics,
         diagnostics: analysis.diagnostics,
         loaded_modules,
+        evaluable_loaded_modules,
     })
 }
 
