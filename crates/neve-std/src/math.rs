@@ -32,8 +32,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Float(n) => int_from_f64(n.floor())
                         .map(Value::Int)
                         .ok_or_else(|| "math.floor expects a finite number".to_string()),
-                    Value::Int(n) => Ok(Value::Int(n.clone())),
-                    _ => Err("math.floor expects a number".to_string()),
+                    _ => Err("math.floor expects a Float".to_string()),
                 },
             }),
         ),
@@ -46,8 +45,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Float(n) => int_from_f64(n.ceil())
                         .map(Value::Int)
                         .ok_or_else(|| "math.ceil expects a finite number".to_string()),
-                    Value::Int(n) => Ok(Value::Int(n.clone())),
-                    _ => Err("math.ceil expects a number".to_string()),
+                    _ => Err("math.ceil expects a Float".to_string()),
                 },
             }),
         ),
@@ -60,8 +58,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Float(n) => int_from_f64(n.round())
                         .map(Value::Int)
                         .ok_or_else(|| "math.round expects a finite number".to_string()),
-                    Value::Int(n) => Ok(Value::Int(n.clone())),
-                    _ => Err("math.round expects a number".to_string()),
+                    _ => Err("math.round expects a Float".to_string()),
                 },
             }),
         ),
@@ -72,10 +69,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.sqrt())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.sqrt()))
-                        .ok_or_else(|| "math.sqrt expects a finite number".to_string()),
-                    _ => Err("math.sqrt expects a number".to_string()),
+                    _ => Err("math.sqrt expects a Float".to_string()),
                 },
             }),
         ),
@@ -118,10 +112,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.ln())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.ln()))
-                        .ok_or_else(|| "math.log expects a finite number".to_string()),
-                    _ => Err("math.log expects a number".to_string()),
+                    _ => Err("math.log expects a Float".to_string()),
                 },
             }),
         ),
@@ -132,10 +123,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.log10())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.log10()))
-                        .ok_or_else(|| "math.log10 expects a finite number".to_string()),
-                    _ => Err("math.log10 expects a number".to_string()),
+                    _ => Err("math.log10 expects a Float".to_string()),
                 },
             }),
         ),
@@ -146,10 +134,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.exp())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.exp()))
-                        .ok_or_else(|| "math.exp expects a finite number".to_string()),
-                    _ => Err("math.exp expects a number".to_string()),
+                    _ => Err("math.exp expects a Float".to_string()),
                 },
             }),
         ),
@@ -161,10 +146,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.sin())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.sin()))
-                        .ok_or_else(|| "math.sin expects a finite number".to_string()),
-                    _ => Err("math.sin expects a number".to_string()),
+                    _ => Err("math.sin expects a Float".to_string()),
                 },
             }),
         ),
@@ -175,10 +157,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.cos())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.cos()))
-                        .ok_or_else(|| "math.cos expects a finite number".to_string()),
-                    _ => Err("math.cos expects a number".to_string()),
+                    _ => Err("math.cos expects a Float".to_string()),
                 },
             }),
         ),
@@ -189,10 +168,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Float(n.tan())),
-                    Value::Int(n) => int_to_f64(n)
-                        .map(|v| Value::Float(v.tan()))
-                        .ok_or_else(|| "math.tan expects a finite number".to_string()),
-                    _ => Err("math.tan expects a number".to_string()),
+                    _ => Err("math.tan expects a Float".to_string()),
                 },
             }),
         ),
@@ -287,7 +263,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::String(s) => parse_int(s)
                         .map(Value::Int)
                         .ok_or_else(|| format!("cannot parse '{}' as integer", s)),
-                    _ => Err("math.toInt expects a number or string".to_string()),
+                    Value::Bool(b) => Ok(Value::Int(if *b { 1 } else { 0 }.into())),
+                    _ => Err("math.toInt expects a number, string, or bool".to_string()),
                 },
             }),
         ),
@@ -317,8 +294,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Bool(n.is_nan())),
-                    Value::Int(_) => Ok(Value::Bool(false)),
-                    _ => Err("math.isNan expects a number".to_string()),
+                    _ => Err("math.isNan expects a Float".to_string()),
                 },
             }),
         ),
@@ -329,8 +305,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Float(n) => Ok(Value::Bool(n.is_infinite())),
-                    Value::Int(_) => Ok(Value::Bool(false)),
-                    _ => Err("math.isInf expects a number".to_string()),
+                    _ => Err("math.isInf expects a Float".to_string()),
                 },
             }),
         ),

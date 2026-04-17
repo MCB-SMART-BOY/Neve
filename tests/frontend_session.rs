@@ -1,25 +1,16 @@
 //! Integration tests for compatibility frontend session APIs.
 //! 兼容前端会话 API 的集成测试。
 
-use std::fs;
-use std::path::Path;
+mod support;
 
 use neve_diagnostic::{DiagnosticKind, Severity};
-use neve_frontend::{FrontendSession, SessionBuildInputs};
+use neve_frontend::{
+    FrontendSession, SessionBuildInputs, SessionCheckError, SessionDisplayError,
+    SessionModuleContext, SessionSourceCheckError, SessionVisibleState,
+};
 use neve_parser::parse;
+use support::module_fixtures::create_test_module;
 use tempfile::TempDir;
-
-fn create_test_module(dir: &Path, path: &[&str], content: &str) {
-    let mut full_path = dir.to_path_buf();
-    for (i, segment) in path.iter().enumerate() {
-        full_path.push(segment);
-        if i < path.len() - 1 {
-            fs::create_dir_all(&full_path).unwrap();
-        }
-    }
-    full_path.set_extension("neve");
-    fs::write(full_path, content).unwrap();
-}
 
 fn parse_ok(source: &str) -> neve_syntax::SourceFile {
     let (ast, diagnostics) = parse(source);
@@ -110,6 +101,875 @@ fn test_frontend_session_resolves_imported_bindings_and_module_aliases() {
 }
 
 #[test]
+fn test_frontend_session_resolves_builtin_std_import_bookkeeping() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok(
+        r#"
+            import std.list (len);
+            import std.list as list_ops;
+            import std (*);
+            fn compute() = list_ops.len([1, 2]) + len([3, 4]);
+        "#,
+    );
+
+    let session = FrontendSession::new(temp_dir.path());
+    let resolved = session
+        .resolve_ast_imports(&ast, &[])
+        .expect("builtin std import resolution should succeed");
+
+    assert!(
+        resolved
+            .builtin_item_imports
+            .iter()
+            .any(|(name, builtin)| name == "len" && builtin == "list.len"),
+        "expected builtin item import, got {:?}",
+        resolved.builtin_item_imports
+    );
+    assert!(
+        resolved
+            .builtin_module_imports
+            .iter()
+            .any(|(alias, module)| alias == "list_ops" && module == "list"),
+        "expected builtin module alias, got {:?}",
+        resolved.builtin_module_imports
+    );
+    assert!(
+        resolved
+            .builtin_module_imports
+            .iter()
+            .any(|(alias, module)| alias == "math" && module == "math"),
+        "expected root std glob module import, got {:?}",
+        resolved.builtin_module_imports
+    );
+}
+
+#[test]
+fn test_frontend_session_prepares_module_and_resolves_imports_in_one_step() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+
+    let ast = parse_ok(
+        r#"
+            import math (add);
+            import math as ops;
+            import std.list as list_ops;
+            import std.list (len);
+            fn compute() = ops.add(len([1, 2]), list_ops.len([3, 4]));
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let prepared = session
+        .prepare_module_from_ast(
+            &ast,
+            "repl".to_string(),
+            Vec::new(),
+            &SessionBuildInputs::default(),
+        )
+        .expect("session prepare should succeed");
+
+    assert_eq!(
+        prepared.newly_loaded.len(),
+        1,
+        "expected one loaded dependency"
+    );
+    assert!(
+        !prepared.global_defs.is_empty(),
+        "expected current module globals"
+    );
+    assert!(
+        prepared
+            .resolved_imports
+            .bindings
+            .iter()
+            .any(|(name, _)| name == "add"),
+        "expected imported binding, got {:?}",
+        prepared.resolved_imports.bindings
+    );
+    assert!(
+        prepared
+            .resolved_imports
+            .module_aliases
+            .iter()
+            .any(|alias| alias == "ops"),
+        "expected imported module alias, got {:?}",
+        prepared.resolved_imports.module_aliases
+    );
+    assert!(
+        prepared
+            .resolved_imports
+            .builtin_item_imports
+            .iter()
+            .any(|(name, builtin)| name == "len" && builtin == "list.len"),
+        "expected builtin item import, got {:?}",
+        prepared.resolved_imports.builtin_item_imports
+    );
+    assert!(
+        prepared
+            .resolved_imports
+            .builtin_module_imports
+            .iter()
+            .any(|(alias, module)| alias == "list_ops" && module == "list"),
+        "expected builtin module alias, got {:?}",
+        prepared.resolved_imports.builtin_module_imports
+    );
+}
+
+#[test]
+fn test_frontend_session_prepares_checked_module_in_one_step() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+
+    let ast = parse_ok(
+        r#"
+            import math (add);
+            import std.list as list_ops;
+            fn compute() = list_ops.len([add(1, 2)]);
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let checked = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("checked session prepare should succeed");
+
+    assert_eq!(
+        checked.prepared.newly_loaded.len(),
+        1,
+        "expected one loaded dependency"
+    );
+    assert!(
+        checked.analysis.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        checked.analysis.diagnostics
+    );
+    assert!(
+        checked
+            .prepared
+            .resolved_imports
+            .bindings
+            .iter()
+            .any(|(name, _)| name == "add"),
+        "expected imported binding, got {:?}",
+        checked.prepared.resolved_imports.bindings
+    );
+}
+
+#[test]
+fn test_frontend_session_parses_and_checks_source_in_one_step() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let checked = session
+        .parse_checked_source_with_context(
+            r#"
+                import math (add);
+                fn compute() = add(1, 2);
+            "#,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("checked source parse should succeed");
+
+    assert!(
+        !checked.ast.items.is_empty(),
+        "expected parsed AST items for checked source"
+    );
+    assert!(
+        checked.checked.analysis.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        checked.checked.analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_parse_checked_source_reports_parse_diagnostics() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+
+    let error = session
+        .parse_checked_source_with_context(
+            "let x = ;",
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("parse-broken source should fail before checked-module preparation");
+
+    let SessionSourceCheckError::ParseDiagnostics(diagnostics) = error else {
+        panic!("expected parse diagnostics, got {error:?}");
+    };
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Parser && diag.severity == Severity::Error),
+        "expected parser diagnostics, got {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_source_check_error_projects_parse_diagnostics_for_display() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+
+    let error = session
+        .parse_checked_source_with_context(
+            "let x = ;",
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("parse-broken source should fail before checked-module preparation")
+        .into_display_error("let x = ;", "let x = ;");
+
+    let SessionDisplayError::Diagnostics {
+        source_name,
+        source,
+        diagnostics,
+    } = error
+    else {
+        panic!("expected source-attributed diagnostics, got {error:?}");
+    };
+    assert_eq!(source_name, "let x = ;");
+    assert_eq!(source, "let x = ;");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Parser && diag.severity == Severity::Error),
+        "expected parser diagnostics, got {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_parses_checked_source_with_explicit_display_name() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+
+    let error = session
+        .parse_checked_source_with_context_for_display_as(
+            "<snippet>",
+            "let x = ;",
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("parse-broken source should surface the explicit display name");
+
+    let SessionDisplayError::Diagnostics {
+        source_name,
+        source,
+        diagnostics,
+    } = error
+    else {
+        panic!("expected source-attributed diagnostics, got {error:?}");
+    };
+    assert_eq!(source_name, "<snippet>");
+    assert_eq!(source, "let x = ;");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Parser && diag.severity == Severity::Error),
+        "expected parser diagnostics, got {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_parses_checked_source_with_context_for_display() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let checked = session
+        .parse_checked_source_with_context_for_display(
+            r#"
+                import math (add);
+                fn compute() = add(1, 2);
+            "#,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("checked source parse-for-display should succeed");
+
+    assert!(
+        !checked.ast.items.is_empty(),
+        "expected parsed AST items for checked source"
+    );
+    assert!(
+        checked.checked.analysis.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        checked.checked.analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_parses_checks_and_formats_binding_type_in_one_step() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+
+    let formatted = session
+        .parse_format_binding_type_with_context(
+            "struct User {}; fn id(x: User) -> User = x;",
+            "id",
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("binding-type formatting should succeed");
+
+    assert_eq!(formatted, Some("(User) -> User".to_string()));
+}
+
+#[test]
+fn test_frontend_session_prepares_repl_expression_source_and_marks_ephemeral() {
+    let prepared = FrontendSession::prepare_repl_source("1 + 2");
+
+    assert_eq!(prepared.source, "let __expr__ = 1 + 2;");
+    assert!(
+        !prepared.persist_defs,
+        "wrapped expression inputs should stay ephemeral"
+    );
+}
+
+#[test]
+fn test_frontend_session_prepares_repl_input_with_source_name_and_context() {
+    let temp_dir = TempDir::new().unwrap();
+    let session = FrontendSession::new(temp_dir.path());
+    let prepared = session.prepare_repl_input("1 + 2");
+
+    assert_eq!(prepared.source_name, "<repl>");
+    assert_eq!(prepared.source, "let __expr__ = 1 + 2;");
+    assert!(
+        !prepared.persist_defs,
+        "wrapped expression inputs should stay ephemeral"
+    );
+    assert_eq!(prepared.context.root_dir, None);
+    assert_eq!(prepared.context.module_path, Vec::<String>::new());
+    assert_eq!(prepared.context.module_name, "repl");
+}
+
+#[test]
+fn test_frontend_session_prepares_repl_item_source_and_marks_persistent() {
+    let prepared = FrontendSession::prepare_repl_source("let answer = 42");
+
+    assert_eq!(prepared.source, "let answer = 42;");
+    assert!(
+        prepared.persist_defs,
+        "item inputs should keep persistent REPL semantics"
+    );
+}
+
+#[test]
+fn test_frontend_session_parses_and_formats_repl_type_query_in_one_step() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+
+    let formatted = session
+        .parse_format_repl_type("1 + 2", &SessionVisibleState::default())
+        .expect("REPL type query formatting should succeed");
+
+    assert_eq!(formatted, Some("Int".to_string()));
+}
+
+#[test]
+fn test_frontend_session_returns_canonical_repl_context() {
+    let temp_dir = TempDir::new().unwrap();
+    let session = FrontendSession::new(temp_dir.path());
+    let context = session.repl_context();
+
+    assert_eq!(context.root_dir, None);
+    assert_eq!(context.module_path, Vec::<String>::new());
+    assert_eq!(context.module_name, "repl");
+}
+
+#[test]
+fn test_frontend_session_repl_type_query_projects_display_diagnostics() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+
+    let error = session
+        .parse_format_repl_type_for_display("41?", &SessionVisibleState::default())
+        .expect_err("invalid REPL type query should surface display diagnostics");
+
+    let SessionDisplayError::Diagnostics {
+        source_name,
+        source,
+        diagnostics,
+    } = error
+    else {
+        panic!("expected source-attributed diagnostics, got {error:?}");
+    };
+    assert_eq!(source_name, "<repl:type>");
+    assert_eq!(source, "let __type__ = 41?;");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
+        "expected type diagnostics, got {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_prepared_module_skips_hidden_expr_bindings() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok("let __expr__ = 1 + 2;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let prepared = session
+        .prepare_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("prepared module should succeed");
+
+    assert!(
+        prepared.defined_bindings.is_empty(),
+        "hidden expression bindings should not be exposed, got {:?}",
+        prepared.defined_bindings
+    );
+}
+
+#[test]
+fn test_frontend_session_formats_checked_binding_type_for_direct_global_reference() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok(
+        r#"
+            let x = 41;
+            let __type__ = x;
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let checked = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("checked session prepare should succeed");
+
+    assert_eq!(
+        session.format_checked_binding_type(&checked, "__type__"),
+        Some("Int".to_string())
+    );
+}
+
+#[test]
+fn test_frontend_session_formats_named_checked_binding_types_with_current_module_names() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok("struct User {}; fn id(x: User) -> User = x;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let checked = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect("checked session prepare should succeed");
+
+    assert_eq!(
+        session.format_checked_binding_type(&checked, "id"),
+        Some("(User) -> User".to_string())
+    );
+}
+
+#[test]
+fn test_frontend_session_prepare_checked_module_reports_loaded_module_errors() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+
+    let ast = parse_ok(
+        r#"
+            import broken (bad);
+            fn run() = 1;
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let error = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("broken dependency should block checked prepare");
+
+    let SessionCheckError::LoadedModules(entries) = error else {
+        panic!("expected loaded-module diagnostics, got {error:?}");
+    };
+    assert_eq!(entries.len(), 1, "expected one broken dependency");
+    assert!(entries[0].file_path.ends_with("broken.neve"));
+    assert!(
+        entries[0]
+            .diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
+        "expected type error diagnostics, got {:?}",
+        entries[0].diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_check_error_projects_loaded_module_diagnostics_for_display() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+
+    let ast = parse_ok(
+        r#"
+            import broken (bad);
+            fn run() = 1;
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let error = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("broken dependency should block checked prepare")
+        .into_display_error("fn run() = 1;", "fn run() = 1;");
+
+    let SessionDisplayError::LoadedModules(entries) = error else {
+        panic!("expected loaded-module display error, got {error:?}");
+    };
+    assert_eq!(entries.len(), 1, "expected one broken dependency");
+    assert!(entries[0].file_path.ends_with("broken.neve"));
+    assert!(
+        entries[0]
+            .diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
+        "expected type error diagnostics, got {:?}",
+        entries[0].diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_prepare_checked_module_reports_current_module_errors() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok("fn bad() = 1 + true;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let error = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("broken current module should block checked prepare");
+
+    let SessionCheckError::ModuleDiagnostics(diagnostics) = error else {
+        panic!("expected current-module diagnostics, got {error:?}");
+    };
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
+        "expected type error diagnostics, got {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_check_error_projects_current_module_diagnostics_for_display() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok("fn bad() = 1 + true;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let error = session
+        .prepare_checked_module_with_context(
+            &ast,
+            &SessionModuleContext::repl(),
+            &SessionVisibleState::default(),
+        )
+        .expect_err("broken current module should block checked prepare")
+        .into_display_error("fn bad() = 1 + true;", "fn bad() = 1 + true;");
+
+    let SessionDisplayError::Diagnostics {
+        source_name,
+        source,
+        diagnostics,
+    } = error
+    else {
+        panic!("expected source-attributed diagnostics, got {error:?}");
+    };
+    assert_eq!(source_name, "fn bad() = 1 + true;");
+    assert_eq!(source, "fn bad() = 1 + true;");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
+        "expected type error diagnostics, got {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_commit_prepared_module_carries_visible_state_between_inputs() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let mut visible_state = SessionVisibleState::default();
+
+    let first = parse_ok(
+        r#"
+            import math (add);
+            import std.list as list_ops;
+            fn compute() = add(1, 2);
+        "#,
+    );
+    let first_prepared = session
+        .prepare_module_with_visible_state(&first, "repl".to_string(), Vec::new(), &visible_state)
+        .expect("first prepare should succeed");
+    session.commit_prepared_module(&mut visible_state, first_prepared);
+    assert_eq!(
+        session.persisted_modules().len(),
+        1,
+        "expected committed module to be persisted in the session"
+    );
+
+    let second = parse_ok(
+        r#"
+            fn again() = list_ops.len([add(1, 2)]);
+        "#,
+    );
+    let second_prepared = session
+        .prepare_module_with_visible_state(&second, "repl".to_string(), Vec::new(), &visible_state)
+        .expect("second prepare should succeed");
+    let analysis = session.analyze_module(&second_prepared.module);
+
+    assert!(
+        analysis.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        analysis.diagnostics
+    );
+    assert!(
+        second_prepared.global_defs.contains_key("again"),
+        "expected current module globals"
+    );
+}
+
+#[test]
+fn test_frontend_session_returns_loaded_modules_in_dependency_order() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["util"], "pub fn inc(x) = x + 1;");
+    create_test_module(
+        temp_dir.path(),
+        &["math"],
+        "import util (inc); pub fn add_one(x) = inc(x);",
+    );
+
+    let ast = parse_ok(
+        r#"
+            import math (add_one);
+            fn compute() = add_one(1);
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let build = session
+        .build_module_from_ast(
+            &ast,
+            "repl".to_string(),
+            Vec::new(),
+            &SessionBuildInputs::default(),
+        )
+        .expect("session build should succeed");
+
+    assert_eq!(
+        build.newly_loaded.len(),
+        2,
+        "expected transitive dependencies to load"
+    );
+
+    let loaded = session.loaded_modules_in_order();
+    assert_eq!(loaded.len(), 2, "expected two loaded dependency modules");
+    assert!(loaded[0].file_path.ends_with("util.neve"));
+    assert!(loaded[1].file_path.ends_with("math.neve"));
+    assert!(
+        loaded.iter().all(|entry| entry.module.is_some()),
+        "expected lowered HIR for loaded modules, got {:?}",
+        loaded
+    );
+    assert!(
+        loaded
+            .iter()
+            .all(|entry| entry.analysis.diagnostics.is_empty()),
+        "unexpected diagnostics in loaded modules: {:?}",
+        loaded
+    );
+}
+
+#[test]
+fn test_frontend_session_returns_only_evaluable_loaded_modules_in_dependency_order() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["util"], "pub fn inc(x) = x + 1;");
+    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+
+    let ast = parse_ok(
+        r#"
+            import util (inc);
+            import broken (bad);
+            fn compute() = inc(1);
+        "#,
+    );
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    session
+        .build_module_from_ast(
+            &ast,
+            "repl".to_string(),
+            Vec::new(),
+            &SessionBuildInputs::default(),
+        )
+        .expect("session build should succeed");
+
+    let evaluable = session.evaluable_loaded_modules_in_order();
+    assert_eq!(
+        evaluable.len(),
+        1,
+        "expected only the clean dependency to be evaluable"
+    );
+    assert!(
+        !evaluable[0].module.items.is_empty(),
+        "expected lowered HIR items for the clean dependency"
+    );
+    assert!(
+        evaluable[0].method_resolutions.is_empty(),
+        "expected no method resolutions for the simple helper module, got {:?}",
+        evaluable[0].method_resolutions
+    );
+}
+
+#[test]
+fn test_frontend_session_resolves_file_module_context_under_current_root() {
+    let temp_dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(temp_dir.path().join("app")).unwrap();
+    std::fs::write(
+        temp_dir.path().join("app").join("mod.neve"),
+        "let answer = 42;",
+    )
+    .unwrap();
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let context = session
+        .repl_context_for_file(temp_dir.path().join("app").join("mod.neve"), false)
+        .expect("module context should resolve");
+
+    assert_eq!(context.root_dir.as_deref(), Some(session.root_dir()));
+    assert_eq!(context.module_path, vec!["app".to_string()]);
+    assert_eq!(context.module_name, "app");
+}
+
+#[test]
+fn test_frontend_session_loads_repl_file_input_under_current_root() {
+    let temp_dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(temp_dir.path().join("app")).unwrap();
+    std::fs::write(
+        temp_dir.path().join("app").join("mod.neve"),
+        "let answer = 42;",
+    )
+    .unwrap();
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let input = session
+        .load_repl_file_input(temp_dir.path().join("app").join("mod.neve"), false)
+        .expect("REPL file input should load");
+
+    assert_eq!(
+        input.source_name,
+        temp_dir
+            .path()
+            .join("app")
+            .join("mod.neve")
+            .display()
+            .to_string(),
+        "expected file-backed REPL source name to match the user-facing path"
+    );
+    assert_eq!(
+        input.file_path,
+        temp_dir.path().join("app").join("mod.neve"),
+        "expected user-facing file path to be preserved"
+    );
+    assert_eq!(input.source, "let answer = 42;");
+    assert_eq!(input.context.root_dir.as_deref(), Some(session.root_dir()));
+    assert_eq!(input.context.module_path, vec!["app".to_string()]);
+    assert_eq!(input.context.module_name, "app");
+}
+
+#[test]
+fn test_frontend_session_load_repl_file_input_reports_read_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut session = FrontendSession::new(temp_dir.path());
+    let missing = temp_dir.path().join("missing.neve");
+
+    let error = session
+        .load_repl_file_input(&missing, false)
+        .expect_err("missing REPL file should surface a display error");
+
+    let SessionDisplayError::Message(message) = error else {
+        panic!("expected read failure message, got {error:?}");
+    };
+    assert!(
+        message.contains("Cannot read file"),
+        "expected read failure prefix, got {message}"
+    );
+    assert!(
+        message.contains("missing.neve"),
+        "expected missing file path, got {message}"
+    );
+}
+
+#[test]
+fn test_frontend_session_can_rebase_root_when_pristine() {
+    let first = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    std::fs::create_dir_all(second.path().join("app")).unwrap();
+    std::fs::write(
+        second.path().join("app").join("mod.neve"),
+        "let answer = 42;",
+    )
+    .unwrap();
+
+    let mut session = FrontendSession::new(first.path());
+    let context = session
+        .repl_context_for_file(second.path().join("app").join("mod.neve"), true)
+        .expect("context should rebase to new root");
+
+    assert_eq!(context.root_dir.as_deref(), Some(session.root_dir()));
+    assert_eq!(session.root_dir(), second.path().join("app").as_path());
+    assert_eq!(context.module_path, Vec::<String>::new());
+}
+
+#[test]
+fn test_frontend_session_rejects_root_switch_when_not_pristine() {
+    let first = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    std::fs::write(second.path().join("main.neve"), "let answer = 42;").unwrap();
+
+    let mut session = FrontendSession::new(first.path());
+    session.record_module(neve_frontend::analyze_source("let x = 1;").hir);
+
+    let error = session
+        .repl_context_for_file(second.path().join("main.neve"), true)
+        .expect_err("non-empty sessions should not silently mix project roots");
+
+    assert!(
+        error.to_string().contains(":clear"),
+        "expected guidance to clear the session, got {error}"
+    );
+}
+
+#[test]
 fn test_frontend_session_attributes_diagnostics_for_newly_loaded_modules() {
     let temp_dir = TempDir::new().unwrap();
     create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
@@ -135,11 +995,44 @@ fn test_frontend_session_attributes_diagnostics_for_newly_loaded_modules() {
     assert_eq!(diagnostics.len(), 1, "expected one broken dependency");
     assert!(diagnostics[0].file_path.ends_with("broken.neve"));
     assert!(
+        diagnostics[0].source.contains("pub fn bad() = 1 + true;"),
+        "expected projected source text, got {:?}",
+        diagnostics[0].source
+    );
+    assert!(
         diagnostics[0]
             .diagnostics
             .iter()
             .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
         "expected type error diagnostics, got {:?}",
         diagnostics[0].diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_checked_module_analysis_returns_errors() {
+    let temp_dir = TempDir::new().unwrap();
+    let ast = parse_ok("fn bad() = 1 + true;");
+
+    let mut session = FrontendSession::new(temp_dir.path());
+    let build = session
+        .build_module_from_ast(
+            &ast,
+            "repl".to_string(),
+            Vec::new(),
+            &SessionBuildInputs::default(),
+        )
+        .expect("session build should succeed");
+
+    let diagnostics = session
+        .analyze_module_checked(&build.module)
+        .expect_err("broken current module should report semantic errors");
+
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type && diag.severity == Severity::Error),
+        "expected type error diagnostics, got {:?}",
+        diagnostics
     );
 }

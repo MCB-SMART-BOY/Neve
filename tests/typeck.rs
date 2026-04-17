@@ -408,6 +408,65 @@ fn test_typeck_std_math_constants_have_float_type() {
 }
 
 #[test]
+fn test_typeck_std_math_conversion_bridges_have_explicit_result_types() {
+    check_no_errors(
+        r#"
+            import std.math as math;
+            let i: Int = math.toInt(true);
+            let f: Float = math.toFloat("1.5");
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_math_float_predicates_have_explicit_result_types() {
+    check_no_errors(
+        r#"
+            import std.math as math;
+            let a: Bool = math.isNan(math.nan);
+            let b: Bool = math.isInf(math.inf);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_math_rounding_bridges_have_explicit_result_types() {
+    check_no_errors(
+        r#"
+            import std.math as math;
+            let a: Int = math.floor(1.9);
+            let b: Int = math.ceil(1.1);
+            let c: Int = math.round(1.6);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_math_unary_float_transforms_have_explicit_result_types() {
+    check_no_errors(
+        r#"
+            import std.math as math;
+            let a: Float = math.sqrt(9.0);
+            let b: Float = math.log(1.0);
+            let c: Float = math.log10(1000.0);
+            let d: Float = math.exp(0.0);
+        "#,
+    );
+}
+
+#[test]
+fn test_typeck_std_math_trigonometric_bridges_have_explicit_result_types() {
+    check_no_errors(
+        r#"
+            import std.math as math;
+            let a: Float = math.sin(0.0);
+            let b: Float = math.cos(0.0);
+            let c: Float = math.tan(0.0);
+        "#,
+    );
+}
+
+#[test]
 fn test_typeck_std_math_constants_reject_wrong_annotation() {
     assert_has_diagnostic(
         r#"
@@ -417,6 +476,101 @@ fn test_typeck_std_math_constants_reject_wrong_annotation() {
         "#,
         Severity::Error,
         "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_conversion_bridges_reject_wrong_annotation() {
+    assert_has_diagnostic(
+        r#"
+            fn expectFloat(x: Float) -> Float = x;
+            import std.math as math;
+            let wrong = expectFloat(math.toInt(true));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_float_predicates_reject_int_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.math as math;
+            let wrong = math.isNan(1);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_rounding_bridges_reject_int_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.math as math;
+            let wrong = math.floor(1);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_unary_float_transforms_reject_int_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.math as math;
+            let wrong = math.sqrt(1);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_trigonometric_bridges_reject_int_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.math as math;
+            let wrong = math.sin(1);
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_math_function_remains_inference_hole_outside_explicit_surface() {
+    let source = r#"
+        import std.math as math;
+        let value = math.abs(1);
+    "#;
+    let (ast, parse_diags) = parse(source);
+    assert!(
+        parse_diags.is_empty(),
+        "unexpected parse errors: {:?}",
+        parse_diags
+    );
+
+    let hir = lower(&ast);
+    let def_id = hir.items.last().expect("let binding should exist").id;
+
+    let mut checker = TypeChecker::new();
+    checker.check(&hir);
+    assert!(
+        checker.diagnostics_ref().is_empty(),
+        "unexpected type errors: {:?}",
+        checker.diagnostics_ref()
+    );
+
+    let ty = checker
+        .global_type(def_id)
+        .expect("global type should exist");
+    let rendered = format_type(&ty);
+    assert!(
+        rendered.starts_with('?'),
+        "expected math.abs result to remain an inference hole, got {rendered}",
     );
 }
 
@@ -846,9 +1000,12 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
             import std.io as io;
             import std.path as path;
             let content: String = io.readFile("/tmp/file.txt");
+            let entries_legacy: List<String> = io.readDir("/tmp");
             let structured: String = io.readFilePath(path.fromString("/tmp/file.txt"));
             let entries: List<String> = io.readDirPath(path.fromString("/tmp"));
             let entry_paths: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
+            let write_text_legacy: Unit = io.writeFile("/tmp/file.out", "hello");
+            let append_text_legacy: Unit = io.appendFile("/tmp/file.out", "hello");
             let write_text: Unit = io.writeFilePath(path.fromString("/tmp/file.out"), "hello");
             let append_text: Unit = io.appendFilePath(path.fromString("/tmp/file.out"), "hello");
             let binary: Bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
@@ -858,6 +1015,13 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
                 io.appendFileBytesPath(path.fromString("/tmp/file.out"), binary);
             let cwd_path: Path = io.currentDirPath();
             let home_path: Option<Path> = io.homeDirPath();
+            let home_text: Option<String> = io.homeDir();
+            let system: String = io.currentSystem();
+            let created_dir_legacy: Unit = io.createDirAll("/tmp/neve-dir");
+            let removed_dir_legacy: Unit = io.removeDirAll("/tmp/neve-dir");
+            let exists_legacy: Bool = io.pathExists("/tmp/file.txt");
+            let dir_legacy: Bool = io.isDir("/tmp");
+            let file_legacy: Bool = io.isFile("/tmp/file.txt");
             let created_dir: Unit = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
             let removed_dir: Unit = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
             let cmd: Command = io.command("printf", ["neve"]);
@@ -913,6 +1077,7 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
             let cmd_text: String = toString(cmd);
             let proc_text: String = toString(proc);
             let digest: String = io.hashString("abc");
+            let digest_file: String = io.hashFile("/tmp/file.txt");
             let digest_path: String = io.hashFilePath(path.fromString("/tmp/file.txt"));
             let cwd: String = io.currentDir();
             let env = io.getEnv("HOME") ?? "";
@@ -975,6 +1140,18 @@ fn test_typeck_std_io_read_dir_entry_paths_rejects_string_argument() {
         r#"
             import std.io as io;
             let wrong = io.readDirEntryPaths("/tmp");
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_io_hash_string_rejects_non_string_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.io as io;
+            let wrong = io.hashString(1);
         "#,
         Severity::Error,
         "type mismatch",
@@ -1419,8 +1596,11 @@ fn test_typeck_std_fetch_builtins_allow_valid_uses() {
         r#"
             import std.fetch as fetch;
             let path: String = fetch.path("Cargo.toml").path;
+            let remoteHash: String = fetch.url("https://example.com/archive.tar.gz").hash;
+            let verified: String = fetch.pathWithHash("Cargo.toml", "0000000000000000000000000000000000000000000000000000000000000000").hash;
             let hash: String = fetch.urlWithHash("https://example.com/archive.tar.gz", "0000000000000000000000000000000000000000000000000000000000000000").hash;
             let cached: Bool = fetch.git("https://example.com/repo.git", "main").cached;
+            let verifiedGit: String = fetch.gitWithHash("https://example.com/repo.git", "main", "0000000000000000000000000000000000000000000000000000000000000000").hash;
         "#,
     );
 }
@@ -1444,9 +1624,11 @@ fn test_typeck_std_map_and_set_builtins_allow_valid_uses() {
         r#"
             import std.Map;
             import std.Set;
+            import std.list as list;
             let map = Map.insert("a", 1, Map.empty);
             let value: Int = Map.getWithDefault("a", 0, map);
             let present: Bool = Map.contains("a", map);
+            let total: Int = list.sum(Map.values(map));
             let set = Set.insert(1, Set.empty);
             let count: Int = Set.size(set);
             let hasOne: Bool = Set.contains(1, set);
@@ -1464,6 +1646,18 @@ fn test_typeck_std_map_and_set_builtins_reject_wrong_use() {
             let map = Map.insert("a", 1, Map.empty);
             let set = Set.insert(1, Set.empty);
             let wrong = expectInt(Map.contains("a", map)) + expectInt(Set.isEmpty(set));
+        "#,
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn test_typeck_std_map_values_rejects_non_map_argument() {
+    assert_has_diagnostic(
+        r#"
+            import std.Map;
+            let wrong = Map.values(1);
         "#,
         Severity::Error,
         "type mismatch",

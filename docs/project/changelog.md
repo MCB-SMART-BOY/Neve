@@ -29,6 +29,15 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Improved / 改进
 - (nothing yet)
 
+## [3.1.0] - 2026-04-18
+
+### Added / 新增
+- **Typed `std.math` canonical surface**: Added explicit public support for `math.toInt`, `math.toFloat`, `math.isNan`, `math.isInf`, `math.floor`, `math.ceil`, `math.round`, `math.sqrt`, `math.log`, `math.log10`, `math.exp`, `math.sin`, `math.cos`, and `math.tan`, with aligned type checking, runtime behavior, REPL `:type`, LSP hover/completion, API docs, and regression coverage. / **类型化 `std.math` 规范表面**: 新增 `math.toInt`、`math.toFloat`、`math.isNan`、`math.isInf`、`math.floor`、`math.ceil`、`math.round`、`math.sqrt`、`math.log`、`math.log10`、`math.exp`、`math.sin`、`math.cos` 与 `math.tan` 的显式公开支持，并同步打通类型检查、运行时行为、REPL `:type`、LSP hover/completion、API 文档与回归覆盖。
+
+### Improved / 改进
+- **Stdlib tooling truthfulness**: Reorganized LSP stdlib completion metadata into surface-specific modules with regression tests, and aligned completion/hover/type-query output with the real verified `io`, `list`, `string`, `path`, `fetch`, `Map`, `Set`, `option`, `result`, and `math` surfaces instead of stale placeholders or runtime-only entries. / **标准库工具链真实性**: 将 LSP 标准库补全元数据重组为按表面拆分的模块并补齐回归测试，同时让 completion / hover / 类型查询重新对齐真实已验证的 `io`、`list`、`string`、`path`、`fetch`、`Map`、`Set`、`option`、`result` 与 `math` 表面，不再暴露陈旧占位项或仅运行时存在的入口。
+- **Frontend-owned REPL display attribution**: `FrontendSession` now owns canonical current-input display attribution for REPL flows, including `<repl>` / `<repl:type>` naming, file-backed input display names, and checked-source display projection, reducing remaining CLI-local duplication across ordinary inputs, `:type`, and `:load`. / **frontend 持有的 REPL 诊断归属**: `FrontendSession` 现在接管 REPL 当前输入的规范展示归属，包括 `<repl>` / `<repl:type>` 命名、文件输入展示名以及 checked-source 的 display projection，进一步减少普通输入、`:type` 与 `:load` 路径上的 CLI 本地重复逻辑。
+
 ## [3.0.0] - 2026-04-15
 
 ### Added / 新增

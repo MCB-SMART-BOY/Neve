@@ -1,25 +1,24 @@
 //! The `neve repl` command.
 //! `neve repl` 命令。
 
-use crate::commands::module_graph;
 use crate::output;
 use neve_common::Span;
-use neve_diagnostic::{Severity, emit};
+use neve_diagnostic::emit;
 use neve_eval::{Evaluator, Value, builtins};
 use neve_frontend::{
-    FrontendSession, ModuleAnalysis, SessionBuildInputs, SessionBuildResult,
-    format_type_with_names_map,
+    FrontendSession, SessionDefinedBinding, SessionDisplayError, SessionLoadedDiagnostics,
+    SessionModuleContext, SessionPreparedModule, SessionVisibleState,
 };
-use neve_hir::{DefId, ItemKind as HirItemKind, Module, ModuleId, Ty, TyKind};
-use neve_parser::parse;
+use neve_hir::{DefId, Module, ModuleId};
 use neve_std::stdlib;
-use neve_syntax::{ImportDef, ImportItems, Item, ItemKind, PatternKind, SourceFile, Visibility};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+#[cfg(test)]
 const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 100);
+#[cfg(test)]
 const REPL_LAZY_TYPE_ID: DefId = DefId(u32::MAX - 101);
 
 /// Run the REPL.
@@ -133,17 +132,7 @@ pub fn run() -> Result<(), String> {
                             let expr_str = parts[1..].join(" ");
                             match infer_repl_type(&expr_str, &runtime_state, &semantic_state) {
                                 Ok(ty) => println!("{ty}"),
-                                Err(TypeQueryError::Diagnostics {
-                                    source,
-                                    diagnostics,
-                                }) => {
-                                    for diag in &diagnostics {
-                                        emit(&source, "<repl:type>", diag);
-                                    }
-                                }
-                                Err(TypeQueryError::Message(message)) => {
-                                    eprintln!("{message}");
-                                }
+                                Err(error) => emit_display_error(error),
                             }
                             input_buffer.clear();
                             continue;
@@ -155,54 +144,23 @@ pub fn run() -> Result<(), String> {
                                 continue;
                             }
                             let file_path = parts[1];
-                            match std::fs::read_to_string(file_path) {
-                                Ok(content) => {
-                                    let context = match semantic_state
-                                        .context_for_file(file_path, runtime_state.is_pristine())
-                                    {
-                                        Ok(context) => context,
-                                        Err(message) => {
-                                            eprintln!("{message}");
-                                            input_buffer.clear();
-                                            continue;
-                                        }
-                                    };
-
-                                    match evaluate_repl_input(
-                                        &content,
+                            match semantic_state
+                                .load_repl_file_input(file_path, runtime_state.is_pristine())
+                            {
+                                Ok(input) => {
+                                    match evaluate_repl_input_with_source_name(
+                                        &input.source_name,
+                                        &input.source,
                                         true,
-                                        &context,
+                                        &input.context,
                                         &mut runtime_state,
                                         &mut semantic_state,
                                     ) {
-                                        Ok(_) => println!("Loaded: {}", file_path),
-                                        Err(ReplEvalError::Diagnostics {
-                                            source,
-                                            diagnostics,
-                                        }) => {
-                                            for diag in &diagnostics {
-                                                emit(&source, file_path, diag);
-                                            }
-                                        }
-                                        Err(ReplEvalError::ModuleDiagnostics(entries)) => {
-                                            for entry in &entries {
-                                                for diag in &entry.diagnostics {
-                                                    emit(
-                                                        &entry.source,
-                                                        &entry.path.display().to_string(),
-                                                        diag,
-                                                    );
-                                                }
-                                            }
-                                        }
-                                        Err(ReplEvalError::Message(message)) => {
-                                            eprintln!("{message}");
-                                        }
+                                        Ok(_) => println!("Loaded: {}", input.source_name),
+                                        Err(error) => emit_display_error(error),
                                     }
                                 }
-                                Err(e) => {
-                                    eprintln!("Cannot read file '{}': {}", file_path, e);
-                                }
+                                Err(error) => emit_display_error(error),
                             }
                             input_buffer.clear();
                             continue;
@@ -225,39 +183,22 @@ pub fn run() -> Result<(), String> {
 
                 // Prepare input for parsing - wrap bare expressions as let bindings
                 // 准备用于解析的输入 - 将裸表达式包装为 let 绑定
-                let prepared_input = prepare_repl_input(input);
-                let is_expr_wrapped = prepared_input.starts_with("let __expr__ = ");
+                let prepared_input = semantic_state.prepare_repl_input(input);
 
-                match evaluate_repl_input(
-                    &prepared_input,
-                    !is_expr_wrapped,
-                    &ReplInputContext::repl(),
+                match evaluate_repl_input_with_source_name(
+                    &prepared_input.source_name,
+                    &prepared_input.source,
+                    prepared_input.persist_defs,
+                    &prepared_input.context,
                     &mut runtime_state,
                     &mut semantic_state,
                 ) {
                     Ok(value) => {
-                        if is_expr_wrapped || !matches!(value, Value::Unit) {
+                        if !prepared_input.persist_defs || !matches!(value, Value::Unit) {
                             println!("{:?}", value);
                         }
                     }
-                    Err(ReplEvalError::Diagnostics {
-                        source,
-                        diagnostics,
-                    }) => {
-                        for diag in &diagnostics {
-                            emit(&source, "<repl>", diag);
-                        }
-                    }
-                    Err(ReplEvalError::ModuleDiagnostics(entries)) => {
-                        for entry in &entries {
-                            for diag in &entry.diagnostics {
-                                emit(&entry.source, &entry.path.display().to_string(), diag);
-                            }
-                        }
-                    }
-                    Err(ReplEvalError::Message(message)) => {
-                        eprintln!("{message}");
-                    }
+                    Err(error) => emit_display_error(error),
                 }
 
                 // Clear buffer after processing
@@ -282,86 +223,14 @@ pub fn run() -> Result<(), String> {
     Ok(())
 }
 
-/// Prepare REPL input for parsing by wrapping bare expressions as let bindings.
-/// 通过将裸表达式包装为 let 绑定来准备 REPL 输入用于解析。
-fn prepare_repl_input(input: &str) -> String {
-    let trimmed = input.trim();
-
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    // Check if it's already a valid item (starts with keyword)
-    // 检查是否已经是有效的项（以关键字开头）
-    let is_item = trimmed.starts_with("let ")
-        || trimmed.starts_with("fn ")
-        || trimmed.starts_with("type ")
-        || trimmed.starts_with("struct ")
-        || trimmed.starts_with("enum ")
-        || trimmed.starts_with("trait ")
-        || trimmed.starts_with("impl ")
-        || trimmed.starts_with("import ")
-        || trimmed.starts_with("pub ");
-
-    if is_item {
-        // It's already an item, just ensure it ends with semicolon
-        // 已经是一个项，只需确保以分号结尾
-        if trimmed.ends_with(';') {
-            trimmed.to_string()
-        } else {
-            format!("{trimmed};")
-        }
-    } else {
-        // It's an expression, wrap it as a let binding
-        // 是一个表达式，将其包装为 let 绑定
-        format!("let __expr__ = {trimmed};")
-    }
-}
-
-#[derive(Debug)]
-enum ReplEvalError {
-    Diagnostics {
-        source: String,
-        diagnostics: Vec<neve_diagnostic::Diagnostic>,
-    },
-    ModuleDiagnostics(Vec<LoadedModuleDiagnostics>),
-    Message(String),
-}
-
-#[derive(Debug)]
-struct LoadedModuleDiagnostics {
-    path: PathBuf,
-    source: String,
-    diagnostics: Vec<neve_diagnostic::Diagnostic>,
-}
-
-#[derive(Debug, Clone)]
-struct ReplInputContext {
-    root_dir: Option<PathBuf>,
-    module_path: Vec<String>,
-    module_name: String,
-}
-
-impl ReplInputContext {
-    fn repl() -> Self {
-        Self {
-            root_dir: None,
-            module_path: Vec::new(),
-            module_name: "repl".to_string(),
-        }
-    }
-}
+type ReplInputContext = SessionModuleContext;
+type ReplSemanticState = FrontendSession;
 
 #[derive(Clone)]
 struct ReplHirState {
     evaluator: Evaluator,
-    next_def_id: u32,
-    globals: HashMap<String, DefId>,
+    visible_state: SessionVisibleState,
     user_bindings: HashMap<String, bool>,
-    builtin_item_imports: HashMap<String, String>,
-    builtin_module_imports: HashMap<String, String>,
-    imported_defs: HashMap<String, DefId>,
-    imported_module_aliases: HashSet<String>,
     evaluated_modules: HashSet<ModuleId>,
 }
 
@@ -379,13 +248,8 @@ impl ReplHirState {
     fn with_root_dir(_root_dir: PathBuf) -> Self {
         Self {
             evaluator: Evaluator::new().with_extra_builtins(std_builtin_values()),
-            next_def_id: 0,
-            globals: HashMap::new(),
+            visible_state: SessionVisibleState::default(),
             user_bindings: HashMap::new(),
-            builtin_item_imports: HashMap::new(),
-            builtin_module_imports: HashMap::new(),
-            imported_defs: HashMap::new(),
-            imported_module_aliases: HashSet::new(),
             evaluated_modules: HashSet::new(),
         }
     }
@@ -395,12 +259,8 @@ impl ReplHirState {
     }
 
     fn is_pristine(&self) -> bool {
-        self.globals.is_empty()
+        self.visible_state.is_pristine()
             && self.user_bindings.is_empty()
-            && self.builtin_item_imports.is_empty()
-            && self.builtin_module_imports.is_empty()
-            && self.imported_defs.is_empty()
-            && self.imported_module_aliases.is_empty()
             && self.evaluated_modules.is_empty()
     }
 
@@ -414,21 +274,20 @@ impl ReplHirState {
         bindings
     }
 
-    fn eval_persistent(&mut self, input: PersistentEvalInput<'_>) -> Result<Value, String> {
-        self.eval_pending_loaded_modules(input.semantic_state)?;
-        self.evaluator
-            .set_method_resolutions(input.method_resolutions);
+    fn eval_persistent(
+        &mut self,
+        prepared: SessionPreparedModule,
+        semantic_state: &mut ReplSemanticState,
+        method_resolutions: HashMap<Span, DefId>,
+    ) -> Result<Value, String> {
+        self.eval_pending_loaded_modules(semantic_state)?;
+        self.evaluator.set_method_resolutions(method_resolutions);
         let value = self
             .evaluator
-            .eval_module(input.module)
+            .eval_module(&prepared.module)
             .map_err(|e| format!("evaluation error: {e:?}"))?;
-        self.next_def_id = input.next_def_id.max(input.semantic_state.next_def_id());
-        for (name, def_id) in input.global_defs {
-            self.globals.insert(name.clone(), *def_id);
-        }
-        self.record_user_bindings(input.ast);
-        self.record_module_imports(input.ast, &input.context.module_path, input.semantic_state)?;
-        self.record_std_imports(input.ast);
+        self.record_user_bindings(&prepared.defined_bindings);
+        semantic_state.commit_prepared_module(&mut self.visible_state, prepared);
         Ok(value)
     }
 
@@ -445,47 +304,10 @@ impl ReplHirState {
             .map_err(|e| format!("evaluation error: {e:?}"))
     }
 
-    fn build_module(
-        &mut self,
-        ast: &SourceFile,
-        context: &ReplInputContext,
-        semantic_state: &mut ReplSemanticState,
-    ) -> Result<SessionBuildResult, String> {
-        semantic_state.validate_context(context)?;
-        semantic_state.build_module_from_ast(
-            ast,
-            context.module_name.clone(),
-            context.module_path.clone(),
-            SessionBuildInputs {
-                next_def_id: self.next_def_id.max(semantic_state.next_def_id()),
-                existing_globals: self
-                    .globals
-                    .iter()
-                    .map(|(name, def_id)| (name.clone(), *def_id))
-                    .collect(),
-                imported_defs: self
-                    .imported_defs
-                    .iter()
-                    .map(|(name, def_id)| (name.clone(), *def_id))
-                    .collect(),
-                imported_module_aliases: self.imported_module_aliases.iter().cloned().collect(),
-                builtin_item_imports: self
-                    .builtin_item_imports
-                    .iter()
-                    .map(|(name, builtin)| (name.clone(), builtin.clone()))
-                    .collect(),
-                builtin_module_imports: self
-                    .builtin_module_imports
-                    .iter()
-                    .map(|(alias, prefix)| (alias.clone(), prefix.clone()))
-                    .collect(),
-            },
-        )
-    }
-
-    fn record_user_bindings(&mut self, ast: &SourceFile) {
-        for (name, is_pub) in item_bindings(ast) {
-            self.user_bindings.insert(name, is_pub);
+    fn record_user_bindings(&mut self, bindings: &[SessionDefinedBinding]) {
+        for binding in bindings {
+            self.user_bindings
+                .insert(binding.name.clone(), binding.is_public);
         }
     }
 
@@ -493,210 +315,69 @@ impl ReplHirState {
         &mut self,
         semantic_state: &ReplSemanticState,
     ) -> Result<(), String> {
-        let analyses = semantic_state.analyze_loaded_modules();
-
-        for module_id in semantic_state.load_order() {
-            if self.evaluated_modules.contains(module_id) {
+        for entry in semantic_state.evaluable_loaded_modules_in_order() {
+            if self.evaluated_modules.contains(&entry.module_id) {
                 continue;
             }
-
-            let Some(module) = semantic_state.hir_module(*module_id) else {
-                continue;
-            };
-            let Some(analysis) = analyses.get(module_id) else {
-                continue;
-            };
 
             self.evaluator
-                .eval_module_with_method_resolutions(module, &analysis.semantics.method_resolutions)
+                .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
                 .map_err(|e| format!("evaluation error: {e:?}"))?;
-            self.evaluated_modules.insert(*module_id);
+            self.evaluated_modules.insert(entry.module_id);
         }
 
         Ok(())
     }
-
-    fn record_module_imports(
-        &mut self,
-        ast: &SourceFile,
-        current_module_path: &[String],
-        semantic_state: &ReplSemanticState,
-    ) -> Result<(), String> {
-        let resolved = semantic_state.resolve_ast_imports(ast, current_module_path)?;
-
-        for (name, def_id) in resolved.bindings {
-            self.imported_defs.insert(name, def_id);
-        }
-        for alias in resolved.module_aliases {
-            self.imported_module_aliases.insert(alias);
-        }
-
-        Ok(())
-    }
-
-    fn record_std_imports(&mut self, ast: &SourceFile) {
-        for item in &ast.items {
-            let ItemKind::Import(import) = &item.kind else {
-                continue;
-            };
-            let Some(module_prefix) = repl_std_module_prefix(import) else {
-                continue;
-            };
-
-            match &import.items {
-                ImportItems::Module => {
-                    let alias = import
-                        .alias
-                        .as_ref()
-                        .map(|alias| alias.name.clone())
-                        .or_else(|| import.path.last().map(|segment| segment.name.clone()));
-                    if let Some(alias) = alias {
-                        self.builtin_module_imports
-                            .insert(alias, module_prefix.to_string());
-                    }
-                }
-                ImportItems::Items(items) => {
-                    for item in items {
-                        self.builtin_item_imports
-                            .insert(item.name.clone(), format!("{module_prefix}.{}", item.name));
-                    }
-                }
-                ImportItems::All => {
-                    for export in std_module_exports(module_prefix) {
-                        self.builtin_item_imports
-                            .insert(export.clone(), format!("{module_prefix}.{export}"));
-                    }
-                }
-            }
-        }
-    }
 }
 
-struct PersistentEvalInput<'a> {
-    ast: &'a SourceFile,
-    module: &'a Module,
-    global_defs: &'a HashMap<String, DefId>,
-    next_def_id: u32,
-    context: &'a ReplInputContext,
-    semantic_state: &'a ReplSemanticState,
-    method_resolutions: HashMap<Span, DefId>,
-}
-
+#[cfg(test)]
 fn evaluate_repl_input(
     current_source: &str,
     persist_defs: bool,
     context: &ReplInputContext,
     runtime_state: &mut ReplHirState,
     semantic_state: &mut ReplSemanticState,
-) -> Result<Value, ReplEvalError> {
-    let (ast, diagnostics) = parse(current_source);
-    if !diagnostics.is_empty() {
-        return Err(ReplEvalError::Diagnostics {
-            source: current_source.to_string(),
-            diagnostics,
-        });
-    }
+) -> Result<Value, SessionDisplayError> {
+    evaluate_repl_input_with_source_name(
+        current_source,
+        current_source,
+        persist_defs,
+        context,
+        runtime_state,
+        semantic_state,
+    )
+}
 
-    let build = runtime_state
-        .build_module(&ast, context, semantic_state)
-        .map_err(ReplEvalError::Message)?;
-    if !build.newly_loaded.is_empty() {
-        report_loaded_module_diagnostics(semantic_state, &build.newly_loaded)?;
-    }
-
-    let analysis = match analyze_repl_module(&build.module, semantic_state) {
-        Ok(analysis) => analysis,
-        Err(diagnostics) => {
-            return Err(ReplEvalError::Diagnostics {
-                source: current_source.to_string(),
-                diagnostics,
-            });
-        }
-    };
-    let method_resolutions = analysis.semantics.method_resolutions.clone();
+fn evaluate_repl_input_with_source_name(
+    current_source_name: &str,
+    current_source: &str,
+    persist_defs: bool,
+    context: &ReplInputContext,
+    runtime_state: &mut ReplHirState,
+    semantic_state: &mut ReplSemanticState,
+) -> Result<Value, SessionDisplayError> {
+    let checked_input = semantic_state.parse_checked_source_with_context_for_display_as(
+        current_source_name,
+        current_source,
+        context,
+        &runtime_state.visible_state,
+    )?;
+    let method_resolutions = checked_input
+        .checked
+        .analysis
+        .semantics
+        .method_resolutions
+        .clone();
+    let prepared = checked_input.checked.prepared;
 
     let value = if persist_defs {
-        runtime_state.eval_persistent(PersistentEvalInput {
-            ast: &ast,
-            module: &build.module,
-            global_defs: &build.global_defs,
-            next_def_id: build.next_def_id,
-            context,
-            semantic_state,
-            method_resolutions,
-        })
+        runtime_state.eval_persistent(prepared, semantic_state, method_resolutions)
     } else {
-        runtime_state.eval_ephemeral(&build.module, semantic_state, method_resolutions)
+        runtime_state.eval_ephemeral(&prepared.module, semantic_state, method_resolutions)
     }
-    .map_err(ReplEvalError::Message)?;
-
-    if persist_defs {
-        semantic_state.record_module(build.module);
-    }
+    .map_err(SessionDisplayError::Message)?;
 
     Ok(value)
-}
-
-fn analyze_repl_module(
-    current_module: &Module,
-    semantic_state: &ReplSemanticState,
-) -> Result<ModuleAnalysis, Vec<neve_diagnostic::Diagnostic>> {
-    let analysis = semantic_state.analyze_module(current_module);
-    if analysis
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == Severity::Error)
-    {
-        return Err(analysis.diagnostics);
-    }
-
-    Ok(analysis)
-}
-
-fn report_loaded_module_diagnostics(
-    semantic_state: &ReplSemanticState,
-    newly_loaded: &[ModuleId],
-) -> Result<(), ReplEvalError> {
-    let entries: Vec<_> = semantic_state
-        .loaded_module_diagnostics(newly_loaded)
-        .into_iter()
-        .map(|entry| LoadedModuleDiagnostics {
-            path: entry.file_path.clone(),
-            source: std::fs::read_to_string(&entry.file_path).unwrap_or_default(),
-            diagnostics: entry.diagnostics,
-        })
-        .collect();
-
-    if entries.is_empty() {
-        Ok(())
-    } else {
-        Err(ReplEvalError::ModuleDiagnostics(entries))
-    }
-}
-
-fn item_bindings(ast: &SourceFile) -> Vec<(String, bool)> {
-    ast.items
-        .iter()
-        .flat_map(|item| {
-            let is_pub = item_visibility(item) != Visibility::Private;
-            item_defined_names(item)
-                .into_iter()
-                .map(move |name| (name, is_pub))
-        })
-        .collect()
-}
-
-fn item_visibility(item: &Item) -> Visibility {
-    match &item.kind {
-        ItemKind::Let(def) => def.visibility,
-        ItemKind::Fn(def) => def.visibility,
-        ItemKind::TypeAlias(def) => def.visibility,
-        ItemKind::Struct(def) => def.visibility,
-        ItemKind::Enum(def) => def.visibility,
-        ItemKind::Trait(def) => def.visibility,
-        ItemKind::Import(def) => def.visibility,
-        ItemKind::Impl(_) => Visibility::Private,
-    }
 }
 
 fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
@@ -705,327 +386,53 @@ fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {
         .map(|(name, value)| (name.to_string(), value))
 }
 
-fn repl_std_module_prefix(import: &ImportDef) -> Option<&str> {
-    if import.path.len() == 2
-        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
-    {
-        Some(import.path[1].name.as_str())
-    } else {
-        None
-    }
-}
-
-fn std_module_exports(module_prefix: &str) -> Vec<String> {
-    let prefix = format!("{module_prefix}.");
-    let mut exports: Vec<_> = stdlib()
-        .into_iter()
-        .filter_map(|(name, _)| name.strip_prefix(&prefix).map(str::to_string))
-        .filter(|name| !name.contains('.'))
-        .collect();
-    exports.sort();
-    exports.dedup();
-    exports
-}
-
-#[derive(Debug)]
-enum TypeQueryError {
-    Diagnostics {
-        source: String,
-        diagnostics: Vec<neve_diagnostic::Diagnostic>,
-    },
-    Message(String),
-}
-
-#[derive(Debug, Clone)]
-struct ReplSemanticState {
-    session: FrontendSession,
-}
-
-impl Default for ReplSemanticState {
-    fn default() -> Self {
-        let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        Self::with_root_dir(root_dir)
-    }
-}
-
-impl ReplSemanticState {
-    fn with_root_dir(root_dir: PathBuf) -> Self {
-        Self {
-            session: FrontendSession::new(root_dir),
-        }
-    }
-
-    fn root_dir(&self) -> &Path {
-        self.session.root_dir()
-    }
-
-    fn clear(&mut self) {
-        self.session.clear();
-    }
-
-    fn is_pristine(&self) -> bool {
-        self.session.is_pristine()
-    }
-
-    fn next_def_id(&self) -> u32 {
-        self.session.next_def_id()
-    }
-
-    fn hir_module(&self, module_id: ModuleId) -> Option<&Module> {
-        self.session.hir_module(module_id)
-    }
-
-    fn load_order(&self) -> &[ModuleId] {
-        self.session.load_order()
-    }
-
-    fn validate_context(&self, context: &ReplInputContext) -> Result<(), String> {
-        if let Some(root_dir) = &context.root_dir
-            && root_dir != self.root_dir()
-        {
-            return Err(format!(
-                "REPL 模块图当前固定在会话根目录 '{}'；请在该项目根目录启动 REPL，或加载同一根目录下的文件",
-                self.root_dir().display()
-            ));
-        }
-        Ok(())
-    }
-
-    fn context_for_file(
-        &mut self,
-        path: impl AsRef<Path>,
-        allow_root_switch: bool,
-    ) -> Result<ReplInputContext, String> {
-        let canonical = path
-            .as_ref()
-            .canonicalize()
-            .map_err(|e| format!("cannot resolve path '{}': {}", path.as_ref().display(), e))?;
-        let relative = match canonical.strip_prefix(self.root_dir()) {
-            Ok(relative) => relative,
-            Err(_) => {
-                let (root_dir, _) = module_graph::resolve_module_path(&canonical)?;
-                if !(allow_root_switch && self.is_pristine()) {
-                    return Err(format!(
-                        "loaded file '{}' is outside the current REPL session root '{}'; run :clear before switching to another project root",
-                        canonical.display(),
-                        self.root_dir().display()
-                    ));
-                }
-                self.session.rebase_root(root_dir.clone());
-                canonical.strip_prefix(self.root_dir()).map_err(|_| {
-                    format!(
-                        "loaded file '{}' is outside the REPL session root '{}'",
-                        canonical.display(),
-                        self.root_dir().display()
-                    )
-                })?
-            }
-        };
-
-        let mut module_path: Vec<String> = relative
-            .components()
-            .map(|component| component.as_os_str().to_string_lossy().to_string())
-            .collect();
-        if let Some(last) = module_path.last_mut()
-            && last.ends_with(".neve")
-        {
-            *last = last.trim_end_matches(".neve").to_string();
-        }
-        if module_path.last().map(|segment| segment.as_str()) == Some("mod") {
-            module_path.pop();
-        }
-        if module_path.len() == 1 && module_path[0] == "lib" {
-            module_path.clear();
-        }
-
-        let module_name = module_path
-            .last()
-            .cloned()
-            .unwrap_or_else(|| "main".to_string());
-        Ok(ReplInputContext {
-            root_dir: Some(self.root_dir().to_path_buf()),
-            module_path,
-            module_name,
-        })
-    }
-
-    fn record_module(&mut self, module: Module) {
-        self.session.record_module(module);
-    }
-
-    fn build_module_from_ast(
-        &mut self,
-        ast: &SourceFile,
-        module_name: String,
-        module_path: Vec<String>,
-        inputs: SessionBuildInputs,
-    ) -> Result<SessionBuildResult, String> {
-        self.session
-            .build_module_from_ast(ast, module_name, module_path, &inputs)
-            .map_err(|e| e.to_string())
-    }
-
-    fn analyze_module(&self, current_module: &Module) -> ModuleAnalysis {
-        self.session.analyze_module(current_module)
-    }
-
-    fn analyze_loaded_modules(&self) -> HashMap<ModuleId, ModuleAnalysis> {
-        self.session.analyze_loaded_modules()
-    }
-
-    fn loaded_module_diagnostics(
-        &self,
-        newly_loaded: &[ModuleId],
-    ) -> Vec<neve_frontend::SessionLoadedDiagnostics> {
-        self.session.loaded_module_diagnostics(newly_loaded)
-    }
-
-    fn type_names_with_current(&self, current_module: &Module) -> HashMap<DefId, String> {
-        self.session.type_names_with_current(current_module)
-    }
-
-    fn resolve_ast_imports(
-        &self,
-        ast: &SourceFile,
-        current_module_path: &[String],
-    ) -> Result<neve_frontend::SessionResolvedImports, String> {
-        self.session
-            .resolve_ast_imports(ast, current_module_path)
-            .map_err(|e| e.to_string())
-    }
-}
-
 fn infer_repl_type(
     expr: &str,
     runtime_state: &ReplHirState,
     state: &ReplSemanticState,
-) -> Result<String, TypeQueryError> {
-    let source = prepare_repl_type_input(expr);
-    let (ast, diagnostics) = parse(&source);
-    if !diagnostics.is_empty() {
-        return Err(TypeQueryError::Diagnostics {
-            source,
-            diagnostics,
-        });
-    }
-
-    let context = ReplInputContext::repl();
-    let mut runtime = runtime_state.clone();
+) -> Result<String, SessionDisplayError> {
+    let runtime = runtime_state.clone();
     let mut semantic = state.clone();
-    let build = runtime
-        .build_module(&ast, &context, &mut semantic)
-        .map_err(TypeQueryError::Message)?;
-    let analysis = analyze_repl_module(&build.module, &semantic).map_err(|diagnostics| {
-        TypeQueryError::Diagnostics {
+    semantic
+        .parse_format_repl_type_for_display(expr, &runtime.visible_state)?
+        .ok_or_else(|| {
+            SessionDisplayError::Message("internal error: failed to infer queried type".to_string())
+        })
+}
+
+fn emit_loaded_module_diagnostics(entries: &[SessionLoadedDiagnostics]) {
+    for entry in entries {
+        for diag in &entry.diagnostics {
+            emit(&entry.source, &entry.file_path.display().to_string(), diag);
+        }
+    }
+}
+
+fn emit_display_error(error: SessionDisplayError) {
+    match error {
+        SessionDisplayError::Diagnostics {
+            source_name,
             source,
             diagnostics,
-        }
-    })?;
-
-    let query_def_id = find_repl_type_binding(&build.module).ok_or_else(|| {
-        TypeQueryError::Message("internal error: missing type query binding".to_string())
-    })?;
-
-    let ty = if let Some(target_def_id) = find_repl_type_target(&build.module) {
-        analysis.semantics.global_type(target_def_id)
-    } else {
-        analysis.semantics.global_type(query_def_id)
-    }
-    .ok_or_else(|| {
-        TypeQueryError::Message("internal error: failed to infer queried type".to_string())
-    })?;
-    Ok(format_repl_semantic_type(ty, &build.module, &semantic))
-}
-
-fn prepare_repl_type_input(expr: &str) -> String {
-    let trimmed = expr.trim();
-    if trimmed.is_empty() {
-        String::new()
-    } else {
-        format!("let __type__ = {trimmed};")
-    }
-}
-
-fn item_defined_names(item: &Item) -> Vec<String> {
-    match &item.kind {
-        ItemKind::Let(let_def) => match &let_def.pattern.kind {
-            PatternKind::Var(ident) if ident.name != "__expr__" && ident.name != "__type__" => {
-                vec![ident.name.clone()]
+        } => {
+            for diag in &diagnostics {
+                emit(&source, &source_name, diag);
             }
-            _ => Vec::new(),
-        },
-        ItemKind::Fn(fn_def) if fn_def.name.name != "__type__" => vec![fn_def.name.name.clone()],
-        ItemKind::TypeAlias(def) => vec![def.name.name.clone()],
-        ItemKind::Struct(def) => vec![def.name.name.clone()],
-        ItemKind::Enum(def) => vec![def.name.name.clone()],
-        ItemKind::Trait(def) => vec![def.name.name.clone()],
-        ItemKind::Import(import) => match &import.items {
-            ImportItems::Module => import
-                .alias
-                .as_ref()
-                .map(|alias| vec![alias.name.clone()])
-                .or_else(|| import.path.last().map(|name| vec![name.name.clone()]))
-                .unwrap_or_default(),
-            ImportItems::Items(items) => items.iter().map(|item| item.name.clone()).collect(),
-            ImportItems::All => Vec::new(),
-        },
-        ItemKind::Impl(_) => Vec::new(),
-        ItemKind::Fn(_) => Vec::new(),
-    }
-}
-
-fn find_repl_type_binding(module: &neve_hir::Module) -> Option<DefId> {
-    module.items.iter().find_map(|item| match &item.kind {
-        HirItemKind::Fn(def) if def.name == "__type__" => Some(item.id),
-        _ => None,
-    })
-}
-
-fn find_repl_type_target(module: &neve_hir::Module) -> Option<DefId> {
-    module.items.iter().find_map(|item| match &item.kind {
-        HirItemKind::Fn(def) if def.name == "__type__" => match &def.body.kind {
-            neve_hir::ExprKind::Global(def_id) => Some(*def_id),
-            _ => None,
-        },
-        _ => None,
-    })
-}
-
-fn format_repl_semantic_type(
-    ty: &Ty,
-    module: &Module,
-    semantic_state: &ReplSemanticState,
-) -> String {
-    let names = collect_repl_type_names(semantic_state, module);
-    format_repl_semantic_type_with_names(ty, &names)
-}
-
-fn collect_repl_type_names(
-    semantic_state: &ReplSemanticState,
-    module: &Module,
-) -> HashMap<DefId, String> {
-    semantic_state.type_names_with_current(module)
-}
-
-fn format_repl_semantic_type_with_names(ty: &Ty, names: &HashMap<DefId, String>) -> String {
-    match &ty.kind {
-        TyKind::Named(def_id, _) if *def_id == REPL_FN_TYPE_ID => "Fn".to_string(),
-        TyKind::Named(def_id, args) if *def_id == REPL_LAZY_TYPE_ID => {
-            format!(
-                "Lazy[{}]",
-                format_repl_semantic_type_with_names(&args[0], names)
-            )
         }
-        _ => format_type_with_names_map(ty, names),
+        SessionDisplayError::LoadedModules(entries) => {
+            emit_loaded_module_diagnostics(&entries);
+        }
+        SessionDisplayError::Message(message) => {
+            eprintln!("{message}");
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        REPL_FN_TYPE_ID, REPL_LAZY_TYPE_ID, ReplEvalError, ReplHirState, ReplInputContext,
-        ReplSemanticState, TypeQueryError, evaluate_repl_input, format_repl_semantic_type,
-        infer_repl_type, prepare_repl_input,
+        REPL_FN_TYPE_ID, REPL_LAZY_TYPE_ID, ReplHirState, ReplInputContext, ReplSemanticState,
+        evaluate_repl_input, infer_repl_type,
     };
     use neve_common::Span;
     use neve_diagnostic::{ErrorCode, Severity};
@@ -1036,6 +443,7 @@ mod tests {
             TaskValue,
         },
     };
+    use neve_frontend::{FrontendSession, SessionDisplayError};
     use neve_hir::{DefId, ItemKind as HirItemKind, Ty, TyKind, lower};
     use neve_parser::parse;
 
@@ -1064,7 +472,7 @@ mod tests {
     ) {
         let err = infer_repl_type(expr, runtime, state)
             .expect_err("expected REPL type inference to fail with diagnostics");
-        let TypeQueryError::Diagnostics { diagnostics, .. } = err else {
+        let SessionDisplayError::Diagnostics { diagnostics, .. } = err else {
             panic!("expected diagnostic-bearing REPL type error, got {:?}", err);
         };
         let diag = diagnostics
@@ -1081,7 +489,6 @@ mod tests {
         assert_eq!(diag.severity, Severity::Error);
     }
 
-    use neve_syntax::SourceFile;
     use neve_typeck::{
         BYTES_TYPE_ID, COMMAND_TYPE_ID, LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, PATH_TYPE_ID,
         PIPELINE_TYPE_ID, PROCESS_RESULT_TYPE_ID, REDIRECT_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID,
@@ -1092,38 +499,6 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
-
-    #[derive(Debug, Clone)]
-    struct ReplSemanticEntry {
-        defined_names: Vec<String>,
-    }
-
-    fn semantic_entries_from_ast(source: &str, ast: &SourceFile) -> Vec<ReplSemanticEntry> {
-        ast.items
-            .iter()
-            .filter_map(|item| {
-                let snippet = normalize_repl_item_source(&source[item.span.range()]);
-                if snippet.is_empty() {
-                    None
-                } else {
-                    Some(ReplSemanticEntry {
-                        defined_names: super::item_defined_names(item),
-                    })
-                }
-            })
-            .collect()
-    }
-
-    fn normalize_repl_item_source(source: &str) -> String {
-        let trimmed = source.trim();
-        if trimmed.is_empty() {
-            String::new()
-        } else if trimmed.ends_with(';') {
-            trimmed.to_string()
-        } else {
-            format!("{trimmed};")
-        }
-    }
 
     fn unknown_ty() -> Ty {
         Ty {
@@ -1401,10 +776,8 @@ mod tests {
 
         let mut state = ReplSemanticState::default();
         state.record_module(hir.clone());
-        assert_eq!(
-            format_repl_semantic_type(&ty, &hir, &state),
-            "(User) -> User"
-        );
+        let formatted = state.format_type_with_current_names(&ty, &hir);
+        assert_eq!(formatted, "(User) -> User");
     }
 
     #[test]
@@ -2007,6 +1380,161 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_std_math_conversion_results() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let int_ty = infer_repl_type("math.toInt(true)", &runtime, &state)
+            .expect("type inference should succeed");
+        let float_ty = infer_repl_type(r#"math.toFloat("1.5")"#, &runtime, &state)
+            .expect("type inference should succeed");
+
+        assert_eq!(int_ty, "Int");
+        assert_eq!(float_ty, "Float");
+    }
+
+    #[test]
+    fn repl_type_uses_std_math_float_predicate_results() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let nan_ty = infer_repl_type("math.isNan(math.nan)", &runtime, &state)
+            .expect("type inference should succeed");
+        let inf_ty = infer_repl_type("math.isInf(math.inf)", &runtime, &state)
+            .expect("type inference should succeed");
+
+        assert_eq!(nan_ty, "Bool");
+        assert_eq!(inf_ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_std_math_rounding_results() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let floor_ty = infer_repl_type("math.floor(1.9)", &runtime, &state)
+            .expect("type inference should succeed");
+        let ceil_ty = infer_repl_type("math.ceil(1.1)", &runtime, &state)
+            .expect("type inference should succeed");
+        let round_ty = infer_repl_type("math.round(1.6)", &runtime, &state)
+            .expect("type inference should succeed");
+
+        assert_eq!(floor_ty, "Int");
+        assert_eq!(ceil_ty, "Int");
+        assert_eq!(round_ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_std_math_unary_float_transform_results() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let sqrt_ty = infer_repl_type("math.sqrt(9.0)", &runtime, &state)
+            .expect("type inference should succeed");
+        let log_ty = infer_repl_type("math.log(1.0)", &runtime, &state)
+            .expect("type inference should succeed");
+        let log10_ty = infer_repl_type("math.log10(1000.0)", &runtime, &state)
+            .expect("type inference should succeed");
+        let exp_ty = infer_repl_type("math.exp(0.0)", &runtime, &state)
+            .expect("type inference should succeed");
+
+        assert_eq!(sqrt_ty, "Float");
+        assert_eq!(log_ty, "Float");
+        assert_eq!(log10_ty, "Float");
+        assert_eq!(exp_ty, "Float");
+    }
+
+    #[test]
+    fn repl_type_uses_std_math_trigonometric_results() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let sin_ty = infer_repl_type("math.sin(0.0)", &runtime, &state)
+            .expect("type inference should succeed");
+        let cos_ty = infer_repl_type("math.cos(0.0)", &runtime, &state)
+            .expect("type inference should succeed");
+        let tan_ty = infer_repl_type("math.tan(0.0)", &runtime, &state)
+            .expect("type inference should succeed");
+
+        assert_eq!(sin_ty, "Float");
+        assert_eq!(cos_ty, "Float");
+        assert_eq!(tan_ty, "Float");
+    }
+
+    #[test]
+    fn repl_type_keeps_std_math_function_as_inference_hole() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.math as math;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type("math.abs(1)", &runtime, &state)
+            .expect("type inference should succeed");
+        assert!(
+            ty.starts_with('?'),
+            "expected math.abs to remain an inference hole, got {ty}",
+        );
+    }
+
+    #[test]
     fn repl_type_uses_std_fetch_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -2027,6 +1555,122 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_std_fetch_path_with_hash_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.fetch as fetch;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"fetch.pathWithHash("Cargo.toml", "0000000000000000000000000000000000000000000000000000000000000000").hash"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_std_fetch_url_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.fetch as fetch;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"fetch.url("https://example.com/archive.tar.gz").hash"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_std_fetch_url_with_hash_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.fetch as fetch;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"fetch.urlWithHash("https://example.com/archive.tar.gz", "0000000000000000000000000000000000000000000000000000000000000000").hash"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_std_fetch_git_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.fetch as fetch;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"fetch.git("/tmp/repo", "main").hash"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_std_fetch_git_with_hash_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.fetch as fetch;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"fetch.gitWithHash("/tmp/repo", "main", "0000000000000000000000000000000000000000000000000000000000000000").hash"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
     fn repl_type_uses_std_map_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -2036,12 +1680,12 @@ mod tests {
             .expect("import should evaluate");
 
         let ty = infer_repl_type(
-            r#"Map.getWithDefault("a", 0, Map.insert("a", 1, Map.empty))"#,
+            r#"Map.values(Map.insert("a", 1, Map.empty))"#,
             &runtime,
             &state,
         )
         .expect("type inference should succeed");
-        assert_eq!(ty, "Int");
+        assert_eq!(ty, "List[Int]");
     }
 
     #[test]
@@ -2318,6 +1962,54 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_io_write_file_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.writeFile("/tmp/file.out", "hello")"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_append_file_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(
+            r#"io.appendFile("/tmp/file.out", "hello")"#,
+            &runtime,
+            &state,
+        )
+        .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
     fn repl_type_uses_io_append_file_path_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -2402,6 +2094,46 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_io_current_dir_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.currentDir()"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_get_env_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.getEnv("HOME")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Option[String]");
+    }
+
+    #[test]
     fn repl_type_uses_io_home_dir_path_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -2419,6 +2151,106 @@ mod tests {
         let ty = infer_repl_type(r#"io.homeDirPath()"#, &runtime, &state)
             .expect("type inference should succeed");
         assert_eq!(ty, "Option[Path]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_home_dir_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.homeDir()"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Option[String]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_current_system_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.currentSystem()"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_read_file_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.readFile("/tmp/file.txt")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_read_dir_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.readDir("/tmp")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "List[String]");
+    }
+
+    #[test]
+    fn repl_type_uses_io_create_dir_all_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.createDirAll("/tmp/neve-dir")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "()");
     }
 
     #[test]
@@ -2470,6 +2302,86 @@ mod tests {
     }
 
     #[test]
+    fn repl_type_uses_io_remove_dir_all_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.removeDirAll("/tmp/neve-dir")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "()");
+    }
+
+    #[test]
+    fn repl_type_uses_io_path_exists_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.pathExists("/tmp/file.txt")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_io_is_dir_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.isDir("/tmp")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
+    fn repl_type_uses_io_is_file_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.isFile("/tmp/file.txt")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Bool");
+    }
+
+    #[test]
     fn repl_type_uses_io_hash_file_path_result() {
         let mut runtime = ReplHirState::new();
         let mut state = ReplSemanticState::default();
@@ -2490,6 +2402,46 @@ mod tests {
             &state,
         )
         .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_hash_file_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.hashFile("/tmp/file.txt")"#, &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_io_hash_string_result() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.io as io;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type(r#"io.hashString("abc")"#, &runtime, &state)
+            .expect("type inference should succeed");
         assert_eq!(ty, "String");
     }
 
@@ -3382,19 +3334,6 @@ mod tests {
     }
 
     #[test]
-    fn semantic_state_skips_hidden_expr_bindings() {
-        let source = "let __expr__ = 1 + 2;";
-        let (ast, diagnostics) = parse(source);
-        assert!(
-            diagnostics.is_empty(),
-            "unexpected parse diagnostics: {diagnostics:?}"
-        );
-
-        let entries = semantic_entries_from_ast(source, &ast);
-        assert!(entries.iter().all(|entry| entry.defined_names.is_empty()));
-    }
-
-    #[test]
     fn repl_runtime_value_type_formatting_is_readable() {
         let ty = type_from_value(&Value::List(std::rc::Rc::new(vec![Value::Int(1.into())])));
         assert_eq!(format_repl_type(&ty), "List[Int]");
@@ -3477,9 +3416,15 @@ mod tests {
             .expect("definition should evaluate");
         assert_eq!(value, Value::Int(41.into()));
 
-        let expr = prepare_repl_input("x + 1");
-        let value = evaluate_repl_input(&expr, false, &context, &mut runtime, &mut semantic)
-            .expect("expression should evaluate");
+        let expr = FrontendSession::prepare_repl_source("x + 1");
+        let value = evaluate_repl_input(
+            &expr.source,
+            expr.persist_defs,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("expression should evaluate");
         assert_eq!(value, Value::Int(42.into()));
     }
 
@@ -3503,9 +3448,15 @@ mod tests {
         )
         .expect("trait definition should evaluate");
 
-        let expr = prepare_repl_input("21.twice()");
-        let value = evaluate_repl_input(&expr, false, &context, &mut runtime, &mut semantic)
-            .expect("cross-input method call should evaluate");
+        let expr = FrontendSession::prepare_repl_source("21.twice()");
+        let value = evaluate_repl_input(
+            &expr.source,
+            expr.persist_defs,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("cross-input method call should evaluate");
         assert_eq!(value, Value::Int(42.into()));
     }
 
@@ -3524,9 +3475,15 @@ mod tests {
         )
         .expect("import should evaluate");
 
-        let expr = prepare_repl_input(r#"string.len("abcd")"#);
-        let value = evaluate_repl_input(&expr, false, &context, &mut runtime, &mut semantic)
-            .expect("stdlib call should evaluate");
+        let expr = FrontendSession::prepare_repl_source(r#"string.len("abcd")"#);
+        let value = evaluate_repl_input(
+            &expr.source,
+            expr.persist_defs,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("stdlib call should evaluate");
         assert_eq!(value, Value::Int(4.into()));
     }
 
@@ -3548,9 +3505,15 @@ mod tests {
         .expect("redefinition should evaluate");
         assert_eq!(value, Value::Int(2.into()));
 
-        let expr = prepare_repl_input("x");
-        let value = evaluate_repl_input(&expr, false, &context, &mut runtime, &mut semantic)
-            .expect("latest binding should evaluate");
+        let expr = FrontendSession::prepare_repl_source("x");
+        let value = evaluate_repl_input(
+            &expr.source,
+            expr.persist_defs,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("latest binding should evaluate");
         assert_eq!(value, Value::Int(2.into()));
 
         let ty = infer_repl_type("x", &runtime, &semantic).expect("type query should succeed");
@@ -3567,7 +3530,7 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
@@ -3579,9 +3542,15 @@ mod tests {
         )
         .expect("module import should evaluate");
 
-        let expr = prepare_repl_input("add(1, 2)");
-        let value = evaluate_repl_input(&expr, false, &context, &mut runtime, &mut semantic)
-            .expect("imported function should evaluate");
+        let expr = FrontendSession::prepare_repl_source("add(1, 2)");
+        let value = evaluate_repl_input(
+            &expr.source,
+            expr.persist_defs,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("imported function should evaluate");
         assert_eq!(value, Value::Int(3.into()));
     }
 
@@ -3595,15 +3564,21 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
         let context = ReplInputContext::repl();
 
         evaluate_repl_input("import math;", true, &context, &mut runtime, &mut semantic)
             .expect("module namespace import should evaluate");
 
-        let expr = prepare_repl_input("math.add(20, 22)");
-        let value = evaluate_repl_input(&expr, false, &context, &mut runtime, &mut semantic)
-            .expect("namespace import should evaluate");
+        let expr = FrontendSession::prepare_repl_source("math.add(20, 22)");
+        let value = evaluate_repl_input(
+            &expr.source,
+            expr.persist_defs,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("namespace import should evaluate");
         assert_eq!(value, Value::Int(42.into()));
     }
 
@@ -3623,9 +3598,9 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
         let context = semantic
-            .context_for_file(
+            .repl_context_for_file(
                 temp_dir.path().join("app").join("mod.neve"),
                 runtime.is_pristine(),
             )
@@ -3636,11 +3611,12 @@ mod tests {
             .expect("loaded file should evaluate");
         assert_eq!(value, Value::Int(42.into()));
 
-        let expr = prepare_repl_input("answer");
+        let expr = FrontendSession::prepare_repl_source("answer");
+        let context = semantic.repl_context();
         let value = evaluate_repl_input(
-            &expr,
-            false,
-            &ReplInputContext::repl(),
+            &expr.source,
+            expr.persist_defs,
+            &context,
             &mut runtime,
             &mut semantic,
         )
@@ -3658,7 +3634,7 @@ mod tests {
         .unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
-        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
         let context = ReplInputContext::repl();
 
         let error = evaluate_repl_input(
@@ -3671,9 +3647,45 @@ mod tests {
         .expect_err("importing a broken module should surface diagnostics");
 
         match error {
-            ReplEvalError::ModuleDiagnostics(entries) => {
+            SessionDisplayError::LoadedModules(entries) => {
                 assert_eq!(entries.len(), 1);
-                assert!(entries[0].path.ends_with("broken.neve"));
+                assert!(entries[0].file_path.ends_with("broken.neve"));
+                assert!(
+                    entries[0]
+                        .diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.severity == Severity::Error)
+                );
+            }
+            other => panic!("expected module diagnostics, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn repl_checked_input_reports_type_errors_from_newly_imported_modules() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("broken.neve"),
+            "pub fn bad() = 1 + true;",
+        )
+        .unwrap();
+
+        let runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
+        let context = ReplInputContext::repl();
+
+        let error = semantic
+            .parse_checked_source_with_context_for_display(
+                "import broken (bad);",
+                &context,
+                &runtime.visible_state,
+            )
+            .expect_err("broken imports should surface loaded-module diagnostics through the shared checked-input layer");
+
+        match error {
+            SessionDisplayError::LoadedModules(entries) => {
+                assert_eq!(entries.len(), 1);
+                assert!(entries[0].file_path.ends_with("broken.neve"));
                 assert!(
                     entries[0]
                         .diagnostics
@@ -3703,10 +3715,10 @@ mod tests {
 
         let mut runtime = ReplHirState::with_root_dir(first.path().to_path_buf());
         runtime.clear();
-        let mut semantic = ReplSemanticState::with_root_dir(first.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(first.path());
 
         let context = semantic
-            .context_for_file(
+            .repl_context_for_file(
                 second.path().join("app").join("mod.neve"),
                 runtime.is_pristine(),
             )
@@ -3726,16 +3738,16 @@ mod tests {
         fs::write(second.path().join("main.neve"), "let answer = 42;").unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(first.path().to_path_buf());
-        let mut semantic = ReplSemanticState::with_root_dir(first.path().to_path_buf());
+        let mut semantic = ReplSemanticState::with_root_dir(first.path());
         let context = ReplInputContext::repl();
         evaluate_repl_input("let x = 1;", true, &context, &mut runtime, &mut semantic)
             .expect("definition should evaluate");
 
         let error = semantic
-            .context_for_file(second.path().join("main.neve"), runtime.is_pristine())
+            .repl_context_for_file(second.path().join("main.neve"), runtime.is_pristine())
             .expect_err("non-empty sessions should not silently mix project roots");
         assert!(
-            error.contains(":clear"),
+            error.to_string().contains(":clear"),
             "expected guidance to clear the session, got {error}"
         );
     }

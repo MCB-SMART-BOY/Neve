@@ -5,13 +5,21 @@
 //! - runtime parity between AST compat and HIR evaluators on a supported subset
 //! - explicit sentinels for currently known runtime divergence
 
+mod support;
+
 use neve_common::Int;
+use neve_derive::Hash;
 use neve_diagnostic::{DiagnosticKind, ErrorCode, Severity};
 use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::{AnalysisResult, analyze_source};
 use neve_std::{std_module_overrides, stdlib};
 use std::fs;
 use std::rc::Rc;
+use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
+use support::source_fixtures::{
+    pipeline_execution_source as shared_pipeline_execution_source,
+    shell_projection_source as shared_shell_projection_source,
+};
 use tempfile::TempDir;
 
 fn int(value: i64) -> Int {
@@ -76,76 +84,12 @@ fn assert_runtime_error_parity(source: &str, expected_fragment: &str) {
     }
 }
 
-#[cfg(not(windows))]
 fn shell_projection_source() -> String {
-    r#"
-        import std.io as io;
-        let migrated = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
-        let canonical = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
-        let same =
-            typeOf(migrated) == "ProcessResult" &&
-            io.processSuccess(migrated) == io.processSuccess(canonical) &&
-            io.processStdout(migrated) == io.processStdout(canonical) &&
-            io.processCode(migrated) == io.processCode(canonical) &&
-            io.processStderr(migrated) == io.processStderr(canonical);
-        let x = same;
-    "#
-    .to_string()
+    shared_shell_projection_source(Some("x"))
 }
 
-#[cfg(windows)]
-fn shell_projection_source() -> String {
-    r#"
-        import std.io as io;
-        let migrated = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
-        let canonical = io.execCommand(io.command("cmd", ["/C", "rustc --version"]));
-        let same =
-            typeOf(migrated) == "ProcessResult" &&
-            io.processSuccess(migrated) == io.processSuccess(canonical) &&
-            io.processStdout(migrated) == io.processStdout(canonical) &&
-            io.processCode(migrated) == io.processCode(canonical) &&
-            io.processStderr(migrated) == io.processStderr(canonical);
-        let x = same;
-    "#
-    .to_string()
-}
-
-#[cfg(not(windows))]
 fn pipeline_execution_source() -> String {
-    r#"
-        import std.io as io;
-        let result = io.execPipeline(io.pipeline([
-            io.command("sh", ["-c", "printf neve"]),
-            io.command("sh", ["-c", "grep neve"])
-        ]));
-        let same =
-            typeOf(result) == "ProcessResult" &&
-            io.processSuccess(result) &&
-            io.processCode(result) == 0 &&
-            io.processStdout(result) != "" &&
-            io.processStderr(result) == "";
-        let x = same;
-    "#
-    .to_string()
-}
-
-#[cfg(windows)]
-fn pipeline_execution_source() -> String {
-    r#"
-        import std.io as io;
-        let result = io.execPipeline(io.pipeline([
-            io.command("cmd", ["/C", "echo neve"]),
-            io.command("cmd", ["/C", "findstr neve"])
-        ]));
-        let same =
-            typeOf(result) == "ProcessResult" &&
-            io.processSuccess(result) &&
-            io.processCode(result) == 0 &&
-            io.processStdout(result) != "" &&
-            io.processStderr(result) == "";
-        let x = same;
-    "#
-    .to_string()
+    shared_pipeline_execution_source(Some("x"))
 }
 
 #[test]
@@ -679,6 +623,210 @@ fn test_end_to_end_std_io_builtin_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_std_io_current_system_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        io.currentSystem()
+        ",
+        Value::String(format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS).into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_current_dir_runtime_parity() {
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        io.currentDir()
+        ",
+        Value::String(
+            std::env::current_dir()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+                .into(),
+        ),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_get_env_runtime_parity() {
+    let missing = "__NEVE_TEST_MISSING_ENV_37C93B7C__";
+    assert!(
+        std::env::var_os(missing).is_none(),
+        "test environment unexpectedly defines {missing}"
+    );
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        io.getEnv(\"{missing}\") ?? \"missing\"
+        "
+        ),
+        Value::String("missing".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_fetch_path_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"fetch-path-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = Hash::of(content).to_hex();
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.fetch as fetch;
+        let x = fetch.path(\"{escaped}\").hash;
+        "
+        ),
+        Value::String(Rc::new(expected)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_fetch_path_with_hash_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"fetch-path-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = Hash::of(content).to_hex();
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.fetch as fetch;
+        let x = fetch.pathWithHash(\"{escaped}\", \"{expected}\").hash;
+        "
+        ),
+        Value::String(Rc::new(expected)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_fetch_url_with_hash_runtime_parity() {
+    let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.fetch as fetch;
+        let x = fetch.urlWithHash(\"{url}\", \"{expected_hash}\").hash;
+        "
+        ),
+        Value::String(Rc::new(expected_hash)),
+    );
+    server.join().expect("fixture server should exit cleanly");
+}
+
+#[test]
+fn test_end_to_end_std_fetch_url_runtime_parity() {
+    let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.fetch as fetch;
+        let x = fetch.url(\"{url}\").hash;
+        "
+        ),
+        Value::String(Rc::new(expected_hash)),
+    );
+    server.join().expect("fixture server should exit cleanly");
+}
+
+#[test]
+fn test_end_to_end_std_fetch_git_runtime_parity() {
+    let (_temp, repo_path, expected_hash) = init_local_git_repo();
+    let escaped = repo_path.replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.fetch as fetch;
+        let x = fetch.git(\"{escaped}\", \"main\").hash;
+        "
+        ),
+        Value::String(Rc::new(expected_hash)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_fetch_git_with_hash_runtime_parity() {
+    let (_temp, repo_path, expected_hash) = init_local_git_repo();
+    let escaped = repo_path.replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.fetch as fetch;
+        let x = fetch.gitWithHash(\"{escaped}\", \"main\", \"{expected_hash}\").hash;
+        "
+        ),
+        Value::String(Rc::new(expected_hash)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_read_file_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    fs::write(&file_path, "read-file-content").unwrap();
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let x = io.readFile(\"{escaped}\");
+        "
+        ),
+        Value::String(Rc::new("read-file-content".to_string())),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_read_dir_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("io-read-dir");
+    fs::create_dir_all(dir.join("nested")).unwrap();
+    fs::write(dir.join("alpha.txt"), "a").unwrap();
+    fs::write(dir.join("beta.txt"), "b").unwrap();
+    let escaped = dir.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        import std.list as list;
+        let x = list.sort(io.readDir(\"{escaped}\"));
+        "
+        ),
+        Value::List(Rc::new(vec![
+            Value::String(Rc::new("alpha.txt".to_string())),
+            Value::String(Rc::new("beta.txt".to_string())),
+            Value::String(Rc::new("nested".to_string())),
+        ])),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_hash_file_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file_path = temp.path().join("source.txt");
+    let content = b"hash-file-content";
+    fs::write(&file_path, content).unwrap();
+    let expected = "09f00a4ba8e49c5a253e1af9ff6c40f8151754ccd88f95ef162981960b2ad8f7";
+    let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let x = io.hashFile(\"{escaped}\");
+        "
+        ),
+        Value::String(Rc::new(expected.to_string())),
+    );
+}
+
+#[test]
 fn test_end_to_end_std_io_hash_file_path_runtime_parity() {
     let temp = TempDir::new().unwrap();
     let file_path = temp.path().join("source.txt");
@@ -908,6 +1056,26 @@ fn test_end_to_end_std_io_write_file_path_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_std_io_write_file_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-write-dst.neve.txt");
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        let done = io.writeFile(\"{escaped_dst}\", \"hello\");
+        let x = io.readFile(\"{escaped_dst}\");
+        "
+    );
+
+    assert_runtime_parity(&source, Value::String("hello".to_string().into()));
+}
+
+#[test]
 fn test_end_to_end_std_io_append_file_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
     let dst_path = temp_dir.path().join("io-append-path-dst.neve.txt");
@@ -924,6 +1092,28 @@ fn test_end_to_end_std_io_append_file_path_runtime_parity() {
         let reset = io.writeFilePath(dst, \"hello\");
         let done = io.appendFilePath(dst, \"-path\");
         let x = io.readFilePath(dst);
+        "
+    );
+
+    assert_runtime_parity(&source, Value::String("hello-path".to_string().into()));
+}
+
+#[test]
+fn test_end_to_end_std_io_append_file_runtime_parity() {
+    let temp_dir = TempDir::new().unwrap();
+    let dst_path = temp_dir.path().join("io-append-dst.neve.txt");
+    std::fs::write(&dst_path, "hello").unwrap();
+    let escaped_dst = dst_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('\"', "\\\"");
+
+    let source = format!(
+        "
+        import std.io as io;
+        let reset = io.writeFile(\"{escaped_dst}\", \"hello\");
+        let done = io.appendFile(\"{escaped_dst}\", \"-path\");
+        let x = io.readFile(\"{escaped_dst}\");
         "
     );
 
@@ -1007,6 +1197,39 @@ fn test_end_to_end_std_io_home_dir_path_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_std_io_home_dir_runtime_parity() {
+    let expected = match std::env::var("HOME") {
+        Ok(home) => Value::Some(Box::new(Value::String(home.into()))),
+        Err(_) => Value::None,
+    };
+    assert_runtime_parity(
+        "
+        import std.io as io;
+        io.homeDir()
+        ",
+        expected,
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_create_dir_all_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("legacy").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let target = \"{escaped}\";
+        let done = io.createDirAll(target);
+        io.pathExists(target) && io.isDir(target)
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
 fn test_end_to_end_std_io_create_dir_all_path_runtime_parity() {
     let temp = TempDir::new().unwrap();
     let target = temp.path().join("typed").join("a").join("b");
@@ -1039,6 +1262,76 @@ fn test_end_to_end_std_io_remove_dir_all_path_runtime_parity() {
         let created = io.createDirAllPath(target);
         let done = io.removeDirAllPath(target);
         !io.pathExistsPath(target)
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_remove_dir_all_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("legacy").join("a").join("b");
+    let escaped = target.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let target = \"{escaped}\";
+        let created = io.createDirAll(target);
+        let done = io.removeDirAll(target);
+        !io.pathExists(target)
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_path_exists_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("exists.txt");
+    fs::write(&file, "neve").unwrap();
+    let escaped = file.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let x = io.pathExists(\"{escaped}\");
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_is_dir_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().join("nested");
+    fs::create_dir_all(&dir).unwrap();
+    let escaped = dir.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let x = io.isDir(\"{escaped}\");
+        "
+        ),
+        Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_io_is_file_runtime_parity() {
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("nested.txt");
+    fs::write(&file, "neve").unwrap();
+    let escaped = file.to_string_lossy().replace('\\', "\\\\");
+    assert_runtime_parity(
+        &format!(
+            "
+        import std.io as io;
+        let x = io.isFile(\"{escaped}\");
         "
         ),
         Value::Bool(true),
@@ -1891,10 +2184,79 @@ fn test_end_to_end_std_map_and_set_builtin_runtime_parity() {
         "
         import std.Map;
         import std.Set;
+        import std.list as list;
         let map = Map.insert(\"a\", 41, Map.empty);
         let set = Set.insert(1, Set.empty);
-        let x = Map.getWithDefault(\"a\", 0, map) + Set.size(set);
+        let x = Map.getWithDefault(\"a\", 0, map) + Set.size(set) + list.sum(Map.values(map));
         ",
-        Value::Int(int(42)),
+        Value::Int(int(83)),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_math_conversion_runtime_parity() {
+    assert_runtime_parity(
+        r#"
+        import std.math as math;
+        let x = (math.toInt(true), math.toFloat("1.5"));
+        "#,
+        Value::Tuple(Rc::new(vec![Value::Int(int(1)), Value::Float(1.5)])),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_math_float_predicate_runtime_parity() {
+    assert_runtime_parity(
+        r#"
+        import std.math as math;
+        let x = (math.isNan(math.nan), math.isInf(math.inf));
+        "#,
+        Value::Tuple(Rc::new(vec![Value::Bool(true), Value::Bool(true)])),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_math_rounding_runtime_parity() {
+    assert_runtime_parity(
+        r#"
+        import std.math as math;
+        let x = (math.floor(1.9), math.ceil(1.1), math.round(1.6));
+        "#,
+        Value::Tuple(Rc::new(vec![
+            Value::Int(int(1)),
+            Value::Int(int(2)),
+            Value::Int(int(2)),
+        ])),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_math_unary_float_transform_runtime_parity() {
+    assert_runtime_parity(
+        r#"
+        import std.math as math;
+        let x = (math.sqrt(9.0), math.log(1.0), math.log10(1000.0), math.exp(0.0));
+        "#,
+        Value::Tuple(Rc::new(vec![
+            Value::Float(3.0),
+            Value::Float(0.0),
+            Value::Float(3.0),
+            Value::Float(1.0),
+        ])),
+    );
+}
+
+#[test]
+fn test_end_to_end_std_math_trigonometric_runtime_parity() {
+    assert_runtime_parity(
+        r#"
+        import std.math as math;
+        let x = (math.sin(0.0), math.cos(0.0), math.tan(0.0));
+        "#,
+        Value::Tuple(Rc::new(vec![
+            Value::Float(0.0),
+            Value::Float(1.0),
+            Value::Float(0.0),
+        ])),
     );
 }

@@ -2085,6 +2085,468 @@ Track progress with concrete metrics rather than narrative only:
   - `cargo test --test lsp -- --nocapture`
   - `cargo test -p neve repl_ -- --nocapture`
   - `cargo clippy -p neve-std -p neve-typeck -p neve-eval -p neve-frontend -p neve-lsp -p neve --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL source normalization behind frontend-owned helpers.
+- Reduced REPL command-layer duplication further by introducing frontend-owned helpers in `crates/neve-frontend/src/session.rs` for:
+  - normalizing one raw REPL input into canonical source text plus persistence intent
+  - normalizing one `:type` query expression into the hidden type-query binding form
+  - formatting one REPL type query through a frontend-owned wrapper that keeps the synthetic binding name private
+- Reduced `neve repl` duplication further by routing command-layer input preparation through `FrontendSession` instead of locally owning:
+  - keyword-based item-vs-expression detection
+  - semicolon completion for item inputs
+  - hidden synthetic binding names `__expr__` / `__type__`
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL persistence, printing, or diagnostic behavior
+- Added focused frontend-session regressions covering:
+  - REPL expression normalization staying ephemeral
+  - REPL item normalization staying persistent
+  - REPL type-query formatting through the frontend-owned helper
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+
+### 2026-04-18
+
+- Continued `PR-008` by moving prepared-module persistence behind `FrontendSession`.
+- Added `FrontendSession::commit_prepared_module(...)` in `crates/neve-frontend/src/session.rs` so one frontend-owned step now:
+  - applies resolved import/global visibility effects to `SessionVisibleState`
+  - records the prepared HIR module into persisted session state
+- Reduced `neve repl` duplication further by:
+  - removing the split `visible_state.apply_prepared_module(...)` + `record_module(...)` commit flow
+  - simplifying persistent-input evaluation to consume `SessionPreparedModule` directly and delegate commit back to `FrontendSession`
+- Updated frontend-owned integration coverage in `tests/frontend_session.rs` to lock the new commit API by proving a committed prepared module:
+  - persists in the session
+  - carries visible imports/definitions into the next input
+- Validation completed with:
+  - `cargo test --test frontend_session`
+  - `cargo test -p neve --bin neve repl_`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test --workspace`
+- Continued `PR-008` again by folding REPL current-input checking behind one frontend-owned checked-module API.
+- Added `SessionCheckedModule` plus `SessionCheckError` in `crates/neve-frontend/src/session.rs`, together with:
+  - `FrontendSession::prepare_checked_module_with_context(...)`
+  - `FrontendSession::prepare_checked_module_with_visible_state(...)`
+- The new checked-module API now owns the remaining REPL semantic sequence for one input:
+  - prepare/build current in-memory module
+  - gate on newly loaded dependency diagnostics
+  - run checked semantic analysis for the current module
+- Reduced `neve repl` duplication further by:
+  - deleting the local prepare + loaded-module-diagnostics + analyze-module-checked chain
+  - routing both ordinary REPL evaluation and `:type` snippet analysis through the same frontend checked-module entrypoint
+- Added frontend-owned integration coverage in `tests/frontend_session.rs` for:
+  - successful checked preparation in one step
+  - checked preparation failing on loaded-module diagnostics
+  - checked preparation failing on current-module diagnostics
+- Validation completed with:
+  - `cargo test --test frontend_session`
+  - `cargo test -p neve --bin neve repl_`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test --workspace`
+- Continued `PR-008` once more by narrowing the frontend/eval boundary for already-loaded dependency modules.
+- Added `SessionEvaluableModule` plus `FrontendSession::evaluable_loaded_modules_in_order()` in `crates/neve-frontend/src/session.rs` so frontend now exposes:
+  - dependency-first loaded modules
+  - only when they have lowered HIR and no blocking diagnostics
+  - with the method-resolution tables needed for HIR evaluation
+- Reduced `neve repl` duplication further by removing the last local semantic filtering inside `eval_pending_loaded_modules(...)`:
+  - REPL still owns evaluated-module tracking
+  - frontend now owns the decision about which loaded modules are semantically ready to execute
+- Added frontend-owned integration coverage in `tests/frontend_session.rs` proving that the new evaluable-module view:
+  - preserves dependency order
+  - excludes broken loaded modules
+- Validation completed with:
+  - `cargo test --test frontend_session`
+  - `cargo test -p neve --bin neve repl_`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test --workspace`
+- Tightened the adjacent frontend snippet-analysis path so `analyze_snippet_ast(...)` now projects loaded dependency modules directly from `FrontendSession::loaded_modules_in_order()` instead of rebuilding:
+  - `load_order()`
+  - `module_info()`
+  - `hir_module()`
+  - `analyze_loaded_modules()`
+  as a second local composition layer
+- Added focused frontend coverage in `tests/frontend.rs` proving snippet analysis preserves dependency-first loaded-module order.
+- Validation completed with:
+  - `cargo test --test frontend`
+  - `cargo test --test frontend_session`
+  - `cargo test -p neve --bin neve repl_`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test --workspace`
+- Continued `PR-008` by exposing snippet-level evaluable dependency modules from frontend instead of letting `neve eval` recompute that boundary locally.
+- Extended `SnippetAnalysis` in `crates/neve-frontend/src/lib.rs` with frontend-owned `evaluable_loaded_modules`, projected from `FrontendSession::evaluable_loaded_modules_in_order()` for just the modules newly loaded by the snippet.
+- Reduced `neve eval` duplication further by:
+  - keeping loaded-module diagnostic emission on the existing `loaded_modules` view
+  - deleting the last local `hir.is_some()` + `Severity::Error` filter before dependency evaluation
+  - evaluating only frontend-designated `evaluable_loaded_modules`
+- Added focused frontend coverage in `tests/frontend.rs` proving snippet analysis excludes broken loaded modules from the evaluable dependency list while preserving dependency-first order for the remaining modules.
+- Validation completed with:
+  - `cargo test --test frontend -- --nocapture`
+  - `cargo test -p neve --bin neve eval_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by exposing program-level evaluable modules from `FrontendDriver` so file-oriented CLI consumers stop rebuilding the HIR execution list locally.
+- Added `ProgramEvaluableModule` plus `ProgramAnalysis::evaluable_modules_in_order()` in `crates/neve-frontend/src/driver.rs` so frontend now exposes:
+  - dependency-first program modules ready for HIR evaluation
+  - only when lowered HIR exists
+  - only when the module has no blocking diagnostics
+  - with the method-resolution tables needed by the evaluator
+- Reduced `neve run` / `neve build` duplication further by deleting the local `load_order + hir_module + semantics.method_resolutions` execution assembly and evaluating only frontend-designated program modules.
+- Added focused frontend-driver coverage in `tests/frontend_driver.rs` proving the program-level evaluable view excludes broken dependencies while preserving dependency-first order for the remaining clean modules, including the root module.
+- Validation completed with:
+  - `cargo test --test frontend_driver -- --nocapture`
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by exposing program-level diagnostics entries from `FrontendDriver` so CLI tooling stops recomposing file-path/source/diagnostics views module by module.
+- Added `ProgramDiagnosticModule` plus `ProgramAnalysis::diagnostic_modules_in_order()` in `crates/neve-frontend/src/driver.rs` so frontend now exposes:
+  - dependency-first program diagnostics entries
+  - file path plus source text for attribution
+  - the final per-module diagnostics view already normalized by the driver
+- Reduced CLI duplication further by routing `neve run`, `neve build`, and `neve check` through the same frontend-owned program diagnostics projection instead of each command locally stitching together:
+  - `module_info()`
+  - file reads for diagnostic attribution
+  - `diagnostics()` / parser-diagnostic selection
+- Added focused frontend-driver coverage in `tests/frontend_driver.rs` proving the diagnostics projection preserves dependency-first order and carries both parser and type diagnostics with source text.
+- Validation completed with:
+  - `cargo test --test frontend_driver -- --nocapture`
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo test -p neve --bin neve check_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by exposing program-level parse-clean modules from `FrontendDriver` so `neve run` no longer assembles AST-compat inputs from `module_info() + parsed_source() + module_path` locally.
+- Added `ProgramParsedModule` plus `ProgramAnalysis::parsed_modules_in_order()` in `crates/neve-frontend/src/driver.rs` so frontend now exposes dependency-first modules that:
+  - have no parser diagnostics
+  - carry the parsed AST
+  - preserve file path and resolved module path for AST-compat evaluation
+- Reduced `neve run` duplication further by:
+  - deleting the local `ParsedModule` compatibility struct
+  - deleting the local `collect_parsed_modules(...)` assembly step
+  - routing AST-compat preflight through frontend-owned parsed modules while keeping parse-diagnostic emission and compat fallback behavior unchanged
+- Added focused frontend-driver coverage in `tests/frontend_driver.rs` proving the parsed-module view excludes parse-broken dependencies while preserving dependency-first order for the remaining clean modules.
+- Validation completed with:
+  - `cargo test --test frontend_driver -- --nocapture`
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by exposing a frontend-owned direct module parse helper for the remaining `neve run` direct-std AST-compat branch.
+- Added `ModuleParseResult` plus `parse_module_file(...)` in `crates/neve-frontend/src/driver.rs` so frontend now owns the single-file parse artifact used by compatibility consumers:
+  - source text for diagnostic attribution
+  - parser diagnostics
+  - parse-clean AST payload when available
+  - resolved module-path segments supplied by the caller
+- Reduced `neve run` duplication further by routing `run_direct_value(...)` through the new frontend parse helper instead of locally owning:
+  - `read_to_string(...)`
+  - `neve_parser::parse(...)`
+  - ad hoc source/AST packaging for the direct-std fallback path
+- Added focused regressions for:
+  - frontend direct module parsing returning a parse-clean AST payload in `tests/frontend_driver.rs`
+  - `neve run` requiring `--compat-ast` for a direct `src/std/mod.neve` root module and using the AST-compat backend when explicitly enabled
+- Validation completed with:
+  - `cargo test --test frontend_driver -- --nocapture`
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by collapsing the last duplicated AST-compat evaluator construction in `neve run`.
+- Reduced `neve run` duplication further by adding narrow internal helpers in `neve-cli/src/commands/run.rs` for:
+  - shared AST-compat evaluator construction across direct-std fallback and the multi-module compat loop
+  - shared AST-compat `eval_file(...)` error handling and parse-diagnostic emission
+- Kept the explicit compatibility boundary unchanged:
+  - no new public surface
+  - no behavioral change to direct-std fallback
+  - no change to loaded-module cache flow for the multi-module AST-compat loop
+- Validation completed with:
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by collapsing the remaining compat module-cache/update flow in `neve run` behind one narrow private runner.
+- Reduced `neve run` duplication further by introducing a private AST-compat program runner in `neve-cli/src/commands/run.rs` that now owns:
+  - loaded-module cache progression across dependency-first compat evaluation
+  - per-module AST-compat evaluator construction inputs
+  - cache refresh after each successful module evaluation
+- Kept the explicit compatibility boundary unchanged:
+  - no new public surface
+  - no change to AST-compat cache semantics
+  - no change to direct-std fallback behavior
+- Added focused `run_` regressions proving the multi-module AST-compat path still works for:
+  - unsupported `import std;` root-module imports
+  - mixed local dependency + std root-module compatibility execution
+- Validation completed with:
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by collapsing `neve run`'s remaining AST-compat branch decision into one private execution-plan layer.
+- Reduced `neve run` duplication further by introducing a private execution-plan enum + planner in `neve-cli/src/commands/run.rs` that now owns the split between:
+  - canonical frontend/HIR execution
+  - direct std-file AST-compat fallback
+  - parse-clean program AST-compat fallback for unsupported std import shapes
+- Kept the explicit compatibility boundary unchanged:
+  - no new public surface
+  - no change to the direct-std vs unsupported-import fallback messages
+  - no change to verbose parse summaries or parse-diagnostic emission ordering
+- Validation completed with:
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by collapsing `neve run`'s remaining backend/value packaging behind one private execution-result layer.
+- Reduced `neve run` duplication further by introducing a private execution-result helper in `neve-cli/src/commands/run.rs` so:
+  - the planner/executor pair now owns backend tagging for all run paths
+  - `run_value(...)` keeps its existing tuple-shaped call surface for nearby consumers such as `neve eval`
+  - command-level backend/value packaging is no longer repeated across the frontend/HIR path and AST-compat fallbacks
+- Kept the explicit compatibility boundary unchanged:
+  - no new public surface
+  - no change to `run_value(...)`'s external tuple contract
+  - no change to direct-std or unsupported-import fallback behavior
+- Validation completed with:
+  - `cargo test -p neve --bin neve run_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by collapsing `neve eval`'s remaining backend/value bridge behind one private execution-result layer.
+- Reduced `neve eval` duplication further by introducing a private execution-result helper in `neve-cli/src/commands/eval.rs` so:
+  - the command now centralizes backend tagging for both the canonical frontend/HIR path and the explicit module-graph AST-compat fallback
+  - `eval_value(...)` keeps its existing tuple-shaped call surface for nearby command consumers
+  - `eval` no longer hand-maps `RunBackend` into a separate command-local backend/value tuple inside the fallback path
+- Kept the explicit compatibility boundary unchanged:
+  - no new public surface
+  - no change to `eval_value(...)`'s external tuple contract
+  - no change to the explicit `--compat-ast` requirement for unsupported `import std;` fallback paths
+- Added focused `eval_` regressions covering:
+  - unsupported `import std;` plus local dependency still requiring explicit `--compat-ast`
+  - the same source shape still evaluating successfully through AST-compat when explicitly requested
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test -p neve --bin neve eval_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by collapsing REPL's remaining parse/check bridge behind one private checked-input layer.
+- Reduced `neve repl` duplication further by introducing a private checked-input helper in `neve-cli/src/commands/repl.rs` so:
+  - REPL evaluation and `:type` queries now share one parse-clean + frontend-checked input path
+  - REPL no longer hand-repeats `parse(...) + prepare_checked_module_with_context(...) + SessionCheckError` mapping across those two entrypoints
+  - frontend-owned `SessionCheckedModule` preparation remains the single semantic gate before REPL evaluation or type formatting
+- Kept the explicit compatibility/session boundary unchanged:
+  - no new public surface
+  - no change to REPL runtime persistence rules
+  - no change to loaded-module diagnostic attribution or project-root switching behavior
+- Added focused `repl_` regression covering:
+  - the shared checked-input layer still surfacing loaded-module diagnostics for a broken newly imported module
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL `:type` binding-target and readable type-name orchestration behind `FrontendSession`.
+- Reduced REPL command-layer semantic formatting further by introducing narrow frontend-owned helpers in `crates/neve-frontend/src/session.rs` for:
+  - resolving the semantic type target for a named binding in one checked in-memory module
+  - formatting a type with names visible to the current session plus the current module
+- Reduced `neve repl` duplication further by routing `infer_repl_type(...)` through those helpers instead of locally owning:
+  - checked-module binding target discovery for the synthetic `__type__` binding
+  - current-session type-name collection for readable `:type` output
+  - command-local semantic type formatting for frontend-checked REPL queries
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL diagnostic attribution or persistence rules
+- Added focused regressions for:
+  - frontend session resolving a checked binding's semantic type target through a direct global reference
+  - frontend session formatting checked binding types with current-module names
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by collapsing REPL's remaining checked-binding type lookup behind one frontend-owned helper.
+- Reduced REPL `:type` command-layer semantic querying further by introducing narrow frontend-owned helpers in `crates/neve-frontend/src/session.rs` for:
+  - resolving the semantic type of one named binding in a checked in-memory module
+  - formatting that checked binding type directly against current-session + current-module names
+- Reduced `neve repl` duplication further by routing `infer_repl_type(...)` through the new checked-binding type formatter instead of locally owning:
+  - direct `analysis.semantics.global_type(...)` lookup for the synthetic `__type__` binding
+  - the final command-layer handoff between checked binding selection and readable type formatting
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new language semantics
+  - no change to REPL query diagnostics or persistence rules
+- Added focused frontend-session regressions covering:
+  - formatting a checked binding type for a direct global-reference query binding
+  - formatting a named checked binding type with current-module type names
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL current-source parse+checked-module orchestration behind one frontend-owned helper.
+- Reduced REPL command-layer semantic setup further by introducing narrow frontend-owned source helpers in `crates/neve-frontend/src/session.rs` for:
+  - parsing one in-memory source string and returning its AST alongside a checked module result
+  - surfacing parser failures through one session-owned source-check error boundary before checked-module preparation
+- Reduced `neve repl` duplication further by routing its private checked-input helper through the new frontend source-check API instead of locally owning:
+  - direct `neve_parser::parse(...)` orchestration for current REPL input
+  - the parser-to-checked-module handoff before REPL evaluation or `:type` queries
+  - command-local assembly of the parse-clean AST plus checked-module pair
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL parser/type diagnostic attribution
+- Added focused frontend-session regressions covering:
+  - parsing and checking one source string in a single frontend-owned step
+  - surfacing parser diagnostics through the new source-check helper
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` once more by collapsing REPL `:type`'s remaining parse/check/format chain behind one frontend-owned helper.
+- Reduced REPL type-query command-layer orchestration further by introducing a narrow frontend-owned helper in `crates/neve-frontend/src/session.rs` for:
+  - parsing one source string
+  - preparing one checked in-memory module
+  - formatting one named binding's readable type
+  in one session-owned step
+- Reduced `neve repl` duplication further by routing `infer_repl_type(...)` through that combined frontend helper instead of locally owning:
+  - the command-layer handoff from parsed+checked source into checked-binding type formatting
+  - a dedicated checked-input path just for `:type` queries
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL query diagnostics or persistence rules
+- Added focused frontend-session regression covering:
+  - parsing, checking, and formatting a named binding type in one frontend-owned step
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL user-binding projection behind frontend-prepared module state.
+- Reduced REPL command-layer bookkeeping further by introducing a frontend-owned defined-binding projection on `SessionPreparedModule` in `crates/neve-frontend/src/session.rs` so prepared inputs now carry:
+  - user-visible binding names introduced by the current input
+  - binding visibility needed for REPL `:env` display
+  - the existing checked/import bookkeeping without an extra REPL-local AST scan
+- Reduced `neve repl` duplication further by routing runtime user-binding persistence through `prepared.defined_bindings` instead of locally owning:
+  - AST item visibility inspection
+  - per-item defined-name extraction
+  - REPL-only filtering for hidden synthetic bindings such as `__expr__` / `__type__`
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL persistence or `:env` visibility behavior
+- Added focused frontend-session regression covering:
+  - prepared modules excluding hidden synthetic expression bindings from the projected user-visible binding list
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL source-check error projection behind frontend-owned helpers.
+- Reduced REPL command-layer duplication further by introducing a frontend-owned display projection in `crates/neve-frontend/src/session.rs` so source-check and checked-module failures can now be rendered as one shared frontend error shape carrying:
+  - current-source-attributed diagnostics
+  - loaded-module diagnostics
+  - plain session/message failures
+- Reduced `neve repl` duplication further by routing command-layer error handling through `SessionDisplayError` instead of locally owning:
+  - a separate checked-input error wrapper
+  - duplicated eval/type-query diagnostic/message enums
+  - local source-check error mapping from `SessionSourceCheckError` / `SessionCheckError`
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL diagnostic emission or persistence behavior
+- Added focused frontend-session regressions covering:
+  - parse diagnostics projected to source-attributed display errors
+  - loaded-module check failures projected to loaded-module display errors
+  - current-module check failures projected to source-attributed display errors
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+- Continued `PR-008` again by moving REPL checked-input display handoff behind frontend-owned helpers.
+- Reduced REPL command-layer duplication further by introducing frontend-owned helpers in `crates/neve-frontend/src/session.rs` for:
+  - parsing and checking one source input against caller-visible session state while directly projecting failures into `SessionDisplayError`
+  - formatting one REPL `:type` query while directly projecting failures into the same frontend-owned display error shape
+- Reduced `neve repl` duplication further by routing command-layer checked-input/type-query handoff through `FrontendSession` instead of locally owning:
+  - a `check_repl_input(...)` wrapper around `parse_checked_source_with_context(...)`
+  - explicit REPL-side source threading for type-query display projection
+  - the last thin checked-source display adapter in the REPL command layer
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL diagnostic emission, persistence, or evaluation behavior
+- Added focused frontend-session regressions covering:
+  - checked-source parse+check succeeding through the new display-ready helper
+  - REPL type-query failures surfacing source-attributed display diagnostics through the new frontend-owned helper
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-frontend -p neve --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL context selection behind frontend-owned helpers.
+- Reduced REPL command-layer duplication further by introducing frontend-owned helpers in `crates/neve-frontend/src/session.rs` for:
+  - returning the canonical in-memory REPL module context
+  - resolving one file-backed REPL input context while preserving the existing root-switch rules
+- Reduced `neve repl` duplication further by routing command-layer context setup through `FrontendSession` instead of directly owning:
+  - `SessionModuleContext::repl()` construction for ordinary interactive inputs
+  - direct calls to `module_context_for_file(...)` from `:load`
+  - the remaining production knowledge of how REPL inputs map onto module-context shapes
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL loading, persistence, or diagnostic behavior
+- Added focused regressions covering:
+  - frontend returning the canonical REPL context shape
+  - frontend file-backed REPL context helpers under current-root, root-rebase, and root-switch-rejection flows
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-frontend -p neve --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL file-backed input orchestration behind frontend-owned helpers.
+- Reduced REPL command-layer duplication further by introducing a frontend-owned file-input helper in `crates/neve-frontend/src/session.rs` that now owns:
+  - reading one file-backed REPL source from disk
+  - resolving the file-backed REPL module context with the existing root-switch rules
+  - returning one frontend-owned bundle containing the user-facing file path, source text, and resolved context
+- Reduced `neve repl` duplication further by routing `:load` through `FrontendSession` instead of locally owning:
+  - direct `std::fs::read_to_string(...)` orchestration in the command handler
+  - command-layer composition of read-file failure messages with path attribution
+  - separate file-read and file-context setup steps before evaluation
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL `:load` persistence, evaluation, or diagnostic behavior
+- Added focused frontend-session regressions covering:
+  - loading one file-backed REPL input under the current root with source text and resolved context preserved
+  - projecting missing-file failures as display-ready frontend messages
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-frontend -p neve --all-targets -- -D warnings`
+- Continued `PR-008` again by moving REPL display naming for interactive and file-backed inputs behind frontend-owned helpers.
+- Reduced REPL command-layer duplication further by introducing frontend-owned REPL input metadata in `crates/neve-frontend/src/session.rs` so frontend now owns:
+  - the canonical `<repl>` source name for ordinary interactive inputs
+  - the bundled source/context/persistence metadata for one prepared in-memory REPL input
+  - the user-facing display name derived from one file-backed REPL input path
+- Reduced `neve repl` duplication further by routing display attribution through `FrontendSession` instead of locally owning:
+  - the `<repl>` source-name constant used for current-input diagnostic emission
+  - `display().to_string()` conversion for file-backed success/error attribution
+  - separate command-layer assembly of ordinary interactive input metadata before evaluation
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL evaluation, persistence, or diagnostic behavior
+- Added focused frontend-session regressions covering:
+  - prepared in-memory REPL inputs carrying the canonical source name, wrapped source, persistence flag, and context
+  - file-backed REPL inputs carrying the expected user-facing source name
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-frontend -p neve --all-targets -- -D warnings`
+- Continued `PR-008` again by moving current-input display attribution behind frontend-owned display errors.
+- Reduced REPL command-layer duplication further by extending frontend display projection in `crates/neve-frontend/src/session.rs` so frontend now owns:
+  - the canonical `<repl:type>` display name for REPL type queries
+  - the user-facing source name attached to current-source diagnostics
+  - one explicit checked-source display entrypoint for consumers that already have canonical source naming
+- Reduced `neve repl` duplication further by routing diagnostic emission through self-attributed `SessionDisplayError` values instead of locally owning:
+  - the remaining `"<repl:type>"` source-name constant in the `:type` command path
+  - separate `emit_display_error(error, source_name)` plumbing for ordinary interactive inputs
+  - separate `emit_display_error(error, source_name)` plumbing for file-backed REPL inputs
+- Kept the explicit compatibility/session boundary unchanged:
+  - no runtime behavior changes
+  - no new surface language semantics
+  - no change to REPL evaluation, persistence, or diagnostic content
+- Added focused frontend-session regressions covering:
+  - explicit display-name projection for checked-source frontend errors
+  - canonical `<repl:type>` attribution on REPL type-query diagnostics
+  - source-name preservation on direct display-error projection helpers
+- Validation completed with:
+  - `cargo fmt --all`
+  - `cargo test --test frontend_session -- --nocapture`
+  - `cargo test -p neve --bin neve repl_ -- --nocapture`
+  - `cargo clippy -p neve-frontend -p neve --all-targets -- -D warnings`
 - Continued `PR-012` with a narrow tooling-consumer parity slice for `std.fetch` / `std.Map` / `std.Set`.
 - The change remained intentionally narrow and mainline-aligned:
   - added LSP hover coverage for representative `fetch`, `Map`, and `Set` bindings so semantic hover now explicitly covers the surface that had already been pulled into completion metadata and explicit typeck
@@ -2109,9 +2571,152 @@ Track progress with concrete metrics rather than narrative only:
   - updated `docs/reference/api.md` so the published `std.math` constant list includes `math.pi` / `math.e` / `math.inf` / `math.nan`
   - added focused consumer regressions so `typeck`, `frontend`, LSP hover, and REPL `:type` all explicitly cover the current math-constant surface
   - deliberately did not widen the broader `std.math` function surface because that would open the separate `Number` / numeric-overload design gate
+- Continued `PR-012` with a follow-up `std.math` explicit-surface correction slice.
+- The change stayed bounded and convergence-focused:
+  - trimmed LSP stdlib completion metadata back to the real explicit `std.math` surface, which currently contains only the canonical constant bindings
+  - corrected `docs/reference/api.md` so it no longer advertises `math.abs` / `math.pow` / related helpers as typed public API before the `Number` design gate is resolved
+  - added focused tooling regressions that lock `math.abs(1)` to its current inference-hole behavior in LSP hover and REPL `:type`, instead of pretending it already has an explicit canonical signature
+- Continued `PR-012` with a narrow `std.math` conversion-bridge slice.
+- The change remained bounded and mainline-aligned:
+  - added explicit `typeck` surface for `math.toInt` and `math.toFloat` without opening the broader `Number` design gate
+  - restored `math.toInt` / `math.toFloat` to LSP stdlib completion metadata and API docs as the only currently typed `std.math` functions
+  - aligned `math.toInt` runtime behavior with the existing top-level conversion bridge by accepting `Bool`
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a narrow `std.math` float-predicate slice.
+- The change stayed bounded and avoided the broader numeric-overload gate:
+  - added explicit `typeck` surface for `math.isNan` / `math.isInf` as `Float -> Bool`
+  - restored `math.isNan` / `math.isInf` to LSP stdlib completion metadata and API docs as the only current typed `std.math` predicates
+  - aligned runtime behavior with that explicit surface by rejecting non-`Float` arguments instead of silently treating `Int` as `false`
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a narrow `std.math` rounding slice.
+- The change stayed within the same bounded `Float`-only design:
+  - added explicit `typeck` surface for `math.floor` / `math.ceil` / `math.round` as `Float -> Int`
+  - restored those three helpers to LSP stdlib completion metadata and API docs without opening the broader `Number` gate
+  - aligned runtime behavior with the explicit surface by rejecting `Int` inputs instead of silently returning the original integer
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a narrow `std.math` unary-float-transform slice.
+- The change stayed within the same bounded `Float`-only design:
+  - added explicit `typeck` surface for `math.sqrt` / `math.log` / `math.log10` / `math.exp` as `Float -> Float`
+  - restored those four helpers to LSP stdlib completion metadata and API docs without opening the broader `Number` gate
+  - aligned runtime behavior with the explicit surface by rejecting `Int` inputs instead of silently coercing them
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a narrow `std.math` trigonometric slice.
+- The change stayed within the same bounded `Float`-only design:
+  - added explicit `typeck` surface for `math.sin` / `math.cos` / `math.tan` as `Float -> Float`
+  - restored those three helpers to LSP stdlib completion metadata and API docs without opening the broader `Number` gate
+  - aligned runtime behavior with the explicit surface by rejecting `Int` inputs instead of silently coercing them
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a narrow `std.Map` values slice.
+- The change stayed bounded and avoided the stable-key reification gate:
+  - added explicit `typeck` surface for `Map.values` as `Map<K, V> -> List<V>`
+  - restored `Map.values` to LSP stdlib completion metadata and API docs as the only currently safe Map projection helper
+  - deliberately kept `Map.keys` / `Map.toList` out of the explicit surface because they still expose stable-string key representations instead of canonical key reification
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a narrow `std.io` explicit-surface correction slice for `io.hashString`.
+- The change stayed bounded and avoided any runtime or host-boundary redesign:
+  - added explicit `typeck` surface for `io.hashString` as `String -> String`
+  - left runtime behavior, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added focused parity coverage for the missing consumer edges: explicit typeck rejection of non-string input, LSP hover, and REPL `:type`
+- Continued `PR-012` with a follow-up `std.io` consumer-parity slice for `io.hashString`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing direct std runtime coverage and a dedicated frontend bridge test while reusing the already-covered eval/end-to-end/LSP/REPL/typeck edges
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.currentSystem`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type`
+- Continued `PR-012` with a follow-up `std.io` consumer-parity slice for `io.currentSystem`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added a dedicated frontend bridge test so `io.currentSystem()` no longer depends on the older shared `std.io + std.fetch` smoke case
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.currentDir`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused parity coverage across `std`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` while leaving the existing broad `typeck` positive coverage in place
+- Continued `PR-012` with a follow-up `std.io` consumer-parity slice for `io.currentDir`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added a dedicated frontend bridge test so `io.currentDir()` no longer depends on the older shared `std.io + std.fetch` smoke case
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.getEnv`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added deterministic focused parity coverage across `std`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` using a guaranteed-missing environment key while leaving the existing broad `typeck` positive coverage in place
+- Continued `PR-012` with a follow-up `std.io` consumer-parity slice for `io.getEnv`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added a dedicated frontend bridge test so `io.getEnv()` no longer depends on the older shared `std.io + std.fetch` smoke case
+- Continued `PR-012` with a narrow `std.fetch` consumer-parity slice for `fetch.path`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP hover, REPL `:type`, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - replaced the older shared `std.io + std.fetch` frontend smoke dependency with a dedicated `fetch.path(...).hash` bridge test and added the missing focused `eval` / `end_to_end` parity coverage for the canonical metadata-record projection path
+- Continued `PR-012` with a narrow `std.fetch` consumer-parity slice for `fetch.pathWithHash`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added missing dedicated parity across std direct runtime coverage, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the canonical `fetch.pathWithHash(...).hash` projection path
+- Continued `PR-012` with a narrow `std.fetch` consumer-parity slice for `fetch.url`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added deterministic local-loopback parity across std direct runtime coverage, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the canonical `fetch.url(...).hash` projection path
+- Continued `PR-012` with a narrow `std.fetch` consumer-parity slice for `fetch.urlWithHash`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added deterministic local-loopback parity across std direct runtime coverage, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the canonical `fetch.urlWithHash(...).hash` projection path while reusing the existing broad `typeck` positive coverage
+- Continued `PR-012` with a narrow `std.fetch` consumer-parity slice for `fetch.git`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added deterministic local-repository parity across std direct runtime coverage, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the canonical `fetch.git(...).hash` projection path while reusing the existing broad `typeck` positive coverage
+- Continued `PR-012` with a narrow `std.fetch` consumer-parity slice for `fetch.gitWithHash`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added deterministic local-repository parity across std direct runtime coverage, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the canonical `fetch.gitWithHash(...).hash` projection path while reusing the same local git harness as `fetch.git`
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.hashFile`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path hashing surface alongside the already-covered typed-path mirror
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.homeDir`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added focused parity coverage across `std`, `typeck`, `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path home-directory bridge alongside the already-covered typed-path mirror
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.readFile`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused consumer parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path text file bridge while leaving the existing std runtime and broad typeck positive coverage in place
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.writeFile`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused consumer parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path write bridge while extending the existing broad typeck positive coverage to include the canonical `String -> String -> Unit` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.appendFile`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused consumer parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path append bridge while extending the existing broad typeck positive coverage to include the canonical `String -> String -> Unit` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.readDir`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added missing direct std runtime coverage plus focused parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path directory bridge while extending the existing broad typeck positive coverage to include the canonical `String -> List[String]` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.createDirAll`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused consumer parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path directory-creation bridge while extending the existing broad typeck positive coverage to include the canonical `String -> Unit` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.removeDirAll`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, std direct builtin coverage, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added the missing focused consumer parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path directory-removal bridge while extending the existing broad typeck positive coverage to include the canonical `String -> Unit` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.pathExists`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added missing direct std runtime coverage plus focused parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path existence predicate while extending the existing broad typeck positive coverage to include the canonical `String -> Bool` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.isDir`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added missing direct std runtime coverage plus focused parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path directory predicate while extending the existing broad typeck positive coverage to include the canonical `String -> Bool` contract
+- Continued `PR-012` with a narrow `std.io` consumer-parity slice for `io.isFile`.
+- The change stayed bounded and avoided any surface or runtime redesign:
+  - kept the existing runtime behavior, explicit `typeck` surface, LSP completion metadata, and API docs unchanged because they already matched the canonical public shape
+  - added missing direct std runtime coverage plus focused parity across `frontend`, `eval`, `end_to_end`, LSP hover, and REPL `:type` for the legacy string-path file predicate while extending the existing broad typeck positive coverage to include the canonical `String -> Bool` contract
 - Added focused regressions for:
   - LSP stdlib completion metadata including the real canonical `math.inf` / `math.nan` entries
   - explicit consumer parity for `math.inf` / `math.nan` across typeck/frontend/LSP/REPL
+  - explicit documentation/tooling separation between the current constant-only public `std.math` surface and the still-untyped `math.abs` call path
 - Validation completed with:
   - `cargo fmt --all`
   - `cargo test --test std -- --nocapture`

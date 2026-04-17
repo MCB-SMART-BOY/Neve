@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use neve_common::Span;
 use neve_hir::{DefId, ModuleId, ModuleInfo, ModuleLoadError, ModuleLoader};
+use neve_parser::parse;
 use neve_typeck::TypeChecker;
 
 use crate::{
@@ -34,6 +35,97 @@ pub struct ProgramAnalysis {
     loader: ModuleLoader,
     modules: HashMap<ModuleId, ModuleAnalysis>,
     type_names: HashMap<DefId, String>,
+}
+
+/// Dependency-first program module diagnostics entry.
+/// 依赖优先的程序模块诊断条目。
+#[derive(Debug, Clone)]
+pub struct ProgramDiagnosticModule {
+    /// Loaded module id.
+    /// 已加载模块 ID。
+    pub module_id: ModuleId,
+    /// Backing source path on disk.
+    /// 模块对应的磁盘路径。
+    pub file_path: PathBuf,
+    /// Source text read for diagnostic attribution.
+    /// 用于诊断归属展示的源码文本。
+    pub source: String,
+    /// Final diagnostics for the module.
+    /// 模块的最终诊断。
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Dependency-first program module entry with a successfully parsed AST.
+/// 带有成功解析 AST 的依赖优先程序模块条目。
+#[derive(Debug, Clone)]
+pub struct ProgramParsedModule {
+    /// Loaded module id.
+    /// 已加载模块 ID。
+    pub module_id: ModuleId,
+    /// Backing source path on disk.
+    /// 模块对应的磁盘路径。
+    pub file_path: PathBuf,
+    /// Resolved module path segments.
+    /// 解析后的模块路径段。
+    pub module_path: Vec<String>,
+    /// Parsed AST for this module.
+    /// 当前模块的已解析 AST。
+    pub ast: SourceFile,
+}
+
+/// Result of parsing one module file for compatibility consumers.
+/// 面向兼容消费者的单模块文件解析结果。
+#[derive(Debug, Clone)]
+pub struct ModuleParseResult {
+    /// Backing source path on disk.
+    /// 模块对应的磁盘路径。
+    pub file_path: PathBuf,
+    /// Resolved module path segments.
+    /// 解析后的模块路径段。
+    pub module_path: Vec<String>,
+    /// Source text read for parsing and diagnostic attribution.
+    /// 用于解析与诊断归属展示的源码文本。
+    pub source: String,
+    /// Final parser diagnostics for this file.
+    /// 当前文件的最终解析诊断。
+    pub diagnostics: Vec<Diagnostic>,
+    /// Parse-clean AST payload when parsing succeeded.
+    /// 解析成功时的 AST 负载。
+    pub ast: Option<SourceFile>,
+}
+
+/// Dependency-first program module entry ready for HIR evaluation.
+/// 可直接用于 HIR 求值的依赖优先程序模块条目。
+#[derive(Debug, Clone)]
+pub struct ProgramEvaluableModule {
+    /// Loaded module id.
+    /// 已加载模块 ID。
+    pub module_id: ModuleId,
+    /// Lowered HIR for this program module.
+    /// 当前程序模块的降级 HIR。
+    pub module: Module,
+    /// Resolved method call targets needed before evaluation.
+    /// 求值前需要的方法调用解析结果。
+    pub method_resolutions: HashMap<Span, DefId>,
+}
+
+/// Parse one module file into compatibility-facing diagnostics and AST payload.
+/// 将单个模块文件解析为面向兼容层的诊断与 AST 负载。
+pub fn parse_module_file(
+    file_path: impl AsRef<Path>,
+    module_path: &[String],
+) -> std::io::Result<ModuleParseResult> {
+    let file_path = file_path.as_ref().to_path_buf();
+    let source = std::fs::read_to_string(&file_path)?;
+    let (ast, diagnostics) = parse(&source);
+
+    Ok(ModuleParseResult {
+        file_path,
+        module_path: module_path.to_vec(),
+        source,
+        ast: diagnostics.is_empty().then_some(ast),
+        diagnostics,
+    })
 }
 
 impl ProgramAnalysis {
@@ -99,6 +191,74 @@ impl ProgramAnalysis {
     /// 借用共享的可见类型名映射。
     pub fn type_names(&self) -> &HashMap<DefId, String> {
         &self.type_names
+    }
+
+    /// Return dependency-first program diagnostics entries.
+    /// 返回依赖优先的程序诊断条目。
+    pub fn diagnostic_modules_in_order(&self) -> Vec<ProgramDiagnosticModule> {
+        self.load_order()
+            .iter()
+            .filter_map(|module_id| {
+                let info = self.module_info(*module_id)?;
+                let diagnostics = self.diagnostics(*module_id)?.to_vec();
+                Some(ProgramDiagnosticModule {
+                    module_id: *module_id,
+                    file_path: info.file_path.clone(),
+                    source: std::fs::read_to_string(&info.file_path).unwrap_or_default(),
+                    diagnostics,
+                })
+            })
+            .collect()
+    }
+
+    /// Return dependency-first parsed program modules with parse-clean ASTs.
+    /// 返回带有解析成功 AST 的依赖优先程序模块。
+    pub fn parsed_modules_in_order(&self) -> Vec<ProgramParsedModule> {
+        self.load_order()
+            .iter()
+            .filter_map(|module_id| {
+                let info = self.module_info(*module_id)?;
+                if !self
+                    .parsed_diagnostics(*module_id)
+                    .unwrap_or(&[])
+                    .is_empty()
+                {
+                    return None;
+                }
+                let ast = self.parsed_source(*module_id)?.clone();
+                Some(ProgramParsedModule {
+                    module_id: *module_id,
+                    file_path: info.file_path.clone(),
+                    module_path: info.path.clone(),
+                    ast,
+                })
+            })
+            .collect()
+    }
+
+    /// Return dependency-first program modules that are ready for HIR evaluation.
+    /// 返回已可用于 HIR 求值的依赖优先程序模块。
+    pub fn evaluable_modules_in_order(&self) -> Vec<ProgramEvaluableModule> {
+        self.load_order()
+            .iter()
+            .filter_map(|module_id| {
+                let module = self.hir_module(*module_id)?.clone();
+                let analysis = self.modules.get(module_id)?;
+                if analysis
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
+                {
+                    return None;
+                }
+
+                Some(ProgramEvaluableModule {
+                    module_id: *module_id,
+                    module,
+                    method_resolutions: analysis.semantics.method_resolutions.clone(),
+                })
+            })
+            .collect()
     }
 }
 

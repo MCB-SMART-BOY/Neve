@@ -6,6 +6,7 @@ use crate::output;
 use neve_diagnostic::{Severity, emit};
 use neve_eval::{Evaluator, Value};
 use neve_frontend::{LoadedSnippetModule, analyze_snippet_ast};
+use neve_hir::supports_canonical_std_import;
 use neve_parser::parse;
 use neve_std::stdlib;
 use neve_syntax::{ImportDef, ItemKind, SourceFile};
@@ -39,6 +40,32 @@ pub fn run(expr: &str, verbose: bool, compat_ast: bool) -> Result<(), String> {
 enum EvalBackend {
     FrontendHir,
     AstCompat,
+}
+
+/// Result of executing one private `neve eval` path.
+/// 执行单条私有 `neve eval` 路径后的结果。
+struct EvalExecutionResult {
+    backend: EvalBackend,
+    value: Value,
+}
+
+impl EvalExecutionResult {
+    fn frontend_hir(value: Value) -> Self {
+        Self {
+            backend: EvalBackend::FrontendHir,
+            value,
+        }
+    }
+
+    fn from_run(backend: RunBackend, value: Value) -> Self {
+        Self {
+            backend: match backend {
+                RunBackend::FrontendHir => EvalBackend::FrontendHir,
+                RunBackend::AstCompat => EvalBackend::AstCompat,
+            },
+            value,
+        }
+    }
 }
 
 /// Prepare the source for parsing by wrapping expressions appropriately.
@@ -120,6 +147,16 @@ fn eval_value(
     root_dir: &Path,
     compat_ast: bool,
 ) -> Result<(EvalBackend, Value), String> {
+    let result = execute_eval(file, source, root_dir, compat_ast)?;
+    Ok((result.backend, result.value))
+}
+
+fn execute_eval(
+    file: &SourceFile,
+    source: &str,
+    root_dir: &Path,
+    compat_ast: bool,
+) -> Result<EvalExecutionResult, String> {
     if source_file_requires_ast_compat(file) {
         return eval_via_module_graph(source, root_dir, compat_ast);
     }
@@ -150,25 +187,15 @@ fn eval_value(
     }
 
     let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
-    for entry in &analysis.loaded_modules {
-        let Some(module) = &entry.hir else {
-            continue;
-        };
-        if entry
-            .diagnostics
-            .iter()
-            .any(|diag| diag.severity == Severity::Error)
-        {
-            continue;
-        }
-
+    for entry in &analysis.evaluable_loaded_modules {
         evaluator
-            .eval_module_with_method_resolutions(module, &entry.semantics.method_resolutions)
+            .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
             .map_err(format_hir_eval_error)?;
     }
+
     evaluator
         .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
-        .map(|value| (EvalBackend::FrontendHir, value))
+        .map(EvalExecutionResult::frontend_hir)
         .map_err(format_hir_eval_error)
 }
 
@@ -176,17 +203,10 @@ fn eval_via_module_graph(
     source: &str,
     root_dir: &Path,
     compat_ast: bool,
-) -> Result<(EvalBackend, Value), String> {
+) -> Result<EvalExecutionResult, String> {
     let temp_module = TempEvalModule::create(source, root_dir)?;
     let (backend, value) = run_file_value(temp_module.path(), false, compat_ast)?;
-    Ok((map_run_backend(backend), value))
-}
-
-fn map_run_backend(backend: RunBackend) -> EvalBackend {
-    match backend {
-        RunBackend::FrontendHir => EvalBackend::FrontendHir,
-        RunBackend::AstCompat => EvalBackend::AstCompat,
-    }
+    Ok(EvalExecutionResult::from_run(backend, value))
 }
 
 struct TempEvalModule {
@@ -229,12 +249,7 @@ fn source_file_requires_ast_compat(file: &SourceFile) -> bool {
 }
 
 fn import_requires_ast_compat(import: &ImportDef) -> bool {
-    is_std_import(import) && !is_supported_std_import(import)
-}
-
-fn is_supported_std_import(import: &ImportDef) -> bool {
-    import.path.len() == 2
-        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+    is_std_import(import) && !supports_canonical_std_import(import)
 }
 
 fn is_std_import(import: &ImportDef) -> bool {
@@ -364,21 +379,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_value_rejects_implicit_ast_compat_for_unsupported_std_import_shape() {
-        let source = prepare_source("import std (list); let result = list.len([1, 2])");
-        let (file, diagnostics) = parse(&source);
-        assert!(
-            diagnostics.is_empty(),
-            "unexpected parse errors: {:?}",
-            diagnostics
-        );
-
-        let err = eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap_err();
-        assert!(err.contains("--compat-ast"), "unexpected error: {err}");
-    }
-
-    #[test]
-    fn eval_value_uses_ast_compat_when_explicit_for_unsupported_std_import_shape() {
+    fn eval_value_prefers_frontend_hir_for_std_root_module_item_imports() {
         let source = prepare_source("import std (list); let result = list.len([1, 2])");
         let (file, diagnostics) = parse(&source);
         assert!(
@@ -388,8 +389,56 @@ mod tests {
         );
 
         let (backend, value) =
-            eval_value(&file, &source, TempDir::new().unwrap().path(), true).unwrap();
-        assert_eq!(backend, EvalBackend::AstCompat);
+            eval_value(&file, &source, TempDir::new().unwrap().path(), false).unwrap();
+        assert_eq!(backend, EvalBackend::FrontendHir);
         assert_eq!(value, Value::Int(2.into()));
+    }
+
+    #[test]
+    fn eval_value_requires_compat_ast_for_std_root_module_import_with_local_dependency() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("util.neve"),
+            "pub fn add_one(x) = x + 1;",
+        )
+        .unwrap();
+
+        let source = prepare_source(
+            "import util (add_one); import std; let result = add_one(std.list.len([1, 2]))",
+        );
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let err = eval_value(&file, &source, temp_dir.path(), false)
+            .expect_err("unsupported std root module import should require --compat-ast");
+        assert!(err.contains("--compat-ast"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn eval_value_uses_ast_compat_for_std_root_module_import_with_local_dependency() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("util.neve"),
+            "pub fn add_one(x) = x + 1;",
+        )
+        .unwrap();
+
+        let source = prepare_source(
+            "import util (add_one); import std; let result = add_one(std.list.len([1, 2]))",
+        );
+        let (file, diagnostics) = parse(&source);
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected parse errors: {:?}",
+            diagnostics
+        );
+
+        let (backend, value) = eval_value(&file, &source, temp_dir.path(), true).unwrap();
+        assert_eq!(backend, EvalBackend::AstCompat);
+        assert_eq!(value, Value::Int(3.into()));
     }
 }

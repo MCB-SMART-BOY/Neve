@@ -1688,7 +1688,7 @@ mod tests {
             x86_64_linux = #{
                 default = #{
                     name = "dep",
-                    version = "3.0.0"
+                    version = "3.1.0"
                 }
             }
         }
@@ -1744,7 +1744,7 @@ mod tests {
             root.join("helpers.neve"),
             r#"pub fn package(name) = #{
     name = name,
-    version = "3.0.0"
+    version = "3.1.0"
 };"#,
         )?;
 

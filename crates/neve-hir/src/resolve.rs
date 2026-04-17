@@ -13,6 +13,285 @@ use neve_syntax::{self as ast, SourceFile};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+/// Canonical builtin std import bindings derived from one AST import.
+/// 从单个 AST 导入派生出的规范 std builtin 绑定。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StdBuiltinImportBindings {
+    /// Imported builtin items keyed by in-scope name.
+    /// 作用域内名称到 builtin 全名的映射。
+    pub item_imports: Vec<(String, String)>,
+    /// Imported builtin modules keyed by namespace alias.
+    /// 命名空间别名到 builtin 模块前缀的映射。
+    pub module_imports: Vec<(String, String)>,
+}
+
+impl StdBuiltinImportBindings {
+    /// Merge another binding set into this one.
+    /// 将另一组绑定合并到当前结果。
+    pub fn extend(&mut self, other: Self) {
+        self.item_imports.extend(other.item_imports);
+        self.module_imports.extend(other.module_imports);
+    }
+}
+
+/// Return the canonical builtin std root modules.
+/// 返回规范的 std builtin 根模块集合。
+pub fn std_builtin_root_modules() -> &'static [&'static str] {
+    const ROOT_MODULES: &[&str] = &[
+        "fetch", "io", "list", "Map", "math", "option", "path", "result", "Set", "string",
+    ];
+    ROOT_MODULES
+}
+
+/// Return the exported builtin names for a std module prefix.
+/// 返回给定 std 模块前缀导出的 builtin 名称。
+pub fn std_builtin_exports(module_prefix: &str) -> Option<&'static [&'static str]> {
+    const FETCH: &[&str] = &[
+        "git",
+        "gitWithHash",
+        "path",
+        "pathWithHash",
+        "url",
+        "urlWithHash",
+    ];
+    const IO: &[&str] = &[
+        "appendFile",
+        "createDirAll",
+        "currentDir",
+        "currentSystem",
+        "exec",
+        "execShell",
+        "execWith",
+        "getEnv",
+        "hashFile",
+        "hashString",
+        "homeDir",
+        "isDir",
+        "isFile",
+        "pathExists",
+        "readDir",
+        "readFile",
+        "removeDirAll",
+        "writeFile",
+    ];
+    const LIST: &[&str] = &[
+        "append",
+        "cons",
+        "contains",
+        "drop",
+        "empty",
+        "filter",
+        "fold",
+        "foldRight",
+        "get",
+        "head",
+        "indexOf",
+        "init",
+        "isEmpty",
+        "last",
+        "len",
+        "map",
+        "max",
+        "min",
+        "product",
+        "range",
+        "replicate",
+        "reverse",
+        "singleton",
+        "sort",
+        "sum",
+        "tail",
+        "take",
+        "unzip",
+        "zip",
+    ];
+    const MAP: &[&str] = &[
+        "contains",
+        "difference",
+        "empty",
+        "filter",
+        "filterWithKey",
+        "fold",
+        "foldWithKey",
+        "fromList",
+        "get",
+        "getWithDefault",
+        "insert",
+        "intersection",
+        "isEmpty",
+        "keys",
+        "map",
+        "mapWithKey",
+        "remove",
+        "singleton",
+        "size",
+        "toList",
+        "union",
+        "update",
+        "values",
+    ];
+    const MATH: &[&str] = &[
+        "abs", "ceil", "clamp", "cos", "e", "exp", "floor", "inf", "isInf", "isNan", "log",
+        "log10", "max", "min", "nan", "pi", "pow", "round", "sin", "sqrt", "tan", "toFloat",
+        "toInt",
+    ];
+    const OPTION: &[&str] = &["is_none", "is_some", "none", "some", "unwrap", "unwrap_or"];
+    const PATH: &[&str] = &["extension", "filename", "is_absolute", "join", "parent"];
+    const RESULT: &[&str] = &["err", "is_err", "is_ok", "ok", "unwrap", "unwrap_err"];
+    const SET: &[&str] = &[
+        "contains",
+        "difference",
+        "empty",
+        "filter",
+        "fold",
+        "fromList",
+        "insert",
+        "intersection",
+        "isDisjoint",
+        "isEmpty",
+        "isSubset",
+        "isSuperset",
+        "map",
+        "partition",
+        "remove",
+        "singleton",
+        "size",
+        "symmetricDifference",
+        "toList",
+        "union",
+    ];
+    const STRING: &[&str] = &[
+        "chars",
+        "contains",
+        "endsWith",
+        "isEmpty",
+        "join",
+        "len",
+        "lines",
+        "lower",
+        "repeat",
+        "replace",
+        "split",
+        "startsWith",
+        "substring",
+        "trim",
+        "upper",
+    ];
+
+    match module_prefix {
+        "fetch" => Some(FETCH),
+        "io" => Some(IO),
+        "list" => Some(LIST),
+        "Map" => Some(MAP),
+        "math" => Some(MATH),
+        "option" => Some(OPTION),
+        "path" => Some(PATH),
+        "result" => Some(RESULT),
+        "Set" => Some(SET),
+        "string" => Some(STRING),
+        _ => None,
+    }
+}
+
+/// Return whether the canonical frontend/HIR path supports this std import.
+/// 返回该 std 导入是否由规范 frontend/HIR 路径支持。
+pub fn supports_canonical_std_import(import: &ast::ImportDef) -> bool {
+    import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+        && (ast_std_builtin_module_prefix(import).is_some()
+            || ast_is_std_root_builtin_import(import))
+}
+
+/// Resolve builtin std import bookkeeping for one AST import when applicable.
+/// 在适用时解析单个 AST 导入对应的 builtin std bookkeeping。
+pub fn resolve_std_builtin_import(import: &ast::ImportDef) -> Option<StdBuiltinImportBindings> {
+    let mut bindings = StdBuiltinImportBindings::default();
+
+    if let Some(module_prefix) = ast_std_builtin_module_prefix(import) {
+        match &import.items {
+            ast::ImportItems::Module => {
+                let alias = import
+                    .alias
+                    .as_ref()
+                    .map(|alias| alias.name.clone())
+                    .or_else(|| import.path.last().map(|segment| segment.name.clone()));
+                if let Some(alias) = alias {
+                    bindings
+                        .module_imports
+                        .push((alias, module_prefix.to_string()));
+                }
+            }
+            ast::ImportItems::Items(items) => {
+                for item in items {
+                    bindings
+                        .item_imports
+                        .push((item.name.clone(), format!("{module_prefix}.{}", item.name)));
+                }
+            }
+            ast::ImportItems::All => {
+                if let Some(exports) = std_builtin_exports(module_prefix) {
+                    for export in exports {
+                        bindings
+                            .item_imports
+                            .push(((*export).to_string(), format!("{module_prefix}.{export}")));
+                    }
+                }
+            }
+        }
+
+        return Some(bindings);
+    }
+
+    if !ast_is_std_root_builtin_import(import) {
+        return None;
+    }
+
+    match &import.items {
+        ast::ImportItems::Items(items) => {
+            for item in items {
+                bindings
+                    .module_imports
+                    .push((item.name.clone(), item.name.clone()));
+            }
+        }
+        ast::ImportItems::All => {
+            for module_name in std_builtin_root_modules() {
+                bindings
+                    .module_imports
+                    .push(((*module_name).to_string(), (*module_name).to_string()));
+            }
+        }
+        ast::ImportItems::Module => {}
+    }
+
+    Some(bindings)
+}
+
+fn ast_std_builtin_module_prefix(import: &ast::ImportDef) -> Option<&str> {
+    if import.path.len() == 2
+        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+    {
+        Some(import.path[1].name.as_str())
+    } else {
+        None
+    }
+}
+
+fn ast_is_std_root_builtin_import(import: &ast::ImportDef) -> bool {
+    if import.path.len() != 1
+        || import.path.first().map(|segment| segment.name.as_str()) != Some("std")
+    {
+        return false;
+    }
+
+    match &import.items {
+        ast::ImportItems::Items(items) => items
+            .iter()
+            .all(|item| std_builtin_root_modules().contains(&item.name.as_str())),
+        ast::ImportItems::All => true,
+        ast::ImportItems::Module => false,
+    }
+}
+
 /// Name resolver that builds HIR from AST.
 /// 从 AST 构建 HIR 的名称解析器。
 pub struct Resolver {
@@ -624,155 +903,33 @@ impl Resolver {
         }
     }
 
-    fn std_builtin_exports(module_prefix: &str) -> Option<&'static [&'static str]> {
-        const FETCH: &[&str] = &[
-            "git",
-            "gitWithHash",
-            "path",
-            "pathWithHash",
-            "url",
-            "urlWithHash",
-        ];
-        const IO: &[&str] = &[
-            "appendFile",
-            "createDirAll",
-            "currentDir",
-            "currentSystem",
-            "exec",
-            "execShell",
-            "execWith",
-            "getEnv",
-            "hashFile",
-            "hashString",
-            "homeDir",
-            "isDir",
-            "isFile",
-            "pathExists",
-            "readDir",
-            "readFile",
-            "removeDirAll",
-            "writeFile",
-        ];
-        const LIST: &[&str] = &[
-            "append",
-            "cons",
-            "contains",
-            "drop",
-            "empty",
-            "filter",
-            "fold",
-            "foldRight",
-            "get",
-            "head",
-            "indexOf",
-            "init",
-            "isEmpty",
-            "last",
-            "len",
-            "map",
-            "max",
-            "min",
-            "product",
-            "range",
-            "replicate",
-            "reverse",
-            "singleton",
-            "sort",
-            "sum",
-            "tail",
-            "take",
-            "unzip",
-            "zip",
-        ];
-        const MAP: &[&str] = &[
-            "contains",
-            "difference",
-            "empty",
-            "filter",
-            "filterWithKey",
-            "fold",
-            "foldWithKey",
-            "fromList",
-            "get",
-            "getWithDefault",
-            "insert",
-            "intersection",
-            "isEmpty",
-            "keys",
-            "map",
-            "mapWithKey",
-            "remove",
-            "singleton",
-            "size",
-            "toList",
-            "union",
-            "update",
-            "values",
-        ];
-        const MATH: &[&str] = &[
-            "abs", "ceil", "clamp", "cos", "e", "exp", "floor", "inf", "isInf", "isNan", "log",
-            "log10", "max", "min", "nan", "pi", "pow", "round", "sin", "sqrt", "tan", "toFloat",
-            "toInt",
-        ];
-        const OPTION: &[&str] = &["is_none", "is_some", "none", "some", "unwrap", "unwrap_or"];
-        const PATH: &[&str] = &["extension", "filename", "is_absolute", "join", "parent"];
-        const RESULT: &[&str] = &["err", "is_err", "is_ok", "ok", "unwrap", "unwrap_err"];
-        const SET: &[&str] = &[
-            "contains",
-            "difference",
-            "empty",
-            "filter",
-            "fold",
-            "fromList",
-            "insert",
-            "intersection",
-            "isDisjoint",
-            "isEmpty",
-            "isSubset",
-            "isSuperset",
-            "map",
-            "partition",
-            "remove",
-            "singleton",
-            "size",
-            "symmetricDifference",
-            "toList",
-            "union",
-        ];
-        const STRING: &[&str] = &[
-            "chars",
-            "contains",
-            "endsWith",
-            "isEmpty",
-            "join",
-            "len",
-            "lines",
-            "lower",
-            "repeat",
-            "replace",
-            "split",
-            "startsWith",
-            "substring",
-            "trim",
-            "upper",
-        ];
-
-        match module_prefix {
-            "fetch" => Some(FETCH),
-            "io" => Some(IO),
-            "list" => Some(LIST),
-            "Map" => Some(MAP),
-            "math" => Some(MATH),
-            "option" => Some(OPTION),
-            "path" => Some(PATH),
-            "result" => Some(RESULT),
-            "Set" => Some(SET),
-            "string" => Some(STRING),
-            _ => None,
-        }
-    }
-
     fn try_register_std_import(&mut self, import: &Import) -> bool {
+        if import.path.len() == 1
+            && import.path.first().map(|segment| segment.as_str()) == Some("std")
+        {
+            match &import.kind {
+                ImportKind::Items(names)
+                    if names
+                        .iter()
+                        .all(|name| std_builtin_root_modules().contains(&name.as_str())) =>
+                {
+                    for name in names {
+                        self.imported_builtin_modules
+                            .insert(name.clone(), name.clone());
+                    }
+                    return true;
+                }
+                ImportKind::All => {
+                    for module_name in std_builtin_root_modules() {
+                        self.imported_builtin_modules
+                            .insert((*module_name).to_string(), (*module_name).to_string());
+                    }
+                    return true;
+                }
+                _ => return false,
+            }
+        }
+
         let Some(module_prefix) = Self::std_builtin_module_prefix(&import.path) else {
             return false;
         };
@@ -795,7 +952,7 @@ impl Resolver {
                 }
             }
             ImportKind::All => {
-                let Some(names) = Self::std_builtin_exports(&module_prefix) else {
+                let Some(names) = std_builtin_exports(&module_prefix) else {
                     return false;
                 };
                 for name in names {

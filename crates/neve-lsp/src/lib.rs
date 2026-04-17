@@ -13,6 +13,7 @@
 
 mod backend;
 mod capabilities;
+mod stdlib_completion;
 
 pub mod document;
 pub mod semantic_tokens;

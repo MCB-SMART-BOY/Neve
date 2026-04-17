@@ -22,4 +22,7 @@ pub use module_loader::{
     ImportResolveError, ModuleInfo, ModuleLoadError, ModuleLoader, Visibility,
 };
 pub use module_paths::{ModulePath, ModulePathKind};
-pub use resolve::Resolver;
+pub use resolve::{
+    Resolver, StdBuiltinImportBindings, resolve_std_builtin_import, std_builtin_exports,
+    std_builtin_root_modules, supports_canonical_std_import,
+};
