@@ -1,13 +1,12 @@
 //! The `neve repl` command.
 //! `neve repl` 命令。
 
-use crate::output;
+use crate::{commands::diagnostics, output};
 use neve_common::Span;
-use neve_diagnostic::emit;
-use neve_eval::{Evaluator, Value, builtins};
+use neve_eval::{EvaluableModuleRef, Evaluator, Value, builtins};
 use neve_frontend::{
-    FrontendSession, SessionDefinedBinding, SessionDisplayError, SessionLoadedDiagnostics,
-    SessionModuleContext, SessionPreparedModule, SessionVisibleState,
+    FrontendSession, SessionDefinedBinding, SessionDisplayError, SessionModuleContext,
+    SessionPreparedModule, SessionVisibleState,
 };
 use neve_hir::{DefId, Module, ModuleId};
 use neve_std::stdlib;
@@ -132,7 +131,7 @@ pub fn run() -> Result<(), String> {
                             let expr_str = parts[1..].join(" ");
                             match infer_repl_type(&expr_str, &runtime_state, &semantic_state) {
                                 Ok(ty) => println!("{ty}"),
-                                Err(error) => emit_display_error(error),
+                                Err(error) => diagnostics::emit_session_display_error(error),
                             }
                             input_buffer.clear();
                             continue;
@@ -157,10 +156,12 @@ pub fn run() -> Result<(), String> {
                                         &mut semantic_state,
                                     ) {
                                         Ok(_) => println!("Loaded: {}", input.source_name),
-                                        Err(error) => emit_display_error(error),
+                                        Err(error) => {
+                                            diagnostics::emit_session_display_error(error)
+                                        }
                                     }
                                 }
-                                Err(error) => emit_display_error(error),
+                                Err(error) => diagnostics::emit_session_display_error(error),
                             }
                             input_buffer.clear();
                             continue;
@@ -198,7 +199,7 @@ pub fn run() -> Result<(), String> {
                             println!("{:?}", value);
                         }
                     }
-                    Err(error) => emit_display_error(error),
+                    Err(error) => diagnostics::emit_session_display_error(error),
                 }
 
                 // Clear buffer after processing
@@ -281,10 +282,12 @@ impl ReplHirState {
         method_resolutions: HashMap<Span, DefId>,
     ) -> Result<Value, String> {
         self.eval_pending_loaded_modules(semantic_state)?;
-        self.evaluator.set_method_resolutions(method_resolutions);
         let value = self
             .evaluator
-            .eval_module(&prepared.module)
+            .eval_evaluable_module(EvaluableModuleRef::new(
+                &prepared.module,
+                &method_resolutions,
+            ))
             .map_err(|e| format!("evaluation error: {e:?}"))?;
         self.record_user_bindings(&prepared.defined_bindings);
         semantic_state.commit_prepared_module(&mut self.visible_state, prepared);
@@ -300,7 +303,7 @@ impl ReplHirState {
         self.eval_pending_loaded_modules(semantic_state)?;
         let mut evaluator = self.evaluator.clone();
         evaluator
-            .eval_module_with_method_resolutions(module, &method_resolutions)
+            .eval_evaluable_module(EvaluableModuleRef::new(module, &method_resolutions))
             .map_err(|e| format!("evaluation error: {e:?}"))
     }
 
@@ -321,7 +324,10 @@ impl ReplHirState {
             }
 
             self.evaluator
-                .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
+                .eval_evaluable_module(EvaluableModuleRef::new(
+                    &entry.module,
+                    &entry.method_resolutions,
+                ))
                 .map_err(|e| format!("evaluation error: {e:?}"))?;
             self.evaluated_modules.insert(entry.module_id);
         }
@@ -398,34 +404,6 @@ fn infer_repl_type(
         .ok_or_else(|| {
             SessionDisplayError::Message("internal error: failed to infer queried type".to_string())
         })
-}
-
-fn emit_loaded_module_diagnostics(entries: &[SessionLoadedDiagnostics]) {
-    for entry in entries {
-        for diag in &entry.diagnostics {
-            emit(&entry.source, &entry.file_path.display().to_string(), diag);
-        }
-    }
-}
-
-fn emit_display_error(error: SessionDisplayError) {
-    match error {
-        SessionDisplayError::Diagnostics {
-            source_name,
-            source,
-            diagnostics,
-        } => {
-            for diag in &diagnostics {
-                emit(&source, &source_name, diag);
-            }
-        }
-        SessionDisplayError::LoadedModules(entries) => {
-            emit_loaded_module_diagnostics(&entries);
-        }
-        SessionDisplayError::Message(message) => {
-            eprintln!("{message}");
-        }
-    }
 }
 
 #[cfg(test)]
@@ -3267,6 +3245,56 @@ mod tests {
             &state,
         )
         .expect("type inference should succeed");
+        assert_eq!(ty, "String");
+    }
+
+    #[test]
+    fn repl_type_uses_optional_flow_result_for_builtin_result_try_expr() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "import std.result as result;",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("import should evaluate");
+
+        let ty = infer_repl_type("result.ok(41)? + 1", &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_optional_flow_result_for_enum_some_try_expr() {
+        let mut runtime = ReplHirState::new();
+        let mut state = ReplSemanticState::default();
+        let context = ReplInputContext::repl();
+
+        evaluate_repl_input(
+            "enum Option { Some(Int), None };",
+            true,
+            &context,
+            &mut runtime,
+            &mut state,
+        )
+        .expect("enum definition should evaluate");
+
+        let ty = infer_repl_type("Some(41)? + 1", &runtime, &state)
+            .expect("type inference should succeed");
+        assert_eq!(ty, "Int");
+    }
+
+    #[test]
+    fn repl_type_uses_optional_flow_result_for_record_safe_field_expr() {
+        let runtime = ReplHirState::new();
+        let state = ReplSemanticState::default();
+
+        let ty = infer_repl_type(r#"#{ name = "test" }?.name ?? "default""#, &runtime, &state)
+            .expect("type inference should succeed");
         assert_eq!(ty, "String");
     }
 

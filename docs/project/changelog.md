@@ -21,13 +21,30 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
-## [Unreleased] / 未发布
+## [3.2.0] - 2026-05-04
 
 ### Added / 新增
-- (nothing yet)
+- **Effect system**: Added `effect` keyword for explicit side-effect annotation. Pure functions are checked by default; `--allow-effects` bypasses the check.
+- **Scripting builtins**: `io.execCommandLines` (line-by-line output), `io.awaitTaskWithTimeout` (timeout + process kill for Command/Pipeline), `io.args()` (script arguments), `io.env()` (environment variables), `io.sleep()`, `io.which()`.
+- **Shebang support**: `.neve` files starting with `#!/usr/bin/env neve` can be executed directly. `neve run file.neve arg1 arg2` passes arguments via `io.args()`.
+- **Pipeline timeout**: `io.awaitTaskWithTimeout` now supports Pipeline tasks with per-stage process kill.
+- **Windows process kill**: Timeout-based process termination uses `taskkill` on Windows, `kill -9` on Unix.
+- **Example scripts**: `manifest.neve` (file listing + SHA-256), `build-check.neve` (CI checks), `http-check.neve` (HTTP health), `backup.neve` (file backup with timestamp).
+
+### Changed / 变更
+- **Effect checking is default-on**: `neve check` now rejects effectful calls by default. Use `--allow-effects` to restore permissive behavior. The old `--pure` flag is removed.
+- **Spec v2.1**: Updated language specification with Effect System and Scripting chapters. Keywords: 20 → 21 (added `effect`).
 
 ### Improved / 改进
-- (nothing yet)
+- **Phase B exit criteria validated**: Build reproducibility, lockfile determinism, and GC safety all verified with real package builds.
+- **Formatter**: Fixed `effect` keyword being dropped during formatting. Verified idempotent.
+- **Parser golden tests**: 189 tests including new syntax forms (effect annotation, list comprehension, safe field, try expression).
+- **Cross-platform**: Process kill works on both Unix and Windows.
+
+### Fixed / 修复
+- **Formatter**: `effect` keyword was silently dropped during formatting (now preserved).
+- **Unreachable pattern diagnostics**: Added missing `ErrorCode::UnreachablePattern` to unreachable pattern warnings.
+- **Pipeline timeout**: Previously unsupported; now fully implemented.
 
 ## [3.1.0] - 2026-04-18
 

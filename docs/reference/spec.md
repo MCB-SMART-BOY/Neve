@@ -4,7 +4,7 @@
 
 <h1>Neve Language Specification</h1>
 
-<p><em>语言规范 v2.0</em></p>
+<p><em>语言规范 v2.1</em></p>
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -219,6 +219,11 @@ impl Show for Point {
     fn show(self) -> String = `({self.x}, {self.y})`;
 };
 
+-- Function (pure, no side effects)
+fn add(x: Int, y: Int) -> Int = x + y;
+
+-- Effectful function (may perform I/O, process execution, etc.)
+fn readConfig(path: String) -> String effect = io.readFile(path);
 -- Function
 fn add(x: Int, y: Int) -> Int = x + y;
 ```
@@ -246,6 +251,11 @@ impl Show for Point {
     fn show(self) -> String = `({self.x}, {self.y})`;
 };
 
+-- 函数（纯函数，无副作用）
+fn add(x: Int, y: Int) -> Int = x + y;
+
+-- 副作用函数（可执行 I/O、进程操作等）
+fn readConfig(path: String) -> String effect = io.readFile(path);
 -- 函数
 fn add(x: Int, y: Int) -> Int = x + y;
 ```
@@ -499,12 +509,71 @@ let expensive = lazy compute();
 let result = force(expensive);
 ```
 
+## 10. Effect System / 副作用系统
+
+Neve distinguishes pure functions from effectful ones at compile time.
+Neve 在编译期区分纯函数和副作用函数。
+
+### Effect Annotation / 副作用注解
+
+Functions that perform host effects (I/O, process execution, network) must be annotated with `effect`.
+执行宿主机副作用（I/O、进程执行、网络）的函数必须用 `effect` 注解。
 
 ```neve
-let expensive = lazy compute();
-let result = force(expensive);
+-- Pure function: no effects allowed / 纯函数：不允许副作用
+fn pureAdd(x: Int, y: Int) -> Int = x + y;
+
+-- Effectful function: may call io.*, fetch.* / 副作用函数：可调用 io.*, fetch.*
+fn readHostname() -> String effect = io.readFile("/etc/hostname");
 ```
 
+### Effect Checking / 副作用检查
+
+- `neve check` enforces effect purity by default: pure functions cannot call effectful builtins
+- `neve check` 默认强制副作用检查：纯函数不得调用副作用内置函数
+- The `effect` annotation propagates: calling an effectful function requires the caller to be effectful
+- `effect` 注解传播：调用副作用函数要求调用者也是副作用函数
+- Inspector functions (`processSuccess`, `processStdout`, `processCode`, `processStderr`) are pure
+- 检查器函数（`processSuccess`、`processStdout`、`processCode`、`processStderr`）是纯函数
+- `neve check` performs module-level purity checking by default (rejects all effectful calls; use `--allow-effects` to bypass)
+- `neve check` 默认执行模块级纯度检查（拒绝所有副作用调用；使用 `--allow-effects` 绕过）
+
+### Effectful Builtins / 副作用内置函数
+
+| Module | Functions | Effect |
+|--------|-----------|--------|
+| `std.io` | `readFile`, `writeFile`, `execCommand`, `execPipeline`, `getEnv`, ... | I/O, Process |
+| `std.io` | `processSuccess`, `processStdout`, `processCode`, `processStderr` | Pure (inspectors) |
+| `std.fetch` | `url`, `git`, `path` | Network, Filesystem |
+| `std.list` | All functions | Pure |
+| `std.path` | All functions | Pure |
+
+## 11. Scripting / 脚本
+
+Neve supports shebang-based scripting with command-line argument access.
+Neve 支持基于 shebang 的脚本编写和命令行参数访问。
+
+```neve
+#!/usr/bin/env neve
+import std.io as io;
+
+-- Access script arguments / 访问脚本参数
+let args = io.args();
+
+-- Run a command with timeout / 带超时运行命令
+let cmd = io.command("echo", ["hello"]);
+let task = io.taskCommand(cmd);
+let result = io.awaitTaskWithTimeout(task, 5000);
+```
+
+### Shebang Support / Shebang 支持
+
+- `.neve` files starting with `#!/usr/bin/env neve` can be executed directly
+- 以 `#!/usr/bin/env neve` 开头的 `.neve` 文件可直接执行
+- The shebang line is automatically stripped before parsing
+- Shebang 行在解析前自动去除
+- Remaining CLI arguments are available via `io.args() -> List[String]`
+- 剩余 CLI 参数可通过 `io.args() -> List[String]` 获取
 
 ## Appendix A: Keywords / 附录 A: 关键字
 
@@ -513,20 +582,20 @@ let result = force(expensive);
 let fn type struct enum trait impl
 pub import as self super crate
 if then else match
-lazy true false
+lazy true false effect
 ```
 
-**20 keywords total**
+**21 keywords total**
 
 
 ```
 let fn type struct enum trait impl
 pub import as self super crate
 if then else match
-lazy true false
+lazy true false effect
 ```
 
-**一共 20 个关键字**
+**一共 21 个关键字**
 
 
 ## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照

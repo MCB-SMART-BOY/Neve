@@ -16,7 +16,7 @@
 use crate::ConfigError;
 use neve_derive::Hash;
 use neve_diagnostic::{Diagnostic, Severity};
-use neve_eval::{Evaluator, Value};
+use neve_eval::{EvaluableModuleRef, Evaluator, Value};
 use neve_fetch::{
     archive as fetch_archive, git as fetch_git, url as fetch_url, verify as fetch_verify,
 };
@@ -663,10 +663,10 @@ impl Flake {
             ensure_single_flake_has_no_errors(&analysis.diagnostics)?;
             let mut evaluator = Evaluator::new();
             let root_value = evaluator
-                .eval_module_with_method_resolutions(
+                .eval_evaluable_module(EvaluableModuleRef::new(
                     &analysis.hir,
                     &analysis.semantics.method_resolutions,
-                )
+                ))
                 .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
             let outputs = extract_outputs_value(&root_value)?;
             return Ok((evaluator, outputs));
@@ -1241,7 +1241,10 @@ fn eval_flake_source_via_frontend(source: &str) -> Result<Value, ConfigError> {
     let analysis = analyze_source(source);
     ensure_single_flake_has_no_errors(&analysis.diagnostics)?;
     Evaluator::new()
-        .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
+        .eval_evaluable_module(EvaluableModuleRef::new(
+            &analysis.hir,
+            &analysis.semantics.method_resolutions,
+        ))
         .map_err(|e| ConfigError::Eval(format!("{:?}", e)))
 }
 
@@ -1260,26 +1263,15 @@ fn build_program_evaluator_and_root_value(
     analysis: &ProgramAnalysis,
 ) -> Result<(Evaluator, Value), ConfigError> {
     let mut evaluator = Evaluator::new();
-    let mut root_value = Value::Unit;
-
-    for module_id in analysis.load_order() {
-        let Some(module) = analysis.hir_module(*module_id) else {
-            continue;
-        };
-        let method_resolutions = analysis
-            .semantics(*module_id)
-            .map(|semantics| &semantics.method_resolutions)
-            .cloned()
-            .unwrap_or_default();
-
-        let value = evaluator
-            .eval_module_with_method_resolutions(module, &method_resolutions)
-            .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
-
-        if *module_id == analysis.root_module_id() {
-            root_value = value;
-        }
-    }
+    let modules = analysis.evaluable_modules_in_order();
+    let root_value = evaluator
+        .eval_evaluable_modules(
+            modules
+                .iter()
+                .map(|entry| EvaluableModuleRef::new(&entry.module, &entry.method_resolutions)),
+            analysis.root_module_id(),
+        )
+        .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
 
     Ok((evaluator, root_value))
 }
@@ -1364,23 +1356,11 @@ fn ensure_single_flake_has_no_errors(diagnostics: &[Diagnostic]) -> Result<(), C
 }
 
 fn ensure_flake_program_has_no_errors(analysis: &ProgramAnalysis) -> Result<(), ConfigError> {
-    let mut errors = Vec::new();
-
-    for module_id in analysis.load_order() {
-        let Some(info) = analysis.module_info(*module_id) else {
-            continue;
-        };
-
-        for diagnostic in analysis.diagnostics(*module_id).unwrap_or(&[]) {
-            if diagnostic.severity == Severity::Error {
-                errors.push(format!(
-                    "{}: {}",
-                    info.file_path.display(),
-                    diagnostic.message
-                ));
-            }
-        }
+    if !analysis.has_blocking_diagnostics() {
+        return Ok(());
     }
+
+    let errors = analysis.blocking_diagnostic_messages();
 
     if errors.is_empty() {
         return Ok(());
@@ -1778,6 +1758,21 @@ let flake = #{
             }
             _ => return Err("expected package record".into()),
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_flake_load_reports_frontend_type_errors() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = tempdir()?;
+        let root = temp.path();
+
+        fs::write(root.join("flake.neve"), "let flake = 1 + true;")?;
+
+        let err = Flake::load(root).expect_err("type error should be surfaced");
+        let message = err.to_string();
+        assert!(message.contains("frontend diagnostics"));
+        assert!(message.contains("flake.neve"));
 
         Ok(())
     }

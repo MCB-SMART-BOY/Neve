@@ -3,8 +3,8 @@
 
 mod support;
 
-use neve_diagnostic::DiagnosticKind;
-use neve_frontend::{FrontendDriver, parse_module_file};
+use neve_diagnostic::{DiagnosticKind, Severity};
+use neve_frontend::{DiagnosticStats, FrontendDriver, parse_module_file};
 use support::module_fixtures::create_test_module;
 use tempfile::TempDir;
 
@@ -177,6 +177,65 @@ fn test_frontend_driver_returns_dependency_first_diagnostic_modules() {
 }
 
 #[test]
+fn test_frontend_driver_returns_only_parser_diagnostic_modules_in_dependency_order() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    create_test_module(
+        root,
+        &["bad_parse_a"],
+        r#"
+            pub fn broken_a(x) =
+        "#,
+    );
+    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(
+        root,
+        &["bad_parse_b"],
+        r#"
+            pub fn broken_b(x) =
+        "#,
+    );
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            import bad_parse_a;
+            import bad_type;
+            import bad_parse_b;
+            fn run() = 1;
+        "#,
+    );
+
+    let analysis = FrontendDriver::new(root)
+        .analyze_module_path(&["main".into()])
+        .unwrap();
+
+    let parser_paths: Vec<_> = analysis
+        .parser_diagnostic_modules_in_order()
+        .into_iter()
+        .map(|entry| {
+            assert!(
+                entry
+                    .diagnostics
+                    .iter()
+                    .all(|diag| diag.kind == DiagnosticKind::Parser),
+                "expected parser-only diagnostics, got {:?}",
+                entry.diagnostics
+            );
+            entry
+                .file_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(parser_paths, vec!["bad_parse_a.neve", "bad_parse_b.neve"]);
+}
+
+#[test]
 fn test_frontend_driver_returns_only_parse_clean_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
@@ -217,6 +276,243 @@ fn test_frontend_driver_returns_only_parse_clean_modules_in_dependency_order() {
         .collect();
 
     assert_eq!(parsed_paths, vec!["util.neve", "main.neve"]);
+}
+
+#[test]
+fn test_frontend_driver_returns_only_lowered_modules_in_dependency_order() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    create_test_module(root, &["util"], "pub fn inc(x) = x + 1;");
+    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(
+        root,
+        &["warn_only"],
+        r#"
+            import std.option as option;
+            pub fn warned() = match option.some(1) {
+                Some(_) -> 1,
+                Some(inner) -> inner,
+                None -> 0
+            };
+        "#,
+    );
+    create_test_module(
+        root,
+        &["bad_parse"],
+        r#"
+            pub fn broken(x) =
+        "#,
+    );
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            import util (inc);
+            import bad_type;
+            import warn_only;
+            import bad_parse;
+            fn run() = inc(1);
+        "#,
+    );
+
+    let analysis = FrontendDriver::new(root)
+        .analyze_module_path(&["main".into()])
+        .unwrap();
+
+    let lowered_modules = analysis.lowered_modules_in_order();
+    let lowered_paths: Vec<_> = lowered_modules
+        .iter()
+        .map(|entry| {
+            entry
+                .file_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(
+        lowered_paths,
+        vec!["util.neve", "bad_type.neve", "warn_only.neve", "main.neve"]
+    );
+    assert!(
+        lowered_modules
+            .iter()
+            .all(|entry| !entry.ast.items.is_empty()),
+        "expected parse-clean AST payloads, got {:?}",
+        lowered_modules
+    );
+    assert!(
+        lowered_modules
+            .iter()
+            .all(|entry| !entry.module.items.is_empty()),
+        "expected lowered HIR payloads, got {:?}",
+        lowered_modules
+    );
+
+    let bad_type = lowered_modules
+        .iter()
+        .find(|entry| entry.file_path.ends_with("bad_type.neve"))
+        .expect("expected type-broken lowered module");
+    assert!(
+        bad_type
+            .diagnostics
+            .iter()
+            .any(|diag| diag.kind == DiagnosticKind::Type),
+        "expected final type diagnostics, got {:?}",
+        bad_type.diagnostics
+    );
+
+    let warn_only = lowered_modules
+        .iter()
+        .find(|entry| entry.file_path.ends_with("warn_only.neve"))
+        .expect("expected warning-only lowered module");
+    assert!(
+        warn_only
+            .diagnostics
+            .iter()
+            .any(|diag| diag.severity == Severity::Warning),
+        "expected warning diagnostics, got {:?}",
+        warn_only.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_driver_diagnostic_stats_distinguish_errors_and_warnings() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    create_test_module(
+        root,
+        &["bad_parse"],
+        r#"
+            pub fn broken(x) =
+        "#,
+    );
+    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(
+        root,
+        &["warn_only"],
+        r#"
+            import std.option as option;
+            pub fn warned() = match option.some(1) {
+                Some(_) -> 1,
+                Some(inner) -> inner,
+                None -> 0
+            };
+        "#,
+    );
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            import bad_parse;
+            import bad_type;
+            import warn_only;
+            fn run() = 1;
+        "#,
+    );
+
+    let analysis = FrontendDriver::new(root)
+        .analyze_module_path(&["main".into()])
+        .unwrap();
+    let stats: DiagnosticStats = analysis.diagnostic_stats();
+
+    assert!(
+        stats.parse_errors > 0,
+        "expected parse errors, got {:?}",
+        stats
+    );
+    assert!(
+        stats.non_parse_errors > 0,
+        "expected blocking non-parse errors"
+    );
+    assert_eq!(stats.warnings, 1);
+    assert!(stats.has_errors());
+    assert!(analysis.has_blocking_diagnostics());
+
+    let warning_entry = analysis
+        .diagnostic_modules_in_order()
+        .into_iter()
+        .find(|entry| entry.file_path.ends_with("warn_only.neve"))
+        .expect("expected warning-only module diagnostics");
+    assert!(
+        warning_entry
+            .diagnostics
+            .iter()
+            .any(|diag| diag.severity == Severity::Warning),
+        "expected warning diagnostics, got {:?}",
+        warning_entry.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_driver_blocking_diagnostic_messages_preserve_order_and_exclude_warnings() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    create_test_module(
+        root,
+        &["bad_parse"],
+        r#"
+            pub fn broken(x) =
+        "#,
+    );
+    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(
+        root,
+        &["warn_only"],
+        r#"
+            import std.option as option;
+            pub fn warned() = match option.some(1) {
+                Some(_) -> 1,
+                Some(inner) -> inner,
+                None -> 0
+            };
+        "#,
+    );
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            import bad_parse;
+            import bad_type;
+            import warn_only;
+            fn run() = 1;
+        "#,
+    );
+
+    let analysis = FrontendDriver::new(root)
+        .analyze_module_path(&["main".into()])
+        .unwrap();
+    let messages = analysis.blocking_diagnostic_messages();
+
+    assert!(
+        messages.len() >= 2,
+        "expected parse + type messages, got {:?}",
+        messages
+    );
+    assert!(
+        messages[0].contains("bad_parse.neve"),
+        "expected parse-broken module first, got {:?}",
+        messages
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("bad_type.neve")),
+        "expected type-broken module message, got {:?}",
+        messages
+    );
+    assert!(
+        !messages
+            .iter()
+            .any(|message| message.contains("warn_only.neve")),
+        "warning-only module should not produce blocking messages: {:?}",
+        messages
+    );
 }
 
 #[test]

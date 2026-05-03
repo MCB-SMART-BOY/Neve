@@ -54,12 +54,23 @@ enum Commands {
         /// 当 HIR 暂不支持该模块形态时，使用旧的 AST 兼容后端。
         #[arg(long = "compat-ast")]
         compat_ast: bool,
+
+        /// Arguments to pass to the script (accessible via io.args()).
+        /// 传递给脚本的参数（通过 io.args() 访问）。
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 
-    /// Type check a file. / 类型检查文件。
+    /// Type check a file. Effect checking is on by default.
+    /// 类型检查文件。默认启用副作用检查。
     Check {
         /// The file to check. / 要检查的文件。
         file: String,
+
+        /// Allow effectful operations (disable purity enforcement).
+        /// 允许副作用操作（禁用纯度检查）。
+        #[arg(long)]
+        allow_effects: bool,
     },
 
     /// Format a file or directory. / 格式化文件或目录。
@@ -256,8 +267,20 @@ fn main() {
         // Cross-platform commands (language features)
         // 跨平台命令（语言功能）
         Commands::Eval { expr, compat_ast } => commands::eval::run(&expr, cli.verbose, compat_ast),
-        Commands::Run { file, compat_ast } => commands::run::run(&file, cli.verbose, compat_ast),
-        Commands::Check { file } => commands::check::run(&file, cli.verbose),
+        Commands::Run {
+            file,
+            compat_ast,
+            args,
+        } => {
+            if !args.is_empty() {
+                neve_std::set_script_args(args);
+            }
+            commands::run::run(&file, cli.verbose, compat_ast)
+        }
+        Commands::Check {
+            file,
+            allow_effects,
+        } => commands::check::run(&file, cli.verbose, allow_effects),
         Commands::Fmt { action } => match action {
             FmtAction::File { file, write } => commands::fmt::run(&file, write),
             FmtAction::Check { file } => commands::fmt::check(&file),

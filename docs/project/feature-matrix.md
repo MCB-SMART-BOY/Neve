@@ -61,19 +61,19 @@
 | 基础字面量、算术、记录、列表、元组 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 核心表达式基本可用，但端到端与工具链统一性还不足 |
 | 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，主 CLI 路径在常见本地导入与 `std` 导入场景下已优先走 HIR，但边缘场景仍会回退 |
 | 列表推导 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 语言层基本可用，工具链覆盖不足 |
-| 安全字段访问 `?.` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | 运行时可用，但类型语义仍偏弱 |
+| 安全字段访问 `?.` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / record / option-record；类型拒绝非 record 非 option 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | 路径字面量 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 目前本质上仍被当成 `String`，不是独立 `Path` |
 | 惰性表达式 `lazy` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `lazy/force/isLazy/isEvaluated` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
-| 空值合并 `??` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 已对齐并支持 Option-like enum、`std.option` builtin 与 safe-field fallback；完整 optionality 类型模型仍需继续收敛 |
-| 错误传播 `?` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | AST/HIR runtime 已对齐并支持 Option/Result-like enum，以及 `std.option` / `std.result` builtin；完整类型与 effect 语义仍需继续收敛 |
-| Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明和部分完整性检查存在，但还不能视为完全闭环 |
-| 关联类型（声明与完整性） | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明层已稳定，`Self` / `Self.Item` 已开始在 impl/typecheck use-site 生效；但更通用的关联类型解析与工具链镜像仍需补完 |
-| 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | 当前 canonical 规则已明确为“先做接收者方法派发，再回退到 callable target `foo(x, y)`”；当两条分支都不存在时，frontend/typeck 现在会给 dedicated missing-method 诊断，但未来是否长期保留 callable fallback 仍未最终收口 |
+| 空值合并 `??` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / user enum `Some/None`；类型拒绝非 Option-like 的 `??` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
+| 错误传播 `?` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option/Result / user enum `Some/None`/`Ok/Err`；类型拒绝非 optional 的 `?` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
+| Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | impl 签名规范化与方法派发优先顺序已定；impl-assoc 类型解析已统一到 canonical 路径；方法调用 UnknownMethod 诊断已到位；关联类型与缺省 alias 链的解析在全管线一致 |
+| 关联类型（声明与完整性） | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | 声明层稳定；`Self.Item` / `Self.Alias` 链解析与缺省已通过 canonical impl-assoc helper 统一；投影解析已暴露到 `ModuleSemantics`；impl-signature 不匹配已带投影标签 |
+| 方法调用语法 `x.foo(y)` | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | canonical 派发顺序：inherent → trait method → callable fallback；`UnknownMethod` 诊断码已稳定；派发优先级已有端到端测试锁定；未来是否移除 callable fallback 待后续决策 |
 | Or pattern `a | b` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | HIR lowering/typecheck/runtime 已收敛，工具链覆盖仍需继续补齐 |
 | Binding pattern `x @ pat` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `name @ pattern` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | List rest pattern `[x, ..xs]` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `init/rest/tail` 语义已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | 记录模式匹配 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 语言形态存在，编译器级检查不足 |
-| Match 穷尽性检查 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已接入 typecheck 主流程，支持 `Bool`、`Unit`、用户枚举，以及 builtin `Option/Result`；列表、记录和更复杂子模式仍需继续扩展 |
+| Match 穷尽性检查 | N/A | N/A | ⚠️ | N/A | N/A | ⚠️ | 现已接入 typecheck 主流程，支持 `Bool`、`Unit`、用户枚举、builtin `Option/Result`；`NonExhaustiveMatch` 错误码已到位；missing patterns 按声明顺序报告；列表、记录和更复杂子模式仍需继续扩展 |
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
 | 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 已替换为真实 frontend/runtime smoke tests，但覆盖广度还不足以单独代表语言完备度 |
@@ -82,7 +82,7 @@
 
 | Area / 领域 | 现状 | 主要问题 |
 |-------------|------|----------|
-| `neve check` | ⚠️ 可用 | 类型检查能跑，当前模块和已加载依赖模块中的命名类型现在都能在 diagnostics 中较可读地显示；但完整语义镜像和更多编译器级保证还没闭环 |
+| `neve check` | ⚠️ 可用 | 类型检查能跑，支持 `--pure` 模式拒绝副作用调用，当前模块和已加载依赖模块中的命名类型现在都能在 diagnostics 中较可读地显示；但完整语义镜像和更多编译器级保证还没闭环 |
 | `neve eval` | ⚠️ 可用 | 无 `import` 输入、本地模块导入，以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；仅少数仍未收敛的导入/运行时边缘场景会回退 AST |
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR，跨模块命名类型在 diagnostics 中的显示也已更可读；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
@@ -99,7 +99,7 @@
 | 文件读取 | ✅ | `std.io` 已支持 |
 | 文件写入与追加 | ✅ | `io.writeFile` / `io.appendFile` 已支持 |
 | 目录递归创建与删除 | ✅ | `io.createDirAll` / `io.removeDirAll` 已支持，且 `io.createDirAllPath` / `io.removeDirAllPath` 已提供首批 typed-path 目录创建/删除 bridges |
-| 环境变量读取 | ✅ | `io.getEnv` 已支持 |
+| 环境变量读取 | ✅ | `io.getEnv` / `io.env()` 已支持；`io.env()` 返回所有环境变量 Record |
 | 进程执行并捕获输出 | ✅ | 对象主线由 `io.execCommand` / `io.execPipeline` 承接；需要 shell 语义时，显式构造 `io.command("sh"/"cmd", ["-c"/"/C", ...])` 再执行 |
 | 可配置执行（`cwd` / `env` / `stdin` / `redirects`） | ✅ | `io.commandWith` 已能公开构造带 `cwd` / `env` / `stdin` 的 `Command`，`io.commandWithRedirects` 也已能把 typed `Redirect` 列表收进 `Command`；配置执行现在通过 `io.execCommand(io.commandWith(...))` 走 canonical 对象主线 |
 
@@ -114,10 +114,10 @@
 | 一等管道 | ⚠️ | 内部已落 runtime identity，且 `std.io.pipeline` 已提供最小公开构造桥；`std.io.pipeline` / `std.io.pipelineWithRedirects` 现在都会在构造时拒绝明显无效的 pipeline object，例如空 pipeline、non-final stage 的 `stdout` redirect、以及 non-first stage 的 configured `stdin` 或 `stdin` redirect，`std.io.pipelineWithRedirects` 也会拒绝 boundary `stdin/stdout/stderr` 与 stage-local attachment 的冲突；`std.io.execPipeline` 已提供首批阻塞、缓冲式执行桥，而 boundary-level redirect composition 也已收回到 `io.execPipeline(io.pipelineWithRedirects(...))` 这条对象携带主线上，`io.commandWithRedirects` 还让 `Pipeline` 开始拥有最小逐 stage redirect attachment，但还没有 `cmd1 |> cmd2` 语法、流式句柄或更广的进程编排模型 |
 | 一等重定向 | ⚠️ | 内部已落 runtime identity，且 `std.io.redirectStdoutPath` / `std.io.redirectStderrPath` / `std.io.redirectStdinPath` 已提供最小公开构造桥；边界级 `stdout -> Path` / `stderr -> Path` / `stdin <- Path` 组合现在通过 `io.commandWithRedirects` / `io.pipelineWithRedirects` 收进一等对象，再走 `io.execCommand` / `io.execPipeline` 的 canonical 执行主线；同时对 boundary/stage-local 重复 redirect、non-final `stdout` 截流、以及 non-first stage 的 `stdin` 配置冲突继续做显式拒绝；但还没有更广的流模型或 stage-local redirect 语法 |
 | 一等 `Task<T>` | ⚠️ | 内部已落 runtime identity，且 `std.io.taskCommand` / `std.io.taskPipeline` / `std.io.awaitTask` / `std.io.awaitTasks` 已提供最小公开构造/消费桥，让 `Command` 或 `Pipeline` 都能进入 `Task[ProcessResult] -> ProcessResult` 与 `List<Task[ProcessResult]> -> List<ProcessResult>` 的 blocking canonical path；但还没有 poll/cancel、超时控制、后台调度或任何非阻塞 task runtime |
-| 流式处理 | ❌ | 当前执行模型偏“一次性捕获”，不是流模型 |
-| timeout / cancel | ❌ | 长任务控制仍缺失 |
+| 流式处理 | ⚠️ | io.execCommandLines 已支持逐行输出；真正流式处理仍待设计 |
+| timeout / cancel | ⚠️ |  已新增：对  支持限时阻塞等待，超时返回 ；pipeline 超时尚未支持；cancel 与 poll 模型仍需后续 |
 | signal / TTY | ❌ | 服务和交互场景还没法认真承诺 |
-| shebang / argv / 脚本入口 | ❌ | 还没有真正替换 `.sh` 入口脚本的语言机制 |
+| shebang / argv / 脚本入口 | ⚠️ | shebang + argv 完整支持：`#!/usr/bin/env neve` 和 `neve run file.neve arg1 arg2` 均可传递参数；`io.args()` 返回 `List[String]` |`#!/usr/bin/env neve` 脚本可直接执行；CLI 自动检测并传递剩余参数；`io.args()` 返回 `List[String]`；全局参数通过 RwLock 传递 |
 | glob / 文件查询组合子 | ❌ | 自动化脚本里常见，但当前还没有 |
 
 ## 当前最该关注的缺口 / Most Important Gaps
@@ -132,14 +132,14 @@
 
 这种状态最容易制造“看起来已经有了”的错觉。
 
-### 2. `?`、方法调用、模式系统是当前的核心风险区
+### 2. 方法调用、模式系统是当前的核心风险区
 
-这三块都属于：
+这两块都属于：
 
 - 表面看起来已经有语法
 - 实际上还没有完全稳定的统一语义
 
-所以它们必须优先于新语法。
+所以它们必须优先于新语法。`?` / `??` / `?.` 的 optional-flow 语义已在 PR-017 中完成收敛，不再属于风险区。
 
 ### 3. Bash 替代还没真正开始进入核心难区
 

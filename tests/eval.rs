@@ -6,7 +6,7 @@ mod support;
 
 use neve_common::Int;
 use neve_derive::Hash;
-use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
+use neve_eval::{EvalError, EvaluableModuleRef, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
@@ -40,7 +40,10 @@ fn eval_checked_hir(source: &str) -> Result<Value, EvalError> {
             .into_iter()
             .map(|(name, value)| (name.to_string(), value)),
     );
-    eval.eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
+    eval.eval_evaluable_module(EvaluableModuleRef::new(
+        &analysis.hir,
+        &analysis.semantics.method_resolutions,
+    ))
 }
 
 /// Evaluate source with builtins available (using the AST compat evaluator).

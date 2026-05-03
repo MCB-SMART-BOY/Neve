@@ -393,10 +393,12 @@ Decision / 要决策的问题:
 
 - Is `x.foo(y)` just sugar for `foo(x, y)`, or does it mean trait-based method dispatch?
 
+Status: ✅ Resolved (PR-016). The canonical dispatch order is: inherent impl → trait method → callable-target fallback `foo(x, y)`. This precedence is test-locked. When neither method nor callable target exists, a dedicated `UnknownMethod` diagnostic is emitted. The two separate impl-assoc resolution paths have been collapsed into one canonical `canonical_impl_assoc_types` helper (D-070).
+
 Required answer / 建议答案:
 
-- Current canonical rule: `x.foo(y)` first attempts receiver method dispatch, then falls back to the lowered callable form `foo(x, y)` if no method resolves.
-- Next step: keep that precedence explicit, tested, and documented before considering any future breaking change to remove the fallback branch.
+- Current canonical rule: `x.foo(y)` first attempts receiver method dispatch, then falls back to the lowered callable form `foo(x, y)` if no method resolves. ✅ Done.
+- Next step: keep that precedence explicit, tested, and documented before considering any future breaking change to remove the fallback branch. ✅ Done.
 
 ### Gate G3: Failure Propagation / 决策门 G3：失败传播
 
@@ -404,9 +406,11 @@ Decision / 要决策的问题:
 
 - What exactly does `?` mean for `Result`, `Option`, and effectful task execution?
 
+Status: ✅ Resolved (PR-017). The optional-flow semantics are now unified through `resolve_optional_flow_payload` for `?`, `??`, and `?.`. The closure matrix covers builtin Option/Result, user enum `Some/None`/`Ok/Err`, record safe-field access, and invalid-use rejection. All tooling surfaces (frontend, REPL, LSP) share the same diagnostics. Effectful task execution (`Task<T>`) remains a separate concern deferred to Gate G4 / PR-011.
+
 Required answer / 建议答案:
 
-- `?` must have one rule family, documented in the spec, implemented identically across all execution paths.
+- `?` must have one rule family, documented in the spec, implemented identically across all execution paths. ✅ Done for the pure-language subset.
 
 ### Gate G4: Effect Boundary / 决策门 G4：副作用边界
 
@@ -860,39 +864,35 @@ Each phase should be tracked with concrete metrics, not only narrative progress.
 
 ## Immediate Priority Order / 当前立即优先级
 
-1. `WP-0A` Feature support matrix
-2. `WP-0B` Expand the real end-to-end harness corpus
-3. `WP-0C` Documentation status correction
-4. `WP-1A` Pattern lowering fidelity
-5. `WP-1B` Canonical `Try` / `Option` / `Result` semantics
-6. `WP-1C` Method call and trait dispatch unification
-7. `WP-1D` HIR evaluator parity for canonical language features
-8. `WP-1E` Remove sentinel and placeholder semantic hacks
-9. `WP-2A` Exhaustiveness checking
-10. `WP-2B` Unreachable-pattern diagnostics
-11. `WP-3A` `Path` runtime type
-12. `WP-3C` `Command` and `ProcessResult` types
-13. `WP-4A` Effect boundary design record
-14. `WP-5A` First-class pipeline and redirection runtime
+Updated 2026-04-18. WP-0 through WP-2 are substantially complete. Current priorities:
+
+2026-04-18 更新。WP-0 到 WP-2 已基本完成。当前优先级：
+
+1. `WP-4A` Effect boundary design record (G4) — **current frontier**
+2. `WP-5B` Streaming process output
+3. `WP-4B` Pipeline timeout support
+4. `WP-0A` Spec v2.0 freeze (documentation alignment)
+5. `WP-6A` Phase B exit criteria validation
+6. `WP-2A` Pattern analysis architecture hardening (deferred from PR-015)
+7. `WP-6B` Formatter idempotency verification
+8. `WP-6C` Cross-platform scripting parity
 
 ## Next Execution Batch / 下一执行批次
 
-If work starts immediately after this roadmap, the first batch should be:
+Updated 2026-04-18. WP-0 (Reality Alignment), WP-1 (Semantic Convergence), and WP-2 (Compiler-Grade Types) are largely complete. The current frontier is WP-3/WP-4 (Effect & Runtime Layer).
 
-如果现在立刻开工，第一批任务应该是下面这些，而且它们已经可以映射到文件层级：
+2026-04-18 更新。WP-0（现实校准）、WP-1（语义收敛）和 WP-2（编译器级类型）已基本完成。当前前沿是 WP-3/WP-4（Effect & Runtime）。
 
-| Task | Work package | Likely files | Expected output |
-|------|--------------|--------------|-----------------|
-| Create support matrix document | `WP-0A` | `docs/project/feature-matrix.md`, `docs/project/language-roadmap.md` | One table per feature across parser/lowering/typeck/eval/tooling |
-| Enumerate syntax sources of truth | `WP-0A` | `crates/neve-syntax/src/*.rs`, `docs/reference/spec.md` | Canonical feature inventory |
-| Record current implementation coverage | `WP-0A` | `crates/neve-parser`, `crates/neve-hir`, `crates/neve-typeck`, `crates/neve-eval`, `crates/neve-lsp`, `neve-cli` | Honest support classification |
-| Expand real E2E helper coverage | `WP-0B` | `tests/end_to_end.rs` | Broader executable full-pipeline helper coverage |
-| Add more real corpus programs to E2E tests | `WP-0B` | `tests/end_to_end.rs`, possibly `tests/common.rs` | Executed language corpus that tracks feature growth |
-| Correct public status claims | `WP-0C` | `README.md`, `docs/README.md`, `docs/project/philosophy.md`, `tests/README.md` | Status labels aligned with reality |
-| Preserve pattern semantics in lowering | `WP-1A` | `crates/neve-hir/src/resolve.rs`, `crates/neve-hir/src/hir.rs`, `tests/parser.rs`, `tests/typeck.rs`, `tests/eval.rs` | No lossy fallback for pattern forms |
-| Decide and document `?` semantics | `WP-1B` | `docs/reference/spec.md`, `crates/neve-hir/src/resolve.rs`, `crates/neve-eval`, `crates/neve-typeck` | One rule for `Try`/`Option`/`Result` |
-| Unify method call semantics | `WP-1C` | `crates/neve-typeck/src/traits.rs`, `crates/neve-typeck/src/check.rs`, `crates/neve-eval/src/eval.rs`, `crates/neve-hir/src/resolve.rs`, `tests/typeck.rs`, `tests/end_to_end.rs`, `tests/lsp.rs`, `docs/reference/spec.md` | Dispatch precedence explicit and test-locked across typeck/eval/tooling |
-| Bring HIR runtime to parity | `WP-1D` | `crates/neve-eval/src/eval.rs`, `neve-cli/src/commands/eval.rs`, `neve-cli/src/commands/run.rs` | Canonical runtime path for CLI execution |
+| Priority | Task | Files | Status |
+|----------|------|-------|--------|
+| 1 | Effect type system design doc (G4) | `docs/project/effect-boundary.md` (new) | Not started |
+| 2 | Streaming process output | `crates/neve-std/src/io.rs` | Not started |
+| 3 | Pipeline timeout support | `crates/neve-std/src/io.rs` | Not started |
+| 4 | Spec v2.0 freeze | `docs/reference/spec.md` | Not started |
+| 5 | Parser golden tests | `tests/parser.rs` | Not started |
+| 6 | Phase B exit criteria validation | `neve-builder`, `neve-store` | Not started |
+| 7 | Formatter idempotency verification | `neve-fmt` | Not started |
+| 8 | Pattern analysis architecture (D-052-054) | `crates/neve-typeck/src/pattern_analysis.rs` | Deferred |
 
 ## Acceptance Standard / 验收标准
 

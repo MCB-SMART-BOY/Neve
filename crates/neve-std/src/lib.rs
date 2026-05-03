@@ -19,6 +19,28 @@ use neve_eval::{Value, compat::AstEnv};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+pub use io::set_script_args;
+
+/// Returns true if the named builtin performs host effects (I/O, process execution, network).
+/// 如果指定名称的内置函数执行宿主机副作用（I/O、进程执行、网络），则返回 true。
+pub fn is_effectful_builtin(name: &str) -> bool {
+    // Effectful modules that touch the host
+    let parts: Vec<&str> = name.split('.').collect();
+    if parts.len() >= 2 {
+        match parts[0] {
+            "io" => !matches!(
+                parts[1],
+                // Pure io introspection functions
+                "processSuccess" | "processStdout" | "processCode" | "processStderr"
+            ),
+            "fetch" => true,
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
 /// Initialize the standard library and return all built-in bindings.
 /// 初始化标准库并返回所有内置绑定。
 pub fn stdlib() -> Vec<(&'static str, Value)> {

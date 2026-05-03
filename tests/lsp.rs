@@ -2727,6 +2727,89 @@ fn test_document_hover_uses_optional_flow_result_for_safe_field_coalesce_binding
 }
 
 #[test]
+fn test_document_hover_uses_optional_flow_result_for_builtin_result_try_binding() {
+    let source = r#"
+        import std.result as result;
+        let value = result.ok(41)? + 1;
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    assert!(
+        doc.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        doc.diagnostics
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Int");
+}
+
+#[test]
+fn test_document_hover_uses_optional_flow_result_for_enum_some_try_binding() {
+    let source = r#"
+        enum Option { Some(Int), None };
+        let value = Some(41)? + 1;
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    assert!(
+        doc.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        doc.diagnostics
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: Int");
+}
+
+#[test]
+fn test_document_hover_uses_optional_flow_result_for_record_safe_field_binding() {
+    let source = r#"
+        let value = #{ name = "test" }?.name ?? "default";
+    "#;
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    assert!(
+        doc.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        doc.diagnostics
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("value")
+        .and_then(|defs| defs.first())
+        .expect("let definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "let value: String");
+}
+
+#[test]
 fn test_document_hover_uses_canonical_default_assoc_alias_return_for_method_call_binding() {
     let source = r#"
         trait Iterator {

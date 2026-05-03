@@ -82,6 +82,7 @@ pub enum TokenKind {
     Lazy,      // lazy - 惰性求值
     True,      // true - 真
     False,     // false - 假
+    Effect,    // effect - 副作用注解
 
     // ===== Delimiters 分隔符 =====
     LParen,     // ( - 左圆括号
@@ -160,6 +161,7 @@ impl TokenKind {
                 | TokenKind::Lazy
                 | TokenKind::True
                 | TokenKind::False
+                | TokenKind::Effect
         )
     }
 
@@ -187,6 +189,7 @@ impl TokenKind {
             "lazy" => Some(TokenKind::Lazy),
             "true" => Some(TokenKind::True),
             "false" => Some(TokenKind::False),
+            "effect" => Some(TokenKind::Effect),
             _ => None,
         }
     }

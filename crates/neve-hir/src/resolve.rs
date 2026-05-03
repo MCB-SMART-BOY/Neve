@@ -1030,6 +1030,7 @@ impl Resolver {
                         generics: Vec::new(),
                         params: Vec::new(),
                         return_ty: Self::unknown_ty(item.span),
+                        effectful: true, // let bindings allow effects (REPL wrappers)
                         body,
                     }),
                     span: item.span,
@@ -1062,6 +1063,7 @@ impl Resolver {
                         generics,
                         params,
                         return_ty,
+                        effectful: def.effect,
                         body,
                     }),
                     span: item.span,

@@ -11,8 +11,9 @@ use neve_parser::parse;
 use neve_typeck::TypeChecker;
 
 use crate::{
-    Diagnostic, Module, ModuleSemantics, SourceFile, collect_item_names_from_modules,
-    collect_module_semantics, rewrite_diagnostics_with_names,
+    Diagnostic, DiagnosticStats, Module, ModuleSemantics, SourceFile, collect_diagnostic_stats,
+    collect_item_names_from_modules, collect_module_semantics, diagnostics_have_errors,
+    rewrite_diagnostics_with_names,
 };
 
 /// Per-module semantic analysis produced by the compatibility driver.
@@ -55,6 +56,10 @@ pub struct ProgramDiagnosticModule {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// Program-wide diagnostic counts grouped by blocking/non-blocking role.
+/// 按阻断/非阻断角色分组的程序级诊断计数。
+pub type ProgramDiagnosticStats = DiagnosticStats;
+
 /// Dependency-first program module entry with a successfully parsed AST.
 /// 带有成功解析 AST 的依赖优先程序模块条目。
 #[derive(Debug, Clone)]
@@ -71,6 +76,27 @@ pub struct ProgramParsedModule {
     /// Parsed AST for this module.
     /// 当前模块的已解析 AST。
     pub ast: SourceFile,
+}
+
+/// Dependency-first program module entry with parse-clean AST and lowered HIR.
+/// 带有解析成功 AST 与已降级 HIR 的依赖优先程序模块条目。
+#[derive(Debug, Clone)]
+pub struct ProgramLoweredModule {
+    /// Loaded module id.
+    /// 已加载模块 ID。
+    pub module_id: ModuleId,
+    /// Backing source path on disk.
+    /// 模块对应的磁盘路径。
+    pub file_path: PathBuf,
+    /// Parsed AST for this module.
+    /// 当前模块的已解析 AST。
+    pub ast: SourceFile,
+    /// Lowered HIR for this module.
+    /// 当前模块的降级 HIR。
+    pub module: Module,
+    /// Final diagnostics for this module after semantic analysis.
+    /// 当前模块在语义分析后的最终诊断。
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// Result of parsing one module file for compatibility consumers.
@@ -193,14 +219,67 @@ impl ProgramAnalysis {
         &self.type_names
     }
 
-    /// Return dependency-first program diagnostics entries.
-    /// 返回依赖优先的程序诊断条目。
-    pub fn diagnostic_modules_in_order(&self) -> Vec<ProgramDiagnosticModule> {
+    /// Summarize program diagnostics by blocking/non-blocking role.
+    /// 按阻断/非阻断角色汇总程序诊断。
+    pub fn diagnostic_stats(&self) -> ProgramDiagnosticStats {
+        collect_diagnostic_stats(
+            self.load_order()
+                .iter()
+                .flat_map(|module_id| self.diagnostics(*module_id).unwrap_or(&[]).iter()),
+        )
+    }
+
+    /// Whether the program contains any blocking diagnostics.
+    /// 当前程序是否包含任何阻断诊断。
+    pub fn has_blocking_diagnostics(&self) -> bool {
+        self.diagnostic_stats().has_errors()
+    }
+
+    /// Return dependency-first blocking diagnostic messages with file attribution.
+    /// 返回带文件归属、按依赖优先顺序排列的阻断诊断文本。
+    pub fn blocking_diagnostic_messages(&self) -> Vec<String> {
         self.load_order()
             .iter()
             .filter_map(|module_id| {
                 let info = self.module_info(*module_id)?;
-                let diagnostics = self.diagnostics(*module_id)?.to_vec();
+                Some(
+                    self.diagnostics(*module_id)
+                        .unwrap_or(&[])
+                        .iter()
+                        .filter(|diagnostic| {
+                            diagnostic.severity == neve_diagnostic::Severity::Error
+                        })
+                        .map(|diagnostic| {
+                            format!("{}: {}", info.file_path.display(), diagnostic.message)
+                        }),
+                )
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn collect_diagnostic_modules_in_order<P>(
+        &self,
+        include_empty: bool,
+        mut predicate: P,
+    ) -> Vec<ProgramDiagnosticModule>
+    where
+        P: FnMut(&Diagnostic) -> bool,
+    {
+        self.load_order()
+            .iter()
+            .filter_map(|module_id| {
+                let info = self.module_info(*module_id)?;
+                let diagnostics = self
+                    .diagnostics(*module_id)?
+                    .iter()
+                    .filter(|diagnostic| predicate(diagnostic))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if diagnostics.is_empty() && !include_empty {
+                    return None;
+                }
+
                 Some(ProgramDiagnosticModule {
                     module_id: *module_id,
                     file_path: info.file_path.clone(),
@@ -209,6 +288,20 @@ impl ProgramAnalysis {
                 })
             })
             .collect()
+    }
+
+    /// Return dependency-first program diagnostics entries.
+    /// 返回依赖优先的程序诊断条目。
+    pub fn diagnostic_modules_in_order(&self) -> Vec<ProgramDiagnosticModule> {
+        self.collect_diagnostic_modules_in_order(true, |_| true)
+    }
+
+    /// Return dependency-first program parser diagnostic entries.
+    /// 返回依赖优先的程序解析诊断条目。
+    pub fn parser_diagnostic_modules_in_order(&self) -> Vec<ProgramDiagnosticModule> {
+        self.collect_diagnostic_modules_in_order(false, |diagnostic| {
+            diagnostic.kind == neve_diagnostic::DiagnosticKind::Parser
+        })
     }
 
     /// Return dependency-first parsed program modules with parse-clean ASTs.
@@ -236,6 +329,32 @@ impl ProgramAnalysis {
             .collect()
     }
 
+    /// Return dependency-first program modules with parse-clean AST and lowered HIR.
+    /// 返回带有解析成功 AST 与已降级 HIR 的依赖优先程序模块。
+    pub fn lowered_modules_in_order(&self) -> Vec<ProgramLoweredModule> {
+        self.load_order()
+            .iter()
+            .filter_map(|module_id| {
+                let info = self.module_info(*module_id)?;
+                if !self
+                    .parsed_diagnostics(*module_id)
+                    .unwrap_or(&[])
+                    .is_empty()
+                {
+                    return None;
+                }
+
+                Some(ProgramLoweredModule {
+                    module_id: *module_id,
+                    file_path: info.file_path.clone(),
+                    ast: self.parsed_source(*module_id)?.clone(),
+                    module: self.hir_module(*module_id)?.clone(),
+                    diagnostics: self.diagnostics(*module_id)?.to_vec(),
+                })
+            })
+            .collect()
+    }
+
     /// Return dependency-first program modules that are ready for HIR evaluation.
     /// 返回已可用于 HIR 求值的依赖优先程序模块。
     pub fn evaluable_modules_in_order(&self) -> Vec<ProgramEvaluableModule> {
@@ -244,11 +363,7 @@ impl ProgramAnalysis {
             .filter_map(|module_id| {
                 let module = self.hir_module(*module_id)?.clone();
                 let analysis = self.modules.get(module_id)?;
-                if analysis
-                    .diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
-                {
+                if diagnostics_have_errors(&analysis.diagnostics) {
                     return None;
                 }
 

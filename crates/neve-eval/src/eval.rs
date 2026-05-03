@@ -18,6 +18,25 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use thiserror::Error;
 
+/// One HIR module together with the semantic side tables needed for evaluation.
+/// 一个带有求值所需语义 side table 的 HIR 模块视图。
+#[derive(Debug, Clone, Copy)]
+pub struct EvaluableModuleRef<'a> {
+    module: &'a Module,
+    method_resolutions: &'a HashMap<Span, DefId>,
+}
+
+impl<'a> EvaluableModuleRef<'a> {
+    /// Build a borrowed evaluable-module view from HIR plus method resolutions.
+    /// 通过 HIR 与方法解析结果构建借用式可求值模块视图。
+    pub fn new(module: &'a Module, method_resolutions: &'a HashMap<Span, DefId>) -> Self {
+        Self {
+            module,
+            method_resolutions,
+        }
+    }
+}
+
 /// Evaluation errors.
 /// 求值错误。
 #[derive(Debug, Error)]
@@ -153,6 +172,37 @@ impl Evaluator {
         self.eval_module(module)
     }
 
+    /// Evaluate one HIR module through the canonical evaluable-module view.
+    /// 通过规范的可求值模块视图求值单个 HIR 模块。
+    pub fn eval_evaluable_module(
+        &mut self,
+        module: EvaluableModuleRef<'_>,
+    ) -> Result<Value, EvalError> {
+        self.eval_module_with_method_resolutions(module.module, module.method_resolutions)
+    }
+
+    /// Evaluate dependency-first modules and return the root module's value.
+    /// 按依赖优先顺序求值模块，并返回根模块的值。
+    pub fn eval_evaluable_modules<'a, I>(
+        &mut self,
+        modules: I,
+        root_id: neve_hir::ModuleId,
+    ) -> Result<Value, EvalError>
+    where
+        I: IntoIterator<Item = EvaluableModuleRef<'a>>,
+    {
+        let mut root_value = Value::Unit;
+
+        for module in modules {
+            let value = self.eval_evaluable_module(module)?;
+            if module.module.id == root_id {
+                root_value = value;
+            }
+        }
+
+        Ok(root_value)
+    }
+
     /// Call a runtime function value with explicit arguments.
     /// 使用显式参数调用运行时函数值。
     pub fn call_value(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
@@ -234,6 +284,7 @@ impl Evaluator {
                             generics: item.generics.clone(),
                             params: item.params.clone(),
                             return_ty: item.return_ty.clone(),
+                            effectful: true,
                             body: item.body.clone(),
                         }),
                     );
@@ -1618,6 +1669,7 @@ mod tests {
                 kind: TyKind::Int,
                 span,
             },
+            effectful: false,
             body,
         };
 

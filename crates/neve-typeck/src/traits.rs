@@ -504,6 +504,17 @@ impl TraitResolver {
                     assoc.ty = ty.clone();
                 }
             }
+            // Also insert canonical assoc types that were resolved from trait defaults
+            // and are not yet in the impl's explicit assoc type list (D-070).
+            for (name, ty) in assoc_types {
+                if !info.assoc_types.iter().any(|a| &a.name == name) {
+                    info.assoc_types.push(AssocTypeResolution {
+                        name: name.clone(),
+                        ty: ty.clone(),
+                        span: Span::DUMMY,
+                    });
+                }
+            }
         }
     }
 

@@ -2260,3 +2260,104 @@ fn test_end_to_end_std_math_trigonometric_runtime_parity() {
         ])),
     );
 }
+
+#[test]
+fn test_end_to_end_write_read_roundtrip() {
+    assert_runtime_parity(
+        r#"
+        import std.io as io;
+        import std.string as string;
+        let _ = io.writeFile("/tmp/neve_e2e_rt.txt", "roundtrip data");
+        string.trim(io.readFile("/tmp/neve_e2e_rt.txt"))
+        "#,
+        neve_eval::Value::String("roundtrip data".to_string().into()),
+    );
+}
+
+#[test]
+fn test_end_to_end_io_which_finds_sh() {
+    assert_runtime_parity(
+        r#"import std.io as io; match io.which("sh") { Some(_) -> true, None -> false }"#,
+        neve_eval::Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_full_scripting_workflow() {
+    // Test the complete scripting workflow: args, file I/O, process exec, pipes
+    assert_runtime_parity(
+        r#"
+        import std.io as io;
+        import std.string as string;
+        
+        -- Write a test file
+        let _ = io.writeFile("/tmp/neve_workflow_test.txt", "line1\nline2\nline3");
+        
+        -- Read it back
+        let content = io.readFile("/tmp/neve_workflow_test.txt");
+        
+        -- Count lines via external command
+        let wc = io.execCommand(io.command("wc", ["-l", "/tmp/neve_workflow_test.txt"]));
+        
+        -- Verify everything worked
+        let lines = string.lines(string.trim(content));
+        io.processSuccess(wc)
+        "#,
+        neve_eval::Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_pipeline_with_timeout_completes() {
+    assert_runtime_parity(
+        r#"
+        import std.io as io;
+        let p = io.pipeline([io.command("echo", ["hello pipeline"]), io.command("cat", [])]);
+        let task = io.taskPipeline(p);
+        let result = io.awaitTaskWithTimeout(task, 5000);
+        match result {
+            Some(pr) -> io.processSuccess(pr),
+            None -> false
+        }
+        "#,
+        neve_eval::Value::Bool(true),
+    );
+}
+
+#[test]
+fn test_end_to_end_effect_annotation_is_checked() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> String = io.readFile("/etc/hostname");
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_effect_annotation_passes_with_effect_kw() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn good() -> String effect = io.readFile("/etc/hostname");
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call"));
+    assert!(
+        !has_effect_error,
+        "unexpected effect error: {:?}",
+        analysis.diagnostics
+    );
+}
