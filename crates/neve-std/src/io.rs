@@ -13,6 +13,21 @@ use neve_eval::value::{
 use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+/// Script arguments set by the CLI before evaluation.
+/// CLI 在求值前设置的脚本参数。
+static SCRIPT_ARGS: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+/// Set script arguments (called by CLI before evaluation).
+/// 设置脚本参数（由 CLI 在求值前调用）。
+pub fn set_script_args(args: Vec<String>) {
+    if let Ok(mut guard) = SCRIPT_ARGS.write() {
+        *guard = args;
+    }
+}
 
 /// Returns all IO builtins.
 /// 返回所有 IO 内置函数。
@@ -366,6 +381,62 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "io.env",
+            Value::Builtin(BuiltinFn {
+                name: "io.env",
+                arity: 0,
+                func: |_args| {
+                    let mut fields = Vec::new();
+                    for (key, value) in std::env::vars() {
+                        fields.push((key, Value::String(Rc::new(value))));
+                    }
+                    Ok(Value::Record(Rc::new(
+                        fields.into_iter().collect::<HashMap<_, _>>(),
+                    )))
+                },
+            }),
+        ),
+        (
+            "io.sleep",
+            Value::Builtin(BuiltinFn {
+                name: "io.sleep",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Int(ms) => {
+                        let ms: u64 = ms
+                            .try_into()
+                            .map_err(|_| "io.sleep: timeout must be non-negative".to_string())?;
+                        std::thread::sleep(Duration::from_millis(ms));
+                        Ok(Value::Unit)
+                    }
+                    _ => Err("io.sleep expects an integer (milliseconds)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.which",
+            Value::Builtin(BuiltinFn {
+                name: "io.which",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(cmd) => {
+                        let path = std::env::var_os("PATH").unwrap_or_default();
+                        let found = std::env::split_paths(&path).find_map(|dir| {
+                            let full = dir.join(cmd.as_str());
+                            if full.is_file() { Some(full) } else { None }
+                        });
+                        Ok(match found {
+                            Some(p) => Value::Some(Box::new(Value::String(Rc::new(
+                                p.to_string_lossy().to_string(),
+                            )))),
+                            None => Value::None,
+                        })
+                    }
+                    _ => Err("io.which expects a command name string".to_string()),
+                },
+            }),
+        ),
+        (
             "io.currentDir",
             Value::Builtin(BuiltinFn {
                 name: "io.currentDir",
@@ -398,6 +469,21 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Ok(std::env::var("HOME")
                         .map(|p| Value::Some(Box::new(Value::Path(Rc::new(p.into())))))
                         .unwrap_or(Value::None))
+                },
+            }),
+        ),
+        (
+            "io.args",
+            Value::Builtin(BuiltinFn {
+                name: "io.args",
+                arity: 0,
+                func: |_args| {
+                    let guard = SCRIPT_ARGS.read().map_err(|e| format!("io.args: {e}"))?;
+                    let args: Vec<Value> = guard
+                        .iter()
+                        .map(|arg| Value::String(Rc::new(arg.clone())))
+                        .collect();
+                    Ok(Value::List(Rc::new(args)))
                 },
             }),
         ),
@@ -462,6 +548,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |args| match &args[0] {
                     Value::Command(command) => execute_command_value(command),
                     _ => Err("io.execCommand expects a Command".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.execCommandLines",
+            Value::Builtin(BuiltinFn {
+                name: "io.execCommandLines",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Command(command) => execute_command_lines(command),
+                    _ => Err("io.execCommandLines expects a Command".to_string()),
                 },
             }),
         ),
@@ -600,6 +697,25 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         await_tasks(&tasks)
                     }
                     _ => Err("io.awaitTasks expects List<Task[ProcessResult]>".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.awaitTaskWithTimeout",
+            Value::Builtin(BuiltinFn {
+                name: "io.awaitTaskWithTimeout",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::Task(task), Value::Int(timeout_ms)) => {
+                        let timeout_ms: u64 = timeout_ms.try_into().map_err(|_| {
+                            "io.awaitTaskWithTimeout: timeout must be non-negative".to_string()
+                        })?;
+                        await_task_with_timeout(task, timeout_ms)
+                    }
+                    _ => {
+                        Err("io.awaitTaskWithTimeout expects (Task[ProcessResult], Int)"
+                            .to_string())
+                    }
                 },
             }),
         ),
@@ -791,6 +907,19 @@ fn output_to_process_result_value(output: std::process::Output) -> ProcessResult
     )
 }
 
+fn execute_command_lines(command: &CommandValue) -> Result<Value, String> {
+    let mut cmd = configured_process_command(command);
+    let output = cmd
+        .output()
+        .map_err(|e| format!("io.execCommandLines: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<Value> = stdout
+        .lines()
+        .map(|line| Value::String(Rc::new(line.to_string())))
+        .collect();
+    Ok(Value::List(Rc::new(lines)))
+}
+
 fn execute_command_value(command: &CommandValue) -> Result<Value, String> {
     let result = execute_command_value_to_process_result(command, "io.execCommand")?;
     Ok(Value::ProcessResult(Rc::new(result)))
@@ -799,6 +928,235 @@ fn execute_command_value(command: &CommandValue) -> Result<Value, String> {
 fn execute_pipeline_value(pipeline: &PipelineValue) -> Result<Value, String> {
     let result = execute_pipeline_value_to_process_result(pipeline, "io.execPipeline")?;
     Ok(Value::ProcessResult(Rc::new(result)))
+}
+
+struct RawCommandTarget {
+    program: String,
+    args: Vec<String>,
+    cwd: Option<String>,
+    stdin: Option<String>,
+    env: HashMap<String, String>,
+}
+
+struct RawProcessResult {
+    code: i32,
+    success: bool,
+    stdout: String,
+    stderr: String,
+}
+
+fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Result<Value, String> {
+    let commands: Vec<RawCommandTarget> = pipeline
+        .commands()
+        .iter()
+        .map(|cmd| RawCommandTarget {
+            program: cmd.program().to_string(),
+            args: cmd.args().to_vec(),
+            cwd: cmd.cwd().map(|s| s.to_string()),
+            stdin: cmd.stdin().map(|s| s.to_string()),
+            env: cmd.env().clone(),
+        })
+        .collect();
+
+    if commands.is_empty() {
+        return Err("io.awaitTaskWithTimeout: pipeline requires at least one command".to_string());
+    }
+
+    let current_pid = std::sync::Arc::new(std::sync::Mutex::new(None::<u32>));
+    let pid_for_kill = current_pid.clone();
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let mut previous_stdout: Option<String> = None;
+        let mut combined_stderr = String::new();
+        let mut last_code = 0;
+        let mut last_success = false;
+
+        for (idx, raw) in commands.iter().enumerate() {
+            let mut cmd = std::process::Command::new(&raw.program);
+            cmd.args(&raw.args);
+            if let Some(cwd) = &raw.cwd {
+                cmd.current_dir(cwd);
+            }
+            for (key, value) in &raw.env {
+                cmd.env(key, value);
+            }
+            cmd.stdin(std::process::Stdio::piped());
+            cmd.stdout(std::process::Stdio::piped());
+            cmd.stderr(std::process::Stdio::piped());
+
+            let mut child = match cmd.spawn() {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: {e}")));
+                    return;
+                }
+            };
+
+            // Track current pid for kill-on-timeout
+            *pid_for_kill.lock().unwrap() = Some(child.id());
+
+            // Feed stdin from previous stage or initial input
+            let stage_stdin = if idx == 0 {
+                raw.stdin.as_deref().or(previous_stdout.as_deref())
+            } else {
+                previous_stdout.as_deref()
+            };
+
+            if let Some(stdin_text) = stage_stdin
+                && let Some(mut pipe) = child.stdin.take()
+            {
+                use std::io::Write;
+                if let Err(e) = pipe.write_all(stdin_text.as_bytes()) {
+                    let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: {e}")));
+                    return;
+                }
+            }
+
+            match child.wait_with_output() {
+                Ok(output) => {
+                    previous_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+                    combined_stderr.push_str(&String::from_utf8_lossy(&output.stderr));
+                    last_code = output.status.code().unwrap_or(-1);
+                    last_success = output.status.success();
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: {e}")));
+                    return;
+                }
+            }
+        }
+
+        *pid_for_kill.lock().unwrap() = None;
+        let _ = tx.send(Ok(RawProcessResult {
+            code: last_code,
+            success: last_success,
+            stdout: previous_stdout.unwrap_or_default(),
+            stderr: combined_stderr,
+        }));
+    });
+
+    match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
+        Ok(result) => match result {
+            Ok(raw_result) => Ok(Value::Some(Box::new(Value::ProcessResult(Rc::new(
+                ProcessResultValue::new(
+                    raw_result.code,
+                    raw_result.success,
+                    raw_result.stdout,
+                    raw_result.stderr,
+                ),
+            ))))),
+            Err(e) => Err(e),
+        },
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            // Kill the currently running process
+            if let Some(pid) = *current_pid.lock().unwrap() {
+                #[cfg(unix)]
+                {
+                    let _ = std::process::Command::new("kill")
+                        .arg("-9")
+                        .arg(pid.to_string())
+                        .output();
+                }
+            }
+            Ok(Value::None)
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err("io.awaitTaskWithTimeout: internal error".to_string())
+        }
+    }
+}
+
+fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Result<Value, String> {
+    let raw_target = match task.target() {
+        TaskTargetValue::Command(command) => RawCommandTarget {
+            program: command.program().to_string(),
+            args: command.args().to_vec(),
+            cwd: command.cwd().map(|s| s.to_string()),
+            stdin: command.stdin().map(|s| s.to_string()),
+            env: command.env().clone(),
+        },
+        TaskTargetValue::Pipeline(pipeline) => {
+            return await_pipeline_with_timeout(pipeline, timeout_ms);
+        }
+    };
+
+    // Spawn the process first to get the pid for kill-on-timeout.
+    let mut cmd = std::process::Command::new(&raw_target.program);
+    cmd.args(&raw_target.args);
+    if let Some(cwd) = &raw_target.cwd {
+        cmd.current_dir(cwd);
+    }
+    for (key, value) in &raw_target.env {
+        cmd.env(key, value);
+    }
+    cmd.stdin(std::process::Stdio::piped());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("io.awaitTaskWithTimeout: {e}"))?;
+    let pid = child.id();
+
+    // Write stdin if provided
+    if let Some(stdin_text) = &raw_target.stdin
+        && let Some(mut pipe) = child.stdin.take()
+    {
+        use std::io::Write;
+        pipe.write_all(stdin_text.as_bytes())
+            .map_err(|e| format!("io.awaitTaskWithTimeout: failed writing stdin: {e}"))?;
+    }
+
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let output = child.wait_with_output();
+        let result = match output {
+            Ok(out) => Ok(RawProcessResult {
+                code: out.status.code().unwrap_or(-1),
+                success: out.status.success(),
+                stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+                stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+            }),
+            Err(e) => Err(format!("io.awaitTaskWithTimeout: {e}")),
+        };
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
+        Ok(result) => match result {
+            Ok(raw_result) => Ok(Value::Some(Box::new(Value::ProcessResult(Rc::new(
+                ProcessResultValue::new(
+                    raw_result.code,
+                    raw_result.success,
+                    raw_result.stdout,
+                    raw_result.stderr,
+                ),
+            ))))),
+            Err(e) => Err(e),
+        },
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            // Kill the process on timeout via platform kill command
+            #[cfg(unix)]
+            {
+                let _ = std::process::Command::new("kill")
+                    .arg("-9")
+                    .arg(pid.to_string())
+                    .output();
+            }
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/PID", &pid.to_string()])
+                    .output();
+            }
+            Ok(Value::None)
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err("io.awaitTaskWithTimeout: internal error".to_string())
+        }
+    }
 }
 
 fn await_task(task: &TaskValue) -> Result<Value, String> {

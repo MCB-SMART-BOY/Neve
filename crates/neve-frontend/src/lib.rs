@@ -11,8 +11,8 @@ mod session;
 
 pub use driver::{
     FrontendDriver, FrontendError, ModuleAnalysis, ModuleParseResult, ProgramAnalysis,
-    ProgramDiagnosticModule, ProgramEvaluableModule, ProgramParsedModule, analyze_module_path,
-    parse_module_file,
+    ProgramDiagnosticModule, ProgramDiagnosticStats, ProgramEvaluableModule, ProgramLoweredModule,
+    ProgramParsedModule, analyze_module_path, parse_module_file,
 };
 pub use neve_diagnostic::Diagnostic;
 pub use neve_hir::Module;
@@ -114,6 +114,69 @@ pub struct AnalysisResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// Diagnostic counts grouped by blocking/non-blocking role.
+/// 按阻断/非阻断角色分组的诊断计数。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DiagnosticStats {
+    /// Number of parser diagnostics with error severity.
+    /// 严重程度为错误的解析诊断数量。
+    pub parse_errors: usize,
+    /// Number of non-parser diagnostics with error severity.
+    /// 严重程度为错误且非解析类的诊断数量。
+    pub non_parse_errors: usize,
+    /// Number of warning diagnostics.
+    /// 警告诊断数量。
+    pub warnings: usize,
+}
+
+impl DiagnosticStats {
+    /// Total number of blocking diagnostics.
+    /// 阻断诊断总数。
+    pub fn error_count(self) -> usize {
+        self.parse_errors + self.non_parse_errors
+    }
+
+    /// Whether any loaded dependency diagnostics are blocking.
+    /// 已加载依赖诊断是否包含阻断错误。
+    pub fn has_errors(self) -> bool {
+        self.error_count() > 0
+    }
+}
+
+pub(crate) fn diagnostics_have_errors(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
+}
+
+pub(crate) fn collect_diagnostic_stats<'a, I>(diagnostics: I) -> DiagnosticStats
+where
+    I: IntoIterator<Item = &'a Diagnostic>,
+{
+    let mut stats = DiagnosticStats::default();
+
+    for diagnostic in diagnostics {
+        match (diagnostic.severity, diagnostic.kind) {
+            (neve_diagnostic::Severity::Error, neve_diagnostic::DiagnosticKind::Parser) => {
+                stats.parse_errors += 1;
+            }
+            (neve_diagnostic::Severity::Error, _) => {
+                stats.non_parse_errors += 1;
+            }
+            (neve_diagnostic::Severity::Warning, _) => {
+                stats.warnings += 1;
+            }
+            (neve_diagnostic::Severity::Note, _) => {}
+        }
+    }
+
+    stats
+}
+
+/// Diagnostic counts for dependency modules loaded during snippet analysis.
+/// snippet 分析期间已加载依赖模块的诊断计数。
+pub type LoadedSnippetDiagnosticStats = DiagnosticStats;
+
 /// Result of analyzing one in-memory snippet against a rooted frontend session.
 /// 基于带根目录的 frontend 会话分析单个内存 snippet 的结果。
 #[derive(Debug, Clone)]
@@ -145,6 +208,9 @@ pub struct LoadedSnippetModule {
     /// Backing source path on disk.
     /// 模块对应的磁盘路径。
     pub file_path: PathBuf,
+    /// Source text read for diagnostic attribution.
+    /// 用于诊断归属展示的源码文本。
+    pub source: String,
     /// Lowered HIR for this dependency when available.
     /// 当前依赖模块可用时的降级 HIR。
     pub hir: Option<Module>,
@@ -154,6 +220,36 @@ pub struct LoadedSnippetModule {
     /// Canonical semantic side tables for this dependency when available.
     /// 当前依赖模块可用时的规范语义 side tables。
     pub semantics: ModuleSemantics,
+}
+
+impl SnippetAnalysis {
+    /// Summarize current snippet diagnostics by blocking/non-blocking role.
+    /// 按阻断/非阻断角色汇总当前 snippet 诊断。
+    pub fn diagnostic_stats(&self) -> DiagnosticStats {
+        collect_diagnostic_stats(self.diagnostics.iter())
+    }
+
+    /// Whether current snippet diagnostics contain any blocking errors.
+    /// 当前 snippet 诊断是否包含任何阻断错误。
+    pub fn has_blocking_diagnostics(&self) -> bool {
+        diagnostics_have_errors(&self.diagnostics)
+    }
+
+    /// Summarize loaded dependency diagnostics by blocking/non-blocking role.
+    /// 按阻断/非阻断角色汇总已加载依赖诊断。
+    pub fn loaded_diagnostic_stats(&self) -> LoadedSnippetDiagnosticStats {
+        collect_diagnostic_stats(
+            self.loaded_modules
+                .iter()
+                .flat_map(|entry| entry.diagnostics.iter()),
+        )
+    }
+
+    /// Whether loaded dependency diagnostics contain any blocking errors.
+    /// 已加载依赖诊断是否包含任何阻断错误。
+    pub fn loaded_has_blocking_diagnostics(&self) -> bool {
+        self.loaded_diagnostic_stats().has_errors()
+    }
 }
 
 /// Analyze a source string and return AST, HIR, and diagnostics.
@@ -220,12 +316,16 @@ pub fn analyze_snippet_ast(
         .loaded_modules_in_order()
         .into_iter()
         .filter(|entry| loaded_pending.contains(&entry.module_id))
-        .map(|entry| LoadedSnippetModule {
-            module_id: entry.module_id,
-            file_path: entry.file_path,
-            hir: entry.module,
-            diagnostics: entry.analysis.diagnostics,
-            semantics: entry.analysis.semantics,
+        .map(|entry| {
+            let file_path = entry.file_path;
+            LoadedSnippetModule {
+                module_id: entry.module_id,
+                source: std::fs::read_to_string(&file_path).unwrap_or_default(),
+                file_path,
+                hir: entry.module,
+                diagnostics: entry.analysis.diagnostics,
+                semantics: entry.analysis.semantics,
+            }
         })
         .collect();
     let evaluable_loaded_modules = session

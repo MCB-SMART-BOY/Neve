@@ -4,14 +4,13 @@
 //! Builds a package from a Neve file or flake.
 //! 从 Neve 文件或 flake 构建软件包。
 
-use crate::commands::module_graph;
+use crate::commands::{diagnostics, module_graph};
 use crate::output;
 use crate::platform::{BuildBackend, PlatformCapabilities, warn_limited_sandbox};
 use neve_builder::{BuildBackend as BuilderBackend, Builder, BuilderConfig};
 use neve_config::flake::{Flake, FlakeOutput};
 use neve_derive::{Derivation, StorePath};
-use neve_diagnostic::{Severity, emit};
-use neve_eval::{Evaluator, Value};
+use neve_eval::{EvaluableModuleRef, Evaluator, Value};
 use neve_frontend::{FrontendDriver, ProgramAnalysis};
 use neve_std::stdlib;
 use neve_store::{BinaryCache, CacheConfig, Store};
@@ -361,18 +360,10 @@ fn evaluate_file_via_frontend(path: &Path) -> Result<Value, String> {
 }
 
 fn emit_program_diagnostics(analysis: &ProgramAnalysis) -> Result<(), String> {
-    let mut had_errors = false;
+    let stats = analysis.diagnostic_stats();
+    diagnostics::emit_program_diagnostic_entries(&analysis.diagnostic_modules_in_order());
 
-    for entry in analysis.diagnostic_modules_in_order() {
-        for diag in &entry.diagnostics {
-            emit(&entry.source, &entry.file_path.display().to_string(), diag);
-            if diag.severity == Severity::Error {
-                had_errors = true;
-            }
-        }
-    }
-
-    if had_errors {
+    if stats.has_errors() {
         Err("type error".to_string())
     } else {
         Ok(())
@@ -381,19 +372,15 @@ fn emit_program_diagnostics(analysis: &ProgramAnalysis) -> Result<(), String> {
 
 fn eval_program_root_value(analysis: &ProgramAnalysis) -> Result<Value, String> {
     let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
-    let mut root_value = Value::Unit;
-
-    for entry in analysis.evaluable_modules_in_order() {
-        let value = evaluator
-            .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
-            .map_err(|e| format!("evaluation error: {e:?}"))?;
-
-        if entry.module_id == analysis.root_module_id() {
-            root_value = value;
-        }
-    }
-
-    Ok(root_value)
+    let modules = analysis.evaluable_modules_in_order();
+    evaluator
+        .eval_evaluable_modules(
+            modules
+                .iter()
+                .map(|entry| EvaluableModuleRef::new(&entry.module, &entry.method_resolutions)),
+            analysis.root_module_id(),
+        )
+        .map_err(|e| format!("evaluation error: {e:?}"))
 }
 
 fn std_builtin_values() -> impl Iterator<Item = (String, Value)> {

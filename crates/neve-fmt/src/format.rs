@@ -116,6 +116,11 @@ impl Formatter {
             self.format_type(p, ret_ty);
         }
 
+        // Effect annotation / 副作用注解
+        if def.effect {
+            p.write(" effect");
+        }
+
         // Body / 函数体
         p.write(" = ");
         self.format_expr(p, &def.body);

@@ -19,7 +19,8 @@ use neve_typeck::TypeChecker;
 
 use crate::{
     Diagnostic, Module, ModuleAnalysis, ModuleSemantics, collect_item_names_from_modules,
-    collect_module_semantics, format_type_with_names_map, rewrite_diagnostics_with_names,
+    collect_module_semantics, diagnostics_have_errors, format_type_with_names_map,
+    rewrite_diagnostics_with_names,
 };
 
 const REPL_EXPR_BINDING_NAME: &str = "__expr__";
@@ -762,12 +763,7 @@ impl FrontendSession {
             .into_iter()
             .filter_map(|entry| {
                 let module = entry.module?;
-                if entry
-                    .analysis
-                    .diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
-                {
+                if diagnostics_have_errors(&entry.analysis.diagnostics) {
                     return None;
                 }
 
@@ -820,11 +816,7 @@ impl FrontendSession {
         current_module: &Module,
     ) -> Result<ModuleAnalysis, Vec<Diagnostic>> {
         let analysis = self.analyze_module(current_module);
-        if analysis
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
-        {
+        if diagnostics_have_errors(&analysis.diagnostics) {
             return Err(analysis.diagnostics);
         }
 
@@ -924,12 +916,7 @@ impl FrontendSession {
             if !pending.contains(&entry.module_id) {
                 continue;
             }
-            if entry
-                .analysis
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
-            {
+            if diagnostics_have_errors(&entry.analysis.diagnostics) {
                 entries.push(SessionLoadedDiagnostics {
                     module_id: entry.module_id,
                     file_path: entry.file_path.clone(),

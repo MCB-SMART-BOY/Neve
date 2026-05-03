@@ -1524,3 +1524,63 @@ fn test_pipeline_heavy() {
     );
     assert!(diags.is_empty());
 }
+
+// ============================================================================
+// Effect annotation tests
+// ============================================================================
+
+#[test]
+fn test_parse_fn_with_effect() {
+    let (file, diags) = parse("fn read() -> String effect = io.readFile(\"/x\");");
+    assert!(diags.is_empty(), "unexpected parse errors: {:?}", diags);
+    assert_eq!(file.items.len(), 1);
+    match &file.items[0].kind {
+        neve_syntax::ItemKind::Fn(def) => assert!(def.effect, "expected effect=true"),
+        _ => panic!("expected Fn item"),
+    }
+}
+
+#[test]
+fn test_parse_fn_without_effect() {
+    let (file, diags) = parse("fn add(x: Int) -> Int = x + 1;");
+    assert!(diags.is_empty());
+    match &file.items[0].kind {
+        neve_syntax::ItemKind::Fn(def) => assert!(!def.effect, "expected effect=false"),
+        _ => panic!("expected Fn item"),
+    }
+}
+
+#[test]
+fn test_parse_import_std_module() {
+    let (file, diags) = parse("import std.io as io;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_import_std_items() {
+    let (file, diags) = parse("import std.list (map, filter);");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_list_comprehension() {
+    let (file, diags) = parse("let xs = [x * 2 | x <- [1, 2, 3], x > 0];");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_safe_field_access() {
+    let (file, diags) = parse("let x = record?.field ?? \"default\";");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_try_expression() {
+    let (file, diags) = parse("let x = maybe?;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}

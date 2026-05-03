@@ -656,6 +656,7 @@ pub(crate) fn unreachable_pattern(
 
     Diagnostic::warning(DiagnosticKind::Type, span, "unreachable pattern")
         .with_label(Label::new(span, "this pattern will never be matched"))
+        .with_code(ErrorCode::UnreachablePattern)
         .with_label(Label::new(previous_span, previous_label))
         .with_note(note)
         .with_help("remove this pattern or reorder the match arms")

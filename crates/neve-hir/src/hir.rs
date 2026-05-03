@@ -426,6 +426,8 @@ pub struct FnDef {
     pub params: Vec<Param>,
     /// Return type. / 返回类型。
     pub return_ty: Ty,
+    /// Whether this function is effectful. / 该函数是否有副作用。
+    pub effectful: bool,
     /// Function body. / 函数体。
     pub body: Expr,
 }

@@ -2145,6 +2145,17 @@ impl TypeChecker {
                 builtin_string_option(span),
                 span,
             ),
+            "io.env" => builtin_fn(Vec::new(), builtin_ty(TyKind::Record(vec![]), span), span),
+            "io.sleep" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.which" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_string_option(span),
+                span,
+            ),
             "io.currentDir" | "io.currentSystem" => {
                 builtin_fn(Vec::new(), builtin_ty(TyKind::String, span), span)
             }
@@ -2171,6 +2182,11 @@ impl TypeChecker {
             "io.execCommand" => builtin_fn(
                 vec![builtin_command(span)],
                 builtin_process_result(span),
+                span,
+            ),
+            "io.execCommandLines" => builtin_fn(
+                vec![builtin_command(span)],
+                builtin_list(builtin_ty(TyKind::String, span), span),
                 span,
             ),
             "io.pipeline" => builtin_fn(
@@ -2787,6 +2803,130 @@ impl TypeChecker {
         }
     }
 
+    /// Check that a pure function body contains no effectful calls.
+    fn check_effect_purity(&mut self, expr: &neve_hir::Expr) {
+        let mut calls = Vec::new();
+        self.collect_effectful_calls(expr, &mut calls);
+        for (name, span) in calls {
+            self.error(
+                span,
+                format!(
+                    "effectful call '{name}' in pure function; add `effect` to the function signature"
+                ),
+            );
+        }
+    }
+
+    fn collect_effectful_calls(&self, expr: &neve_hir::Expr, out: &mut Vec<(String, Span)>) {
+        use neve_hir::ExprKind;
+        match &expr.kind {
+            ExprKind::Builtin(name) if Self::is_effectful_builtin_name(name) => {
+                out.push((name.clone(), expr.span));
+            }
+            ExprKind::Call(func, args) => {
+                self.collect_effectful_calls(func, out);
+                for a in args {
+                    self.collect_effectful_calls(a, out);
+                }
+            }
+            ExprKind::MethodCall {
+                receiver,
+                target,
+                args,
+                ..
+            } => {
+                self.collect_effectful_calls(receiver, out);
+                self.collect_effectful_calls(target, out);
+                for a in args {
+                    self.collect_effectful_calls(a, out);
+                }
+            }
+            ExprKind::Binary(_, left, right) => {
+                self.collect_effectful_calls(left, out);
+                self.collect_effectful_calls(right, out);
+            }
+            ExprKind::Unary(_, op) => self.collect_effectful_calls(op, out),
+            ExprKind::If(cond, then_body, else_body) => {
+                self.collect_effectful_calls(cond, out);
+                self.collect_effectful_calls(then_body, out);
+                self.collect_effectful_calls(else_body, out);
+            }
+            ExprKind::Block(stmts, tail) => {
+                for s in stmts {
+                    match &s.kind {
+                        neve_hir::StmtKind::Let { value, .. } => {
+                            self.collect_effectful_calls(value, out)
+                        }
+                        neve_hir::StmtKind::Expr(e) => self.collect_effectful_calls(e, out),
+                    }
+                }
+                if let Some(e) = tail {
+                    self.collect_effectful_calls(e, out);
+                }
+            }
+            ExprKind::Let { value, body, .. } => {
+                self.collect_effectful_calls(value, out);
+                self.collect_effectful_calls(body, out);
+            }
+            ExprKind::Match(scrutinee, arms) => {
+                self.collect_effectful_calls(scrutinee, out);
+                for arm in arms {
+                    self.collect_effectful_calls(&arm.body, out);
+                }
+            }
+            ExprKind::Field(base, _) => self.collect_effectful_calls(base, out),
+            ExprKind::SafeField { base, .. } => self.collect_effectful_calls(base, out),
+            ExprKind::TupleIndex(base, _) => self.collect_effectful_calls(base, out),
+            ExprKind::Try(inner) => self.collect_effectful_calls(inner, out),
+            ExprKind::Coalesce { value, default } => {
+                self.collect_effectful_calls(value, out);
+                self.collect_effectful_calls(default, out);
+            }
+            ExprKind::ListComp { body, generators } => {
+                self.collect_effectful_calls(body, out);
+                for g in generators {
+                    self.collect_effectful_calls(&g.iter, out);
+                }
+            }
+            ExprKind::Record(fields) => {
+                for (_, v) in fields {
+                    self.collect_effectful_calls(v, out);
+                }
+            }
+            ExprKind::List(items) | ExprKind::Tuple(items) => {
+                for item in items {
+                    self.collect_effectful_calls(item, out);
+                }
+            }
+            ExprKind::Lambda(_, body) => self.collect_effectful_calls(body, out),
+            ExprKind::Lazy(inner) => self.collect_effectful_calls(inner, out),
+            ExprKind::Interpolated(parts) => {
+                for part in parts {
+                    if let neve_hir::StringPart::Expr(e) = part {
+                        self.collect_effectful_calls(e, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn is_effectful_builtin_name(name: &str) -> bool {
+        let parts: Vec<&str> = name.split('.').collect();
+        if parts.len() >= 2 {
+            match parts[0] {
+                "io" => !matches!(
+                    parts[1],
+                    "processSuccess" | "processStdout" | "processCode" | "processStderr"
+                ),
+                "fetch" => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
     fn check_match_coverage(&mut self, scrutinee_ty: &Ty, arms: &[MatchArm], span: Span) {
         let scrutinee_ty = self.apply(scrutinee_ty);
         let analysis = analyze_match(
@@ -3134,6 +3274,11 @@ impl TypeChecker {
 
         // Check for unused variables before clearing
         self.check_unused_locals();
+
+        // Effect checking: pure functions cannot call effectful builtins
+        if !fn_def.effectful {
+            self.check_effect_purity(&fn_def.body);
+        }
 
         // Clear locals after checking function
         self.locals.clear();

@@ -609,3 +609,126 @@ fn test_builder_registers_output_metadata_with_references() {
     let _ = fs::remove_dir_all(store_root);
     let _ = fs::remove_dir_all(build_root);
 }
+
+// ============================================================================
+// Phase B exit criteria: reproducibility
+// ============================================================================
+
+#[cfg(unix)]
+#[test]
+fn test_build_twice_produces_identical_store_paths() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let store_root =
+        env::temp_dir().join(format!("neve-repro-store-{}-{}", std::process::id(), nonce));
+    let build_root1 = env::temp_dir().join(format!(
+        "neve-repro-build1-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+    let build_root2 = env::temp_dir().join(format!(
+        "neve-repro-build2-{}-{}",
+        std::process::id(),
+        nonce
+    ));
+
+    let drv = Derivation::builder("repro-test", "1.0")
+        .builder_path("/bin/sh")
+        .arg("-c")
+        .arg("mkdir -p \"$out\"; echo deterministic > \"$out/output.txt\"")
+        .build();
+
+    let store1 = Store::open_at(store_root.clone()).unwrap();
+    let config1 = BuilderConfig {
+        backend: BuildBackend::Simple,
+        sandbox: false,
+        temp_dir: build_root1.clone(),
+        ..Default::default()
+    };
+    let mut builder1 = Builder::with_config(store1, config1);
+    let result1 = builder1.build(&drv).unwrap();
+    let path1 = result1.outputs.get("out").unwrap().clone();
+
+    let store2 = Store::open_at(store_root.clone()).unwrap();
+    let config2 = BuilderConfig {
+        backend: BuildBackend::Simple,
+        sandbox: false,
+        temp_dir: build_root2.clone(),
+        ..Default::default()
+    };
+    let mut builder2 = Builder::with_config(store2, config2);
+    let result2 = builder2.build(&drv).unwrap();
+    let path2 = result2.outputs.get("out").unwrap().clone();
+
+    assert_eq!(path1, path2, "build reproducibility failed");
+
+    let store = Store::open_at(store_root.clone()).unwrap();
+    let out_fs_path = store.to_path(&path1);
+    assert!(out_fs_path.join("output.txt").exists());
+    let content = fs::read_to_string(out_fs_path.join("output.txt")).unwrap();
+    assert_eq!(content.trim(), "deterministic");
+
+    let _ = fs::remove_dir_all(store_root);
+    let _ = fs::remove_dir_all(build_root1);
+    let _ = fs::remove_dir_all(build_root2);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_gc_preserves_live_paths() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let store_root = env::temp_dir().join(format!("neve-gc-test-{}-{}", std::process::id(), nonce));
+
+    let drv = Derivation::builder("gc-test", "1.0")
+        .builder_path("/bin/sh")
+        .arg("-c")
+        .arg("mkdir -p \"$out\"; echo live > \"$out/data.txt\"")
+        .build();
+
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+    let _drv_path = store.add_derivation(&drv).unwrap();
+
+    let config = BuilderConfig {
+        backend: BuildBackend::Simple,
+        sandbox: false,
+        temp_dir: store_root.join("build"),
+        ..Default::default()
+    };
+    let mut builder = Builder::with_config(store, config);
+    let result = builder.build(&drv).unwrap();
+    let out_path = result.outputs.get("out").unwrap();
+
+    // Add GC root
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+    let gc = neve_store::gc::GarbageCollector::new(&mut store);
+    gc.add_root("test-gc-root", out_path).unwrap();
+
+    // GC should preserve live path
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+    let mut gc = neve_store::gc::GarbageCollector::new(&mut store);
+    gc.collect().unwrap();
+
+    let store = Store::open_at(store_root.clone()).unwrap();
+    let out_fs = store.to_path(out_path);
+    assert!(out_fs.join("data.txt").exists(), "GC deleted a live path");
+
+    // Remove root and GC again
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+    let gc = neve_store::gc::GarbageCollector::new(&mut store);
+    gc.remove_root("test-gc-root").unwrap();
+
+    let mut store = Store::open_at(store_root.clone()).unwrap();
+    let mut gc = neve_store::gc::GarbageCollector::new(&mut store);
+    gc.collect().unwrap();
+
+    let _ = fs::remove_dir_all(store_root);
+}

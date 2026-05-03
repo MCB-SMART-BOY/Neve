@@ -9,7 +9,7 @@
 
 use crate::{ConfigError, SystemConfig, UserConfig};
 use neve_diagnostic::Severity;
-use neve_eval::{Evaluator, Value};
+use neve_eval::{EvaluableModuleRef, Evaluator, Value};
 use neve_frontend::{Diagnostic, FrontendDriver, ProgramAnalysis, analyze_source};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -136,10 +136,10 @@ impl Module {
         let analysis = analyze_source(source);
         ensure_single_module_has_no_errors(&analysis.diagnostics, path.as_deref())?;
         let value = Evaluator::new()
-            .eval_module_with_method_resolutions(
+            .eval_evaluable_module(EvaluableModuleRef::new(
                 &analysis.hir,
                 &analysis.semantics.method_resolutions,
-            )
+            ))
             .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
 
         module_from_value(value, path)
@@ -361,23 +361,11 @@ fn ensure_single_module_has_no_errors(
 }
 
 fn ensure_program_has_no_errors(analysis: &ProgramAnalysis) -> Result<(), ConfigError> {
-    let mut errors = Vec::new();
-
-    for module_id in analysis.load_order() {
-        let Some(info) = analysis.module_info(*module_id) else {
-            continue;
-        };
-
-        for diagnostic in analysis.diagnostics(*module_id).unwrap_or(&[]) {
-            if diagnostic.severity == Severity::Error {
-                errors.push(format!(
-                    "{}: {}",
-                    info.file_path.display(),
-                    diagnostic.message
-                ));
-            }
-        }
+    if !analysis.has_blocking_diagnostics() {
+        return Ok(());
     }
+
+    let errors = analysis.blocking_diagnostic_messages();
 
     if errors.is_empty() {
         return Ok(());
@@ -391,28 +379,15 @@ fn ensure_program_has_no_errors(analysis: &ProgramAnalysis) -> Result<(), Config
 
 fn eval_program_root_value(analysis: &ProgramAnalysis) -> Result<Value, ConfigError> {
     let mut evaluator = Evaluator::new();
-    let mut root_value = Value::Unit;
-
-    for module_id in analysis.load_order() {
-        let Some(module) = analysis.hir_module(*module_id) else {
-            continue;
-        };
-        let method_resolutions = analysis
-            .semantics(*module_id)
-            .map(|semantics| &semantics.method_resolutions)
-            .cloned()
-            .unwrap_or_default();
-
-        let value = evaluator
-            .eval_module_with_method_resolutions(module, &method_resolutions)
-            .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?;
-
-        if *module_id == analysis.root_module_id() {
-            root_value = value;
-        }
-    }
-
-    Ok(root_value)
+    let modules = analysis.evaluable_modules_in_order();
+    evaluator
+        .eval_evaluable_modules(
+            modules
+                .iter()
+                .map(|entry| EvaluableModuleRef::new(&entry.module, &entry.method_resolutions)),
+            analysis.root_module_id(),
+        )
+        .map_err(|e| ConfigError::Eval(format!("{:?}", e)))
 }
 
 fn module_from_value(value: Value, path: Option<PathBuf>) -> Result<Module, ConfigError> {

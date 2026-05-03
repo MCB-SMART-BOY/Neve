@@ -4,6 +4,7 @@
 // Cross-platform commands (language features)
 // 跨平台命令（语言功能）
 pub mod check;
+mod diagnostics;
 pub mod doc;
 pub mod eval;
 pub mod fmt;

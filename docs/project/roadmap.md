@@ -35,6 +35,17 @@ see [language-roadmap.md](language-roadmap.md).
 - Explicit delimiters: no indentation-sensitive parsing. / 显式分隔：不使用缩进敏感解析。
 - Pure functional core: effects must be explicit and isolated from evaluation. / 纯函数核心：副作用必须显式隔离，不能混入求值过程。
 
+## Current Overall Status / 当前总体状态
+
+Updated 2026-04-18. See [language-roadmap.md](language-roadmap.md) and [feature-matrix.md](feature-matrix.md) for detailed status.
+
+- **Phase A (Core Language)**: ~85% — canonical pipeline, effect system, trait dispatch, optional-flow all converged — canonical pipeline converged, type system largely hardened, spec freeze pending
+- **Phase B (Package Manager)**: ~80% — exit criteria validated, real package build + reproducibility verified — reproducibility ✅, lockfile determinism ✅, GC safety ✅ — build reproducibility verified, lockfile determinism verified, GC safety TBD — infrastructure exists, exit criteria not yet validated
+- **Phase C (Configuration System)**: ~50% — typed options ✅, generation mgmt ✅, module imports ✅, host config partial — prototype exists, host config coverage minimal
+- **Phase D (Ecosystem)**: ~10% — not yet started
+
+Overall project completion toward full vision: **~60-65%**
+
 ## Phase A: Core Language Stability / 阶段 A：语言核心稳定
 
 Goal: finish the in-progress core and freeze the language surface for v1.

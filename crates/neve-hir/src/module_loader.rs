@@ -52,6 +52,19 @@ pub struct ModuleInfo {
     pub mtime: Option<SystemTime>,
 }
 
+/// Strip a shebang line (#!...) from source text for script support.
+/// 从源文本中去除 shebang 行（#!...）以支持脚本。
+fn strip_shebang(source: &str) -> String {
+    if let Some(rest) = source.strip_prefix("#!") {
+        if let Some(newline_pos) = rest.find('\n') {
+            return rest[newline_pos + 1..].to_string();
+        }
+        // Entire file is just a shebang line
+        return String::new();
+    }
+    source.to_string()
+}
+
 /// Module loader responsible for discovering and loading modules.
 /// 负责发现和加载模块的模块加载器。
 #[derive(Debug, Clone)]
@@ -288,9 +301,9 @@ impl ModuleLoader {
 
         // Read and parse the file
         // 读取并解析文件
-        let source = fs::read_to_string(&file_path)
+        let raw_source = fs::read_to_string(&file_path)
             .map_err(|e| ModuleLoadError::IoError(file_path.clone(), e.to_string()))?;
-
+        let source = strip_shebang(&raw_source);
         let (source_file, parse_errors) = self.cache.parse_source(&file_path, &source);
 
         // Update cache with new mtime and source hash

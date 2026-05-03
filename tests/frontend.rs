@@ -2,7 +2,7 @@
 //! 前端分析管线的集成测试。
 
 use neve_diagnostic::{DiagnosticKind, ErrorCode};
-use neve_frontend::{analyze_snippet_ast, analyze_source};
+use neve_frontend::{DiagnosticStats, analyze_snippet_ast, analyze_source};
 use neve_hir::ItemKind;
 use neve_parser::parse;
 use std::collections::HashMap;
@@ -665,6 +665,89 @@ fn test_frontend_snippet_preserves_dependency_first_loaded_module_order() {
         .collect();
 
     assert_eq!(loaded_paths, vec!["util.neve", "math.neve"]);
+}
+
+#[test]
+fn test_frontend_snippet_loaded_diagnostic_stats_distinguish_errors_and_warnings() {
+    let temp_dir = TempDir::new().unwrap();
+    fs::write(temp_dir.path().join("bad_parse.neve"), "pub fn broken(x) =").unwrap();
+    fs::write(
+        temp_dir.path().join("bad_type.neve"),
+        "pub fn bad() = 1 + true;",
+    )
+    .unwrap();
+    fs::write(
+        temp_dir.path().join("warn_only.neve"),
+        r#"
+            import std.option as option;
+            pub fn warned() = match option.some(1) {
+                Some(_) -> 1,
+                Some(inner) -> inner,
+                None -> 0
+            };
+        "#,
+    )
+    .unwrap();
+
+    let source = "import bad_parse; import bad_type; import warn_only; let result = 1;";
+    let (ast, diagnostics) = parse(source);
+    assert!(
+        diagnostics.is_empty(),
+        "unexpected parse diagnostics: {:?}",
+        diagnostics
+    );
+
+    let analysis =
+        analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
+    let stats: DiagnosticStats = analysis.loaded_diagnostic_stats();
+
+    assert!(
+        stats.parse_errors > 0,
+        "expected loaded parse errors, got {:?}",
+        stats
+    );
+    assert!(
+        stats.non_parse_errors > 0,
+        "expected loaded type errors, got {:?}",
+        stats
+    );
+    assert_eq!(stats.warnings, 1);
+    assert!(stats.has_errors());
+    assert!(analysis.loaded_has_blocking_diagnostics());
+    assert!(
+        analysis
+            .loaded_modules
+            .iter()
+            .all(|entry| !entry.source.is_empty()),
+        "expected loaded module source text for diagnostics, got {:?}",
+        analysis.loaded_modules
+    );
+}
+
+#[test]
+fn test_frontend_snippet_current_diagnostic_stats_report_blocking_type_errors() {
+    let temp_dir = TempDir::new().unwrap();
+    let source = "let value = 1 + true;";
+    let (ast, diagnostics) = parse(source);
+    assert!(
+        diagnostics.is_empty(),
+        "unexpected parse diagnostics: {:?}",
+        diagnostics
+    );
+
+    let analysis =
+        analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
+    let stats: DiagnosticStats = analysis.diagnostic_stats();
+
+    assert_eq!(stats.parse_errors, 0);
+    assert!(
+        stats.non_parse_errors > 0,
+        "expected current snippet type errors, got {:?}",
+        stats
+    );
+    assert_eq!(stats.warnings, 0);
+    assert!(stats.has_errors());
+    assert!(analysis.has_blocking_diagnostics());
 }
 
 #[test]

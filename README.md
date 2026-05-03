@@ -39,10 +39,11 @@ Neve 不是 Nix 兼容层，也不是“配置 DSL 外包一层脚本”。它�
 
 ## Current Status / 当前状态
 
-- Core language tooling is usable today: `eval`, `run`, `check`, `repl`, `fmt`, parser/typeck/eval tests, and end-to-end smoke tests all run in this repository.
-- Main CLI paths now prefer the frontend/HIR pipeline for common local-module and stdlib-import scenarios, but some edge cases still fall back while semantic convergence continues.
-- LSP, package workflows, binary cache flows, and system configuration features exist, but they are less mature than the core language surface.
-- Cross-platform language tooling works on Linux, macOS, and Windows; store/build/config flows remain primarily Unix-oriented.
+- Canonical pipeline (`Parser -> HIR -> Typeck -> HIR Eval`) is the primary execution path.
+- Effect system: `effect` keyword distinguishes pure/effectful functions; `neve check --pure` enforces purity.
+- Typed runtime objects: `Path`, `Command`, `Pipeline`, `ProcessResult`, `Task<T>` with timeout + process kill.
+- Scripting: shebang support, `io.args()`, `io.execCommandLines`, `io.awaitTaskWithTimeout`.
+- LSP, package workflows, binary cache flows, and system configuration features exist (Unix-oriented).
 
 如果你想看“到底什么是真实支持、什么还只是路线图”，直接看：
 

@@ -1,8 +1,7 @@
 //! The `neve fmt` command.
 //! `neve fmt` 命令。
 
-use crate::output;
-use neve_diagnostic::emit;
+use crate::{commands::diagnostics, output};
 use std::fs;
 use std::path::Path;
 
@@ -21,9 +20,8 @@ pub fn run(file: &str, write: bool) -> Result<(), String> {
         Ok(formatted) => formatted,
         Err(err) => {
             if let Some(diags) = err.diagnostics() {
-                for diag in diags {
-                    emit(&source, &path.display().to_string(), diag);
-                }
+                let source_name = path.display().to_string();
+                diagnostics::emit_source_diagnostics(&source_name, &source, diags);
                 return Err("format parse error".to_string());
             }
             return Err(format!("Format error: {}", err));
@@ -61,9 +59,8 @@ pub fn check(file: &str) -> Result<(), String> {
         Ok(is_formatted) => is_formatted,
         Err(err) => {
             if let Some(diags) = err.diagnostics() {
-                for diag in diags {
-                    emit(&source, &path.display().to_string(), diag);
-                }
+                let source_name = path.display().to_string();
+                diagnostics::emit_source_diagnostics(&source_name, &source, diags);
                 return Err("format parse error".to_string());
             }
             return Err(format!("Format error: {}", err));

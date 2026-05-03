@@ -1,10 +1,12 @@
 //! The `neve run` command.
 //! `neve run` 命令。
 
-use crate::{commands::module_graph, output};
-use neve_diagnostic::{Severity, emit};
+use crate::{
+    commands::{diagnostics, module_graph},
+    output,
+};
 use neve_eval::{
-    EvalError, Evaluator, Value,
+    EvalError, EvaluableModuleRef, Evaluator, Value,
     compat::{AstEnv, AstEvaluator},
 };
 use neve_frontend::{
@@ -233,21 +235,11 @@ fn plan_run_execution(
 }
 
 fn emit_program_parse_diagnostics(analysis: &ProgramAnalysis) -> Result<(), String> {
-    let mut parse_errors = 0usize;
+    let stats = analysis.diagnostic_stats();
+    diagnostics::emit_program_diagnostic_entries(&analysis.parser_diagnostic_modules_in_order());
 
-    for entry in analysis.diagnostic_modules_in_order() {
-        for diag in entry
-            .diagnostics
-            .iter()
-            .filter(|diag| diag.kind == neve_diagnostic::DiagnosticKind::Parser)
-        {
-            emit(&entry.source, &entry.file_path.display().to_string(), diag);
-            parse_errors += 1;
-        }
-    }
-
-    if parse_errors > 0 {
-        output::error(&format!("{parse_errors} parse error(s) found"));
+    if stats.parse_errors > 0 {
+        output::error(&format!("{} parse error(s) found", stats.parse_errors));
         return Err("parse error".to_string());
     }
 
@@ -270,34 +262,24 @@ fn emit_program_parse_summary(parsed_modules: &[ProgramParsedModule], root_dir: 
 }
 
 fn eval_modules_via_hir(analysis: &ProgramAnalysis) -> Result<Value, String> {
-    let mut had_errors = false;
+    let stats = analysis.diagnostic_stats();
     let mut evaluator = Evaluator::new().with_extra_builtins(std_builtin_values());
-    let mut root_value = Value::Unit;
 
-    for entry in analysis.diagnostic_modules_in_order() {
-        for diag in &entry.diagnostics {
-            emit(&entry.source, &entry.file_path.display().to_string(), diag);
-            if diag.severity == Severity::Error {
-                had_errors = true;
-            }
-        }
-    }
+    diagnostics::emit_program_diagnostic_entries(&analysis.diagnostic_modules_in_order());
 
-    if had_errors {
+    if stats.has_errors() {
         return Err("type error".to_string());
     }
 
-    for entry in analysis.evaluable_modules_in_order() {
-        let value = evaluator
-            .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
-            .map_err(|e| format!("evaluation error: {e:?}"))?;
-
-        if entry.module_id == analysis.root_module_id() {
-            root_value = value;
-        }
-    }
-
-    Ok(root_value)
+    let modules = analysis.evaluable_modules_in_order();
+    evaluator
+        .eval_evaluable_modules(
+            modules
+                .iter()
+                .map(|entry| EvaluableModuleRef::new(&entry.module, &entry.method_resolutions)),
+            analysis.root_module_id(),
+        )
+        .map_err(|e| format!("evaluation error: {e:?}"))
 }
 
 fn run_direct_value(
@@ -308,13 +290,8 @@ fn run_direct_value(
 ) -> Result<Value, String> {
     let parsed = parse_module_file(file, module_path)
         .map_err(|e| format!("cannot read file '{}': {}", file.display(), e))?;
-    for diag in &parsed.diagnostics {
-        emit(
-            &parsed.source,
-            &parsed.file_path.display().to_string(),
-            diag,
-        );
-    }
+    let source_name = parsed.file_path.display().to_string();
+    diagnostics::emit_source_diagnostics(&source_name, &parsed.source, &parsed.diagnostics);
 
     let Some(ast) = parsed.ast else {
         return Err("parse error".to_string());
@@ -370,12 +347,11 @@ fn eval_ast_compat_module(evaluator: &mut AstEvaluator, ast: &SourceFile) -> Res
         Err(EvalError::ParseDiagnostics {
             path,
             source_text,
-            diagnostics,
+            diagnostics: parse_diagnostics,
             ..
         }) => {
-            for diag in diagnostics {
-                emit(&source_text, &path.display().to_string(), &diag);
-            }
+            let source_name = path.display().to_string();
+            diagnostics::emit_source_diagnostics(&source_name, &source_text, &parse_diagnostics);
             Err("parse error".to_string())
         }
         Err(e) => Err(format!("evaluation error: {e:?}")),

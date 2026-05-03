@@ -39,6 +39,6 @@ pub mod value;
 
 pub use builtin::builtins;
 pub use env::Environment;
-pub use eval::{EvalError, Evaluator};
+pub use eval::{EvalError, EvaluableModuleRef, Evaluator};
 pub use pattern::{MatchHints, Specificity, analyze_match, is_irrefutable, pattern_specificity};
 pub use value::{AstClosure, BuiltinFn, Value, stable_key};

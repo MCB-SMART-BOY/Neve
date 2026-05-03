@@ -1,0 +1,109 @@
+//! Shared CLI helpers for frontend diagnostic emission.
+//! frontend 诊断发射的 CLI 共享辅助函数。
+
+use neve_diagnostic::emit;
+use neve_frontend::{
+    Diagnostic, LoadedSnippetModule, ProgramDiagnosticModule, SessionDisplayError,
+    SessionLoadedDiagnostics,
+};
+use std::path::Path;
+
+trait SourceAttributedDiagnosticsEntry {
+    fn file_path(&self) -> &Path;
+    fn source(&self) -> &str;
+    fn diagnostics(&self) -> &[Diagnostic];
+}
+
+impl SourceAttributedDiagnosticsEntry for ProgramDiagnosticModule {
+    fn file_path(&self) -> &Path {
+        &self.file_path
+    }
+
+    fn source(&self) -> &str {
+        &self.source
+    }
+
+    fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+}
+
+impl SourceAttributedDiagnosticsEntry for LoadedSnippetModule {
+    fn file_path(&self) -> &Path {
+        &self.file_path
+    }
+
+    fn source(&self) -> &str {
+        &self.source
+    }
+
+    fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+}
+
+impl SourceAttributedDiagnosticsEntry for SessionLoadedDiagnostics {
+    fn file_path(&self) -> &Path {
+        &self.file_path
+    }
+
+    fn source(&self) -> &str {
+        &self.source
+    }
+
+    fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+}
+
+/// Emit diagnostics attributed to one source name and source text.
+/// 发射归属到单个源码名称与源码文本的诊断。
+pub(super) fn emit_source_diagnostics(source_name: &str, source: &str, diagnostics: &[Diagnostic]) {
+    for diagnostic in diagnostics {
+        emit(source, source_name, diagnostic);
+    }
+}
+
+fn emit_source_attributed_entries<T: SourceAttributedDiagnosticsEntry>(entries: &[T]) {
+    for entry in entries {
+        let file_path = entry.file_path().display().to_string();
+        emit_source_diagnostics(&file_path, entry.source(), entry.diagnostics());
+    }
+}
+
+/// Emit one dependency-first sequence of program diagnostic entries.
+/// 发射一组按依赖优先顺序排列的程序诊断条目。
+pub(super) fn emit_program_diagnostic_entries(entries: &[ProgramDiagnosticModule]) {
+    emit_source_attributed_entries(entries);
+}
+
+/// Emit one dependency-first sequence of loaded snippet diagnostic entries.
+/// 发射一组按依赖优先顺序排列的 snippet 已加载依赖诊断条目。
+#[allow(dead_code)]
+pub(super) fn emit_loaded_snippet_diagnostic_entries(entries: &[LoadedSnippetModule]) {
+    emit_source_attributed_entries(entries);
+}
+
+/// Emit one dependency-first sequence of session loaded-module diagnostic entries.
+/// 发射一组按依赖优先顺序排列的 session 已加载模块诊断条目。
+pub(super) fn emit_session_loaded_diagnostic_entries(entries: &[SessionLoadedDiagnostics]) {
+    emit_source_attributed_entries(entries);
+}
+
+/// Emit one frontend-owned REPL/session display error.
+/// 发射一个 frontend 持有的 REPL/session 展示错误。
+pub(super) fn emit_session_display_error(error: SessionDisplayError) {
+    match error {
+        SessionDisplayError::Diagnostics {
+            source_name,
+            source,
+            diagnostics,
+        } => emit_source_diagnostics(&source_name, &source, &diagnostics),
+        SessionDisplayError::LoadedModules(entries) => {
+            emit_session_loaded_diagnostic_entries(&entries)
+        }
+        SessionDisplayError::Message(message) => {
+            eprintln!("{message}");
+        }
+    }
+}
