@@ -241,7 +241,7 @@ pub fn run() -> Result<(), String> {
                     &mut semantic_state,
                 ) {
                     Ok(value) => {
-                        if !prepared_input.persist_defs || !matches!(value, Value::Unit) {
+                        if !matches!(value, Value::Unit) {
                             println!("{}", format_repl_value(&value));
                         }
                     }
@@ -651,7 +651,7 @@ fn format_repl_value(value: &Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Int(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
-        Value::String(s) => s.to_string(),
+        Value::String(s) => format!("\"{}\"" , s),
         Value::Char(c) => c.to_string(),
         Value::None => "None".to_string(),
         Value::Some(v) => format!("Some({})", format_repl_value(v)),

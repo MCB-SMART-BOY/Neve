@@ -7,6 +7,15 @@ use neve_eval::value::{BuiltinFn, Value};
 /// 返回所有 Option 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Global constructors for Option (usable without import)
+        (
+            "Some",
+            Value::VariantCtor { name: "Some".to_string(), arity: 1 },
+        ),
+        (
+            "None",
+            Value::None,
+        ),
         // some : a -> Option a
         // Wraps a value in Some / 将值包装为 Some
         (
