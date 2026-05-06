@@ -125,7 +125,7 @@ pub fn run() -> Result<(), String> {
                             println!("  - Use 'let x = ...' to define variables");
                             println!("  - Use 'fn name(...) = ...' to define functions");
                             println!("  - All definitions persist across inputs");
-                            println!("  - End line with \\ for multi-line input");
+                            println!("  - Type ; to finish, or continue on next line for blocks");
                             input_buffer.clear();
                             continue;
                         }
