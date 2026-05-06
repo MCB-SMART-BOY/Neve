@@ -54,33 +54,50 @@ pub fn run() -> Result<(), String> {
         let readline = rl.readline(prompt);
         match readline {
             Ok(line) => {
-                // Handle multi-line input
-                // 处理多行输入
-                // If line ends with backslash, continue on next line
-                // 如果行以反斜杠结尾，则在下一行继续
-                if line.trim_end().ends_with('\\') {
-                    let trimmed = line.trim_end();
-                    input_buffer.push_str(&trimmed[..trimmed.len() - 1]);
+                let line_trimmed = line.trim_end();
+
+                // Handle backslash continuation (explicit multi-line)
+                if line_trimmed.ends_with('\\') {
+                    input_buffer.push_str(&line_trimmed[..line_trimmed.len() - 1]);
                     input_buffer.push('\n');
                     in_multiline = true;
                     continue;
                 }
 
-                // If we're in multiline mode, append this line and process
-                // 如果处于多行模式，追加此行并处理
+                // Accumulate input
                 if in_multiline {
+                    input_buffer.push('\n');
                     input_buffer.push_str(&line);
-                    in_multiline = false;
                 } else {
                     input_buffer = line.to_string();
                 }
 
                 let input = input_buffer.trim();
 
+                // Empty input: reset state
                 if input.is_empty() {
                     input_buffer.clear();
+                    in_multiline = false;
                     continue;
                 }
+
+                // Check if input is complete:
+                // - REPL commands execute immediately
+                // - Ends with ; → complete statement
+                // - Single line with balanced braces and no ; → bare expression, execute
+                let has_unclosed = has_unclosed_braces(input);
+                let is_single_line = !input.contains('\n');
+                let is_complete = input.starts_with(':')
+                    || input.ends_with(';')
+                    || (is_single_line && !has_unclosed && !input.ends_with(';'));
+
+                if !is_complete {
+                    // Not complete yet — continue accumulating
+                    in_multiline = true;
+                    continue;
+                }
+
+                in_multiline = false;
 
                 let _ = rl.add_history_entry(input);
 
@@ -620,6 +637,38 @@ fn neve_config_dir() -> Option<PathBuf> {
 }
 
 /// Get the REPL history file path (~/.config/neve/history).
+
+/// Check if a string has unclosed braces/brackets/parens.
+fn has_unclosed_braces(input: &str) -> bool {
+    let mut depth_paren = 0i32;
+    let mut depth_brace = 0i32;
+    let mut depth_bracket = 0i32;
+    let mut in_string = false;
+    let mut in_char = false;
+    let mut escape = false;
+
+    for ch in input.chars() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        match ch {
+            '\\' => escape = true,
+            '"' if !in_char => in_string = !in_string,
+            '\'' if !in_string => in_char = !in_char,
+            '(' if !in_string && !in_char => depth_paren += 1,
+            ')' if !in_string && !in_char => depth_paren -= 1,
+            '{' if !in_string && !in_char => depth_brace += 1,
+            '}' if !in_string && !in_char => depth_brace -= 1,
+            '[' if !in_string && !in_char => depth_bracket += 1,
+            ']' if !in_string && !in_char => depth_bracket -= 1,
+            _ => {}
+        }
+    }
+
+    depth_paren > 0 || depth_brace > 0 || depth_bracket > 0
+}
+
 fn repl_history_path() -> Option<PathBuf> {
     neve_config_dir().map(|d| d.join("history"))
 }
