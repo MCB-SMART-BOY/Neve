@@ -33,6 +33,81 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Output / 输出 (also available as global print/println)
+        (
+            "print",
+            Value::Builtin(BuiltinFn {
+                name: "print",
+                arity: 1,
+                func: |args| {
+                    use std::io::Write;
+                    let stdout = std::io::stdout();
+                    let mut handle = stdout.lock();
+                    let output = format_value_for_output(&args[0]);
+                    handle
+                        .write_all(output.as_bytes())
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("print: {e}"))
+                },
+            }),
+        ),
+        (
+            "println",
+            Value::Builtin(BuiltinFn {
+                name: "println",
+                arity: 1,
+                func: |args| {
+                    use std::io::Write;
+                    let stdout = std::io::stdout();
+                    let mut handle = stdout.lock();
+                    let output = format_value_for_output(&args[0]);
+                    handle
+                        .write_all(output.as_bytes())
+                        .and_then(|_| handle.write_all(b"\n"))
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("println: {e}"))
+                },
+            }),
+        ),
+        (
+            "io.print",
+            Value::Builtin(BuiltinFn {
+                name: "io.print",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(s) => {
+                        use std::io::Write;
+                        let stdout = std::io::stdout();
+                        let mut handle = stdout.lock();
+                        handle
+                            .write_all(s.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.print: {e}"))
+                    }
+                    _ => Err("io.print expects a String".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.println",
+            Value::Builtin(BuiltinFn {
+                name: "io.println",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(s) => {
+                        use std::io::Write;
+                        let stdout = std::io::stdout();
+                        let mut handle = stdout.lock();
+                        handle
+                            .write_all(s.as_bytes())
+                            .and_then(|_| handle.write_all(b"\n"))
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.println: {e}"))
+                    }
+                    _ => Err("io.println expects a String".to_string()),
+                },
+            }),
+        ),
         // File reading / 文件读取
         (
             "io.readFile",
@@ -981,6 +1056,46 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         ),
         // Process execution / 进程执行
     ]
+}
+
+/// Format any Value for human-readable output (used by print/println).
+fn format_value_for_output(value: &Value) -> String {
+    match value {
+        Value::Unit => String::new(),
+        Value::Bool(b) => b.to_string(),
+        Value::Int(i) => i.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::String(s) => s.to_string(),
+        Value::Char(c) => c.to_string(),
+        Value::None => "None".to_string(),
+        Value::Some(v) => format!("Some({})", format_value_for_output(v)),
+        Value::Ok(v) => format!("Ok({})", format_value_for_output(v)),
+        Value::Err(e) => format!("Err({})", format_value_for_output(e)),
+        Value::List(items) => {
+            let items: Vec<String> = items.iter().map(format_value_for_output).collect();
+            format!("[{}]", items.join(", "))
+        }
+        Value::Tuple(elems) => {
+            let items: Vec<String> = elems.iter().map(format_value_for_output).collect();
+            format!("({})", items.join(", "))
+        }
+        Value::Record(fields) => {
+            let items: Vec<String> = fields
+                .iter()
+                .map(|(k, v)| format!("{} = {}", k, format_value_for_output(v)))
+                .collect();
+            format!("#{{ {} }}", items.join(", "))
+        }
+        Value::Path(p) => p.to_string_lossy().to_string(),
+        Value::ProcessResult(r) => {
+            if r.is_success() {
+                r.stdout().trim_end().to_string()
+            } else {
+                r.stderr().trim_end().to_string()
+            }
+        }
+        _ => format!("{:?}", value),
+    }
 }
 
 /// Compute SHA-256 hash and return as hex string.

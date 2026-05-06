@@ -23,6 +23,10 @@ pub use span::{BytePos, Span};
 /// This is the single source of truth for effect classification,
 /// shared by neve-typeck and neve-std to prevent drift.
 pub fn is_effectful_builtin(name: &str) -> bool {
+    // Single-segment effectful builtins
+    if name == "print" || name == "println" {
+        return true;
+    }
     let parts: Vec<&str> = name.split('.').collect();
     if parts.len() >= 2 {
         match parts[0] {

@@ -1464,7 +1464,7 @@ impl TypeChecker {
                     span,
                 )
             }
-            "print" => {
+            "print" | "println" | "io.print" | "io.println" => {
                 let a = builtin_param(0, "a", span);
                 builtin_forall(
                     Vec::from(["a"]),

@@ -41,6 +41,8 @@ pub enum ItemKind {
     Impl(ImplDef),
     /// `import path;` / 导入语句
     Import(ImportDef),
+    /// Expression statement (top-level expression, not the last). / 表达式语句
+    ExprStmt(Expr),
 }
 
 /// A let binding at the top level.

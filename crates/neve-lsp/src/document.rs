@@ -175,6 +175,11 @@ fn build_hover_maps(
             },
         };
 
+        // Skip expression statements in hover maps
+        if matches!(&ast_item.kind, ast::ItemKind::ExprStmt(_)) {
+            continue;
+        }
+
         match (&ast_item.kind, &hir_item.kind) {
             (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => {
                 if let AstPatternKind::Var(ident) = &def.pattern.kind

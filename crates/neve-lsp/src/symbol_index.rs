@@ -342,6 +342,9 @@ impl SymbolIndex {
                 // Imports don't define new symbols in the current module
                 // 导入不会在当前模块中定义新符号
             }
+            ItemKind::ExprStmt(_) => {
+                // Expression statements don't define new symbols
+            }
         }
     }
 

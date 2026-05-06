@@ -883,6 +883,9 @@ impl Resolver {
                 // Imports are handled separately
                 // 导入单独处理
             }
+            ast::ItemKind::ExprStmt(_) => {
+                // Expression statements don't define names
+            }
         }
     }
 
@@ -976,6 +979,7 @@ impl Resolver {
                 | "isEvaluated"
                 | "len"
                 | "print"
+                | "println"
                 | "toFloat"
                 | "toInt"
                 | "toString"
@@ -1214,6 +1218,14 @@ impl Resolver {
                 })
             }
             ast::ItemKind::Import(_) => None,
+            ast::ItemKind::ExprStmt(expr) => {
+                let id = self.fresh_def_id();
+                Some(Item {
+                    id,
+                    kind: ItemKind::Expr(self.lower_expr(expr)),
+                    span: expr.span,
+                })
+            }
         }
     }
 

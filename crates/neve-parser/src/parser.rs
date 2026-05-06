@@ -79,19 +79,22 @@ impl Parser {
 
             if let Some(item) = self.parse_item() {
                 items.push(item);
-            } else if tail_expr.is_none() {
+            } else {
+                // Parse top-level expression
                 let expr = self.parse_expr();
-                tail_expr = Some(expr);
                 let _ = self.eat(TokenKind::Semicolon);
 
                 if !self.at_end() {
-                    self.error("top-level expression must be the last form in a file");
-                    self.synchronize();
+                    // More forms follow → expression statement
+                    let span = expr.span;
+                    items.push(Item {
+                        kind: ItemKind::ExprStmt(expr),
+                        span,
+                    });
+                } else {
+                    // Last expression in file → tail expression
+                    tail_expr = Some(expr);
                 }
-            } else {
-                // Error recovery: synchronize to next statement boundary
-                // 错误恢复：同步到下一个语句边界
-                self.synchronize();
             }
         }
 
