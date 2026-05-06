@@ -198,6 +198,7 @@ pub struct ImplItem {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
+    pub effect: bool,
     pub body: Expr,
     pub span: Span,
 }

@@ -1325,6 +1325,7 @@ impl Resolver {
             generics,
             params,
             return_ty,
+            effectful: item.effect,
             body,
             span: item.span,
         })
@@ -1678,7 +1679,7 @@ impl Resolver {
                 ExprKind::Interpolated(parts)
             }
 
-            ast::ExprKind::PathLit(path) => ExprKind::Literal(Literal::String(path.clone())),
+            ast::ExprKind::PathLit(path) => ExprKind::Literal(Literal::Path(path.clone())),
         };
 
         Expr {

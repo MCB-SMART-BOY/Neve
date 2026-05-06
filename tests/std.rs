@@ -6861,6 +6861,191 @@ fn test_list_sum_non_int_list() {
     }
 }
 
+// --- Atomic file operations / 原子文件操作 ---
+
+#[test]
+fn test_io_atomic_write_and_read_back() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("atomic-write.txt");
+    let path_str = path.to_string_lossy().to_string();
+
+    let write = get_builtin("io.atomicWrite").expect("io.atomicWrite builtin should exist");
+    let read = get_builtin("io.readFile").expect("io.readFile builtin should exist");
+
+    let result = call_builtin(
+        &write,
+        &[
+            Value::String(Rc::new(path_str.clone())),
+            Value::String(Rc::new("atomic-content".to_string())),
+        ],
+    )
+    .expect("io.atomicWrite should succeed");
+    assert!(matches!(result, Value::Unit));
+
+    // Verify no temp files left behind
+    let parent = path.parent().unwrap();
+    let temp_files: Vec<_> = std::fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+        .collect();
+    assert!(
+        temp_files.is_empty(),
+        "temp files left behind: {:?}",
+        temp_files
+    );
+
+    let read_result = call_builtin(&read, &[Value::String(Rc::new(path_str))])
+        .expect("io.readFile should succeed");
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "atomic-content"));
+}
+
+#[test]
+fn test_io_atomic_write_path_and_read_back() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("atomic-write-path.txt");
+
+    let write = get_builtin("io.atomicWritePath").expect("io.atomicWritePath builtin should exist");
+    let read = get_builtin("io.readFilePath").expect("io.readFilePath builtin should exist");
+
+    let result = call_builtin(
+        &write,
+        &[
+            Value::Path(Rc::new(path.clone())),
+            Value::String(Rc::new("atomic-path-content".to_string())),
+        ],
+    )
+    .expect("io.atomicWritePath should succeed");
+    assert!(matches!(result, Value::Unit));
+
+    let read_result =
+        call_builtin(&read, &[Value::Path(Rc::new(path))]).expect("io.readFilePath should succeed");
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "atomic-path-content"));
+}
+
+#[test]
+fn test_io_atomic_write_all_writes_multiple_files() {
+    let temp = TempDir::new().unwrap();
+    let path_a = temp.path().join("atomic-a.txt");
+    let path_b = temp.path().join("atomic-b.txt");
+    let path_a_str = path_a.to_string_lossy().to_string();
+    let path_b_str = path_b.to_string_lossy().to_string();
+
+    let write_all =
+        get_builtin("io.atomicWriteAll").expect("io.atomicWriteAll builtin should exist");
+    let read = get_builtin("io.readFile").expect("io.readFile builtin should exist");
+
+    let mut entry_a = HashMap::new();
+    entry_a.insert(
+        "path".to_string(),
+        Value::String(Rc::new(path_a_str.clone())),
+    );
+    entry_a.insert(
+        "content".to_string(),
+        Value::String(Rc::new("content-a".to_string())),
+    );
+    let mut entry_b = HashMap::new();
+    entry_b.insert(
+        "path".to_string(),
+        Value::String(Rc::new(path_b_str.clone())),
+    );
+    entry_b.insert(
+        "content".to_string(),
+        Value::String(Rc::new("content-b".to_string())),
+    );
+
+    let entries = Value::List(Rc::new(vec![
+        Value::Record(Rc::new(entry_a)),
+        Value::Record(Rc::new(entry_b)),
+    ]));
+
+    let result = call_builtin(&write_all, &[entries]).expect("io.atomicWriteAll should succeed");
+    assert!(matches!(result, Value::Unit));
+
+    let read_a =
+        call_builtin(&read, &[Value::String(Rc::new(path_a_str))]).expect("read a should succeed");
+    let read_b =
+        call_builtin(&read, &[Value::String(Rc::new(path_b_str))]).expect("read b should succeed");
+    assert!(matches!(read_a, Value::String(s) if s.as_str() == "content-a"));
+    assert!(matches!(read_b, Value::String(s) if s.as_str() == "content-b"));
+}
+
+#[test]
+fn test_io_atomic_write_all_rejects_non_record_entries() {
+    let builtin = get_builtin("io.atomicWriteAll").expect("io.atomicWriteAll builtin should exist");
+    let err = call_builtin(
+        &builtin,
+        &[Value::List(Rc::new(vec![Value::String(Rc::new(
+            "not-a-record".to_string(),
+        ))]))],
+    )
+    .expect_err("io.atomicWriteAll should reject non-record entries");
+    assert!(err.contains("entries[0] must be a Record"));
+}
+
+#[test]
+fn test_io_copy_and_read_back() {
+    let temp = TempDir::new().unwrap();
+    let src = temp.path().join("copy-src.txt");
+    let dst = temp.path().join("copy-dst.txt");
+    let src_str = src.to_string_lossy().to_string();
+    let dst_str = dst.to_string_lossy().to_string();
+
+    std::fs::write(&src, "copy-me").unwrap();
+
+    let copy = get_builtin("io.copy").expect("io.copy builtin should exist");
+    let read = get_builtin("io.readFile").expect("io.readFile builtin should exist");
+
+    let result = call_builtin(
+        &copy,
+        &[
+            Value::String(Rc::new(src_str)),
+            Value::String(Rc::new(dst_str.clone())),
+        ],
+    )
+    .expect("io.copy should succeed");
+    assert!(matches!(result, Value::Unit));
+
+    let read_result =
+        call_builtin(&read, &[Value::String(Rc::new(dst_str))]).expect("read should succeed");
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "copy-me"));
+}
+
+#[test]
+fn test_io_move_and_verify_original_gone() {
+    let temp = TempDir::new().unwrap();
+    let src = temp.path().join("move-src.txt");
+    let dst = temp.path().join("move-dst.txt");
+    let src_str = src.to_string_lossy().to_string();
+    let dst_str = dst.to_string_lossy().to_string();
+
+    std::fs::write(&src, "move-me").unwrap();
+
+    let move_fn = get_builtin("io.move").expect("io.move builtin should exist");
+    let read = get_builtin("io.readFile").expect("io.readFile builtin should exist");
+    let exists = get_builtin("io.pathExists").expect("io.pathExists builtin should exist");
+
+    let result = call_builtin(
+        &move_fn,
+        &[
+            Value::String(Rc::new(src_str.clone())),
+            Value::String(Rc::new(dst_str.clone())),
+        ],
+    )
+    .expect("io.move should succeed");
+    assert!(matches!(result, Value::Unit));
+
+    // Original should be gone
+    let src_exists = call_builtin(&exists, &[Value::String(Rc::new(src_str))])
+        .expect("pathExists should succeed");
+    assert_eq!(src_exists, Value::Bool(false));
+
+    // Content at destination
+    let read_result =
+        call_builtin(&read, &[Value::String(Rc::new(dst_str))]).expect("read should succeed");
+    assert!(matches!(read_result, Value::String(s) if s.as_str() == "move-me"));
+}
+
 #[test]
 fn test_map_size_wrong_type() {
     let size = get_builtin("Map.size").unwrap();

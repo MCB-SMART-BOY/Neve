@@ -18,3 +18,22 @@ pub use int::{
 };
 pub use interner::{Interner, Symbol};
 pub use span::{BytePos, Span};
+
+/// Check if a builtin function name is effectful (touches the host).
+/// This is the single source of truth for effect classification,
+/// shared by neve-typeck and neve-std to prevent drift.
+pub fn is_effectful_builtin(name: &str) -> bool {
+    let parts: Vec<&str> = name.split('.').collect();
+    if parts.len() >= 2 {
+        match parts[0] {
+            "io" => !matches!(
+                parts[1],
+                "processSuccess" | "processStdout" | "processCode" | "processStderr"
+            ),
+            "fetch" => true,
+            _ => false,
+        }
+    } else {
+        false
+    }
+}

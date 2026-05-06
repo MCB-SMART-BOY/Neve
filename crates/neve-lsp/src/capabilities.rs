@@ -35,12 +35,8 @@ pub fn server_capabilities() -> ServerCapabilities {
             completion_item: None,
         }),
 
-        // Signature help / 签名帮助
-        signature_help_provider: Some(SignatureHelpOptions {
-            trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
-            retrigger_characters: None,
-            work_done_progress_options: WorkDoneProgressOptions::default(),
-        }),
+        // Signature help / 签名帮助 (TODO: not yet implemented)
+        signature_help_provider: None,
 
         // Go to definition / 跳转到定义
         definition_provider: Some(OneOf::Left(true)),

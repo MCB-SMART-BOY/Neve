@@ -840,6 +840,145 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        (
+            "io.execCommandStreaming",
+            Value::Builtin(BuiltinFn {
+                name: "io.execCommandStreaming",
+                arity: 2,
+                func: |_args| Err("io.execCommandStreaming is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.execPipelineStreaming",
+            Value::Builtin(BuiltinFn {
+                name: "io.execPipelineStreaming",
+                arity: 2,
+                func: |_args| Err("io.execPipelineStreaming is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.readFileLines",
+            Value::Builtin(BuiltinFn {
+                name: "io.readFileLines",
+                arity: 2,
+                func: |_args| Err("io.readFileLines is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.readFileLinesPath",
+            Value::Builtin(BuiltinFn {
+                name: "io.readFileLinesPath",
+                arity: 2,
+                func: |_args| Err("io.readFileLinesPath is evaluator-owned".to_string()),
+            }),
+        ),
+        // Atomic file operations / 原子文件操作
+        (
+            "io.atomicWrite",
+            Value::Builtin(BuiltinFn {
+                name: "io.atomicWrite",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(path), Value::String(content)) => {
+                        atomic_write(path.as_str(), content.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.atomicWrite: {e}"))
+                    }
+                    _ => Err("io.atomicWrite expects (String, String)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.atomicWritePath",
+            Value::Builtin(BuiltinFn {
+                name: "io.atomicWritePath",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::Path(path), Value::String(content)) => {
+                        atomic_write_path(path.as_path(), content.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.atomicWritePath: {e}"))
+                    }
+                    _ => Err("io.atomicWritePath expects (Path, String)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.atomicWriteAll",
+            Value::Builtin(BuiltinFn {
+                name: "io.atomicWriteAll",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::List(entries) => atomic_write_all(entries)
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("io.atomicWriteAll: {e}")),
+                    _ => Err(
+                        "io.atomicWriteAll expects List[{path: String, content: String}]"
+                            .to_string(),
+                    ),
+                },
+            }),
+        ),
+        (
+            "io.copy",
+            Value::Builtin(BuiltinFn {
+                name: "io.copy",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(src), Value::String(dst)) => {
+                        std::fs::copy(src.as_str(), dst.as_str())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.copy: {e}"))
+                    }
+                    _ => Err("io.copy expects (String, String)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.copyPath",
+            Value::Builtin(BuiltinFn {
+                name: "io.copyPath",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::Path(src), Value::Path(dst)) => {
+                        std::fs::copy(src.as_path(), dst.as_path())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.copyPath: {e}"))
+                    }
+                    _ => Err("io.copyPath expects (Path, Path)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.move",
+            Value::Builtin(BuiltinFn {
+                name: "io.move",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(src), Value::String(dst)) => {
+                        std::fs::rename(src.as_str(), dst.as_str())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.move: {e}"))
+                    }
+                    _ => Err("io.move expects (String, String)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.movePath",
+            Value::Builtin(BuiltinFn {
+                name: "io.movePath",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::Path(src), Value::Path(dst)) => {
+                        std::fs::rename(src.as_path(), dst.as_path())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.movePath: {e}"))
+                    }
+                    _ => Err("io.movePath expects (Path, Path)".to_string()),
+                },
+            }),
+        ),
         // Process execution / 进程执行
     ]
 }
@@ -851,6 +990,142 @@ fn sha256_hex(data: &[u8]) -> String {
 
     let digest = Sha256::digest(data);
     format!("{:x}", digest)
+}
+
+/// Atomic write: write content to a temporary file then rename to target path.
+/// This avoids partial writes and leaves no temp residue on success.
+/// 原子写入：先写入临时文件，然后重命名为目标路径。
+/// 避免部分写入，成功时不留下临时文件残留。
+fn atomic_write(path: &str, content: &[u8]) -> Result<(), String> {
+    let target = std::path::Path::new(path);
+    atomic_write_path(target, content)
+}
+
+fn atomic_write_path(target: &std::path::Path, content: &[u8]) -> Result<(), String> {
+    // Generate unique temp path in same directory to ensure rename is on same filesystem
+    let pid = std::process::id();
+    let parent = target.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let stem = target
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("atomic");
+    let ext = target
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+    let tmp_name = format!("{stem}.tmp.{pid}{ext}");
+    let tmp_path = parent.join(&tmp_name);
+
+    // Write to temp file
+    std::fs::write(&tmp_path, content)
+        .map_err(|e| format!("atomic_write: failed to write temp file: {e}"))?;
+
+    // Atomic rename
+    std::fs::rename(&tmp_path, target).map_err(|e| {
+        // Clean up temp file on failure
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("atomic_write: rename failed: {e}")
+    })
+}
+
+/// Batch atomic write using two-phase commit.
+/// All entries are written to temp files first (phase 1),
+/// then all are renamed (phase 2). If any rename fails, all renames are rolled back.
+/// 批量原子写入，使用两阶段提交。
+/// 第一阶段所有条目写入临时文件，第二阶段全部重命名。
+/// 如果任何重命名失败，所有重命名都会被回滚。
+fn atomic_write_all(entries: &[Value]) -> Result<(), String> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    struct PendingEntry {
+        target: std::path::PathBuf,
+        tmp_path: std::path::PathBuf,
+    }
+
+    let pid = std::process::id();
+    let mut pending: Vec<PendingEntry> = Vec::with_capacity(entries.len());
+
+    // Phase 1: Write all entries to temp files
+    for (i, entry) in entries.iter().enumerate() {
+        let fields = match entry {
+            Value::Record(fields) => fields,
+            _ => {
+                return Err(format!(
+                    "atomicWriteAll: entries[{i}] must be a Record with 'path' and 'content' fields"
+                ));
+            }
+        };
+
+        let path = fields
+            .get("path")
+            .and_then(|v| match v {
+                Value::String(s) => Some(s.as_str().to_string()),
+                _ => None,
+            })
+            .ok_or_else(|| format!("atomicWriteAll: entries[{i}] missing 'path' string field"))?;
+
+        let content = fields
+            .get("content")
+            .and_then(|v| match v {
+                Value::String(s) => Some(s.as_bytes().to_vec()),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                format!("atomicWriteAll: entries[{i}] missing 'content' string field")
+            })?;
+
+        let target = std::path::PathBuf::from(&path);
+        let parent = target.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let stem = target
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("atomic");
+        let ext = target
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|e| format!(".{e}"))
+            .unwrap_or_default();
+        let tmp_name = format!("{stem}.tmp.{pid}.{i}{ext}");
+        let tmp_path = parent.join(&tmp_name);
+
+        std::fs::write(&tmp_path, &content).map_err(|e| {
+            // Clean up all temp files written so far
+            for p in &pending {
+                let _ = std::fs::remove_file(&p.tmp_path);
+            }
+            let _ = std::fs::remove_file(&tmp_path);
+            format!("atomicWriteAll: write temp file failed for entries[{i}]: {e}")
+        })?;
+
+        pending.push(PendingEntry { target, tmp_path });
+    }
+
+    // Phase 2: Rename all temp files to targets
+    // Track which ones have been renamed so we can roll back
+    let mut renamed: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    for entry in &pending {
+        match std::fs::rename(&entry.tmp_path, &entry.target) {
+            Ok(()) => {
+                renamed.push((entry.target.clone(), entry.tmp_path.clone()));
+            }
+            Err(e) => {
+                // Rollback: rename already-committed files back to temp
+                for (target, tmp_path) in &renamed {
+                    let _ = std::fs::rename(target, tmp_path);
+                }
+                // Clean up remaining temp files
+                for p in &pending {
+                    let _ = std::fs::remove_file(&p.tmp_path);
+                }
+                return Err(format!("atomicWriteAll: rename failed: {e}"));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn list_to_string_vec(items: &[Value], arg_name: &str) -> Result<Vec<String>, String> {

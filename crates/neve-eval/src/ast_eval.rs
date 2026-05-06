@@ -1101,7 +1101,9 @@ impl AstEvaluator {
                 }
             }
 
-            ExprKind::PathLit(path) => Ok(Value::String(Rc::new(path.clone()))),
+            ExprKind::PathLit(path) => {
+                Ok(Value::Path(Rc::new(std::path::PathBuf::from(path.clone()))))
+            }
 
             ExprKind::Let {
                 pattern,
