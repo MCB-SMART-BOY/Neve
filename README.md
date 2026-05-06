@@ -39,11 +39,15 @@ Neve 不是 Nix 兼容层，也不是“配置 DSL 外包一层脚本”。它�
 
 ## Current Status / 当前状态
 
-- Canonical pipeline (`Parser -> HIR -> Typeck -> HIR Eval`) is the primary execution path.
-- Effect system: `effect` keyword distinguishes pure/effectful functions; `neve check --pure` enforces purity.
-- Typed runtime objects: `Path`, `Command`, `Pipeline`, `ProcessResult`, `Task<T>` with timeout + process kill.
-- Scripting: shebang support, `io.args()`, `io.execCommandLines`, `io.awaitTaskWithTimeout`.
-- LSP, package workflows, binary cache flows, and system configuration features exist (Unix-oriented).
+- **Canonical pipeline** (`Parser -> HIR -> Typeck -> HIR Eval`) is the primary execution path.
+- **Effect system** (G4 closed): `effect` keyword on functions and impl methods; lambda bodies inherit effect context; `neve check` rejects effectful calls by default.
+- **Streaming I/O**: `io.execCommandStreaming` (stdin + line callback), `io.execPipelineStreaming` (pipeline callback), `io.readFileLines`.
+- **Atomic file ops**: `io.atomicWrite`, `io.atomicWriteAll` (two-phase commit), `io.copy`, `io.move`.
+- **Path literals**: `./path` infers as `Path` type — `io.readFilePath(./test)` works directly.
+- **Typed runtime objects**: `Path`, `Bytes`, `Command`, `Pipeline`, `Redirect`, `ProcessResult`, `Task<T>` with timeout + process kill.
+- **Scripting**: shebang support, `io.args()`, `io.env()`, `io.sleep()`, `io.which()`.
+- **REPL**: history persistence, tab completion, human-friendly display, bracket matching.
+- LSP (hover, goto-def, references, rename, completion), formatter, and package workflows exist (Unix-oriented).
 
 如果你想看“到底什么是真实支持、什么还只是路线图”，直接看：
 
@@ -90,17 +94,20 @@ neve doc quickstart
 ```
 
 ```neve
-fn greet(name) = `Hello, {name}!`;
+-- Streaming command output line by line
+io.execCommandStreaming(
+    io.command("printf", ["hello\nworld\nneve"]),
+    fn(line) { () }
+)
 
-fn factorial(n) = {
-    if n <= 1 then 1
-    else n * factorial(n - 1)
-};
+-- Path literals are Path-type
+let config = io.readFilePath(./Cargo.toml);
 
-#{
-    greeting = greet("World"),
-    value = factorial(5),
-}
+-- Atomic file write
+io.atomicWrite("/tmp/safe.txt", "atomically written");
+
+-- Effect annotation on functions
+fn save(path: Path, content: String) effect = io.writeFilePath(path, content);
 ```
 
 ```bash
