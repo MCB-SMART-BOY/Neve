@@ -10,12 +10,12 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         // Global constructors for Option (usable without import)
         (
             "Some",
-            Value::VariantCtor { name: "Some".to_string(), arity: 1 },
+            Value::VariantCtor {
+                name: "Some".to_string(),
+                arity: 1,
+            },
         ),
-        (
-            "None",
-            Value::None,
-        ),
+        ("None", Value::None),
         // some : a -> Option a
         // Wraps a value in Some / 将值包装为 Some
         (

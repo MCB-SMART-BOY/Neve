@@ -10,11 +10,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         // Global constructors for Result (usable without import)
         (
             "Ok",
-            Value::VariantCtor { name: "Ok".to_string(), arity: 1 },
+            Value::VariantCtor {
+                name: "Ok".to_string(),
+                arity: 1,
+            },
         ),
         (
             "Err",
-            Value::VariantCtor { name: "Err".to_string(), arity: 1 },
+            Value::VariantCtor {
+                name: "Err".to_string(),
+                arity: 1,
+            },
         ),
         // ok : a -> Result a e
         // Wraps a value in Ok / 将值包装为 Ok
