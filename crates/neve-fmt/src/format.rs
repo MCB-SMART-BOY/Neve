@@ -65,6 +65,11 @@ impl Formatter {
             ItemKind::Trait(def) => self.format_trait(p, def),
             ItemKind::Impl(def) => self.format_impl(p, def),
             ItemKind::Import(def) => self.format_import(p, def),
+            ItemKind::ExprStmt(expr) => {
+                self.format_expr(p, expr);
+                p.write(";");
+                p.newline();
+            }
         }
     }
 

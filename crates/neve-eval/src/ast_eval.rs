@@ -470,6 +470,10 @@ impl AstEvaluator {
                 self.eval_import(import_def)?;
                 Ok(Value::Unit)
             }
+            ItemKind::ExprStmt(expr) => {
+                self.eval_expr(expr)?;
+                Ok(Value::Unit)
+            }
             ItemKind::Enum(enum_def) => {
                 let is_pub = enum_def.visibility == Visibility::Public;
                 for variant in &enum_def.variants {

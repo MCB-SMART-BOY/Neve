@@ -625,6 +625,7 @@ impl LanguageServer for Backend {
                         }
                     }
                     ItemKind::Import(_) => continue,
+                    ItemKind::ExprStmt(_) => continue,
                 };
 
                 symbols.push(symbol);

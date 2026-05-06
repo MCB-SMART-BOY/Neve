@@ -586,8 +586,10 @@ impl FrontendSession {
     /// Create a new session rooted at the given directory.
     /// 创建一个以给定目录为根的前端会话。
     pub fn new(root_dir: impl AsRef<Path>) -> Self {
+        // Canonicalize to ensure consistent path comparisons (e.g. macOS /var vs /private/var)
+        let root = root_dir.as_ref().canonicalize().unwrap_or_else(|_| root_dir.as_ref().to_path_buf());
         Self {
-            loader: ModuleLoader::new(root_dir),
+            loader: ModuleLoader::new(root),
             persisted_modules: Vec::new(),
         }
     }
@@ -1396,6 +1398,7 @@ fn item_visibility(item: &neve_syntax::Item) -> Visibility {
         ItemKind::Trait(def) => def.visibility,
         ItemKind::Import(def) => def.visibility,
         ItemKind::Impl(_) => Visibility::Private,
+        ItemKind::ExprStmt(_) => Visibility::Private,
     }
 }
 
@@ -1429,6 +1432,7 @@ fn item_defined_names(item: &neve_syntax::Item) -> Vec<String> {
         },
         ItemKind::Impl(_) => Vec::new(),
         ItemKind::Fn(_) => Vec::new(),
+        ItemKind::ExprStmt(_) => Vec::new(),
     }
 }
 
