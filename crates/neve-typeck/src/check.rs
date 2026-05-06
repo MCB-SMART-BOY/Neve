@@ -1522,7 +1522,11 @@ impl TypeChecker {
                 let _e = builtin_param(1, "e", span);
                 builtin_forall(
                     Vec::from(["a", "e"]),
-                    builtin_fn(vec![a.clone()], builtin_result(a, builtin_param(1, "e", span), span), span),
+                    builtin_fn(
+                        vec![a.clone()],
+                        builtin_result(a, builtin_param(1, "e", span), span),
+                        span,
+                    ),
                     span,
                 )
             }
@@ -1531,7 +1535,11 @@ impl TypeChecker {
                 let e = builtin_param(1, "e", span);
                 builtin_forall(
                     Vec::from(["a", "e"]),
-                    builtin_fn(vec![e.clone()], builtin_result(builtin_param(0, "a", span), e, span), span),
+                    builtin_fn(
+                        vec![e.clone()],
+                        builtin_result(builtin_param(0, "a", span), e, span),
+                        span,
+                    ),
                     span,
                 )
             }
