@@ -553,8 +553,10 @@ impl FrontendSession {
                 persist_defs: true,
             }
         } else {
+            // Strip trailing semicolons to avoid ;; in wrapped source
+            let expr = trimmed.strip_suffix(';').unwrap_or(trimmed);
             SessionPreparedReplSource {
-                source: format!("let {REPL_EXPR_BINDING_NAME} = {trimmed};"),
+                source: format!("let {REPL_EXPR_BINDING_NAME} = {expr};"),
                 persist_defs: false,
             }
         }
