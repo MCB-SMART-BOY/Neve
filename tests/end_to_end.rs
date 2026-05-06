@@ -429,12 +429,23 @@ fn test_end_to_end_try_error_runtime_parity() {
 
 #[test]
 fn test_end_to_end_method_call_fallback_runtime_parity() {
-    assert_runtime_parity(
-        "
+    // Method fallback now emits a warning, so we test directly without diagnostics check
+    let source = "
         fn twice(x: Int) -> Int = x + x;
         let y = 21.twice();
-        ",
-        Value::Int(int(42)),
+    ";
+    let analysis = neve_frontend::analyze_source(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Int(int(42)));
+    // Verify a warning was emitted about method fallback
+    let has_warning = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("method") && d.message.contains("callable fallback"));
+    assert!(
+        has_warning,
+        "expected method fallback warning, got {:?}",
+        analysis.diagnostics
     );
 }
 
@@ -2358,6 +2369,223 @@ fn test_end_to_end_effect_annotation_passes_with_effect_kw() {
     assert!(
         !has_effect_error,
         "unexpected effect error: {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_io_exec_command_streaming_returns_process_result() {
+    // Test that io.execCommandStreaming executes a command and returns a successful ProcessResult.
+    // Uses the canonical HIR evaluator path (AST compat does not support evaluator-owned streaming).
+    let source = r#"
+    import std.io as io;
+    let cmd = io.command("echo", ["hello"]);
+    let result = io.execCommandStreaming(cmd, fn(line) { () });
+    let x = typeOf(result) == "ProcessResult" && io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_command_streaming_effect_checking() {
+    // Verify that io.execCommandStreaming is recognized as effectful.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> ProcessResult = io.execCommandStreaming(
+            io.command("echo", ["hello"]),
+            fn(line) { () }
+        );
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.execCommandStreaming, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_io_exec_command_streaming_with_stdin() {
+    // Test that io.execCommandStreaming respects Command stdin.
+    let source = r#"
+    import std.io as io;
+    let cmd = io.commandWith(#{
+        program = "cat",
+        args = [],
+        stdin = "hello from stdin"
+    });
+    let result = io.execCommandStreaming(cmd, fn(line) { () });
+    let x = typeOf(result) == "ProcessResult" && io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_pipeline_streaming_returns_process_result() {
+    // Test that io.execPipelineStreaming executes a pipeline and returns ProcessResult.
+    let source = r#"
+    import std.io as io;
+    let pipeline = io.pipeline([
+        io.command("echo", ["hello pipeline"]),
+        io.command("cat", [])
+    ]);
+    let result = io.execPipelineStreaming(pipeline, fn(line) { () });
+    let x = typeOf(result) == "ProcessResult" && io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_read_file_lines_calls_callback() {
+    // Test that io.readFileLines reads a file and calls the callback for each line.
+    let temp = TempDir::new().expect("temp dir should exist");
+    let file_path = temp.path().join("streaming-read.txt");
+    let file_path_source = file_path.to_string_lossy().replace("\\", "/");
+    std::fs::write(
+        &file_path,
+        "line1
+line2
+line3
+",
+    )
+    .expect("write should succeed");
+
+    let source = format!(
+        r#"
+        import std.io as io;
+        let _ = io.readFileLines("{file_path_source}", fn(line) {{ () }});
+        let x = true;
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_pipeline_streaming_effect_checking() {
+    // Verify that io.execPipelineStreaming is recognized as effectful.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> ProcessResult = io.execPipelineStreaming(
+            io.pipeline([io.command("echo", ["hello"])]),
+            fn(line) {{ () }}
+        );
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.execPipelineStreaming, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_lambda_in_effect_fn_allows_effectful_calls() {
+    // Regression: lambdas inside `effect` functions should inherit the effect context.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn good() -> ProcessResult effect = io.execCommandStreaming(
+            io.command("echo", ["hello"]),
+            fn(line) { io.writeFile("/tmp/lambda_test.txt", line); () }
+        );
+        "#,
+    );
+    let has_lambda_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("in lambda"));
+    assert!(
+        !has_lambda_error,
+        "lambda inside effect fn should allow effectful calls, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_lambda_in_pure_fn_rejects_effectful_calls() {
+    // Lambdas inside non-effect functions should still reject effectful calls.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> ProcessResult = io.execCommandStreaming(
+            io.command("echo", ["hello"]),
+            fn(line) { io.writeFile("/tmp/lambda_test.txt", line); () }
+        );
+        "#,
+    );
+    let has_lambda_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("in lambda"));
+    assert!(
+        has_lambda_error,
+        "lambda inside pure fn should reject effectful calls, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_impl_method_with_effect_allows_io() {
+    // Impl method with `effect` should allow io calls.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        trait Logger { fn log(msg: String) -> Unit; };
+        struct Dummy {};
+        impl Logger for Dummy {
+            fn log(msg: String) -> Unit effect = io.writeFile("/dev/null", msg);
+        };
+        "#,
+    );
+    let has_impl_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("in impl method"));
+    assert!(
+        !has_impl_error,
+        "impl method with effect should allow io, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_impl_method_without_effect_rejects_io() {
+    // Impl method without `effect` should reject io calls.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        trait Logger { fn log(msg: String) -> Unit; };
+        struct Dummy {};
+        impl Logger for Dummy {
+            fn log(msg: String) -> Unit = io.writeFile("/dev/null", msg);
+        };
+        "#,
+    );
+    let has_impl_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("in impl method"));
+    assert!(
+        has_impl_error,
+        "impl method without effect should reject io, got {:?}",
         analysis.diagnostics
     );
 }

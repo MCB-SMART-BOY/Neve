@@ -608,6 +608,9 @@ pub struct ImplItem {
     pub params: Vec<Param>,
     /// Return type. / 返回类型。
     pub return_ty: Ty,
+    /// Whether this method is annotated with `effect`.
+    /// 是否用 `effect` 注解。
+    pub effectful: bool,
     /// Method body. / 方法体。
     pub body: Expr,
     /// Source location. / 源代码位置。
@@ -732,6 +735,8 @@ pub enum Literal {
     Bool(bool),
     /// Unit value. / 单元值。
     Unit,
+    /// Path value. / 路径值。
+    Path(String),
 }
 
 /// Binary operator.

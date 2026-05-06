@@ -3782,8 +3782,8 @@ fn test_eval_safe_field_with_coalesce() {
 fn test_eval_path_lit_relative() {
     let result = eval_with_builtins("let x = ./foo/bar;");
     match result {
-        Ok(Value::String(s)) => assert_eq!(s.as_str(), "./foo/bar"),
-        other => panic!("expected String, got {:?}", other),
+        Ok(Value::Path(p)) => assert_eq!(p.to_string_lossy(), "./foo/bar"),
+        other => panic!("expected Path, got {:?}", other),
     }
 }
 
@@ -3791,8 +3791,8 @@ fn test_eval_path_lit_relative() {
 fn test_eval_path_lit_parent() {
     let result = eval_with_builtins("let x = ../parent;");
     match result {
-        Ok(Value::String(s)) => assert_eq!(s.as_str(), "../parent"),
-        other => panic!("expected String, got {:?}", other),
+        Ok(Value::Path(p)) => assert_eq!(p.to_string_lossy(), "../parent"),
+        other => panic!("expected Path, got {:?}", other),
     }
 }
 
@@ -3800,8 +3800,8 @@ fn test_eval_path_lit_parent() {
 fn test_eval_path_lit_absolute() {
     let result = eval_with_builtins("let x = /absolute/path;");
     match result {
-        Ok(Value::String(s)) => assert_eq!(s.as_str(), "/absolute/path"),
-        other => panic!("expected String, got {:?}", other),
+        Ok(Value::Path(p)) => assert_eq!(p.to_string_lossy(), "/absolute/path"),
+        other => panic!("expected Path, got {:?}", other),
     }
 }
 

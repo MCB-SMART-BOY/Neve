@@ -779,7 +779,7 @@ impl FrontendSession {
     /// Analyze a current in-memory module against loaded + persisted session state.
     /// 基于已加载模块与持久化模块状态分析当前内存模块。
     pub fn analyze_module(&self, current_module: &Module) -> ModuleAnalysis {
-        let mut checker = TypeChecker::new();
+        let mut checker = TypeChecker::new().with_repl_mode(true);
 
         for module_id in self.loader.load_order() {
             let Some(module) = self.loader.hir_module(*module_id) else {

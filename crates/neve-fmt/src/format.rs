@@ -439,6 +439,11 @@ impl Formatter {
             self.format_type(p, ret_ty);
         }
 
+        // Effect annotation
+        if item.effect {
+            p.write(" effect");
+        }
+
         p.write(" = ");
         self.format_expr(p, &item.body);
         p.write(";");

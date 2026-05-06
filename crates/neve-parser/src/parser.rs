@@ -701,6 +701,9 @@ impl Parser {
             None
         };
 
+        // Parse optional effect annotation
+        let effect = self.eat(TokenKind::Effect);
+
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
         self.expect(TokenKind::Semicolon);
@@ -711,6 +714,7 @@ impl Parser {
             generics,
             params,
             return_type,
+            effect,
             body,
             span: start.merge(end),
         }

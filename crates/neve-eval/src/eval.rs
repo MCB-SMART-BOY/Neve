@@ -704,6 +704,7 @@ impl Evaluator {
             Literal::Char(c) => Value::Char(*c),
             Literal::Bool(b) => Value::Bool(*b),
             Literal::Unit => Value::Unit,
+            Literal::Path(p) => Value::Path(Rc::new(std::path::PathBuf::from(p.clone()))),
         }
     }
 
@@ -973,6 +974,32 @@ impl Evaluator {
                 }
                 Ok(Some(self.builtin_filter(&args[0], &args[1])?))
             }
+            "io.execCommandStreaming" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_exec_streaming(&args[0], &args[1])?))
+            }
+            "io.execPipelineStreaming" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(
+                    self.builtin_exec_pipeline_streaming(&args[0], &args[1])?,
+                ))
+            }
+            "io.readFileLines" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_read_file_lines(&args[0], &args[1])?))
+            }
+            "io.readFileLinesPath" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_read_file_lines_path(&args[0], &args[1])?))
+            }
             "all" => {
                 if args.len() != 2 {
                     return Err(EvalError::WrongArity);
@@ -1105,6 +1132,272 @@ impl Evaluator {
             }
         }
         Ok(Value::List(Rc::new(results)))
+    }
+
+    fn builtin_exec_streaming(
+        &mut self,
+        command: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        use std::io::{BufRead, Write};
+        let cmd = match command {
+            Value::Command(cmd) => cmd,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "execCommandStreaming expects a Command".to_string(),
+                ));
+            }
+        };
+
+        let mut process = std::process::Command::new(cmd.program());
+        process.args(cmd.args());
+        if let Some(cwd) = cmd.cwd() {
+            process.current_dir(cwd);
+        }
+        for (k, v) in cmd.env() {
+            process.env(k, v);
+        }
+        // Respect the Command's stdin setting instead of hardcoding null
+        if cmd.stdin().is_some() {
+            process.stdin(std::process::Stdio::piped());
+        } else {
+            process.stdin(std::process::Stdio::null());
+        }
+        process.stdout(std::process::Stdio::piped());
+        process.stderr(std::process::Stdio::piped());
+
+        let mut child = process
+            .spawn()
+            .map_err(|e| EvalError::TypeError(format!("spawn: {e}")))?;
+
+        // Write stdin if configured, then drop pipe to signal EOF
+        if let Some(stdin_data) = cmd.stdin()
+            && let Some(mut stdin_pipe) = child.stdin.take()
+        {
+            stdin_pipe
+                .write_all(stdin_data.as_bytes())
+                .map_err(|e| EvalError::TypeError(format!("stdin write: {e}")))?;
+            // stdin_pipe dropped here -> pipe closed -> child sees EOF
+        }
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| EvalError::TypeError("no stdout".to_string()))?;
+        let reader = std::io::BufReader::new(stdout);
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| EvalError::TypeError(format!("read: {e}")))?;
+            self.apply(
+                callback.clone(),
+                vec![Value::String(std::rc::Rc::new(line))],
+            )?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| EvalError::TypeError(format!("wait: {e}")))?;
+        let code = output.status.code().unwrap_or(-1);
+        Ok(Value::ProcessResult(std::rc::Rc::new(
+            crate::value::ProcessResultValue::new(
+                code,
+                output.status.success(),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ),
+        )))
+    }
+
+    /// Streaming pipeline execution: execute pipeline stages, connect stdout->stdin,
+    /// and stream the final stage's stdout line by line to the callback.
+    /// 流式管道执行：执行管道各阶段，连接 stdout->stdin，
+    /// 并将最后阶段的 stdout 逐行流式传递给回调。
+    fn builtin_exec_pipeline_streaming(
+        &mut self,
+        pipeline: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        use std::io::{BufRead, Write};
+        let pipeline = match pipeline {
+            Value::Pipeline(p) => p,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "execPipelineStreaming expects a Pipeline".to_string(),
+                ));
+            }
+        };
+
+        let commands = pipeline.commands();
+        if commands.is_empty() {
+            return Err(EvalError::TypeError(
+                "execPipelineStreaming: pipeline requires at least one command".to_string(),
+            ));
+        }
+
+        // Execute pipeline stages sequentially, connecting stdout->stdin
+        let mut previous_stdout: Option<Vec<u8>> = None;
+        let mut combined_stderr = Vec::new();
+        let mut last_code = 0;
+        let mut last_success = false;
+        let mut final_stdout = Vec::new();
+
+        for (idx, cmd) in commands.iter().enumerate() {
+            let mut process = std::process::Command::new(cmd.program());
+            process.args(cmd.args());
+            if let Some(cwd) = cmd.cwd() {
+                process.current_dir(cwd);
+            }
+            for (k, v) in cmd.env() {
+                process.env(k, v);
+            }
+
+            let is_last = idx == commands.len() - 1;
+
+            // Determine stdin for this stage
+            let stage_stdin: Option<&[u8]> = if idx == 0 {
+                // First stage: use configured stdin, or previous_stdout (unlikely but safe)
+                if let Some(s) = cmd.stdin() {
+                    Some(s.as_bytes())
+                } else {
+                    previous_stdout.as_deref()
+                }
+            } else {
+                // Subsequent stages: always use previous stdout
+                previous_stdout.as_deref()
+            };
+
+            if stage_stdin.is_some() {
+                process.stdin(std::process::Stdio::piped());
+            } else {
+                process.stdin(std::process::Stdio::null());
+            }
+            process.stdout(std::process::Stdio::piped());
+            process.stderr(std::process::Stdio::piped());
+
+            let mut child = process.spawn().map_err(|e| {
+                EvalError::TypeError(format!("execPipelineStreaming stage {idx}: spawn: {e}"))
+            })?;
+
+            // Write stdin for this stage, then drop pipe to signal EOF
+            if let Some(data) = stage_stdin
+                && let Some(mut stdin_pipe) = child.stdin.take()
+            {
+                stdin_pipe.write_all(data).map_err(|e| {
+                    EvalError::TypeError(format!(
+                        "execPipelineStreaming stage {idx}: stdin write: {e}"
+                    ))
+                })?;
+                // stdin_pipe dropped here -> pipe closed -> child sees EOF
+            }
+
+            if is_last {
+                // Final stage: stream stdout line by line
+                let stdout = child.stdout.take().ok_or_else(|| {
+                    EvalError::TypeError(
+                        "execPipelineStreaming: no stdout on final stage".to_string(),
+                    )
+                })?;
+                let reader = std::io::BufReader::new(stdout);
+
+                for line in reader.lines() {
+                    let line = line.map_err(|e| EvalError::TypeError(format!("read: {e}")))?;
+                    self.apply(
+                        callback.clone(),
+                        vec![Value::String(std::rc::Rc::new(line))],
+                    )?;
+                }
+
+                let output = child.wait_with_output().map_err(|e| {
+                    EvalError::TypeError(format!("execPipelineStreaming: wait: {e}"))
+                })?;
+                last_code = output.status.code().unwrap_or(-1);
+                last_success = output.status.success();
+                final_stdout = output.stdout;
+                combined_stderr.extend_from_slice(&output.stderr);
+            } else {
+                // Non-final stage: collect all output
+                let output = child.wait_with_output().map_err(|e| {
+                    EvalError::TypeError(format!("execPipelineStreaming stage {idx}: wait: {e}"))
+                })?;
+                last_code = output.status.code().unwrap_or(-1);
+                last_success = output.status.success();
+                previous_stdout = Some(output.stdout);
+                combined_stderr.extend_from_slice(&output.stderr);
+            }
+        }
+
+        Ok(Value::ProcessResult(std::rc::Rc::new(
+            crate::value::ProcessResultValue::new(
+                last_code,
+                last_success,
+                String::from_utf8_lossy(&final_stdout).to_string(),
+                String::from_utf8_lossy(&combined_stderr).to_string(),
+            ),
+        )))
+    }
+
+    /// Read a file line by line, calling the callback for each line.
+    /// 逐行读取文件，每行调用回调。
+    fn builtin_read_file_lines(
+        &mut self,
+        path: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        use std::io::BufRead;
+        let path_str = match path {
+            Value::String(s) => s.as_str(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "readFileLines expects a String path".to_string(),
+                ));
+            }
+        };
+
+        let file = std::fs::File::open(path_str)
+            .map_err(|e| EvalError::TypeError(format!("readFileLines: {e}")))?;
+        let reader = std::io::BufReader::new(file);
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| EvalError::TypeError(format!("readFileLines: {e}")))?;
+            self.apply(
+                callback.clone(),
+                vec![Value::String(std::rc::Rc::new(line))],
+            )?;
+        }
+
+        Ok(Value::Unit)
+    }
+
+    /// Read a file line by line (typed Path variant).
+    /// 逐行读取文件（Path 类型变体）。
+    fn builtin_read_file_lines_path(
+        &mut self,
+        path: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        use std::io::BufRead;
+        let path = match path {
+            Value::Path(p) => p.as_path(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "readFileLinesPath expects a Path".to_string(),
+                ));
+            }
+        };
+
+        let file = std::fs::File::open(path)
+            .map_err(|e| EvalError::TypeError(format!("readFileLinesPath: {e}")))?;
+        let reader = std::io::BufReader::new(file);
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| EvalError::TypeError(format!("readFileLinesPath: {e}")))?;
+            self.apply(
+                callback.clone(),
+                vec![Value::String(std::rc::Rc::new(line))],
+            )?;
+        }
+
+        Ok(Value::Unit)
     }
 
     fn builtin_all(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {

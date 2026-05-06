@@ -251,6 +251,10 @@ pub struct TypeChecker {
     /// Whether to check for unused variables.
     /// 是否检查未使用的变量。
     check_unused: bool,
+    repl_mode: bool,
+    /// Whether we are currently type-checking inside an `effect` function body.
+    /// When true, effectful calls in lambdas are allowed (they inherit the enclosing effect context).
+    in_effectful_fn: bool,
 }
 
 impl TypeChecker {
@@ -273,7 +277,14 @@ impl TypeChecker {
             method_resolutions: HashMap::new(),
             assoc_projection_resolutions: HashMap::new(),
             check_unused: true,
+            repl_mode: false,
+            in_effectful_fn: false,
         }
+    }
+
+    pub fn with_repl_mode(mut self, repl: bool) -> Self {
+        self.repl_mode = repl;
+        self
     }
 
     /// Create a type checker with preloaded global signatures.
@@ -2189,6 +2200,94 @@ impl TypeChecker {
                 builtin_list(builtin_ty(TyKind::String, span), span),
                 span,
             ),
+            "io.execCommandStreaming" => builtin_fn(
+                vec![
+                    builtin_command(span),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::String, span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                ],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.execPipelineStreaming" => builtin_fn(
+                vec![
+                    builtin_pipeline(span),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::String, span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                ],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.readFileLines" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::String, span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.readFileLinesPath" => builtin_fn(
+                vec![
+                    builtin_path(span),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::String, span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.atomicWrite" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.atomicWritePath" => builtin_fn(
+                vec![builtin_path(span), builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.atomicWriteAll" => builtin_fn(
+                vec![builtin_list(
+                    builtin_ty(
+                        TyKind::Record(vec![
+                            ("path".to_string(), builtin_ty(TyKind::String, span)),
+                            ("content".to_string(), builtin_ty(TyKind::String, span)),
+                        ]),
+                        span,
+                    ),
+                    span,
+                )],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.copy" | "io.move" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.copyPath" | "io.movePath" => builtin_fn(
+                vec![builtin_path(span), builtin_path(span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.pipeline" => builtin_fn(
                 vec![builtin_list(builtin_command(span), span)],
                 builtin_pipeline(span),
@@ -2912,19 +3011,7 @@ impl TypeChecker {
     }
 
     fn is_effectful_builtin_name(name: &str) -> bool {
-        let parts: Vec<&str> = name.split('.').collect();
-        if parts.len() >= 2 {
-            match parts[0] {
-                "io" => !matches!(
-                    parts[1],
-                    "processSuccess" | "processStdout" | "processCode" | "processStderr"
-                ),
-                "fetch" => true,
-                _ => false,
-            }
-        } else {
-            false
-        }
+        neve_common::is_effectful_builtin(name)
     }
 
     fn check_match_coverage(&mut self, scrutinee_ty: &Ty, arms: &[MatchArm], span: Span) {
@@ -3207,6 +3294,11 @@ impl TypeChecker {
     }
 
     fn check_fn(&mut self, id: DefId, fn_def: &FnDef) {
+        // Track whether we're inside an effectful function
+        // so that nested lambdas inherit the effect context.
+        let prev_effectful = self.in_effectful_fn;
+        self.in_effectful_fn = fn_def.effectful;
+
         // Create fresh type variables for generic parameters
         let mut generic_vars: HashMap<String, Ty> = HashMap::new();
         for (idx, param) in fn_def.generics.iter().enumerate() {
@@ -3282,6 +3374,9 @@ impl TypeChecker {
 
         // Clear locals after checking function
         self.locals.clear();
+
+        // Restore previous effectful context
+        self.in_effectful_fn = prev_effectful;
     }
 
     fn check_impl_methods(&mut self, impl_def: &ImplDef) {
@@ -3301,6 +3396,11 @@ impl TypeChecker {
         impl_generics: &HashMap<String, Ty>,
         assoc_types: &HashMap<String, Ty>,
     ) {
+        // Track whether we're inside an effectful impl method
+        // so that nested lambdas inherit the effect context.
+        let prev_effectful = self.in_effectful_fn;
+        self.in_effectful_fn = item.effectful;
+
         let mut generic_vars = impl_generics.clone();
         for param in &item.generics {
             generic_vars.insert(param.name.clone(), self.fresh_var());
@@ -3366,8 +3466,23 @@ impl TypeChecker {
         };
         self.globals.insert(item.id, method_ty);
 
+        // Check impl method body for effectful calls (unless annotated effect)
+        if !self.repl_mode && !item.effectful {
+            let mut calls = Vec::new();
+            self.collect_effectful_calls(&item.body, &mut calls);
+            for (name, span) in calls {
+                self.error(
+                    span,
+                    format!("effectful call {name} in impl method; use `effect` function"),
+                );
+            }
+        }
+
         self.check_unused_locals();
         self.locals.clear();
+
+        // Restore previous effectful context
+        self.in_effectful_fn = prev_effectful;
     }
 
     fn fresh_generic_bindings(
@@ -3780,6 +3895,17 @@ impl TypeChecker {
             }
 
             ExprKind::Lambda(params, body) => {
+                if !self.repl_mode && !self.in_effectful_fn {
+                    let mut calls = Vec::new();
+                    self.collect_effectful_calls(body, &mut calls);
+                    for (name, span) in calls {
+                        self.error(
+                            span,
+                            format!("effectful call {} in lambda; use `effect` function", name),
+                        );
+                    }
+                }
+
                 // Bind parameter types
                 let param_tys: Vec<Ty> = params
                     .iter()
@@ -3876,6 +4002,16 @@ impl TypeChecker {
                         self.emit(unknown_method_call(method, &applied_receiver_ty, span));
                         self.fresh_var()
                     } else {
+                        // Method not found; warning about callable fallback
+                        self.diagnostics.push(Diagnostic::warning(
+                            DiagnosticKind::Type,
+                            span,
+                            format!(
+                                "method '{}' not found for {}; using callable fallback",
+                                method,
+                                format_type(&applied_receiver_ty)
+                            ),
+                        ));
                         let func_ty = self.infer_expr(target);
                         let mut arg_tys = vec![receiver_ty];
                         arg_tys.extend(args.iter().map(|arg| self.infer_expr(arg)));
@@ -4059,6 +4195,7 @@ impl TypeChecker {
             Literal::Char(_) => TyKind::Char,
             Literal::Bool(_) => TyKind::Bool,
             Literal::Unit => TyKind::Unit,
+            Literal::Path(_) => return builtin_path(Span::DUMMY),
         };
         Ty {
             kind,
@@ -4281,23 +4418,36 @@ impl TypeChecker {
             }
 
             PatternKind::Record(fields) => {
+                let expected_fields = match &expected.kind {
+                    TyKind::Record(field_tys) => Some(field_tys.as_slice()),
+                    TyKind::DynamicRecord(field_tys) => Some(field_tys.as_slice()),
+                    _ => None,
+                };
+
                 for (name, pat) in fields {
-                    let field_ty = match &expected.kind {
-                        TyKind::Record(field_tys) => field_tys
-                            .iter()
-                            .find(|(n, _)| n == name)
-                            .map(|(_, t)| t.clone()),
-                        TyKind::DynamicRecord(field_tys) => field_tys
-                            .iter()
-                            .find(|(n, _)| n == name)
-                            .map(|(_, t)| t.clone()),
-                        _ => None,
-                    };
+                    let field_ty = expected_fields.and_then(|fts| {
+                        fts.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone())
+                    });
 
                     if let Some(ty) = field_ty {
                         self.check_pattern(pat, &ty);
                     } else {
                         self.error(pattern.span, format!("no field '{}' in record", name));
+                    }
+                }
+
+                // Check for missing fields: if the expected type is a concrete Record,
+                // all declared fields should be covered by the pattern.
+                if let TyKind::Record(declared_fields) = &expected.kind {
+                    let pattern_field_names: Vec<&str> =
+                        fields.iter().map(|(n, _)| n.as_str()).collect();
+                    for (declared_name, _) in declared_fields {
+                        if !pattern_field_names.contains(&declared_name.as_str()) {
+                            self.error(
+                                pattern.span,
+                                format!("missing field '{}' in record pattern", declared_name),
+                            );
+                        }
                     }
                 }
             }
@@ -4423,21 +4573,8 @@ impl TypeChecker {
                         self.check_pattern(pat, ty);
                     }
                 } else {
-                    let expected = self.apply(expected);
-                    if matches!(expected.kind, TyKind::Named(def_id, _) if is_builtin_option_type(def_id) || is_builtin_result_type(def_id))
-                    {
-                        self.error(
-                            pattern.span,
-                            "constructor does not match expected builtin type",
-                        );
-                        return;
-                    }
-                    // Unknown constructor, use fresh type variables
-                    // 未知构造函数，使用新类型变量
-                    for pat in patterns {
-                        let arg_ty = self.fresh_var();
-                        self.check_pattern(pat, &arg_ty);
-                    }
+                    // Unknown constructor — emit error instead of silently passing
+                    self.error(pattern.span, "unknown constructor".to_string());
                 }
             }
 

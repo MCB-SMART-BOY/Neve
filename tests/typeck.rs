@@ -2069,12 +2069,18 @@ fn test_typeck_safe_field_on_unknown_param_checks_present_field_type() {
 
 #[test]
 fn test_typeck_method_call_falls_back_to_function_call_semantics() {
-    check_no_errors(
+    // Method fallback now emits a warning; check for no errors (warnings OK)
+    let diags = check_source(
         "
         fn twice(x: Int) -> Int = x + x;
         let y = 21.twice();
         ",
     );
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
 }
 
 #[test]

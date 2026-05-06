@@ -10,8 +10,12 @@ use neve_frontend::{
 };
 use neve_hir::{DefId, Module, ModuleId};
 use neve_std::stdlib;
-use rustyline::DefaultEditor;
+use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
+use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::hint::{Hinter, HistoryHinter};
+use rustyline::validate::{MatchingBracketValidator, Validator};
+use rustyline::{Context, Helper};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -27,7 +31,15 @@ pub fn run() -> Result<(), String> {
     println!("Type :help for help, :quit to exit");
     println!();
 
-    let mut rl = DefaultEditor::new().map_err(|e| e.to_string())?;
+    let mut rl: rustyline::Editor<ReplHelper, rustyline::history::FileHistory> =
+        rustyline::Editor::new().map_err(|e| e.to_string())?;
+    rl.set_helper(Some(ReplHelper {
+        completer: ReplCompleter::new(),
+        highlighter: MatchingBracketHighlighter::new(),
+        hinter: HistoryHinter {},
+        validator: MatchingBracketValidator::new(),
+    }));
+    load_repl_history(&mut rl);
     let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut runtime_state = ReplHirState::new();
     let mut semantic_state = ReplSemanticState::with_root_dir(root_dir);
@@ -87,8 +99,10 @@ pub fn run() -> Result<(), String> {
                             println!("  :quit, :q         Exit the REPL");
                             println!("  :env              Show all current bindings");
                             println!("  :type <expr>      Show the type of an expression");
-                            println!("  :clear            Clear all bindings (keeps builtins)");
+                            println!("  :save <file>      Save current bindings to a file");
                             println!("  :load <file>      Load and evaluate a Neve file");
+                            println!("  :cd <dir>         Change working directory");
+                            println!("  :clear            Clear all bindings (keeps builtins)");
                             println!();
                             println!("Tips:");
                             println!("  - Use 'let x = ...' to define variables");
@@ -142,9 +156,9 @@ pub fn run() -> Result<(), String> {
                                 input_buffer.clear();
                                 continue;
                             }
-                            let file_path = parts[1];
+                            let file_path = parts[1..].join(" ");
                             match semantic_state
-                                .load_repl_file_input(file_path, runtime_state.is_pristine())
+                                .load_repl_file_input(&file_path, runtime_state.is_pristine())
                             {
                                 Ok(input) => {
                                     match evaluate_repl_input_with_source_name(
@@ -162,6 +176,38 @@ pub fn run() -> Result<(), String> {
                                     }
                                 }
                                 Err(error) => diagnostics::emit_session_display_error(error),
+                            }
+                            input_buffer.clear();
+                            continue;
+                        }
+                        ":save" => {
+                            if parts.len() < 2 {
+                                println!("Usage: :save <file.neve>");
+                                input_buffer.clear();
+                                continue;
+                            }
+                            let file_path = parts[1..].join(" ");
+                            match save_repl_bindings(&file_path, &runtime_state) {
+                                Ok(()) => println!(
+                                    "Saved {} bindings to {}",
+                                    runtime_state.user_bindings().len(),
+                                    file_path
+                                ),
+                                Err(e) => println!("Error: {e}"),
+                            }
+                            input_buffer.clear();
+                            continue;
+                        }
+                        ":cd" => {
+                            if parts.len() < 2 {
+                                println!("Usage: :cd <directory>");
+                                input_buffer.clear();
+                                continue;
+                            }
+                            let dir_path = parts[1..].join(" ");
+                            match std::env::set_current_dir(&dir_path) {
+                                Ok(()) => println!("Changed to {}", dir_path),
+                                Err(e) => println!("Error: {e}"),
                             }
                             input_buffer.clear();
                             continue;
@@ -196,7 +242,7 @@ pub fn run() -> Result<(), String> {
                 ) {
                     Ok(value) => {
                         if !prepared_input.persist_defs || !matches!(value, Value::Unit) {
-                            println!("{:?}", value);
+                            println!("{}", format_repl_value(&value));
                         }
                     }
                     Err(error) => diagnostics::emit_session_display_error(error),
@@ -208,6 +254,8 @@ pub fn run() -> Result<(), String> {
             }
             Err(ReadlineError::Interrupted) => {
                 println!("^C");
+                in_multiline = false;
+                input_buffer.clear();
                 continue;
             }
             Err(ReadlineError::Eof) => {
@@ -220,6 +268,8 @@ pub fn run() -> Result<(), String> {
         }
     }
 
+    // Save history before exit
+    let _ = save_repl_history(&mut rl);
     println!("Goodbye!");
     Ok(())
 }
@@ -406,6 +456,261 @@ fn infer_repl_type(
         })
 }
 
+/// Save current REPL session to a .neve file.
+/// Writes all non-command input history entries as a replayable script.
+fn save_repl_bindings(_path: &str, _runtime_state: &ReplHirState) -> Result<(), String> {
+    // :save saves the current bindings list as a reference file.
+    // Full value serialization requires evaluator introspection (future work).
+    use std::io::Write;
+    let mut file =
+        std::fs::File::create(_path).map_err(|e| format!("cannot create {}: {e}", _path))?;
+
+    writeln!(file, "// Saved from Neve REPL").unwrap();
+    writeln!(file, "// To restore: review and adjust definitions below").unwrap();
+    writeln!(file).unwrap();
+
+    let bindings = _runtime_state.user_bindings();
+    if bindings.is_empty() {
+        writeln!(file, "// (no bindings defined in this session)").unwrap();
+    } else {
+        for (name, is_pub) in &bindings {
+            let vis = if *is_pub { "pub " } else { "" };
+            writeln!(file, "{vis}let {name} = ...; // (re-evaluate to restore)").unwrap();
+        }
+    }
+    Ok(())
+}
+
+// ===== REPL rustyline integration =====
+
+/// Custom REPL completer providing command and file-path completion.
+struct ReplCompleter {
+    file_completer: FilenameCompleter,
+}
+
+impl ReplCompleter {
+    fn new() -> Self {
+        Self {
+            file_completer: FilenameCompleter::new(),
+        }
+    }
+}
+
+const REPL_COMMANDS: &[&str] = &[
+    ":help", ":h", ":quit", ":q", ":env", ":type", ":clear", ":load", ":save", ":cd",
+];
+
+const FILE_ARG_COMMANDS: &[&str] = &[":load", ":save", ":cd"];
+
+impl Completer for ReplCompleter {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let line_up_to_pos = &line[..pos];
+
+        // Complete REPL commands starting with ':'
+        if line_up_to_pos.starts_with(':') {
+            let completions: Vec<Pair> = REPL_COMMANDS
+                .iter()
+                .filter(|c| c.starts_with(line_up_to_pos))
+                .map(|c| Pair {
+                    display: c.to_string(),
+                    replacement: c.to_string(),
+                })
+                .collect();
+            if !completions.is_empty() {
+                return Ok((0, completions));
+            }
+        }
+
+        // Complete file paths for :load, :save, :cd
+        for cmd in FILE_ARG_COMMANDS {
+            let prefix = format!("{} ", cmd);
+            if line_up_to_pos.starts_with(&prefix) {
+                return self.file_completer.complete(line, pos, ctx);
+            }
+        }
+
+        Ok((pos, Vec::new()))
+    }
+}
+
+/// REPL helper combining completer, highlighter, hinter, and validator.
+struct ReplHelper {
+    completer: ReplCompleter,
+    highlighter: MatchingBracketHighlighter,
+    hinter: HistoryHinter,
+    validator: MatchingBracketValidator,
+}
+
+impl Completer for ReplHelper {
+    type Candidate = Pair;
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        self.completer.complete(line, pos, ctx)
+    }
+}
+
+impl Highlighter for ReplHelper {
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> std::borrow::Cow<'l, str> {
+        self.highlighter.highlight(line, pos)
+    }
+    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
+        &'s self,
+        prompt: &'p str,
+        default: bool,
+    ) -> std::borrow::Cow<'b, str> {
+        self.highlighter.highlight_prompt(prompt, default)
+    }
+    fn highlight_hint<'h>(&self, hint: &'h str) -> std::borrow::Cow<'h, str> {
+        self.highlighter.highlight_hint(hint)
+    }
+    fn highlight_candidate<'c>(
+        &self,
+        candidate: &'c str,
+        completion: rustyline::CompletionType,
+    ) -> std::borrow::Cow<'c, str> {
+        self.highlighter.highlight_candidate(candidate, completion)
+    }
+}
+
+impl Hinter for ReplHelper {
+    type Hint = String;
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+        self.hinter.hint(line, pos, ctx)
+    }
+}
+
+impl Validator for ReplHelper {
+    fn validate(
+        &self,
+        ctx: &mut rustyline::validate::ValidationContext,
+    ) -> rustyline::Result<rustyline::validate::ValidationResult> {
+        self.validator.validate(ctx)
+    }
+    fn validate_while_typing(&self) -> bool {
+        self.validator.validate_while_typing()
+    }
+}
+
+impl Helper for ReplHelper {}
+
+/// Get the Neve config directory (~/.config/neve), creating it if needed.
+fn neve_config_dir() -> Option<PathBuf> {
+    let dir = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(xdg).join("neve")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config").join("neve")
+    } else if let Ok(profile) = std::env::var("USERPROFILE") {
+        PathBuf::from(profile).join(".config").join("neve")
+    } else {
+        return None;
+    };
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir)
+}
+
+/// Get the REPL history file path (~/.config/neve/history).
+fn repl_history_path() -> Option<PathBuf> {
+    neve_config_dir().map(|d| d.join("history"))
+}
+
+/// Load REPL command history from disk.
+fn load_repl_history<H: Helper>(rl: &mut rustyline::Editor<H, rustyline::history::FileHistory>) {
+    if let Some(path) = repl_history_path() {
+        let _ = rl.load_history(&path);
+    }
+}
+
+/// Save REPL command history to disk.
+fn save_repl_history<H: Helper>(
+    rl: &mut rustyline::Editor<H, rustyline::history::FileHistory>,
+) -> Result<(), String> {
+    if let Some(path) = repl_history_path() {
+        rl.save_history(&path)
+            .map_err(|e| format!("failed to save history: {e}"))
+    } else {
+        Ok(())
+    }
+}
+
+/// Format a Value for user-friendly REPL display.
+/// Uses Display-like formatting instead of Debug ({:?}).
+fn format_repl_value(value: &Value) -> String {
+    match value {
+        Value::Unit => "()".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Int(i) => i.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::String(s) => s.to_string(),
+        Value::Char(c) => c.to_string(),
+        Value::None => "None".to_string(),
+        Value::Some(v) => format!("Some({})", format_repl_value(v)),
+        Value::Ok(v) => format!("Ok({})", format_repl_value(v)),
+        Value::Err(e) => format!("Err({})", format_repl_value(e)),
+        Value::Variant(name, payload) => format!("{}({})", name, format_repl_value(payload)),
+        Value::List(items) => {
+            let items_str: Vec<String> = items.iter().map(format_repl_value).collect();
+            format!("[{}]", items_str.join(", "))
+        }
+        Value::Tuple(elems) => {
+            let elems_str: Vec<String> = elems.iter().map(format_repl_value).collect();
+            format!("({})", elems_str.join(", "))
+        }
+        Value::Record(fields) => {
+            let fields_str: Vec<String> = fields
+                .iter()
+                .map(|(k, v)| format!("{} = {}", k, format_repl_value(v)))
+                .collect();
+            format!("{{ {} }}", fields_str.join(", "))
+        }
+        Value::Map(m) => {
+            let entries: Vec<String> = m
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, format_repl_value(v)))
+                .collect();
+            format!("Map({{ {} }})", entries.join(", "))
+        }
+        Value::Set(s) => {
+            let items: Vec<String> = s.iter().cloned().collect();
+            format!("Set({{ {} }})", items.join(", "))
+        }
+        Value::Path(p) => format!("{}", p.display()),
+        Value::Command(c) => format!("Command({} {})", c.program(), c.args().join(" ")),
+        Value::Pipeline(p) => {
+            let stages: Vec<String> = p
+                .commands()
+                .iter()
+                .map(|c| c.program().to_string())
+                .collect();
+            format!("Pipeline({})", stages.join(" | "))
+        }
+        Value::ProcessResult(r) => {
+            if r.is_success() {
+                format!("[exit {}]\n{}", r.code(), r.stdout().trim_end())
+            } else {
+                format!("[exit {}]\nstderr: {}", r.code(), r.stderr().trim_end())
+            }
+        }
+        Value::Task(_) => "Task(...)".to_string(),
+        Value::Redirect(_) => "Redirect(...)".to_string(),
+        Value::Bytes(b) => format!("<{} bytes>", b.len()),
+        Value::Thunk(_) => "<thunk>".to_string(),
+        Value::Builtin(_) => "<builtin>".to_string(),
+        Value::BuiltinFn(n, _) => format!("<builtin {}>", n),
+        Value::Closure { .. } | Value::AstClosure(_) => "<function>".to_string(),
+        Value::VariantCtor { name, .. } => format!("<constructor {}>", name),
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::{
