@@ -1504,6 +1504,37 @@ impl TypeChecker {
                     span,
                 )
             }
+            "Some" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![a.clone()], builtin_option(a, span), span),
+                    span,
+                )
+            }
+            "None" => builtin_forall(
+                Vec::from(["a"]),
+                builtin_option(builtin_param(0, "a", span), span),
+                span,
+            ),
+            "Ok" => {
+                let a = builtin_param(0, "a", span);
+                let _e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["a", "e"]),
+                    builtin_fn(vec![a.clone()], builtin_result(a, builtin_param(1, "e", span), span), span),
+                    span,
+                )
+            }
+            "Err" => {
+                let _a = builtin_param(0, "a", span);
+                let e = builtin_param(1, "e", span);
+                builtin_forall(
+                    Vec::from(["a", "e"]),
+                    builtin_fn(vec![e.clone()], builtin_result(builtin_param(0, "a", span), e, span), span),
+                    span,
+                )
+            }
             "assert" => builtin_fn(
                 vec![builtin_ty(TyKind::Bool, span)],
                 builtin_ty(TyKind::Unit, span),

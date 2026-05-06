@@ -725,6 +725,15 @@ impl Evaluator {
                     })?;
                     Ok(Value::Float(a + bf))
                 }
+                (Value::String(a), Value::String(b)) => {
+                    Ok(Value::String(Rc::new(format!("{}{}", a, b))))
+                }
+                (Value::String(s), Value::Char(c)) => {
+                    Ok(Value::String(Rc::new(format!("{}{}", s, c))))
+                }
+                (Value::Char(c), Value::String(s)) => {
+                    Ok(Value::String(Rc::new(format!("{}{}", c, s))))
+                }
                 _ => Err(EvalError::TypeError("cannot add".to_string())),
             },
             BinOp::Sub => match (&left, &right) {
