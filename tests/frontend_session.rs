@@ -946,7 +946,10 @@ fn test_frontend_session_can_rebase_root_when_pristine() {
         .expect("context should rebase to new root");
 
     assert_eq!(context.root_dir.as_deref(), Some(session.root_dir()));
-    assert_eq!(session.root_dir(), second.path().join("app").as_path());
+    assert_eq!(
+        session.root_dir(),
+        second.path().join("app").canonicalize().unwrap().as_path()
+    );
     assert_eq!(context.module_path, Vec::<String>::new());
 }
 
