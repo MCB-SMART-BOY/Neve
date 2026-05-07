@@ -31,8 +31,12 @@ pub fn set_script_args(args: Vec<String>) {
 
 /// Returns all IO builtins.
 /// 返回所有 IO 内置函数。
+mod fs;
+mod process;
+mod event;
+
 pub fn builtins() -> Vec<(&'static str, Value)> {
-    vec![
+    let mut bindings = vec![
         // === Modern aliases (preferred short names) ===
         (
             "io.read",
@@ -1378,7 +1382,11 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         // Process execution / 进程执行
-    ]
+    ];
+    bindings.extend(fs::builtins());
+    bindings.extend(process::builtins());
+    bindings.extend(event::builtins());
+    bindings
 }
 
 /// Format any Value for human-readable output (used by print/println).
