@@ -4,14 +4,14 @@
 
 <h1>Neve</h1>
 
-<p><em>A standalone language for system configuration, reproducible builds, and structured shell automation / 面向系统配置、可复现构建与结构化 shell 自动化的独立语言</em></p>
+<p>A typed language for system automation — configs, builds, monitoring, scripting. Not a config DSL, not a Bash wrapper.</p>
 
 <p>
   <a href="https://github.com/MCB-SMART-BOY/neve/actions/workflows/ci.yml">
     <img src="https://github.com/MCB-SMART-BOY/neve/actions/workflows/ci.yml/badge.svg" alt="CI">
   </a>
   <a href="https://github.com/MCB-SMART-BOY/neve/releases">
-    <img src="https://img.shields.io/github/v/release/MCB-SMART-BOY/neve?include_prereleases&color=blue" alt="Release">
+    <img src="https://img.shields.io/github/v/release/MCB-SMART-BOY/neve?color=blue" alt="Release">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg" alt="License">
@@ -21,126 +21,88 @@
   </a>
 </p>
 
-<p><strong>Windows</strong> · <strong>Linux</strong> · <strong>macOS</strong></p>
+<p><strong>Linux</strong> · <strong>macOS</strong> · <strong>Windows</strong></p>
 
 </div>
 
-Neve is a from-scratch language and toolchain aimed at system configuration, package/build workflows, and safer replacement of ad-hoc shell automation.
-Neve 不是 Nix 兼容层，也不是“配置 DSL 外包一层脚本”。它是一门独立语言，目标是把系统配置、构建工作流和 shell 级自动化放进同一套更可检查、更结构化的工具链里。
+**Docs**: [Quickstart](docs/user/quickstart.md) · [API](docs/reference/api.md) · [Spec](docs/reference/spec.md) · [Feature Matrix](docs/project/feature-matrix.md) · [Reactive Design](docs/project/reactive-design.md)
 
-**Quick Links / 快速链接** · [Docs](docs/) · [Install](docs/user/install.md) · [Quickstart](docs/user/quickstart.md) · [Spec](docs/reference/spec.md) · [API](docs/reference/api.md) · [Feature Matrix](docs/project/feature-matrix.md)
+---
 
-## What Neve Is / Neve 是什么
+## 怎么回事
 
-- A standalone programming language, not just a config DSL / 独立编程语言，而不只是配置 DSL
-- A typed, structured surface for system configuration and automation / 用类型化、结构化方式表达系统配置和自动化
-- A workspace that includes parser, HIR, type checker, evaluator, formatter, LSP, store, fetch, builder, and CLI / 仓库内同时包含 parser、HIR、type checker、evaluator、formatter、LSP、store、fetch、builder 和 CLI
-- A project still converging on one canonical semantic pipeline / 仍在持续收敛到单一 canonical 语义管线的项目
+Neve 是一门自己写的语言，给系统运维用。parser、type checker、evaluator、LSP、formatter、包管理器都在一个仓库里。
 
-## Current Status / 当前状态
+已经在跑的东西：
 
-- **Canonical pipeline** (`Parser -> HIR -> Typeck -> HIR Eval`) is the primary execution path.
-- **Effect system** (G4 closed): `effect` keyword on functions and impl methods; lambda bodies inherit effect context; `neve check` rejects effectful calls by default.
-- **Streaming I/O**: `io.execCommandStreaming` (stdin + line callback), `io.execPipelineStreaming` (pipeline callback), `io.readFileLines`.
-- **Atomic file ops**: `io.atomicWrite`, `io.atomicWriteAll` (two-phase commit), `io.copy`, `io.move`.
-- **Path literals**: `./path` infers as `Path` type — `io.readFilePath(./test)` works directly.
-- **Typed runtime objects**: `Path`, `Bytes`, `Command`, `Pipeline`, `Redirect`, `ProcessResult`, `Task<T>` with timeout + process kill.
-- **Scripting**: shebang support, `io.args()`, `io.env()`, `io.sleep()`, `io.which()`.
-- **REPL**: history persistence, tab completion, human-friendly display, bracket matching.
-- LSP (hover, goto-def, references, rename, completion), formatter, and package workflows exist (Unix-oriented).
+- **管道和重定向** — `io.execPipeline`、`io.commandWithRedirects`
+- **流式 I/O** — 命令输出逐行处理、文件逐行读
+- **原子写入** — 临时文件 + rename，批量两阶段提交
+- **路径字面量** — `./config.toml` 类型是 `Path`，不是 `String`
+- **效果系统** — `effect` 关键字标记副作用，`neve check` 默认拒绝 IO
+- **超时 + 杀进程** — `io.awaitTaskWithTimeout`，超时后 `kill -9`
+- **REPL** — 历史持久化、Tab 补全、括号匹配
 
-如果你想看“到底什么是真实支持、什么还只是路线图”，直接看：
+正在设计的东西：
 
-- [Feature Matrix](docs/project/feature-matrix.md)
-- [Roadmap](docs/project/roadmap.md)
-- [Language Roadmap](docs/project/language-roadmap.md)
+- 反应式 & 触发器 & 时序约束（见 [设计文档](docs/project/reactive-design.md)）
 
-## Install / 安装
+---
 
-### Prebuilt / 预编译版本
+## 装一个
 
 ```bash
-# Linux / macOS
+# 预编译
 curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
-```
 
-```powershell
-# Windows
-irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
-```
+# Arch
+paru -S neve-bin
 
-### From Source / 从源码安装
+# Nix
+nix run github:MCB-SMART-BOY/nix-neve
 
-```bash
+# Homebrew
+brew tap MCB-SMART-BOY/neve && brew install neve
+
+# 或者从源码
 git clone https://github.com/MCB-SMART-BOY/Neve.git
-cd Neve
-
-# Install into Cargo's bin directory
-cargo install --path neve-cli --locked
-
-# Or build only
-cargo build --release
+cd Neve && cargo install --path neve-cli --locked
 ```
 
-手动下载 release、平台说明、AUR、二进制缓存和签名参数说明见：
-[docs/user/install.md](docs/user/install.md)
+---
 
-## Quick Start / 快速开始
-
-```bash
-neve eval "1 + 2 * 3"
-neve repl
-neve doc quickstart
-```
+## 跑一下
 
 ```neve
--- Streaming command output line by line
+-- Hello world（不需要 import）
+println("Hello, world!");
+
+-- 路径字面量直接是 Path 类型
+let content = io.readFilePath(./Cargo.toml);
+
+-- 流式处理命令输出
 io.execCommandStreaming(
-    io.command("printf", ["hello\nworld\nneve"]),
-    fn(line) { () }
-)
+    io.command("journalctl", ["-f"]),
+    fn(line) { println(line) }
+);
 
--- Path literals are Path-type
-let config = io.readFilePath(./Cargo.toml);
+-- 原子写
+io.atomicWrite("/etc/config.toml", newConfig);
 
--- Atomic file write
-io.atomicWrite("/tmp/safe.txt", "atomically written");
-
--- Effect annotation on functions
-fn save(path: Path, content: String) effect = io.writeFilePath(path, content);
+-- 效果注解
+fn save(path: Path, data: String) effect = io.writeFilePath(path, data);
 ```
 
 ```bash
-neve run hello.neve
-neve check hello.neve
+neve run script.neve     # 跑脚本
+neve repl                # 交互式
+neve check script.neve   # 类型检查（默认拒绝 IO）
+neve fmt file script.neve # 格式化
 ```
 
-更系统的上手路径：
+---
 
-- [Quickstart](docs/user/quickstart.md)
-- [Tutorial](docs/user/tutorial.md)
-- [Spec](docs/reference/spec.md)
-- [API](docs/reference/api.md)
-
-## CLI Surface / CLI 入口
-
-- `neve eval "<expr>"` evaluates a single expression.
-- `neve run <file>` runs a Neve file.
-- `neve check <file>` parses, lowers, and type-checks a file/module graph.
-- `neve repl` starts the interactive REPL.
-- `neve fmt ...` formats files or directories.
-- `neve doc <topic>` opens built-in project documentation in the terminal.
-- On Unix, `build`, `package`, `update`, `config`, and `store` expose the package/store/config workflows.
-
-## Repository Layout / 仓库结构
-
-- `neve-cli/`: command-line interface
-- `crates/`: language pipeline and system crates
-- `docs/`: user, reference, contributor, and project-status docs
-- `tests/`: integration and end-to-end smoke coverage
-- `examples/`: sample programs and bootstrap package examples
-
-## Development / 开发
+## 开发
 
 ```bash
 cargo check --workspace
@@ -149,14 +111,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
 
-进一步阅读：
+---
 
-- [Contributor Guide](docs/contributor/contributing.md)
-- [Architecture](docs/contributor/architecture.md)
-- [Onboarding](docs/contributor/onboarding.md)
-- [Tests README](tests/README.md)
+## License
 
-## License / 许可证
-
-Neve is licensed under the [Mozilla Public License 2.0](LICENSE).
-Neve 使用 [Mozilla Public License 2.0](LICENSE) 许可。
+MPL-2.0
