@@ -672,7 +672,6 @@ impl Parser {
                 // Parse optional effect annotation
         let effect = self.eat(TokenKind::Effect);
 
-let effect = self.eat(TokenKind::Effect);
         let default = if self.eat(TokenKind::Eq) {
             Some(self.parse_expr())
         } else {
