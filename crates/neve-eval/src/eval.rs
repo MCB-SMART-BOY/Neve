@@ -7,6 +7,7 @@
 //! 它提供了一个带有尾调用优化的树遍历解释器。
 
 use crate::{Environment, Value};
+use crate::value::{EventKind, EventValue};
 use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32};
 use neve_diagnostic::Diagnostic;
 use neve_hir::{
@@ -1117,6 +1118,18 @@ impl Evaluator {
                 }
                 Ok(Some(self.builtin_retry(&args[0], &args[1], &args[2])?))
             }
+            "io.eventMap" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_event_map(&args[0], &args[1])?))
+            }
+            "io.eventFilter" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_event_filter(&args[0], &args[1])?))
+            }
             "io.defer" => {
                 if args.len() != 1 {
                     return Err(EvalError::WrongArity);
@@ -1530,6 +1543,26 @@ impl Evaluator {
             self.apply(f, vec![])?;
         }
         Ok(())
+    }
+
+    fn builtin_event_map(&mut self, event: &Value, func: &Value) -> Result<Value, EvalError> {
+        let source = match event {
+            Value::Event(e) => Rc::clone(e),
+            _ => return Err(EvalError::TypeError("eventMap expects an Event".to_string())),
+        };
+        Ok(Value::Event(Rc::new(EventValue {
+            kind: EventKind::Mapped { source },
+        })))
+    }
+
+    fn builtin_event_filter(&mut self, event: &Value, _predicate: &Value) -> Result<Value, EvalError> {
+        let source = match event {
+            Value::Event(e) => Rc::clone(e),
+            _ => return Err(EvalError::TypeError("eventFilter expects an Event".to_string())),
+        };
+        Ok(Value::Event(Rc::new(EventValue {
+            kind: EventKind::Filtered { source },
+        })))
     }
 
     fn builtin_all(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
