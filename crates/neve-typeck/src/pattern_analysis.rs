@@ -418,6 +418,29 @@ pub(crate) fn analyze_match(
             result.missing_patterns = missing_enum_patterns(*enum_id, &covered_variant_names, ctx);
         }
 
+        TyKind::String | TyKind::Int | TyKind::Float | TyKind::Char => {
+            // Primitive types have infinite values — only wildcard/variable is exhaustive
+            for arm in arms {
+                if arm.guard.is_some() {
+                    result.push_guarded_ignored();
+                    continue;
+                }
+                if let Some(previous) = result.coverage_complete_at {
+                    result.push_redundant(previous, RedundancyReason::CoveredByPreviousArms);
+                    continue;
+                }
+                if matches!(&arm.pattern.kind, PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)) {
+                    result.push_useful();
+                    result.coverage_complete_at = Some(arm.span);
+                } else {
+                    result.push_useful();
+                }
+            }
+            if result.coverage_complete_at.is_none() {
+                result.missing_patterns.push("_ (wildcard)".to_string());
+            }
+        }
+
         _ => {
             result.arm_usefulness = vec![ArmUsefulness::NotAnalyzed; arms.len()];
         }
