@@ -1545,7 +1545,7 @@ impl Evaluator {
         Ok(())
     }
 
-    fn builtin_event_map(&mut self, event: &Value, func: &Value) -> Result<Value, EvalError> {
+    fn builtin_event_map(&mut self, event: &Value, _func: &Value) -> Result<Value, EvalError> {
         let source = match event {
             Value::Event(e) => Rc::clone(e),
             _ => return Err(EvalError::TypeError("eventMap expects an Event".to_string())),

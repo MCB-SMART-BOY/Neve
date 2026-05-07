@@ -33,6 +33,30 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Interactive / 交互输入
+        (
+            "io.input",
+            Value::Builtin(BuiltinFn {
+                name: "io.input",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(prompt) => {
+                        use std::io::{Write, BufRead};
+                        let stdout = std::io::stdout();
+                        let mut handle = stdout.lock();
+                        handle.write_all(prompt.as_bytes())
+                            .map_err(|e| format!("io.input: {e}"))?;
+                        handle.flush().map_err(|e| format!("io.input: {e}"))?;
+                        let stdin = std::io::stdin();
+                        let mut line = String::new();
+                        stdin.lock().read_line(&mut line)
+                            .map_err(|e| format!("io.input: {e}"))?;
+                        Ok(Value::String(Rc::new(line.trim_end().to_string())))
+                    }
+                    _ => Err("io.input expects a String prompt".to_string()),
+                },
+            }),
+        ),
         // Glob / 文件匹配
         (
             "io.glob",
