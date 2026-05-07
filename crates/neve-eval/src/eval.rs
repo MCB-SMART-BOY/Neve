@@ -2226,23 +2226,29 @@ impl Evaluator {
         Ok(())
     }
 
-    fn builtin_event_map(&mut self, event: &Value, _func: &Value) -> Result<Value, EvalError> {
+    fn builtin_event_map(&mut self, event: &Value, func: &Value) -> Result<Value, EvalError> {
         let source = match event {
             Value::Event(e) => Rc::clone(e),
             _ => return Err(EvalError::TypeError("eventMap expects an Event".to_string())),
         };
         Ok(Value::Event(Rc::new(EventValue {
-            kind: EventKind::Mapped { source },
+            kind: EventKind::Mapped {
+                source,
+                func: func.clone(),
+            },
         })))
     }
 
-    fn builtin_event_filter(&mut self, event: &Value, _predicate: &Value) -> Result<Value, EvalError> {
+    fn builtin_event_filter(&mut self, event: &Value, predicate: &Value) -> Result<Value, EvalError> {
         let source = match event {
             Value::Event(e) => Rc::clone(e),
             _ => return Err(EvalError::TypeError("eventFilter expects an Event".to_string())),
         };
         Ok(Value::Event(Rc::new(EventValue {
-            kind: EventKind::Filtered { source },
+            kind: EventKind::Filtered {
+                source,
+                predicate: predicate.clone(),
+            },
         })))
     }
 

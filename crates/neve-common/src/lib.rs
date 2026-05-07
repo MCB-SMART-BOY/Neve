@@ -39,6 +39,9 @@ pub fn is_effectful_builtin(name: &str) -> bool {
                 "pipeline" | "pipelineWithRedirects" |
                 "redirectStdoutPath" | "redirectStderrPath" | "redirectStdinPath" |
                 "taskCommand" | "taskPipeline" |
+                "eventMap" | "eventFilter" |
+                "reactive" | "liveCurrent" | "liveCancel" |
+                "watchFile" | "every" |
                 "hashString" | "currentSystem"
             ),
             "fetch" => true,

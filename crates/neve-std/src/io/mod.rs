@@ -324,9 +324,37 @@ pub(crate) fn poll_event(event: &EventValue) -> Result<Value, String> {
                 .map_err(|e| format!("poll: {e}"))?;
             Ok(Value::String(Rc::new(content)))
         }
-        EventKind::Mapped { .. } | EventKind::Filtered { .. } => {
-            Err("poll: chained events not yet supported".to_string())
+        EventKind::Mapped { source, func } => {
+            // Poll the source event, then apply the transformation function
+            let source_val = poll_event(source)?;
+            apply_value_function(func, &[source_val])
         }
+        EventKind::Filtered { source, predicate } => {
+            // Poll the source event repeatedly until predicate returns true
+            // Limit to 1000 attempts to prevent infinite loops
+            for _ in 0..1000 {
+                let source_val = poll_event(source)?;
+                match apply_value_function(predicate, &[source_val.clone()]) {
+                    Ok(Value::Bool(true)) => return Ok(source_val),
+                    Ok(_) => continue, // Predicate returned non-true, try again
+                    Err(e) => return Err(e),
+                }
+            }
+            Err("poll: filtered event exceeded max attempts (1000)".to_string())
+        }
+    }
+}
+
+/// Apply a Value function to arguments. Handles Builtin and BuiltinFn.
+/// Closures are not supported in this context (requires evaluator).
+pub(crate) fn apply_value_function(func: &Value, args: &[Value]) -> Result<Value, String> {
+    match func {
+        Value::Builtin(b) => (b.func)(args),
+        Value::BuiltinFn(_, f) => f(args.to_vec()),
+        _ => Err(format!(
+            "poll: cannot apply {:?} as a function (only builtins supported in event chains)",
+            func
+        )),
     }
 }
 

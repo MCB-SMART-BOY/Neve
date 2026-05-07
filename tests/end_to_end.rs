@@ -2764,3 +2764,73 @@ fn test_end_to_end_io_on_signal_effect_checking() {
         analysis.diagnostics
     );
 }
+
+// === Event chain tests (eventMap / eventFilter) ===
+
+#[test]
+fn test_end_to_end_io_event_map_transforms_event() {
+    // Verify that io.eventMap chains a transformation onto an event.
+    let source = r#"
+    import std.io as io;
+    let timer = io.every(1);
+    let mapped = io.eventMap(timer, fn(x) { x + 1 });
+    let x = typeOf(mapped) == "Event";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_event_filter_chains_predicate() {
+    // Verify that io.eventFilter chains a predicate onto an event.
+    let source = r#"
+    import std.io as io;
+    let timer = io.every(1);
+    let filtered = io.eventFilter(timer, fn(x) { x > 0 });
+    let x = typeOf(filtered) == "Event";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_event_map_effect_checking() {
+    // Verify that io.eventMap is NOT effectful (it's a pure constructor).
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn ok() -> Event = io.eventMap(io.every(1), fn(x) { x + 1 });
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        !has_effect_error,
+        "io.eventMap should be pure, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_io_event_filter_effect_checking() {
+    // Verify that io.eventFilter is NOT effectful (it's a pure constructor).
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn ok() -> Event = io.eventFilter(io.every(1), fn(x) { x > 0 });
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        !has_effect_error,
+        "io.eventFilter should be pure, got {:?}",
+        analysis.diagnostics
+    );
+}
