@@ -418,6 +418,40 @@ pub(crate) fn analyze_match(
             result.missing_patterns = missing_enum_patterns(*enum_id, &covered_variant_names, ctx);
         }
 
+        TyKind::Record(field_tys) => {
+            let declared_fields: Vec<&str> = field_tys.iter().map(|(n, _)| n.as_str()).collect();
+            for arm in arms {
+                if arm.guard.is_some() {
+                    result.push_guarded_ignored();
+                    continue;
+                }
+                if let Some(previous) = result.coverage_complete_at {
+                    result.push_redundant(previous, RedundancyReason::CoveredByPreviousArms);
+                    continue;
+                }
+                // Check if this arm covers all declared fields
+                let covers_all = matches!(&arm.pattern.kind,
+                    PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)
+                ) || match &arm.pattern.kind {
+                    PatternKind::Record(fields) => {
+                        let covered: Vec<&str> = fields.iter().map(|(n, _)| n.as_str()).collect();
+                        declared_fields.iter().all(|f| covered.contains(f))
+                    }
+                    _ => false,
+                };
+
+                if covers_all {
+                    result.push_useful();
+                    result.coverage_complete_at = Some(arm.span);
+                } else {
+                    result.push_useful();
+                }
+            }
+            if result.coverage_complete_at.is_none() {
+                result.missing_patterns.push("full record pattern".to_string());
+            }
+        }
+
         TyKind::String | TyKind::Int | TyKind::Float | TyKind::Char => {
             // Primitive types have infinite values — only wildcard/variable is exhaustive
             for arm in arms {
