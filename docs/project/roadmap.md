@@ -90,7 +90,7 @@ REPL       ██████████  历史、补全、智能输入
 
 | 任务 | 说明 |
 |------|------|
-| 自动导入 | `io.println` 不需要 `import std.io` —— io/fmt/path 自动可用 |
+| ~~自动导入~~ | ✅ 已实现 |
 | `main` 函数 | 脚本入口，argc/argv 直接注入 |
 | 更好的错误信息 | "cannot add" → "String 和 Int 不能相加，你可能想用 `toString(n)`" |
 
