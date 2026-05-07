@@ -167,6 +167,7 @@ pub struct TraitItem {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
+    pub effect: bool,
     pub default: Option<Expr>,
     pub span: Span,
 }

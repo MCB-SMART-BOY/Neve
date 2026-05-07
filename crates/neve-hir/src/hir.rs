@@ -552,17 +552,19 @@ pub struct AssocTypeDef {
 /// Trait 项（方法声明）。
 #[derive(Debug, Clone)]
 pub struct TraitItem {
-    /// Method name. / 方法名称。
+    /// Whether this method is annotated with `effect`.
+    pub effectful: bool,
+    /// Method name.
     pub name: String,
-    /// Generic parameters. / 泛型参数。
+    /// Generic parameters.
     pub generics: Vec<GenericParam>,
-    /// Parameter types. / 参数类型。
+    /// Parameter types.
     pub params: Vec<Ty>,
-    /// Return type. / 返回类型。
+    /// Return type.
     pub return_ty: Ty,
-    /// Default implementation (if any). / 默认实现（如有）。
+    /// Default implementation (if any).
     pub default: Option<Expr>,
-    /// Source location. / 源代码位置。
+    /// Source location.
     pub span: Span,
 }
 

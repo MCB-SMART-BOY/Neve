@@ -33,6 +33,14 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Defer / 延迟执行
+        (
+            "io.defer",
+            Value::Builtin(BuiltinFn {
+                name: "io.defer", arity: 1,
+                func: |_args| Err("io.defer is evaluator-owned".to_string()),
+            }),
+        ),
         // Temporal / 时序约束 (evaluator-owned)
         (
             "io.retry",

@@ -53,8 +53,8 @@ REPL       ██████████  历史、补全、智能输入
 
 | 任务 | 说明 |
 |------|------|
-| `|>` 管道语法 | `ls |> grep("neve")` 代替 `io.pipeline([...])` |
-| `defer` / `finally` | 资源清理。`defer { cleanup() }` |
+| ~~`|>` 管道语法~~ | ✅ 已实现：`a |> f` 等价 `f(a)` |
+| `defer` / `finally` | 资源清理。`defer { cleanup() }` | ← 当前
 | glob | `ls *.neve` 或 `io.glob("*.neve")` |
 
 ### 运行时

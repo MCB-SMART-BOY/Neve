@@ -1301,6 +1301,7 @@ impl Resolver {
 
         Some(TraitItem {
             name: item.name.name.clone(),
+            effectful: item.effect,
             generics,
             params,
             return_ty,
