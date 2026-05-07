@@ -575,7 +575,7 @@ impl Parser {
             let ty = self.parse_type();
             // Parse optional default value
             // 解析可选的默认值
-            let effect = self.eat(TokenKind::Effect);
+            let _effect = self.eat(TokenKind::Effect);
         let default = if self.eat(TokenKind::Eq) {
                 Some(self.parse_expr())
             } else {
@@ -752,7 +752,7 @@ impl Parser {
 
         // Parse default: `type Item = Int`
         // 解析默认值：`type Item = Int`
-        let effect = self.eat(TokenKind::Effect);
+        let _effect = self.eat(TokenKind::Effect);
         let default = if self.eat(TokenKind::Eq) {
             Some(self.parse_type())
         } else {
