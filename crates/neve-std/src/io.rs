@@ -336,6 +336,32 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         ),
         // File reading / 文件读取
         (
+            "io.lines",
+            Value::Builtin(BuiltinFn {
+                name: "io.lines",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => {
+                        let content = std::fs::read_to_string(path.as_str())
+                            .map_err(|e| format!("io.lines: {e}"))?;
+                        let lines: Vec<Value> = content.lines()
+                            .map(|l| Value::String(Rc::new(l.to_string())))
+                            .collect();
+                        Ok(Value::List(Rc::new(lines)))
+                    }
+                    Value::Path(path) => {
+                        let content = std::fs::read_to_string(path.as_path())
+                            .map_err(|e| format!("io.lines: {e}"))?;
+                        let lines: Vec<Value> = content.lines()
+                            .map(|l| Value::String(Rc::new(l.to_string())))
+                            .collect();
+                        Ok(Value::List(Rc::new(lines)))
+                    }
+                    _ => Err("io.lines expects a String or Path".to_string()),
+                },
+            }),
+        ),
+        (
             "io.readFile",
             Value::Builtin(BuiltinFn {
                 name: "io.readFile",
