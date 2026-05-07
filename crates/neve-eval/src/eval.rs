@@ -1781,6 +1781,7 @@ impl Evaluator {
             Value::AstClosure(_) => "<function>".to_string(),
             Value::Closure { .. } => "<function>".to_string(),
             Value::Event(_) => "Event(..)".to_string(),
+            Value::Live(_) => "Live(..)".to_string(),
             Value::Thunk(thunk) => {
                 use crate::value::ThunkState;
                 match &*thunk.state() {
