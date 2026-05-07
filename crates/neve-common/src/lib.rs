@@ -32,7 +32,14 @@ pub fn is_effectful_builtin(name: &str) -> bool {
         match parts[0] {
             "io" => !matches!(
                 parts[1],
-                "processSuccess" | "processStdout" | "processCode" | "processStderr"
+                // Pure inspectors
+                "processSuccess" | "processStdout" | "processCode" | "processStderr" |
+                // Pure constructors (no I/O)
+                "command" | "commandWith" | "commandWithRedirects" |
+                "pipeline" | "pipelineWithRedirects" |
+                "redirectStdoutPath" | "redirectStderrPath" | "redirectStdinPath" |
+                "taskCommand" | "taskPipeline" |
+                "hashString" | "currentSystem"
             ),
             "fetch" => true,
             _ => false,
