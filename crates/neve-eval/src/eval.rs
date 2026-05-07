@@ -680,6 +680,99 @@ impl Evaluator {
         Ok(())
     }
 
+    fn builtin_retry(
+        &mut self,
+        func: &Value,
+        max_attempts: &Value,
+        backoff: &Value,
+    ) -> Result<Value, EvalError> {
+        let max_attempts: u32 = match max_attempts {
+            Value::Int(n) => n.clone().try_into().map_err(|_| {
+                EvalError::TypeError("retry: maxAttempts must be positive".to_string())
+            })?,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "retry: maxAttempts must be Int".to_string(),
+                ));
+            }
+        };
+        let backoff_ms: u64 = match backoff {
+            Value::Int(n) => n.clone().try_into().map_err(|_| {
+                EvalError::TypeError("retry: backoff must be non-negative".to_string())
+            })?,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "retry: backoff must be Int".to_string(),
+                ));
+            }
+        };
+
+        let mut last_err = String::new();
+        for attempt in 0..max_attempts {
+            match self.apply(func.clone(), vec![]) {
+                Ok(val) => return Ok(val),
+                Err(e) => {
+                    last_err = format!("{:?}", e);
+                    if attempt + 1 < max_attempts {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            backoff_ms * (attempt as u64 + 1),
+                        ));
+                    }
+                }
+            }
+        }
+        Err(EvalError::TypeError(format!(
+            "retry: all {} attempts failed: {}",
+            max_attempts, last_err
+        )))
+    }
+
+    fn builtin_ensure(
+        &mut self,
+        check: &Value,
+        timeout: &Value,
+        interval: &Value,
+    ) -> Result<Value, EvalError> {
+        let timeout_ms: u64 = match timeout {
+            Value::Int(n) => n.clone().try_into().map_err(|_| {
+                EvalError::TypeError("ensure: timeout must be non-negative".to_string())
+            })?,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "ensure: timeout must be Int".to_string(),
+                ));
+            }
+        };
+        let interval_ms: u64 = match interval {
+            Value::Int(n) => n.clone().try_into().map_err(|_| {
+                EvalError::TypeError("ensure: interval must be positive".to_string())
+            })?,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "ensure: interval must be Int".to_string(),
+                ));
+            }
+        };
+
+        let start = std::time::Instant::now();
+        loop {
+            match self.apply(check.clone(), vec![]) {
+                Ok(Value::Bool(true)) => return Ok(Value::Bool(true)),
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!(
+                        "ensure: check failed: {:?}",
+                        e
+                    )));
+                }
+            }
+            if start.elapsed().as_millis() as u64 > timeout_ms {
+                return Ok(Value::Bool(false));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+        }
+    }
+
     fn get_builtin(&self, _def_id: DefId) -> Option<Value> {
         // Builtin lookup is currently name-based through the shared builtin registry.
         // Evaluator-owned builtins that need runtime context are intercepted in apply().
@@ -1014,6 +1107,18 @@ impl Evaluator {
                     return Err(EvalError::WrongArity);
                 }
                 Ok(Some(self.builtin_all(&args[0], &args[1])?))
+            }
+            "io.retry" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_retry(&args[0], &args[1], &args[2])?))
+            }
+            "io.ensure" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_ensure(&args[0], &args[1], &args[2])?))
             }
             "any" => {
                 if args.len() != 2 {

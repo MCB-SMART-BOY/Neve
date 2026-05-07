@@ -33,6 +33,23 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Temporal / 时序约束 (evaluator-owned)
+        (
+            "io.retry",
+            Value::Builtin(BuiltinFn {
+                name: "io.retry",
+                arity: 3,
+                func: |_args| Err("io.retry is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.ensure",
+            Value::Builtin(BuiltinFn {
+                name: "io.ensure",
+                arity: 3,
+                func: |_args| Err("io.ensure is evaluator-owned".to_string()),
+            }),
+        ),
         // Events / 事件
         // Reactive / 反应式
         (
@@ -1252,6 +1269,8 @@ pub(crate) fn poll_event(event: &EventValue) -> Result<Value, String> {
         }
     }
 }
+
+/// Call a builtin/closure function value with arguments.
 
 /// Compute SHA-256 hash and return as hex string.
 /// 计算 SHA-256 哈希并返回十六进制字符串。
