@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 glob = "0.3"
+rpassword = "7"
 neve-common.workspace = true
 neve-eval.workspace = true
 neve-derive.workspace = true
