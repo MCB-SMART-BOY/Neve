@@ -9,8 +9,8 @@ From this point onward, implementation work for semantic convergence should read
 ## 1. Status
 
 - State: **active** — Phase 3-4，效果系统闭环，事件/反应式落地
-- Current phase: **Phase 3/4 (Effect, Reactive, Temporal)**
-- Overall completion: **~70%**
+- Current phase: **Phase 4/5 (Polish, Architecture)**
+- Overall completion: **~85%**
 - Recent: Lambda/impl effect closed, streaming I/O, Path literals, REPL overhaul, Event/Live/retry/ensure
 
 ### Decision Gate Status
