@@ -15,33 +15,18 @@
 
 ---
 
-> *Your toolkit. Everything you need, nothing you don't.*  
-> 标准库工具箱：只包含你需要的东西。
+> 标准库里有哪些函数，参数是什么，返回什么。
 
 
 ## Using the stdlib / 标准库用法
 
 
-Neve's standard library is namespaced. Import modules to use `list.*`, `string.*`,
-`math.*`, `io.*`, `path.*`, `Map.*`, and `Set.*`. You can also bring selected
-names into scope.
+标准库用命名空间组织。直接 import 用 `list.map`，取个别名也行。
 
 ```neve
-import std.list;
-import std.list (map, filter, fold);
-import std.string as Str;
-import std.Map;
-import std.Set;
-```
-
-
-Neve 的标准库是命名空间形式。通过导入模块使用 `list.*`、`string.*`、
-`math.*`、`io.*`、`path.*`、`Map.*`、`Set.*`。也可以选择性导入需要的名字。
-
-```neve
-import std.list;
-import std.list (map, filter, fold);
-import std.string as Str;
+import std.list;                      -- list.map, list.filter 都能用
+import std.list (map, filter, fold);  -- 只导入这三个
+import std.string as Str;             -- Str.len("hi")
 import std.Map;
 import std.Set;
 ```
