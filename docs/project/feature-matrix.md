@@ -104,6 +104,7 @@
 | 流式 I/O | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` |
 | 路径字面量 | `./config` 推断为 `Path` 类型，`io.readFilePath(./x)` 直接可用 |
 | 字符串拼接 | `"a" + "b"` |
+| 管道语法 | `a |> f` 等价于 `f(a)` |
 | 输出 | `print` / `println` 全局可用 |
 | 效果系统 | `effect` 关键字；fn / impl fn / lambda 全覆盖 |
 | REPL | 历史持久化、Tab 补全、`:save` / `:cd`、智能输入完成 |
