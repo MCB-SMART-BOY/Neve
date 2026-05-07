@@ -6,8 +6,8 @@ This document defines the effect model for Neve — the boundary between pure fu
 
 ## 1. Status
 
-- State: **implementation phase** — effect keyword done, default checking active — implementation partially started (Task<T>, --pure flag)
-- Scope: effect classification, purity checking, effect type system design
+- State: **hardening phase** — effect keyword done, streaming I/O complete, streaming timeout landed (v3.5.0-dev)
+- Scope: effect classification, purity checking, effect type system design, streaming timeout
 - Related: G4 (Effect Boundary), PR-011/012 (typed runtime objects), `neve check --pure`
 
 ## 2. Design Principles
@@ -27,6 +27,8 @@ This document defines the effect model for Neve — the boundary between pure fu
 | Typed runtime objects | Done | Path, Bytes, Command, Pipeline, Redirect, ProcessResult, Task<T> |
 | Task<T> | Done | Wraps Command/Pipeline for deferred execution; blocking await only |
 | io.awaitTaskWithTimeout | Done | Timeout + process kill for Command-based tasks |
+| Streaming I/O | Done | execCommandStreaming, execPipelineStreaming, readFileLines (line-by-line callback) |
+| Streaming timeout | Done | execCommandStreamingWithTimeout, execPipelineStreamingWithTimeout (total deadline + process kill) |
 | neve check --pure | Done | HIR walker rejects calls to effectful builtins |
 | is_effectful_builtin() | Done | Classifies stdlib builtins as pure or effectful |
 | Process inspectors | Done | processSuccess, processStdout, processCode, processStderr (pure) |
@@ -37,9 +39,8 @@ This document defines the effect model for Neve — the boundary between pure fu
 |-----|----------|-------------|
 | Effect type system | High | No way to express "this function may have effects" in the type system |
 | Effect polymorphism | Medium | Can't write functions generic over purity |
-| Streaming I/O | High | All process I/O is buffered; no line-by-line or chunked output |
 | Non-blocking Task | Medium | Tasks always block; no poll/cancel/background execution |
-| Pipeline timeout | Medium | awaitTaskWithTimeout only works for Command, not Pipeline |
+| Pipeline timeout (non-streaming) | Medium | awaitTaskWithTimeout only works for Command, not Pipeline (streaming pipelines have timeout via execPipelineStreamingWithTimeout) |
 | Effect inference | Low | Purity is opt-in (--pure flag) rather than inferred |
 
 ## 4. Effect Classification

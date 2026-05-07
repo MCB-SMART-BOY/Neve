@@ -2589,3 +2589,127 @@ fn test_end_to_end_impl_method_without_effect_rejects_io() {
         analysis.diagnostics
     );
 }
+
+// === Streaming I/O timeout tests / 流式 I/O 超时测试 ===
+
+#[test]
+fn test_end_to_end_io_exec_command_streaming_with_timeout_returns_some() {
+    // Normal completion: timeout is generous, process finishes in time.
+    let source = r#"
+    import std.io as io;
+    let cmd = io.command("echo", ["hello timeout"]);
+    let result = io.execCommandStreamingWithTimeout(cmd, fn(line) { () }, 5000);
+    let x = match result {
+        Some(r) -> typeOf(r) == "ProcessResult" && io.processSuccess(r),
+        None -> false
+    };
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_command_streaming_with_timeout_returns_none_on_timeout() {
+    // Timeout: process takes longer than the timeout -> returns None.
+    let source = r#"
+    import std.io as io;
+    let cmd = io.command("sleep", ["5"]);
+    let result = io.execCommandStreamingWithTimeout(cmd, fn(line) { () }, 100);
+    let x = match result {
+        Some(_) -> false,
+        None -> true
+    };
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_returns_some() {
+    // Normal pipeline completion with timeout.
+    let source = r#"
+    import std.io as io;
+    let pipeline = io.pipeline([
+        io.command("echo", ["hello pipeline timeout"]),
+        io.command("cat", [])
+    ]);
+    let result = io.execPipelineStreamingWithTimeout(pipeline, fn(line) { () }, 5000);
+    let x = match result {
+        Some(r) -> typeOf(r) == "ProcessResult" && io.processSuccess(r),
+        None -> false
+    };
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_returns_none_on_timeout() {
+    // Pipeline timeout: pipeline takes longer than timeout -> returns None.
+    let source = r#"
+    import std.io as io;
+    let pipeline = io.pipeline([
+        io.command("sleep", ["3"]),
+        io.command("echo", ["never runs"])
+    ]);
+    let result = io.execPipelineStreamingWithTimeout(pipeline, fn(line) { () }, 100);
+    let x = match result {
+        Some(_) -> false,
+        None -> true
+    };
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_exec_command_streaming_with_timeout_effect_checking() {
+    // Verify that io.execCommandStreamingWithTimeout is recognized as effectful.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> Option = io.execCommandStreamingWithTimeout(
+            io.command("echo", ["hello"]),
+            fn(line) { () },
+            1000
+        );
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.execCommandStreamingWithTimeout, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_effect_checking() {
+    // Verify that io.execPipelineStreamingWithTimeout is recognized as effectful.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> Option = io.execPipelineStreamingWithTimeout(
+            io.pipeline([io.command("echo", ["hello"])]),
+            fn(line) { () },
+            1000
+        );
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.execPipelineStreamingWithTimeout, got {:?}",
+        analysis.diagnostics
+    );
+}

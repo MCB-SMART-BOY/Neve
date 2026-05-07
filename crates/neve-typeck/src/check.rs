@@ -2267,6 +2267,32 @@ impl TypeChecker {
                 builtin_process_result(span),
                 span,
             ),
+            "io.execCommandStreamingWithTimeout" => builtin_fn(
+                vec![
+                    builtin_command(span),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::String, span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_option(builtin_process_result(span), span),
+                span,
+            ),
+            "io.execPipelineStreamingWithTimeout" => builtin_fn(
+                vec![
+                    builtin_pipeline(span),
+                    builtin_fn(
+                        vec![builtin_ty(TyKind::String, span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_option(builtin_process_result(span), span),
+                span,
+            ),
             "io.readFileLines" => builtin_fn(
                 vec![
                     builtin_ty(TyKind::String, span),
@@ -3182,6 +3208,26 @@ impl TypeChecker {
         }
     }
 
+        fn suggest_global_name(&self, span: Span) -> String {
+        // Build a list of known names from globals and builtins
+        let mut known: Vec<String> = self.globals.keys()
+            .filter_map(|id| self.global_name_for_did(*id))
+            .collect();
+        known.sort();
+        known.dedup();
+        // For now, just list available names if there are few
+        if known.len() <= 10 && !known.is_empty() {
+            format!("undefined global; available: {}", known.join(", "))
+        } else {
+            "undefined global".to_string()
+        }
+    }
+
+    fn global_name_for_did(&self, def_id: DefId) -> Option<String> {
+        // Try to get a name from global_spans or trait resolver
+        None
+    }
+
     fn is_effectful_builtin_name(name: &str) -> bool {
         neve_common::is_effectful_builtin(name)
     }
@@ -4031,7 +4077,8 @@ impl TypeChecker {
                     // Instantiate polymorphic types with fresh type variables
                     instantiate(&ty, &mut || self.fresh_var())
                 } else if def_id.0 == u32::MAX {
-                    self.error(span, "undefined global");
+                    let msg = self.suggest_global_name(span);
+                    self.error(span, msg);
                     self.fresh_var()
                 } else {
                     self.fresh_var()

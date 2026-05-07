@@ -856,11 +856,27 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "io.execCommandStreamingWithTimeout",
+            Value::Builtin(BuiltinFn {
+                name: "io.execCommandStreamingWithTimeout",
+                arity: 3,
+                func: |_args| Err("io.execCommandStreamingWithTimeout is evaluator-owned".to_string()),
+            }),
+        ),
+        (
             "io.execPipelineStreaming",
             Value::Builtin(BuiltinFn {
                 name: "io.execPipelineStreaming",
                 arity: 2,
                 func: |_args| Err("io.execPipelineStreaming is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.execPipelineStreamingWithTimeout",
+            Value::Builtin(BuiltinFn {
+                name: "io.execPipelineStreamingWithTimeout",
+                arity: 3,
+                func: |_args| Err("io.execPipelineStreamingWithTimeout is evaluator-owned".to_string()),
             }),
         ),
         (

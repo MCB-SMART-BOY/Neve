@@ -832,9 +832,9 @@ mod tests {
     use neve_typeck::{
         BYTES_TYPE_ID, COMMAND_TYPE_ID, LIST_TYPE_ID, MAP_TYPE_ID, OPTION_TYPE_ID, PATH_TYPE_ID,
         PIPELINE_TYPE_ID, PROCESS_RESULT_TYPE_ID, REDIRECT_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID,
-        TASK_TYPE_ID, builtin_bytes, builtin_command, builtin_list, builtin_map, builtin_option,
-        builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect, builtin_result,
-        builtin_set, builtin_task, format_builtin_named_type,
+        TASK_TYPE_ID, builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live,
+        builtin_map, builtin_option, builtin_path, builtin_pipeline, builtin_process_result,
+        builtin_redirect, builtin_result, builtin_set, builtin_task, format_builtin_named_type,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -927,6 +927,8 @@ mod tests {
                 "Err" => builtin_result(unknown_ty(), type_from_value(payload), Span::DUMMY),
                 _ => unknown_ty(),
             },
+            Value::Event(_) => builtin_event(unknown_ty(), Span::DUMMY),
+            Value::Live(_) => builtin_live(unknown_ty(), Span::DUMMY),
         }
     }
 

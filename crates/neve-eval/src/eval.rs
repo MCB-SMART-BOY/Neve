@@ -93,7 +93,24 @@ enum TcoResult {
     TailCall(Value, Vec<Value>),
 }
 
-/// The HIR evaluator.
+/// Kill a process by PID. Used for timeout enforcement in streaming I/O.
+/// 通过 PID 终止进程。用于流式 I/O 的超时强制执行。
+fn kill_process_by_pid(pid: u32) {
+    #[cfg(unix)]
+    {
+        let _ = std::process::Command::new("kill")
+            .arg("-9")
+            .arg(pid.to_string())
+            .output();
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .output();
+    }
+}
+
 /// HIR 求值器。
 ///
 /// This evaluator interprets HIR expressions with support for:
@@ -1086,12 +1103,58 @@ impl Evaluator {
                 }
                 Ok(Some(self.builtin_exec_streaming(&args[0], &args[1])?))
             }
+            "io.execCommandStreamingWithTimeout" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                let timeout_ms = match &args[2] {
+                    Value::Int(ms) => {
+                        let ms: u64 = ms.clone().try_into().map_err(|_| {
+                            EvalError::TypeError(
+                                "execCommandStreamingWithTimeout: timeout must be non-negative".to_string(),
+                            )
+                        })?;
+                        ms
+                    }
+                    _ => {
+                        return Err(EvalError::TypeError(
+                            "execCommandStreamingWithTimeout: third argument must be Int (timeout in ms)".to_string(),
+                        ));
+                    }
+                };
+                Ok(Some(
+                    self.builtin_exec_streaming_with_timeout(&args[0], &args[1], timeout_ms)?,
+                ))
+            }
             "io.execPipelineStreaming" => {
                 if args.len() != 2 {
                     return Err(EvalError::WrongArity);
                 }
                 Ok(Some(
                     self.builtin_exec_pipeline_streaming(&args[0], &args[1])?,
+                ))
+            }
+            "io.execPipelineStreamingWithTimeout" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                let timeout_ms = match &args[2] {
+                    Value::Int(ms) => {
+                        let ms: u64 = ms.clone().try_into().map_err(|_| {
+                            EvalError::TypeError(
+                                "execPipelineStreamingWithTimeout: timeout must be non-negative".to_string(),
+                            )
+                        })?;
+                        ms
+                    }
+                    _ => {
+                        return Err(EvalError::TypeError(
+                            "execPipelineStreamingWithTimeout: third argument must be Int (timeout in ms)".to_string(),
+                        ));
+                    }
+                };
+                Ok(Some(
+                    self.builtin_exec_pipeline_streaming_with_timeout(&args[0], &args[1], timeout_ms)?,
                 ))
             }
             "io.readFileLines" => {
@@ -1471,6 +1534,397 @@ impl Evaluator {
                 String::from_utf8_lossy(&combined_stderr).to_string(),
             ),
         )))
+    }
+
+    /// Streaming command execution with total timeout.
+    /// 带总超时的流式命令执行。
+    ///
+    /// Spawns the process, streams stdout line-by-line through a channel,
+    /// and enforces a total execution deadline. Returns None on timeout.
+    /// 启动进程，通过通道逐行传输 stdout，并强制执行总执行期限。超时返回 None。
+    fn builtin_exec_streaming_with_timeout(
+        &mut self,
+        command: &Value,
+        callback: &Value,
+        timeout_ms: u64,
+    ) -> Result<Value, EvalError> {
+        use std::io::{BufRead, Write};
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+
+        let cmd = match command {
+            Value::Command(cmd) => cmd,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "execCommandStreamingWithTimeout expects a Command".to_string(),
+                ));
+            }
+        };
+
+        let mut process = std::process::Command::new(cmd.program());
+        process.args(cmd.args());
+        if let Some(cwd) = cmd.cwd() {
+            process.current_dir(cwd);
+        }
+        for (k, v) in cmd.env() {
+            process.env(k, v);
+        }
+        if cmd.stdin().is_some() {
+            process.stdin(std::process::Stdio::piped());
+        } else {
+            process.stdin(std::process::Stdio::null());
+        }
+        process.stdout(std::process::Stdio::piped());
+        process.stderr(std::process::Stdio::piped());
+
+        let mut child = process
+            .spawn()
+            .map_err(|e| EvalError::TypeError(format!("spawn: {e}")))?;
+        let pid = child.id();
+
+        // Write stdin if configured
+        if let Some(stdin_data) = cmd.stdin()
+            && let Some(mut stdin_pipe) = child.stdin.take()
+        {
+            stdin_pipe
+                .write_all(stdin_data.as_bytes())
+                .map_err(|e| EvalError::TypeError(format!("stdin write: {e}")))?;
+        }
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| EvalError::TypeError("no stdout".to_string()))?;
+
+        // Channel for streaming lines to the evaluator thread
+        let (line_tx, line_rx) = mpsc::channel::<Result<String, String>>();
+        // Channel for the final process result
+        let (result_tx, result_rx) = mpsc::channel::<Result<(i32, bool, Vec<u8>, Vec<u8>), String>>();
+
+        // Spawn reader thread
+        std::thread::spawn(move || {
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines() {
+                match line {
+                    Ok(l) => {
+                        if line_tx.send(Ok(l)).is_err() {
+                            // Receiver dropped (timeout) — stop reading
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = line_tx.send(Err(format!("read: {e}")));
+                        break;
+                    }
+                }
+            }
+            // All lines sent; now wait for process exit
+            match child.wait_with_output() {
+                Ok(output) => {
+                    let _ = result_tx.send(Ok((
+                        output.status.code().unwrap_or(-1),
+                        output.status.success(),
+                        output.stdout,
+                        output.stderr,
+                    )));
+                }
+                Err(e) => {
+                    let _ = result_tx.send(Err(format!("wait: {e}")));
+                }
+            }
+        });
+
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+
+        // Main loop: receive lines with timeout, call callback
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                // Timeout — kill the process
+                kill_process_by_pid(pid);
+                return Ok(Value::None);
+            }
+
+            let remaining = deadline - now;
+            match line_rx.recv_timeout(remaining) {
+                Ok(Ok(line)) => {
+                    self.apply(
+                        callback.clone(),
+                        vec![Value::String(std::rc::Rc::new(line))],
+                    )?;
+                    // Continue to next line
+                }
+                Ok(Err(e)) => {
+                    // Reader thread encountered an error
+                    // Drain result channel and return error
+                    let _ = result_rx.recv();
+                    return Err(EvalError::TypeError(e));
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // Should not happen with correct remaining calculation,
+                    // but handle as timeout
+                    kill_process_by_pid(pid);
+                    return Ok(Value::None);
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    // All lines processed; collect final result
+                    break;
+                }
+            }
+        }
+
+        // Collect final process result
+        match result_rx.recv() {
+            Ok(Ok((code, success, stdout, stderr))) => Ok(Value::Some(Box::new(
+                Value::ProcessResult(std::rc::Rc::new(
+                    crate::value::ProcessResultValue::new(
+                        code,
+                        success,
+                        String::from_utf8_lossy(&stdout).to_string(),
+                        String::from_utf8_lossy(&stderr).to_string(),
+                    ),
+                )),
+            ))),
+            Ok(Err(e)) => Err(EvalError::TypeError(e)),
+            Err(_) => Err(EvalError::TypeError(
+                "execCommandStreamingWithTimeout: internal error".to_string(),
+            )),
+        }
+    }
+
+    /// Streaming pipeline execution with total timeout.
+    /// 带总超时的流式管道执行。
+    fn builtin_exec_pipeline_streaming_with_timeout(
+        &mut self,
+        pipeline: &Value,
+        callback: &Value,
+        timeout_ms: u64,
+    ) -> Result<Value, EvalError> {
+        use std::io::{BufRead, Write};
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+
+        let pipeline = match pipeline {
+            Value::Pipeline(p) => p,
+            _ => {
+                return Err(EvalError::TypeError(
+                    "execPipelineStreamingWithTimeout expects a Pipeline".to_string(),
+                ));
+            }
+        };
+
+        let commands = pipeline.commands();
+        if commands.is_empty() {
+            return Err(EvalError::TypeError(
+                "execPipelineStreamingWithTimeout: pipeline requires at least one command".to_string(),
+            ));
+        }
+
+        // Build command specs for the thread
+        struct StageSpec {
+            program: String,
+            args: Vec<String>,
+            cwd: Option<String>,
+            env: std::collections::HashMap<String, String>,
+            stdin: Option<String>,
+        }
+
+        let stages: Vec<StageSpec> = commands
+            .iter()
+            .map(|cmd| StageSpec {
+                program: cmd.program().to_string(),
+                args: cmd.args().to_vec(),
+                cwd: cmd.cwd().map(|s| s.to_string()),
+                env: cmd.env().clone(),
+                stdin: cmd.stdin().map(|s| s.to_string()),
+            })
+            .collect();
+
+        let last_idx = stages.len() - 1;
+
+        // Channel for streaming final-stage lines
+        let (line_tx, line_rx) = mpsc::channel::<Result<String, String>>();
+        // Channel for the final process result
+        let (result_tx, result_rx) = mpsc::channel::<
+            Result<(i32, bool, Vec<u8>, Vec<u8>), String>,
+        >();
+
+        // PID tracking for kill-on-timeout
+        let current_pid = std::sync::Arc::new(std::sync::Mutex::new(None::<u32>));
+        let pid_for_kill = current_pid.clone();
+
+        std::thread::spawn(move || {
+            let mut previous_stdout: Option<Vec<u8>> = None;
+            let mut combined_stderr = Vec::new();
+            let mut last_code = 0;
+            let mut last_success = false;
+
+            for (idx, stage) in stages.iter().enumerate() {
+                let mut proc = std::process::Command::new(&stage.program);
+                proc.args(&stage.args);
+                if let Some(cwd) = &stage.cwd {
+                    proc.current_dir(cwd);
+                }
+                for (k, v) in &stage.env {
+                    proc.env(k, v);
+                }
+
+                let is_last = idx == last_idx;
+
+                let stage_stdin: Option<&[u8]> = if idx == 0 {
+                    if let Some(s) = &stage.stdin {
+                        Some(s.as_bytes())
+                    } else {
+                        previous_stdout.as_deref()
+                    }
+                } else {
+                    previous_stdout.as_deref()
+                };
+
+                if stage_stdin.is_some() {
+                    proc.stdin(std::process::Stdio::piped());
+                } else {
+                    proc.stdin(std::process::Stdio::null());
+                }
+                proc.stdout(std::process::Stdio::piped());
+                proc.stderr(std::process::Stdio::piped());
+
+                let mut child = match proc.spawn() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = line_tx.send(Err(format!("stage {idx}: spawn: {e}")));
+                        return;
+                    }
+                };
+
+                // Track PID for kill-on-timeout
+                *pid_for_kill.lock().unwrap() = Some(child.id());
+
+                // Write stdin for this stage
+                if let Some(data) = stage_stdin
+                    && let Some(mut stdin_pipe) = child.stdin.take()
+                {
+                    if let Err(e) = stdin_pipe.write_all(data) {
+                        let _ = line_tx.send(Err(format!("stage {idx}: stdin write: {e}")));
+                        return;
+                    }
+                }
+
+                if is_last {
+                    // Final stage: stream stdout line by line
+                    let stdout = match child.stdout.take() {
+                        Some(s) => s,
+                        None => {
+                            let _ = line_tx.send(Err(
+                                "no stdout on final stage".to_string(),
+                            ));
+                            return;
+                        }
+                    };
+                    let reader = std::io::BufReader::new(stdout);
+                    for line in reader.lines() {
+                        match line {
+                            Ok(l) => {
+                                if line_tx.send(Ok(l)).is_err() {
+                                    break; // Receiver dropped (timeout)
+                                }
+                            }
+                            Err(e) => {
+                                let _ = line_tx.send(Err(format!("read: {e}")));
+                                break;
+                            }
+                        }
+                    }
+                    match child.wait_with_output() {
+                        Ok(output) => {
+                            last_code = output.status.code().unwrap_or(-1);
+                            last_success = output.status.success();
+                            combined_stderr.extend_from_slice(&output.stderr);
+                            let _ = result_tx.send(Ok((
+                                last_code,
+                                last_success,
+                                output.stdout,
+                                combined_stderr.clone(),
+                            )));
+                        }
+                        Err(e) => {
+                            let _ = result_tx.send(Err(format!("wait: {e}")));
+                        }
+                    }
+                } else {
+                    // Non-final stage: collect output for next stage
+                    match child.wait_with_output() {
+                        Ok(output) => {
+                            last_code = output.status.code().unwrap_or(-1);
+                            last_success = output.status.success();
+                            previous_stdout = Some(output.stdout);
+                            combined_stderr.extend_from_slice(&output.stderr);
+                        }
+                        Err(e) => {
+                            let _ = line_tx.send(Err(format!("stage {idx}: wait: {e}")));
+                            return;
+                        }
+                    }
+                }
+            }
+
+            *pid_for_kill.lock().unwrap() = None;
+        });
+
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+
+        // Main loop: receive lines with timeout, call callback
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                // Timeout — kill the process
+                if let Some(pid) = *current_pid.lock().unwrap() {
+                    kill_process_by_pid(pid);
+                }
+                return Ok(Value::None);
+            }
+
+            let remaining = deadline - now;
+            match line_rx.recv_timeout(remaining) {
+                Ok(Ok(line)) => {
+                    self.apply(
+                        callback.clone(),
+                        vec![Value::String(std::rc::Rc::new(line))],
+                    )?;
+                }
+                Ok(Err(e)) => {
+                    let _ = result_rx.recv();
+                    return Err(EvalError::TypeError(e));
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if let Some(pid) = *current_pid.lock().unwrap() {
+                        kill_process_by_pid(pid);
+                    }
+                    return Ok(Value::None);
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    break;
+                }
+            }
+        }
+
+        // Collect final process result
+        match result_rx.recv() {
+            Ok(Ok((code, success, stdout, stderr))) => Ok(Value::Some(Box::new(
+                Value::ProcessResult(std::rc::Rc::new(
+                    crate::value::ProcessResultValue::new(
+                        code,
+                        success,
+                        String::from_utf8_lossy(&stdout).to_string(),
+                        String::from_utf8_lossy(&stderr).to_string(),
+                    ),
+                )),
+            ))),
+            Ok(Err(e)) => Err(EvalError::TypeError(e)),
+            Err(_) => Err(EvalError::TypeError(
+                "execPipelineStreamingWithTimeout: internal error".to_string(),
+            )),
+        }
     }
 
     /// Read a file line by line, calling the callback for each line.
