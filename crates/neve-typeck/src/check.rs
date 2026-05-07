@@ -2364,6 +2364,37 @@ impl TypeChecker {
                 builtin_task(builtin_process_result(span), span),
                 span,
             ),
+            "io.eventMap" => {
+                let a = builtin_param(0, "a", span);
+                let b = builtin_param(1, "b", span);
+                builtin_forall(
+                    Vec::from(["a", "b"]),
+                    builtin_fn(
+                        vec![
+                            builtin_event(a.clone(), span),
+                            builtin_fn(vec![a], b.clone(), span),
+                        ],
+                        builtin_event(b, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
+            "io.eventFilter" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![
+                            builtin_event(a.clone(), span),
+                            builtin_fn(vec![a.clone()], builtin_ty(TyKind::Bool, span), span),
+                        ],
+                        builtin_event(a, span),
+                        span,
+                    ),
+                    span,
+                )
+            }
             "io.watchFile" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_event(builtin_ty(TyKind::String, span), span),

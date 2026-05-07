@@ -35,6 +35,22 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // Events / 事件
         (
+            "io.eventMap",
+            Value::Builtin(BuiltinFn {
+                name: "io.eventMap",
+                arity: 2,
+                func: |_args| Err("io.eventMap is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.eventFilter",
+            Value::Builtin(BuiltinFn {
+                name: "io.eventFilter",
+                arity: 2,
+                func: |_args| Err("io.eventFilter is evaluator-owned".to_string()),
+            }),
+        ),
+        (
             "io.watchFile",
             Value::Builtin(BuiltinFn {
                 name: "io.watchFile",
@@ -67,6 +83,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             // Return a simple counter (milliseconds since some epoch)
                             Ok(Value::Int((*interval_ms as i64).into()))
                         }
+                        EventKind::Mapped { .. } | EventKind::Filtered { .. } => Err(
+                            "io.eventNext: chained events require evaluator (use reactive block)"
+                                .to_string(),
+                        ),
                         EventKind::FileWatch { path } => {
                             use std::io::Read;
                             // Poll: check file mtime, return content on change
