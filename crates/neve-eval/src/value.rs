@@ -890,10 +890,14 @@ pub enum EventKind {
     /// Chained: apply a function to each value from the source event.
     Mapped {
         source: Rc<EventValue>,
+        /// The transformation function (a -> b).
+        func: Value,
     },
     /// Chained: only pass through values that satisfy a predicate.
     Filtered {
         source: Rc<EventValue>,
+        /// The filter predicate (a -> Bool).
+        predicate: Value,
     },
 }
 
