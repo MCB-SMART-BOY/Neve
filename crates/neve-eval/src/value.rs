@@ -878,8 +878,20 @@ pub struct EventValue {
 
 #[derive(Debug, Clone)]
 pub enum EventKind {
-    Timer { interval_ms: u64 },
-    FileWatch { path: std::path::PathBuf },
+    Timer {
+        interval_ms: u64,
+    },
+    FileWatch {
+        path: std::path::PathBuf,
+    },
+    /// Chained: apply a function to each value from the source event.
+    Mapped {
+        source: Rc<EventValue>,
+    },
+    /// Chained: only pass through values that satisfy a predicate.
+    Filtered {
+        source: Rc<EventValue>,
+    },
 }
 
 impl Value {
