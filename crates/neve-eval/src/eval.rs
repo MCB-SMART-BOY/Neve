@@ -831,17 +831,17 @@ impl Evaluator {
                 (Value::Char(c), Value::String(s)) => {
                     Ok(Value::String(Rc::new(format!("{}{}", c, s))))
                 }
-                _ => Err(EvalError::TypeError("cannot add".to_string())),
+                _ => Err(EvalError::TypeError(format!("cannot add {:?} and {:?}", left, right))),
             },
             BinOp::Sub => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a - b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
-                _ => Err(EvalError::TypeError("cannot subtract".to_string())),
+                _ => Err(EvalError::TypeError(format!("cannot subtract {:?} from {:?}", right, left))),
             },
             BinOp::Mul => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a * b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
-                _ => Err(EvalError::TypeError("cannot multiply".to_string())),
+                _ => Err(EvalError::TypeError(format!("cannot multiply {:?} and {:?}", left, right))),
             },
             BinOp::Div => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
@@ -852,7 +852,7 @@ impl Evaluator {
                     }
                 }
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
-                _ => Err(EvalError::TypeError("cannot divide".to_string())),
+                _ => Err(EvalError::TypeError(format!("cannot divide {:?} by {:?}", left, right))),
             },
             BinOp::Mod => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
