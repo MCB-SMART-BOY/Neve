@@ -275,7 +275,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // Process execution / 进程执行
+        
     ];
     bindings.extend(fs::builtins());
     bindings.extend(process::builtins());
