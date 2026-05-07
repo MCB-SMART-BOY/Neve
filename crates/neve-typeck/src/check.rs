@@ -2364,6 +2364,19 @@ impl TypeChecker {
                 builtin_task(builtin_process_result(span), span),
                 span,
             ),
+            "io.every" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_event(builtin_ty(TyKind::Int, span), span),
+                span,
+            ),
+            "io.eventNext" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_event(a.clone(), span)], a, span),
+                    span,
+                )
+            }
             "io.awaitTask" => builtin_fn(
                 vec![builtin_task(builtin_process_result(span), span)],
                 builtin_process_result(span),
