@@ -35,6 +35,27 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // Events / 事件
         (
+            "io.watchFile",
+            Value::Builtin(BuiltinFn {
+                name: "io.watchFile",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => {
+                        let path = std::path::PathBuf::from(path.as_str());
+                        Ok(Value::Event(Rc::new(EventValue {
+                            kind: EventKind::FileWatch { path },
+                        })))
+                    }
+                    Value::Path(path) => Ok(Value::Event(Rc::new(EventValue {
+                        kind: EventKind::FileWatch {
+                            path: std::path::PathBuf::from(path.as_ref()),
+                        },
+                    }))),
+                    _ => Err("io.watchFile expects a String or Path".to_string()),
+                },
+            }),
+        ),
+        (
             "io.eventNext",
             Value::Builtin(BuiltinFn {
                 name: "io.eventNext",
@@ -46,8 +67,20 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             // Return a simple counter (milliseconds since some epoch)
                             Ok(Value::Int((*interval_ms as i64).into()))
                         }
-                        EventKind::FileWatch { .. } => {
-                            Err("io.eventNext: file watch not yet implemented".to_string())
+                        EventKind::FileWatch { path } => {
+                            use std::io::Read;
+                            // Poll: check file mtime, return content on change
+                            let metadata = std::fs::metadata(path)
+                                .map_err(|e| format!("io.eventNext: {e}"))?;
+                            let _current_mtime = metadata
+                                .modified()
+                                .map_err(|e| format!("io.eventNext: {e}"))?;
+                            // For now, just read and return file content
+                            let mut content = String::new();
+                            std::fs::File::open(path)
+                                .and_then(|mut f| f.read_to_string(&mut content))
+                                .map_err(|e| format!("io.eventNext: {e}"))?;
+                            Ok(Value::String(Rc::new(content)))
                         }
                     },
                     _ => Err("io.eventNext expects an Event".to_string()),

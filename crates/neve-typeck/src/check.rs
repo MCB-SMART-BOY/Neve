@@ -2364,6 +2364,11 @@ impl TypeChecker {
                 builtin_task(builtin_process_result(span), span),
                 span,
             ),
+            "io.watchFile" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_event(builtin_ty(TyKind::String, span), span),
+                span,
+            ),
             "io.every" => builtin_fn(
                 vec![builtin_ty(TyKind::Int, span)],
                 builtin_event(builtin_ty(TyKind::Int, span), span),
