@@ -115,6 +115,7 @@ pub struct Evaluator {
     /// Additional builtin bindings injected by the caller.
     /// 调用方注入的额外内置绑定。
     extra_builtins: HashMap<String, Value>,
+    defer_stack: Vec<Value>,
 }
 
 /// A global definition.
@@ -145,6 +146,7 @@ impl Evaluator {
             variant_ctors: HashMap::new(),
             method_resolutions: HashMap::new(),
             extra_builtins: HashMap::new(),
+            defer_stack: Vec::new(),
         }
     }
 
@@ -1114,6 +1116,13 @@ impl Evaluator {
                 }
                 Ok(Some(self.builtin_retry(&args[0], &args[1], &args[2])?))
             }
+            "io.defer" => {
+                if args.len() != 1 {
+                    return Err(EvalError::WrongArity);
+                }
+                self.defer_stack.push(args[0].clone());
+                Ok(Some(Value::Unit))
+            }
             "io.ensure" => {
                 if args.len() != 3 {
                     return Err(EvalError::WrongArity);
@@ -1514,6 +1523,14 @@ impl Evaluator {
         Ok(Value::Unit)
     }
 
+    /// Run all deferred functions in reverse order.
+    fn run_defers(&mut self) -> Result<(), EvalError> {
+        while let Some(f) = self.defer_stack.pop() {
+            self.apply(f, vec![])?;
+        }
+        Ok(())
+    }
+
     fn builtin_all(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
         let items = match list {
             Value::List(items) => items,
@@ -1574,6 +1591,7 @@ impl Evaluator {
             globals: self.globals.clone(),
             variant_ctors: self.variant_ctors.clone(),
             method_resolutions: self.method_resolutions.clone(),
+            defer_stack: Vec::new(),
             extra_builtins: self.extra_builtins.clone(),
         };
         let result = eval.eval(&expr);
