@@ -2058,11 +2058,24 @@ impl Evaluator {
             }
         };
 
-        let file = std::fs::File::open(path_str)
+        // Canonicalize to resolve .. components and symlinks
+        let canonical = std::path::Path::new(path_str)
+            .canonicalize()
+            .map_err(|e| EvalError::TypeError(format!("readFileLines: {e}")))?;
+
+        let file = std::fs::File::open(&canonical)
             .map_err(|e| EvalError::TypeError(format!("readFileLines: {e}")))?;
         let reader = std::io::BufReader::new(file);
 
+        let mut line_count: usize = 0;
         for line in reader.lines() {
+            line_count += 1;
+            if line_count > self.max_stream_lines {
+                return Err(EvalError::TypeError(format!(
+                    "readFileLines: exceeded max stream lines ({})",
+                    self.max_stream_lines
+                )));
+            }
             let line = line.map_err(|e| EvalError::TypeError(format!("readFileLines: {e}")))?;
             self.apply(
                 callback.clone(),
@@ -2090,11 +2103,24 @@ impl Evaluator {
             }
         };
 
-        let file = std::fs::File::open(path)
+        // Canonicalize to resolve .. components and symlinks
+        let canonical = path
+            .canonicalize()
+            .map_err(|e| EvalError::TypeError(format!("readFileLinesPath: {e}")))?;
+
+        let file = std::fs::File::open(&canonical)
             .map_err(|e| EvalError::TypeError(format!("readFileLinesPath: {e}")))?;
         let reader = std::io::BufReader::new(file);
 
+        let mut line_count: usize = 0;
         for line in reader.lines() {
+            line_count += 1;
+            if line_count > self.max_stream_lines {
+                return Err(EvalError::TypeError(format!(
+                    "readFileLinesPath: exceeded max stream lines ({})",
+                    self.max_stream_lines
+                )));
+            }
             let line = line.map_err(|e| EvalError::TypeError(format!("readFileLinesPath: {e}")))?;
             self.apply(
                 callback.clone(),
