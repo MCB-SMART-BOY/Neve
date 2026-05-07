@@ -109,9 +109,15 @@ pub fn run() -> Result<(), String> {
 
                     match *cmd {
                         ":quit" | ":q" => break,
+                        ":version" | ":v" => {
+                            println!("Neve REPL v{}", env!("CARGO_PKG_VERSION"));
+                            input_buffer.clear();
+                            continue;
+                        }
                         ":help" | ":h" => {
                             println!("REPL Commands:");
                             // REPL 命令：
+                            println!("  :version, :v      Show version");
                             println!("  :help, :h         Show this help");
                             println!("  :quit, :q         Exit the REPL");
                             println!("  :env              Show all current bindings");
@@ -514,7 +520,7 @@ impl ReplCompleter {
 }
 
 const REPL_COMMANDS: &[&str] = &[
-    ":help", ":h", ":quit", ":q", ":env", ":type", ":clear", ":load", ":save", ":cd",
+    ":help", ":h", ":quit", ":q", ":version", ":v", ":env", ":type", ":clear", ":load", ":save", ":cd",
 ];
 
 const FILE_ARG_COMMANDS: &[&str] = &[":load", ":save", ":cd"];
