@@ -12,6 +12,7 @@ pub mod info;
 pub mod module_graph;
 pub mod repl;
 pub mod run;
+pub mod test;
 
 // Unix-only commands (package management)
 // 仅限 Unix 的命令（软件包管理）
