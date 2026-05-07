@@ -1,7 +1,7 @@
 # Neve 反应式与时序约束设计
 
 > 状态：**草案 v0**  
-> 目标：让 Neve 原生支持触发器（triggers）、反应式计算（reactive computation）和时序约束（temporal constraints），用于系统监控、配置自动化和自愈场景。
+> 目标：让 Neve 原生支持以下数据库级能力——触发器（before/after/on）、反应式计算（reactive）、时序约束（ensure/always）、状态机（transition）、守卫（guard/invariant）、级联传播（cascade/invalidate）。用于系统监控、配置自动化和自愈场景。
 
 ---
 
@@ -23,18 +23,44 @@
 
 ---
 
-## 2. 三层架构
+## 2. 架构总览
 
 ```
-Layer 3: 时序约束 (Temporal Constraints)
-  ensure, require, within, retry, backoff
+Layer 4: 状态转换约束 (State Transition Constraints)
+  transition, guard, invariant, cascade, invalidate
+         ↑ 通常与时序约束组合使用
+Layer 3: 时序约束 (Temporal Constraints)  
+  ensure, require, within, retry, backoff, always, eventually, leadsTo
          ↓ 建立在
-Layer 2: 反应式绑定 (Reactive Bindings)
-  watch, derive, reactive, computed
+Layer 2: 反应式绑定与钩子 (Reactive Bindings & Hooks)
+  reactive, before, after, around, on, watch
          ↓ 建立在
 Layer 1: 事件基础设施 (Event Infrastructure)
-  Event<T>, emit, on, watchFile, watchProcess
+  Event<T>, emit, channel, watchFile, watchProcess
 ```
+
+| 概念 | 数据库类比 | Neve 语法 | 类型安全 | 效果标记 |
+|------|-----------|----------|---------|---------|
+| 事件流 | 无直接类比 | `Event<T>` | ✅ 泛型 | consumer 标记 effect |
+| 前置钩子 | `BEFORE INSERT/UPDATE/DELETE` | `before <target> effect = fn(x) -> Result<x, Err>` | ✅ 输入输出类型检查 | ✅ effect |
+| 后置钩子 | `AFTER INSERT/UPDATE/DELETE` | `after <target> effect = { ... }` | ✅ 无返回值 | ✅ effect |
+| 包围钩子 | `INSTEAD OF` | `around <target> effect = fn(inner, x) { ... }` | ✅ inner 函数类型检查 | ✅ effect |
+| 事件响应 | `ON EVENT` | `on <Event> { ... }` | ✅ Event<T> 类型匹配 | ✅ effect |
+| 守卫 | `CHECK` 约束 | `guard <condition> { require ... }` | ✅ Bool 条件 | ✅ effect |
+| 不变式 | `CHECK` / `NOT NULL` | `invariant <condition>` | ✅ 编译期/运行时双重检查 | 无需标记 |
+| 状态转换 | 状态机约束 | `transition <Type> { State -> State ... }` | ✅ 穷尽性检查 | 无需标记 |
+| 级联 | `ON DELETE CASCADE` | `cascade <action>() { ... }` | ✅ 签名匹配 | ✅ effect |
+| 失效传播 | 物化视图刷新 | `invalidate <memo>` | ✅ 依赖图 | ✅ effect |
+| 反应式绑定 | 物化视图 | `reactive { watch x; ... }` | ✅ 块类型推断 | ✅ effect |
+| 时序约束 | 无直接类比 | `ensure <cond> within <T>` | ✅ 条件类型检查 | ✅ effect |
+| 重试 | 无直接类比 | `retry(fn, backoff=exponential(...))` | ✅ 泛型 | ✅ effect |
+|------|-----------|----------|
+| 事件流 | N/A（底层原语） | `Event<T>` |
+| 触发器 | `CREATE TRIGGER BEFORE/AFTER` | `before`/`after` 块 |
+| 守卫 | `CHECK` 约束 | `guard` 块 |
+| 级联 | `ON DELETE CASCADE` | `cascade` 声明 |
+| 状态转换 | 状态机约束 | `transition` 类型 |
+| 时序约束 | 无直接类比 | `ensure`/`require`/`always` |
 
 ---
 
@@ -220,7 +246,165 @@ restart leadsTo healthy within 30.seconds
 
 ---
 
-## 6. 安全模型
+## 6. Layer 2-B — 钩子（Hooks）
+
+钩子拦截特定操作，在执行前后插入逻辑。这是数据库 `BEFORE/AFTER/INSTEAD OF` 触发器的直接对应。
+
+### 6.1 `before` / `after` 钩子
+
+```neve
+-- before: 在执行操作前运行，可以阻止操作
+before write ./config.toml effect = fn(content: String) -> Result<String, String> {
+    if !validateToml(content) {
+        Err("invalid TOML")          -- 返回 Err 阻止写入
+    } else {
+        Ok(content)                  -- 返回 Ok 允许，可修改内容
+    }
+};
+
+-- after: 在操作成功后运行，不能阻止操作
+after write ./config.toml effect = {
+    io.println("config updated, reloading...");
+    reloadService();
+};
+
+-- 钩子可以绑定到多种目标
+before exec(cmd: Command) effect = fn(cmd: Command) -> Command {
+    io.println("about to execute: {}", cmd.program);
+    cmd
+};
+```
+
+### 6.2 `around` 钩子（包围通知）
+
+```neve
+-- around: 完全包围一个操作，可替换其行为
+around write ./config.toml effect = fn(inner: fn(String) -> Unit, content: String) -> Unit {
+    let backup = io.readFilePath(./config.toml);
+    inner(content);                    -- 调用原始操作
+    if !service.healthy() {
+        io.writeFilePath(./config.toml, backup);  -- 回滚
+    }
+};
+```
+
+### 6.3 `on` 事件钩子
+
+```neve
+-- on: 响应特定事件（不拦截）
+on Crash { restart(); }
+on ConfigChange { reload(); }
+on Timeout(5.seconds) { alert(); }
+
+-- 相当于 after 的简化语法
+```
+
+### 6.4 钩子的作用域与取消
+
+```neve
+-- 钩子绑定到当前作用域的生命周期
+scope {
+    before write ./config.toml effect = validate;
+    -- 验证在此作用域内有效
+};
+-- 离开作用域后钩子自动移除
+
+-- 或显式管理
+let hook = before write ./config.toml effect = validate;
+hook.cancel();  -- 显式取消
+```
+
+---
+
+## 7. Layer 4 — 状态转换约束
+
+这是数据库 `CHECK` 约束、`TRIGGER ... FOR EACH ROW` 和状态机验证的对应。
+
+### 7.1 `guard` — 不变式
+
+```neve
+-- guard: 一个必须始终保持的条件
+guard service.running {
+    require checkHealth() within 30.seconds
+        onViolation { restart() };
+};
+
+-- 等价于：任何可能违反条件的地方都要检查
+```
+
+### 7.2 `invariant` — 静态约束
+
+```neve
+-- invariant: 声明式约束，编译器尽可能静态验证
+invariant port > 0 && port < 65536;
+invariant config.timeout >= 0;
+invariant len(allowedHosts) > 0;
+
+-- 违反时编译警告或运行时 panic
+```
+
+### 7.3 `transition` — 状态机
+
+```neve
+-- transition: 声明有效状态及其转换
+type ServiceState = enum { Stopped, Starting, Running, Stopping, Failed };
+
+transition ServiceState {
+    -- 合法的转换路径
+    Stopped  -> Starting;
+    Starting -> Running;
+    Starting -> Failed    if timeout 30.seconds;
+    Running  -> Stopping;
+    Stopping -> Stopped;
+    Stopping -> Failed    if timeout 10.seconds;
+    _        -> Failed;   -- 任何状态都可以直接进入 Failed
+
+    -- 非法转换在编译期或运行时报错
+};
+
+-- 使用时
+let state: ServiceState = Stopped;
+state.transition(Starting);    -- ✓ 合法
+state.transition(Running);     -- ✗ 编译错误：Stopped 不能直接到 Running
+```
+
+### 7.4 `cascade` — 级联操作
+
+```neve
+-- cascade: 当主对象变化时自动传播
+cascade service.stop() {
+    notify(webhook, "stopping");
+    drainConnections(30.seconds);
+    closeSockets();
+};
+
+cascade config.reload() {
+    invalidate cache;
+    reloadTemplates();
+    notify(webhook, "reloaded");
+};
+
+-- 等价于：
+after exec service.stop effect = {
+    notify(webhook, "stopping");
+    drainConnections(30.seconds);
+    closeSockets();
+};
+```
+
+### 7.5 `invalidate` — 失效传播
+
+```neve
+-- invalidate: 标记派生数据为脏，触发重新计算
+let cache = memoize { expensiveQuery() };
+let derived = cache.map(fn(data) { transform(data) });
+
+invalidate cache;  -- 下次访问 cache 或 derived 时重新计算
+```
+
+---
+
+## 8. 安全模型
 
 ### 6.1 效果层级
 
@@ -270,7 +454,7 @@ let combined = Task.all([a, b]);
 
 ---
 
-## 7. 实现路线图
+## 9. 实现路线图
 
 ### Phase 1 — 事件基础设施（v3.4）
 
@@ -299,7 +483,7 @@ retry / backoff              1 天
 
 ---
 
-## 8. 使用案例
+## 10. 使用案例
 
 ### 8.1 自动重启崩溃服务
 
