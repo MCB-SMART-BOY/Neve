@@ -29,6 +29,7 @@ This document defines the effect model for Neve — the boundary between pure fu
 | io.awaitTaskWithTimeout | Done | Timeout + process kill for Command-based tasks |
 | Streaming I/O | Done | execCommandStreaming, execPipelineStreaming, readFileLines (line-by-line callback) |
 | Streaming timeout | Done | execCommandStreamingWithTimeout, execPipelineStreamingWithTimeout (total deadline + process kill) |
+| Streaming safety limits | Done | max lines (100k), max stdin (10MB), max intermediate buffer (50MB) enforced in evaluator |
 | neve check --pure | Done | HIR walker rejects calls to effectful builtins |
 | is_effectful_builtin() | Done | Classifies stdlib builtins as pure or effectful |
 | Process inspectors | Done | processSuccess, processStdout, processCode, processStderr (pure) |

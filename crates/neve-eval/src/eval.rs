@@ -134,7 +134,22 @@ pub struct Evaluator {
     /// 调用方注入的额外内置绑定。
     extra_builtins: HashMap<String, Value>,
     defer_stack: Vec<Value>,
+    /// Maximum lines to process in streaming I/O before erroring.
+    /// 流式 I/O 中处理的最大行数，超出则报错（默认 100,000）。
+    max_stream_lines: usize,
+    /// Maximum stdin payload size in bytes for process execution.
+    /// 进程执行中 stdin 负载的最大字节数（默认 10 MB）。
+    max_stdin_bytes: usize,
+    /// Maximum intermediate buffer size in bytes for pipeline stages.
+    /// 管道阶段中间缓冲区的最大字节数（默认 50 MB）。
+    max_intermediate_buffer: usize,
 }
+
+/// Default limits for streaming I/O safety.
+/// 流式 I/O 安全的默认限制。
+const DEFAULT_MAX_STREAM_LINES: usize = 100_000;
+const DEFAULT_MAX_STDIN_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+const DEFAULT_MAX_INTERMEDIATE_BUFFER: usize = 50 * 1024 * 1024; // 50 MB
 
 /// A global definition.
 /// 全局定义。
@@ -165,6 +180,9 @@ impl Evaluator {
             method_resolutions: HashMap::new(),
             extra_builtins: HashMap::new(),
             defer_stack: Vec::new(),
+            max_stream_lines: DEFAULT_MAX_STREAM_LINES,
+            max_stdin_bytes: DEFAULT_MAX_STDIN_BYTES,
+            max_intermediate_buffer: DEFAULT_MAX_INTERMEDIATE_BUFFER,
         }
     }
 
@@ -1374,8 +1392,16 @@ impl Evaluator {
         if let Some(stdin_data) = cmd.stdin()
             && let Some(mut stdin_pipe) = child.stdin.take()
         {
+            let stdin_bytes = stdin_data.as_bytes();
+            if stdin_bytes.len() > self.max_stdin_bytes {
+                return Err(EvalError::TypeError(format!(
+                    "execCommandStreaming: stdin size {} exceeds limit {}",
+                    stdin_bytes.len(),
+                    self.max_stdin_bytes
+                )));
+            }
             stdin_pipe
-                .write_all(stdin_data.as_bytes())
+                .write_all(stdin_bytes)
                 .map_err(|e| EvalError::TypeError(format!("stdin write: {e}")))?;
             // stdin_pipe dropped here -> pipe closed -> child sees EOF
         }
@@ -1386,7 +1412,17 @@ impl Evaluator {
             .ok_or_else(|| EvalError::TypeError("no stdout".to_string()))?;
         let reader = std::io::BufReader::new(stdout);
 
+        let mut line_count: usize = 0;
         for line in reader.lines() {
+            line_count += 1;
+            if line_count > self.max_stream_lines {
+                // Kill the process and return error
+                let _ = child.kill();
+                return Err(EvalError::TypeError(format!(
+                    "execCommandStreaming: exceeded max stream lines ({})",
+                    self.max_stream_lines
+                )));
+            }
             let line = line.map_err(|e| EvalError::TypeError(format!("read: {e}")))?;
             self.apply(
                 callback.clone(),
@@ -1482,6 +1518,14 @@ impl Evaluator {
             if let Some(data) = stage_stdin
                 && let Some(mut stdin_pipe) = child.stdin.take()
             {
+                // Check stdin size for first stage (user-supplied)
+                if idx == 0 && data.len() > self.max_stdin_bytes {
+                    return Err(EvalError::TypeError(format!(
+                        "execPipelineStreaming: stage 1 stdin size {} exceeds limit {}",
+                        data.len(),
+                        self.max_stdin_bytes
+                    )));
+                }
                 stdin_pipe.write_all(data).map_err(|e| {
                     EvalError::TypeError(format!(
                         "execPipelineStreaming stage {idx}: stdin write: {e}"
@@ -1499,7 +1543,16 @@ impl Evaluator {
                 })?;
                 let reader = std::io::BufReader::new(stdout);
 
+                let mut line_count: usize = 0;
                 for line in reader.lines() {
+                    line_count += 1;
+                    if line_count > self.max_stream_lines {
+                        let _ = child.kill();
+                        return Err(EvalError::TypeError(format!(
+                            "execPipelineStreaming: exceeded max stream lines ({})",
+                            self.max_stream_lines
+                        )));
+                    }
                     let line = line.map_err(|e| EvalError::TypeError(format!("read: {e}")))?;
                     self.apply(
                         callback.clone(),
@@ -1521,6 +1574,14 @@ impl Evaluator {
                 })?;
                 last_code = output.status.code().unwrap_or(-1);
                 last_success = output.status.success();
+                if output.stdout.len() > self.max_intermediate_buffer {
+                    return Err(EvalError::TypeError(format!(
+                        "execPipelineStreaming: stage {} output {} exceeds intermediate buffer limit {}",
+                        idx + 1,
+                        output.stdout.len(),
+                        self.max_intermediate_buffer
+                    )));
+                }
                 previous_stdout = Some(output.stdout);
                 combined_stderr.extend_from_slice(&output.stderr);
             }
@@ -1586,8 +1647,16 @@ impl Evaluator {
         if let Some(stdin_data) = cmd.stdin()
             && let Some(mut stdin_pipe) = child.stdin.take()
         {
+            let stdin_bytes = stdin_data.as_bytes();
+            if stdin_bytes.len() > self.max_stdin_bytes {
+                return Err(EvalError::TypeError(format!(
+                    "execCommandStreamingWithTimeout: stdin size {} exceeds limit {}",
+                    stdin_bytes.len(),
+                    self.max_stdin_bytes
+                )));
+            }
             stdin_pipe
-                .write_all(stdin_data.as_bytes())
+                .write_all(stdin_bytes)
                 .map_err(|e| EvalError::TypeError(format!("stdin write: {e}")))?;
         }
 
@@ -1637,6 +1706,7 @@ impl Evaluator {
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
 
         // Main loop: receive lines with timeout, call callback
+        let mut line_count: usize = 0;
         loop {
             let now = Instant::now();
             if now >= deadline {
@@ -1648,6 +1718,14 @@ impl Evaluator {
             let remaining = deadline - now;
             match line_rx.recv_timeout(remaining) {
                 Ok(Ok(line)) => {
+                    line_count += 1;
+                    if line_count > self.max_stream_lines {
+                        kill_process_by_pid(pid);
+                        return Err(EvalError::TypeError(format!(
+                            "execCommandStreamingWithTimeout: exceeded max stream lines ({})",
+                            self.max_stream_lines
+                        )));
+                    }
                     self.apply(
                         callback.clone(),
                         vec![Value::String(std::rc::Rc::new(line))],
@@ -1748,6 +1826,22 @@ impl Evaluator {
         let (result_tx, result_rx) = mpsc::channel::<
             Result<(i32, bool, Vec<u8>, Vec<u8>), String>,
         >();
+
+        // Check first stage stdin size before spawning thread
+        if let Some(first) = stages.first() {
+            if let Some(ref stdin_str) = first.stdin {
+                if stdin_str.len() > self.max_stdin_bytes {
+                    return Err(EvalError::TypeError(format!(
+                        "execPipelineStreamingWithTimeout: stage 1 stdin size {} exceeds limit {}",
+                        stdin_str.len(),
+                        self.max_stdin_bytes
+                    )));
+                }
+            }
+        }
+
+        // Capture limits for use inside the thread
+        let max_intermediate = self.max_intermediate_buffer;
 
         // PID tracking for kill-on-timeout
         let current_pid = std::sync::Arc::new(std::sync::Mutex::new(None::<u32>));
@@ -1855,6 +1949,15 @@ impl Evaluator {
                     // Non-final stage: collect output for next stage
                     match child.wait_with_output() {
                         Ok(output) => {
+                            if output.stdout.len() > max_intermediate {
+                                let _ = line_tx.send(Err(format!(
+                                    "stage {} output {} exceeds intermediate buffer limit {}",
+                                    idx + 1,
+                                    output.stdout.len(),
+                                    max_intermediate
+                                )));
+                                return;
+                            }
                             last_code = output.status.code().unwrap_or(-1);
                             last_success = output.status.success();
                             previous_stdout = Some(output.stdout);
@@ -1874,6 +1977,7 @@ impl Evaluator {
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
 
         // Main loop: receive lines with timeout, call callback
+        let mut line_count: usize = 0;
         loop {
             let now = Instant::now();
             if now >= deadline {
@@ -1887,6 +1991,16 @@ impl Evaluator {
             let remaining = deadline - now;
             match line_rx.recv_timeout(remaining) {
                 Ok(Ok(line)) => {
+                    line_count += 1;
+                    if line_count > self.max_stream_lines {
+                        if let Some(pid) = *current_pid.lock().unwrap() {
+                            kill_process_by_pid(pid);
+                        }
+                        return Err(EvalError::TypeError(format!(
+                            "execPipelineStreamingWithTimeout: exceeded max stream lines ({})",
+                            self.max_stream_lines
+                        )));
+                    }
                     self.apply(
                         callback.clone(),
                         vec![Value::String(std::rc::Rc::new(line))],
@@ -2081,6 +2195,9 @@ impl Evaluator {
             method_resolutions: self.method_resolutions.clone(),
             defer_stack: Vec::new(),
             extra_builtins: self.extra_builtins.clone(),
+            max_stream_lines: self.max_stream_lines,
+            max_stdin_bytes: self.max_stdin_bytes,
+            max_intermediate_buffer: self.max_intermediate_buffer,
         };
         let result = eval.eval(&expr);
 
