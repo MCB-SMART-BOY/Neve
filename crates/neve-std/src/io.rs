@@ -7,7 +7,7 @@
 //! 主要用于包构建和配置生成期间。
 
 use neve_eval::value::{
-    BuiltinFn, CommandValue, EventKind, EventValue, PipelineValue, ProcessResultValue,
+    BuiltinFn, CommandValue, EventKind, EventValue, LiveValue, PipelineValue, ProcessResultValue,
     RedirectValue, TaskTargetValue, TaskValue, Value,
 };
 use std::collections::HashMap;
@@ -34,6 +34,73 @@ pub fn set_script_args(args: Vec<String>) {
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // Events / 事件
+        // Reactive / 反应式
+        (
+            "io.reactive",
+            Value::Builtin(BuiltinFn {
+                name: "io.reactive",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Event(event) => Ok(Value::Live(Rc::new(LiveValue {
+                        event: Rc::clone(event),
+                        current: Rc::new(std::cell::RefCell::new(None)),
+                        cancelled: Rc::new(std::cell::Cell::new(false)),
+                    }))),
+                    _ => Err("io.reactive expects an Event".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.liveNext",
+            Value::Builtin(BuiltinFn {
+                name: "io.liveNext",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Live(live) => {
+                        if live.cancelled.get() {
+                            return Err("io.liveNext: live cancelled".to_string());
+                        }
+                        // Poll the source event
+                        let val = crate::io::poll_event(&live.event)?;
+                        // Cache the value
+                        *live.current.borrow_mut() = Some(val.clone());
+                        Ok(val)
+                    }
+                    _ => Err("io.liveNext expects a Live value".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.liveCurrent",
+            Value::Builtin(BuiltinFn {
+                name: "io.liveCurrent",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Live(live) => {
+                        let current = live.current.borrow();
+                        Ok(match current.as_ref() {
+                            Some(v) => Value::Some(Box::new(v.clone())),
+                            None => Value::None,
+                        })
+                    }
+                    _ => Err("io.liveCurrent expects a Live value".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.liveCancel",
+            Value::Builtin(BuiltinFn {
+                name: "io.liveCancel",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Live(live) => {
+                        live.cancelled.set(true);
+                        Ok(Value::Unit)
+                    }
+                    _ => Err("io.liveCancel expects a Live value".to_string()),
+                },
+            }),
+        ),
         (
             "io.eventMap",
             Value::Builtin(BuiltinFn {
@@ -77,32 +144,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "io.eventNext",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Event(event) => match &event.kind {
-                        EventKind::Timer { interval_ms } => {
-                            std::thread::sleep(std::time::Duration::from_millis(*interval_ms));
-                            // Return a simple counter (milliseconds since some epoch)
-                            Ok(Value::Int((*interval_ms as i64).into()))
-                        }
-                        EventKind::Mapped { .. } | EventKind::Filtered { .. } => Err(
-                            "io.eventNext: chained events require evaluator (use reactive block)"
-                                .to_string(),
-                        ),
-                        EventKind::FileWatch { path } => {
-                            use std::io::Read;
-                            // Poll: check file mtime, return content on change
-                            let metadata = std::fs::metadata(path)
-                                .map_err(|e| format!("io.eventNext: {e}"))?;
-                            let _current_mtime = metadata
-                                .modified()
-                                .map_err(|e| format!("io.eventNext: {e}"))?;
-                            // For now, just read and return file content
-                            let mut content = String::new();
-                            std::fs::File::open(path)
-                                .and_then(|mut f| f.read_to_string(&mut content))
-                                .map_err(|e| format!("io.eventNext: {e}"))?;
-                            Ok(Value::String(Rc::new(content)))
-                        }
-                    },
+                    Value::Event(event) => poll_event(event),
                     _ => Err("io.eventNext expects an Event".to_string()),
                 },
             }),
@@ -1187,6 +1229,27 @@ fn format_value_for_output(value: &Value) -> String {
             }
         }
         _ => format!("{:?}", value),
+    }
+}
+
+/// Poll an event source for its next value.
+pub(crate) fn poll_event(event: &EventValue) -> Result<Value, String> {
+    match &event.kind {
+        EventKind::Timer { interval_ms } => {
+            std::thread::sleep(std::time::Duration::from_millis(*interval_ms));
+            Ok(Value::Int((*interval_ms as i64).into()))
+        }
+        EventKind::FileWatch { path } => {
+            use std::io::Read;
+            let mut content = String::new();
+            std::fs::File::open(path)
+                .and_then(|mut f| f.read_to_string(&mut content))
+                .map_err(|e| format!("poll: {e}"))?;
+            Ok(Value::String(Rc::new(content)))
+        }
+        EventKind::Mapped { .. } | EventKind::Filtered { .. } => {
+            Err("poll: chained events not yet supported".to_string())
+        }
     }
 }
 

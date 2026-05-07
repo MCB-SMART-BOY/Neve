@@ -464,6 +464,8 @@ pub enum Value {
     Task(Rc<TaskValue>),
     /// Event runtime object / Event 运行时对象
     Event(Rc<EventValue>),
+    /// Live reactive value
+    Live(Rc<LiveValue>),
     /// ProcessResult runtime object / ProcessResult 运行时对象
     ProcessResult(Rc<ProcessResultValue>),
 
@@ -530,6 +532,7 @@ pub struct BuiltinFn {
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Value::Live(_) => write!(f, "Live(..)"),
             Value::Int(n) => write!(f, "{}", n),
             Value::Float(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
@@ -894,6 +897,14 @@ pub enum EventKind {
     },
 }
 
+/// A live reactive value that updates when its source event fires.
+#[derive(Debug, Clone)]
+pub struct LiveValue {
+    pub event: Rc<EventValue>,
+    pub current: Rc<std::cell::RefCell<Option<Value>>>,
+    pub cancelled: Rc<std::cell::Cell<bool>>,
+}
+
 impl Value {
     /// Check if the value is truthy.
     /// 检查值是否为真值。
@@ -987,6 +998,7 @@ impl KeyCtx {
 
     fn value_key(&mut self, value: &Value) -> String {
         match value {
+            Value::Live(_) => "Live(..)".to_string(),
             Value::Int(n) => format!("Int({n})"),
             Value::Float(f) => format!("Float({})", canonical_float(*f)),
             Value::Bool(b) => format!("Bool({b})"),

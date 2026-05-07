@@ -7,7 +7,7 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::builtin_types::{
-    builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_map, builtin_option,
+    builtin_bytes, builtin_command, builtin_event, builtin_live, builtin_list, builtin_map, builtin_option,
     builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect, builtin_result,
     builtin_set, builtin_task, is_builtin_option_type, is_builtin_result_type,
 };
@@ -2377,6 +2377,30 @@ impl TypeChecker {
                         builtin_event(b, span),
                         span,
                     ),
+                    span,
+                )
+            }
+            "io.reactive" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_event(a.clone(), span)], builtin_live(a, span), span),
+                    span,
+                )
+            }
+            "io.liveNext" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_live(a.clone(), span)], a, span),
+                    span,
+                )
+            }
+            "io.liveCurrent" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(vec![builtin_live(a.clone(), span)], builtin_option(a, span), span),
                     span,
                 )
             }
