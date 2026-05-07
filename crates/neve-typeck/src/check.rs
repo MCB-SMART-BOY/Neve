@@ -255,6 +255,9 @@ pub struct TypeChecker {
     /// Whether we are currently type-checking inside an `effect` function body.
     /// When true, effectful calls in lambdas are allowed (they inherit the enclosing effect context).
     in_effectful_fn: bool,
+    /// Set of DefIds for functions marked with `effect`.
+    /// Used for inter-procedural effect checking.
+    effectful_functions: HashSet<DefId>,
 }
 
 impl TypeChecker {
@@ -279,6 +282,7 @@ impl TypeChecker {
             check_unused: true,
             repl_mode: false,
             in_effectful_fn: false,
+            effectful_functions: HashSet::new(),
         }
     }
 
@@ -3060,6 +3064,10 @@ impl TypeChecker {
             ExprKind::Builtin(name) if Self::is_effectful_builtin_name(name) => {
                 out.push((name.clone(), expr.span));
             }
+            ExprKind::Global(def_id) if self.effectful_functions.contains(def_id) => {
+                // Calling an effectful function from a pure context
+                out.push(("call to effectful function".to_string(), expr.span));
+            }
             ExprKind::Call(func, args) => {
                 self.collect_effectful_calls(func, out);
                 for a in args {
@@ -3504,6 +3512,11 @@ impl TypeChecker {
 
         // Check for unused variables before clearing
         self.check_unused_locals();
+
+        // Record effectful functions for inter-procedural checking
+        if fn_def.effectful {
+            self.effectful_functions.insert(id);
+        }
 
         // Effect checking: pure functions cannot call effectful builtins
         if !fn_def.effectful {
