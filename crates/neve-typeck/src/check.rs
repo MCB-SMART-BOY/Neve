@@ -2532,6 +2532,14 @@ impl TypeChecker {
                 builtin_list(builtin_process_result(span), span),
                 span,
             ),
+            "io.awaitTaskWithTimeout" => builtin_fn(
+                vec![
+                    builtin_task(builtin_process_result(span), span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_option(builtin_process_result(span), span),
+                span,
+            ),
             "io.processSuccess" => builtin_fn(
                 vec![builtin_process_result(span)],
                 builtin_ty(TyKind::Bool, span),

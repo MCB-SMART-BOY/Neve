@@ -121,15 +121,9 @@ fn signal_index(name: &str) -> Option<usize> {
 
 fn set_signal_flag(index: usize) {
     if index < SIGNAL_COUNT {
-        SIGNAL_FLAGS[index].store(true, Ordering::Relaxed);
-    }
-}
-
-fn check_and_clear_signal_flag(index: usize) -> bool {
-    if index < SIGNAL_COUNT {
-        SIGNAL_FLAGS[index].swap(false, Ordering::Relaxed)
-    } else {
-        false
+        // Release ordering: ensures the signal delivery is visible to the
+        // evaluator thread when it does an Acquire load.
+        SIGNAL_FLAGS[index].store(true, Ordering::Release);
     }
 }
 
@@ -154,8 +148,15 @@ fn install_signal_handler(name: &str) -> Result<(), String> {
         "USR2" => (libc::SIGUSR2, handle_sigusr2),
         _ => return Err(format!("unknown signal: {name}")),
     };
+    // Use sigaction instead of signal for portable, persistent handler semantics.
+    // signal() behavior varies across Unix variants (one-shot vs persistent).
     unsafe {
-        libc::signal(sig, handler as libc::sighandler_t);
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = handler as usize;
+        // SA_RESTART: automatically restart interrupted syscalls.
+        // SA_NOCLDSTOP: don't receive SIGCHLD when child stops (not used here but safe).
+        sa.sa_flags = libc::SA_RESTART;
+        libc::sigaction(sig, &sa, std::ptr::null_mut());
     }
     Ok(())
 }
@@ -171,10 +172,10 @@ fn install_signal_handler(name: &str) -> Result<(), String> {
 fn kill_process_by_pid(pid: u32) {
     #[cfg(unix)]
     {
-        let _ = std::process::Command::new("kill")
-            .arg("-9")
-            .arg(pid.to_string())
-            .output();
+        // Use libc::kill directly — more reliable than spawning a subprocess.
+        unsafe {
+            libc::kill(pid as i32, libc::SIGKILL);
+        }
     }
     #[cfg(windows)]
     {
@@ -1819,9 +1820,8 @@ impl Evaluator {
                     // Continue to next line
                 }
                 Ok(Err(e)) => {
-                    // Reader thread encountered an error
-                    // Drain result channel and return error
-                    let _ = result_rx.recv();
+                    // Reader thread error — return immediately.
+                    // The result channel will be dropped when this function returns.
                     return Err(EvalError::TypeError(e));
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -2093,7 +2093,8 @@ impl Evaluator {
                     )?;
                 }
                 Ok(Err(e)) => {
-                    let _ = result_rx.recv();
+                    // Don't block on result_rx — the reader thread may not have
+                    // sent on it. The channel will be dropped when we return.
                     return Err(EvalError::TypeError(e));
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -2108,8 +2109,8 @@ impl Evaluator {
             }
         }
 
-        // Collect final process result
-        match result_rx.recv() {
+        // Collect final process result (with timeout safety net)
+        match result_rx.recv_timeout(std::time::Duration::from_millis(500)) {
             Ok(Ok((code, success, stdout, stderr))) => Ok(Value::Some(Box::new(
                 Value::ProcessResult(std::rc::Rc::new(
                     crate::value::ProcessResultValue::new(
@@ -2270,19 +2271,41 @@ impl Evaluator {
             ))
         })?;
 
-        // Validate callback is callable
-        if !matches!(callback, Value::Builtin(_) | Value::Closure { .. } | Value::BuiltinFn(_, _)) {
-            return Err(EvalError::TypeError(
-                "io.onSignal: second arg must be a function".to_string(),
-            ));
+        // Validate callback is callable and accepts zero arguments
+        // (signal handlers are dispatched with no arguments)
+        match callback {
+            Value::Builtin(b) => {
+                if b.arity != 0 {
+                    return Err(EvalError::TypeError(format!(
+                        "io.onSignal: callback must accept 0 arguments, got {}",
+                        b.arity
+                    )));
+                }
+            }
+            Value::Closure { params, .. } => {
+                if !params.is_empty() {
+                    return Err(EvalError::TypeError(format!(
+                        "io.onSignal: callback must accept 0 arguments, got {}",
+                        params.len()
+                    )));
+                }
+            }
+            Value::BuiltinFn(_, _) => {} // BuiltinFn arity is checked elsewhere
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.onSignal: second arg must be a function".to_string(),
+                ));
+            }
         }
 
-        // Install OS signal handler (idempotent — safe to call multiple times)
-        if let Err(e) = install_signal_handler(name) {
-            return Err(EvalError::TypeError(format!("io.onSignal: {e}")));
+        // Install OS signal handler only once per signal name
+        if !self.signal_handlers.contains_key(name) {
+            if let Err(e) = install_signal_handler(name) {
+                return Err(EvalError::TypeError(format!("io.onSignal: {e}")));
+            }
         }
 
-        // Store the handler callback
+        // Store the handler callback (last registration wins)
         self.signal_handlers
             .insert(name.to_string(), callback.clone());
 
@@ -2293,12 +2316,24 @@ impl Evaluator {
     /// in the evaluation loop. Returns the signal name if a handler was invoked.
     /// 检查待处理的信号并分派处理程序。在求值循环的安全点调用。
     fn check_signals(&mut self) -> Result<(), EvalError> {
-        // Check each supported signal
-        for (name, handler) in self.signal_handlers.clone() {
-            if let Some(idx) = signal_index(&name) {
-                if check_and_clear_signal_flag(idx) {
-                    self.apply(handler, vec![])?;
+        // Collect the names of registered signals that have pending flags.
+        // Avoid cloning the HashMap — only clone handler Values that need dispatch.
+        let mut pending: Vec<String> = Vec::new();
+        for name in self.signal_handlers.keys() {
+            if let Some(idx) = signal_index(name) {
+                if SIGNAL_FLAGS[idx].load(Ordering::Acquire) {
+                    pending.push(name.clone());
                 }
+            }
+        }
+        // Dispatch handlers for pending signals (outside the borrow of signal_handlers)
+        for name in pending {
+            // Clear the flag and dispatch
+            if let Some(idx) = signal_index(&name) {
+                SIGNAL_FLAGS[idx].store(false, Ordering::Release);
+            }
+            if let Some(handler) = self.signal_handlers.get(&name) {
+                self.apply(handler.clone(), vec![])?;
             }
         }
         Ok(())
