@@ -33,6 +33,27 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Glob / 文件匹配
+        (
+            "io.glob",
+            Value::Builtin(BuiltinFn {
+                name: "io.glob",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(pattern) => {
+                        let paths: Result<Vec<_>, _> = glob::glob(pattern.as_str())
+                            .map_err(|e| format!("io.glob: invalid pattern: {e}"))?
+                            .map(|entry| {
+                                entry.map(|p| Value::Path(Rc::new(p)))
+                                    .map_err(|e| format!("io.glob: {e}"))
+                            })
+                            .collect();
+                        paths.map(|v| Value::List(Rc::new(v)))
+                    }
+                    _ => Err("io.glob expects a String pattern".to_string()),
+                },
+            }),
+        ),
         // Signals / 信号处理
         (
             "io.onSignal",
