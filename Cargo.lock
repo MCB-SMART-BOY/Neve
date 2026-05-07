@@ -1399,6 +1399,7 @@ dependencies = [
 name = "neve-eval"
 version = "3.4.2"
 dependencies = [
+ "libc",
  "neve-common",
  "neve-derive",
  "neve-diagnostic",

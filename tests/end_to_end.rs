@@ -2713,3 +2713,54 @@ fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_effect_checking() {
         analysis.diagnostics
     );
 }
+
+// === Signal handling tests ===
+
+#[test]
+fn test_end_to_end_io_on_signal_registers_handler() {
+    // Verify that io.onSignal accepts valid signal names and returns Unit.
+    let source = r#"
+    import std.io as io;
+    let _ = io.onSignal("INT", fn() { print("interrupted!"); () });
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_on_signal_rejects_unknown_signal() {
+    // Verify that io.onSignal rejects unknown signal names.
+    let source = r#"
+    import std.io as io;
+    let _ = io.onSignal("UNKNOWN", fn() { () });
+    let x = true;
+    "#;
+    let analysis = analyze_source(source);
+    let _ = eval_hir(&analysis);
+    // The analysis may or may not have type errors; the runtime should fail
+    // We assert that the evaluation fails (returns Err)
+    let hir_result = eval_hir(&analysis);
+    assert!(hir_result.is_err(), "expected error for unknown signal, got {:?}", hir_result);
+}
+
+#[test]
+fn test_end_to_end_io_on_signal_effect_checking() {
+    // Verify that io.onSignal is recognized as effectful.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> Unit = io.onSignal("INT", fn() { () });
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.onSignal, got {:?}",
+        analysis.diagnostics
+    );
+}
