@@ -2384,6 +2384,11 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.onSignal" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span), builtin_fn(Vec::new(), builtin_ty(TyKind::Unit, span), span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.defer" => builtin_fn(
                 vec![builtin_fn(Vec::new(), builtin_ty(TyKind::Unit, span), span)],
                 builtin_ty(TyKind::Unit, span),

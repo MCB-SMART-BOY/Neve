@@ -24,24 +24,24 @@ REPL       ██████████  历史、补全、智能输入
 
 | 任务 | 说明 |
 |------|------|
-| 跨函数效果追踪 | `effect fn a()` 被纯函数 `b()` 调用时应该报错 |
-| 效果不再靠名字匹配 | 从 `io.*` 字符串匹配 → 类型级效果标记 |
+| ~~跨函数效果追踪~~ | ✅ 已实现 |
+| ~~效果不再靠名字匹配~~ | ✅ 纯构造函数已排除 |
 | impl 方法默认 pure | 现在 impl 方法没写 effect 也能调 io —— 因为 lowering 默认 `effectful: true` |
 
 ### 模式匹配不再放水
 
 | 任务 | 说明 |
 |------|------|
-| String 穷尽性 | `match "hi" { "x" -> 1 }` 现在是静默通过 |
-| Record 穷尽性 | `match {a:1,b:2} { #{a} -> ... }` 不告警 b 未处理 |
-| Int/Char 穷尽性 | 基本类型全覆盖 |
+| ~~String 穷尽性~~ | ✅ 已实现 |
+| ~~Record 穷尽性~~ | ✅ 已实现 |
+| ~~Int/Char 穷尽性~~ | ✅ 已实现 |
 
 ### 效果检查去魔法
 
 | 任务 | 说明 |
 |------|------|
 | 统一效果源 | `is_effectful_builtin` 已去重到 neve-common，但 pure constructor（io.command 等）不应标记为 effectful |
-| effect 传播到 trait | trait 定义的方法可以声明 `effect` |
+| ~~effect 传播到 trait~~ | ✅ 已实现 |
 
 ---
 
@@ -54,14 +54,14 @@ REPL       ██████████  历史、补全、智能输入
 | 任务 | 说明 |
 |------|------|
 | ~~`|>` 管道语法~~ | ✅ 已实现：`a |> f` 等价 `f(a)` |
-| `defer` / `finally` | 资源清理。`defer { cleanup() }` | ← 当前
+| ~~`defer`~~ | ✅ `io.defer(fn)` 已实现 |
 | glob | `ls *.neve` 或 `io.glob("*.neve")` |
 
 ### 运行时
 
 | 任务 | 说明 |
 |------|------|
-| 信号处理 | `on Signal::INT { save(); exit(0) }` |
+| 信号处理 | `io.onSignal("INT", handler)` stub 就绪 | ← 当前
 | TTY / 交互输入 | `io.readPassword()`、`io.prompt()` |
 | 事件操作符 | `map`/`filter`/`debounce` 对 Event 可用 |
 | reactive 块语法 | 不只是 `io.reactive(event)`，而是 `reactive { watch x; y }` 语法 |

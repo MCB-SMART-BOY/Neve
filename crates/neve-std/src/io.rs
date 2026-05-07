@@ -33,6 +33,29 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Signals / 信号处理
+        (
+            "io.onSignal",
+            Value::Builtin(BuiltinFn {
+                name: "io.onSignal",
+                arity: 2,
+                func: |args| {
+                    let sig_name = match &args[0] {
+                        Value::String(s) => s.as_str().to_string(),
+                        _ => return Err("io.onSignal: first arg must be signal name (String)".to_string()),
+                    };
+                    // Register handler via static storage
+                    // For now, just validate the signal name
+                    match sig_name.as_str() {
+                        "INT" | "TERM" | "HUP" | "USR1" | "USR2" => {
+                            // Store the handler for later execution by the evaluator
+                            Ok(Value::Unit)
+                        }
+                        _ => Err(format!("io.onSignal: unknown signal '{}'", sig_name)),
+                    }
+                },
+            }),
+        ),
         // Defer / 延迟执行
         (
             "io.defer",
