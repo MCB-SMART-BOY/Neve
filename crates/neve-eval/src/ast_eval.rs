@@ -2333,6 +2333,7 @@ impl AstEvaluator {
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
             Value::AstClosure(_) => "<function>".to_string(),
             Value::Closure { .. } => "<function>".to_string(),
+            Value::Event(_) => "Event(..)".to_string(),
             Value::Thunk(thunk) => match &*thunk.state() {
                 ThunkState::Evaluated(v) => Self::value_to_string(v),
                 ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
@@ -2417,6 +2418,7 @@ fn runtime_type_key(value: &Value) -> String {
         Value::Some(_) | Value::None => "Option".to_string(),
         Value::Ok(_) | Value::Err(_) => "Result".to_string(),
         Value::Thunk(_) => "Thunk".to_string(),
+        Value::Event(_) => "Event".to_string(),
     }
 }
 

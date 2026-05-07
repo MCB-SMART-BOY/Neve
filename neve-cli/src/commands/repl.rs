@@ -753,6 +753,7 @@ fn format_repl_value(value: &Value) -> String {
         Value::Task(_) => "Task(...)".to_string(),
         Value::Redirect(_) => "Redirect(...)".to_string(),
         Value::Bytes(b) => format!("<{} bytes>", b.len()),
+        Value::Event(_) => "Event(..)".to_string(),
         Value::Thunk(_) => "<thunk>".to_string(),
         Value::Builtin(_) => "<builtin>".to_string(),
         Value::BuiltinFn(n, _) => format!("<builtin {}>", n),
