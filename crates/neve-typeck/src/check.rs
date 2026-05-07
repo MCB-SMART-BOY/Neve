@@ -2384,6 +2384,11 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.defer" => builtin_fn(
+                vec![builtin_fn(Vec::new(), builtin_ty(TyKind::Unit, span), span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.retry" => builtin_fn(
                 vec![
                     builtin_fn(Vec::new(), builtin_ty(TyKind::Bool, span), span),
