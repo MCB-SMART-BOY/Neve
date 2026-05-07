@@ -40,20 +40,19 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "io.input",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::String(prompt) => {
-                        use std::io::{Write, BufRead};
-                        let stdout = std::io::stdout();
-                        let mut handle = stdout.lock();
-                        handle.write_all(prompt.as_bytes())
-                            .map_err(|e| format!("io.input: {e}"))?;
-                        handle.flush().map_err(|e| format!("io.input: {e}"))?;
-                        let stdin = std::io::stdin();
-                        let mut line = String::new();
-                        stdin.lock().read_line(&mut line)
-                            .map_err(|e| format!("io.input: {e}"))?;
-                        Ok(Value::String(Rc::new(line.trim_end().to_string())))
-                    }
+                    Value::String(prompt) => read_input(prompt, false),
                     _ => Err("io.input expects a String prompt".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.readPassword",
+            Value::Builtin(BuiltinFn {
+                name: "io.readPassword",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(prompt) => read_input(prompt, true),
+                    _ => Err("io.readPassword expects a String prompt".to_string()),
                 },
             }),
         ),
@@ -1347,6 +1346,25 @@ pub(crate) fn poll_event(event: &EventValue) -> Result<Value, String> {
 }
 
 /// Call a builtin/closure function value with arguments.
+
+/// Read user input, optionally without echo.
+fn read_input(prompt: &str, no_echo: bool) -> Result<Value, String> {
+    use std::io::{Write, BufRead};
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    handle.write_all(prompt.as_bytes()).map_err(|e| format!("input: {e}"))?;
+    handle.flush().map_err(|e| format!("input: {e}"))?;
+
+    let line = if no_echo {
+        rpassword::read_password().map_err(|e| format!("input: {e}"))?
+    } else {
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line).map_err(|e| format!("input: {e}"))?;
+        line.trim_end().to_string()
+    };
+    Ok(Value::String(Rc::new(line)))
+}
 
 /// Compute SHA-256 hash and return as hex string.
 /// 计算 SHA-256 哈希并返回十六进制字符串。
