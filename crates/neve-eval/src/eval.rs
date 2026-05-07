@@ -17,6 +17,7 @@ use neve_hir::{
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 
 /// One HIR module together with the semantic side tables needed for evaluation.
@@ -93,6 +94,78 @@ enum TcoResult {
     TailCall(Value, Vec<Value>),
 }
 
+// === Signal handling infrastructure ===
+
+/// Number of supported signal types.
+const SIGNAL_COUNT: usize = 5;
+
+/// Global atomic flags for signal detection.
+static SIGNAL_FLAGS: [AtomicBool; SIGNAL_COUNT] = [
+    AtomicBool::new(false), // SIGINT
+    AtomicBool::new(false), // SIGTERM
+    AtomicBool::new(false), // SIGHUP
+    AtomicBool::new(false), // SIGUSR1
+    AtomicBool::new(false), // SIGUSR2
+];
+
+fn signal_index(name: &str) -> Option<usize> {
+    match name {
+        "INT" => Some(0),
+        "TERM" => Some(1),
+        "HUP" => Some(2),
+        "USR1" => Some(3),
+        "USR2" => Some(4),
+        _ => None,
+    }
+}
+
+fn set_signal_flag(index: usize) {
+    if index < SIGNAL_COUNT {
+        SIGNAL_FLAGS[index].store(true, Ordering::Relaxed);
+    }
+}
+
+fn check_and_clear_signal_flag(index: usize) -> bool {
+    if index < SIGNAL_COUNT {
+        SIGNAL_FLAGS[index].swap(false, Ordering::Relaxed)
+    } else {
+        false
+    }
+}
+
+#[cfg(unix)]
+extern "C" fn handle_sigint(_: i32) { set_signal_flag(0); }
+#[cfg(unix)]
+extern "C" fn handle_sigterm(_: i32) { set_signal_flag(1); }
+#[cfg(unix)]
+extern "C" fn handle_sighup(_: i32) { set_signal_flag(2); }
+#[cfg(unix)]
+extern "C" fn handle_sigusr1(_: i32) { set_signal_flag(3); }
+#[cfg(unix)]
+extern "C" fn handle_sigusr2(_: i32) { set_signal_flag(4); }
+
+#[cfg(unix)]
+fn install_signal_handler(name: &str) -> Result<(), String> {
+    let (sig, handler): (i32, extern "C" fn(i32)) = match name {
+        "INT" => (libc::SIGINT, handle_sigint),
+        "TERM" => (libc::SIGTERM, handle_sigterm),
+        "HUP" => (libc::SIGHUP, handle_sighup),
+        "USR1" => (libc::SIGUSR1, handle_sigusr1),
+        "USR2" => (libc::SIGUSR2, handle_sigusr2),
+        _ => return Err(format!("unknown signal: {name}")),
+    };
+    unsafe {
+        libc::signal(sig, handler as libc::sighandler_t);
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn install_signal_handler(name: &str) -> Result<(), String> {
+    let _ = name;
+    Err("signal handling is not supported on this platform".to_string())
+}
+
 /// Kill a process by PID. Used for timeout enforcement in streaming I/O.
 /// 通过 PID 终止进程。用于流式 I/O 的超时强制执行。
 fn kill_process_by_pid(pid: u32) {
@@ -134,6 +207,9 @@ pub struct Evaluator {
     /// 调用方注入的额外内置绑定。
     extra_builtins: HashMap<String, Value>,
     defer_stack: Vec<Value>,
+    /// Signal handlers registered via io.onSignal. Keyed by signal name ("INT", "TERM", etc.).
+    /// 通过 io.onSignal 注册的信号处理程序。按信号名称（"INT"、"TERM" 等）索引。
+    signal_handlers: HashMap<String, Value>,
     /// Maximum lines to process in streaming I/O before erroring.
     /// 流式 I/O 中处理的最大行数，超出则报错（默认 100,000）。
     max_stream_lines: usize,
@@ -180,6 +256,7 @@ impl Evaluator {
             method_resolutions: HashMap::new(),
             extra_builtins: HashMap::new(),
             defer_stack: Vec::new(),
+            signal_handlers: HashMap::new(),
             max_stream_lines: DEFAULT_MAX_STREAM_LINES,
             max_stdin_bytes: DEFAULT_MAX_STDIN_BYTES,
             max_intermediate_buffer: DEFAULT_MAX_INTERMEDIATE_BUFFER,
@@ -1009,6 +1086,9 @@ impl Evaluator {
         let mut current_args = args;
 
         loop {
+            // Check for pending signals before each evaluation step
+            self.check_signals()?;
+
             match current_func {
                 Value::Closure { params, body, env } => {
                     if current_args.len() != params.len() {
@@ -1217,6 +1297,12 @@ impl Evaluator {
                 }
                 self.defer_stack.push(args[0].clone());
                 Ok(Some(Value::Unit))
+            }
+            "io.onSignal" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_on_signal(&args[0], &args[1])?))
             }
             "io.ensure" => {
                 if args.len() != 3 {
@@ -2159,6 +2245,65 @@ impl Evaluator {
         })))
     }
 
+    /// Register a signal handler. Installs the OS signal handler on first registration
+    /// and stores the callback for later dispatch by check_signals().
+    /// 注册信号处理程序。首次注册时安装 OS 信号处理程序，并存储回调供 check_signals() 调度。
+    fn builtin_on_signal(
+        &mut self,
+        signal_name: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        let name = match signal_name {
+            Value::String(s) => s.as_str(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.onSignal: first arg must be a signal name (String)".to_string(),
+                ));
+            }
+        };
+
+        // Validate signal name
+        let _idx = signal_index(name).ok_or_else(|| {
+            EvalError::TypeError(format!(
+                "io.onSignal: unknown signal '{}'. Supported: INT, TERM, HUP, USR1, USR2",
+                name
+            ))
+        })?;
+
+        // Validate callback is callable
+        if !matches!(callback, Value::Builtin(_) | Value::Closure { .. } | Value::BuiltinFn(_, _)) {
+            return Err(EvalError::TypeError(
+                "io.onSignal: second arg must be a function".to_string(),
+            ));
+        }
+
+        // Install OS signal handler (idempotent — safe to call multiple times)
+        if let Err(e) = install_signal_handler(name) {
+            return Err(EvalError::TypeError(format!("io.onSignal: {e}")));
+        }
+
+        // Store the handler callback
+        self.signal_handlers
+            .insert(name.to_string(), callback.clone());
+
+        Ok(Value::Unit)
+    }
+
+    /// Check for pending signals and dispatch handlers. Called at safe points
+    /// in the evaluation loop. Returns the signal name if a handler was invoked.
+    /// 检查待处理的信号并分派处理程序。在求值循环的安全点调用。
+    fn check_signals(&mut self) -> Result<(), EvalError> {
+        // Check each supported signal
+        for (name, handler) in self.signal_handlers.clone() {
+            if let Some(idx) = signal_index(&name) {
+                if check_and_clear_signal_flag(idx) {
+                    self.apply(handler, vec![])?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn builtin_all(&mut self, pred: &Value, list: &Value) -> Result<Value, EvalError> {
         let items = match list {
             Value::List(items) => items,
@@ -2221,6 +2366,7 @@ impl Evaluator {
             method_resolutions: self.method_resolutions.clone(),
             defer_stack: Vec::new(),
             extra_builtins: self.extra_builtins.clone(),
+            signal_handlers: self.signal_handlers.clone(),
             max_stream_lines: self.max_stream_lines,
             max_stdin_bytes: self.max_stdin_bytes,
             max_intermediate_buffer: self.max_intermediate_buffer,
