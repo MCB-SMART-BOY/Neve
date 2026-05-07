@@ -45,6 +45,13 @@ enum Commands {
         compat_ast: bool,
     },
 
+    /// Run tests in a directory. / 运行目录中的测试。
+    Test {
+        /// Directory to find tests in. / 查找测试的目录。
+        #[arg(default_value = ".")]
+        dir: String,
+    },
+
     /// Run a Neve file. / 运行 Neve 文件。
     Run {
         /// The file to run. / 要运行的文件。
@@ -267,6 +274,7 @@ fn main() {
         // Cross-platform commands (language features)
         // 跨平台命令（语言功能）
         Commands::Eval { expr, compat_ast } => commands::eval::run(&expr, cli.verbose, compat_ast),
+        Commands::Test { dir } => commands::test::run(&dir, cli.verbose),
         Commands::Run {
             file,
             compat_ast,
