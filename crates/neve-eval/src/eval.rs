@@ -303,6 +303,7 @@ impl Evaluator {
                 // For top-level let (converted to zero-param function), evaluate immediately
                 if fn_def.params.is_empty() {
                     let value = self.eval(&fn_def.body)?;
+                    self.run_defers()?;
                     self.globals
                         .insert(item.id, GlobalDef::Value(value.clone()));
                     Ok(value)
