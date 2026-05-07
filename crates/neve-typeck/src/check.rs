@@ -2384,6 +2384,11 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.input" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
             "io.glob" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_list(builtin_path(span), span),
