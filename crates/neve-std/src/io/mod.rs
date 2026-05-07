@@ -275,978 +275,6 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        // File reading / 文件读取
-        (
-            "io.lines",
-            Value::Builtin(BuiltinFn {
-                name: "io.lines",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => {
-                        let content = std::fs::read_to_string(path.as_str())
-                            .map_err(|e| format!("io.lines: {e}"))?;
-                        let lines: Vec<Value> = content.lines()
-                            .map(|l| Value::String(Rc::new(l.to_string())))
-                            .collect();
-                        Ok(Value::List(Rc::new(lines)))
-                    }
-                    Value::Path(path) => {
-                        let content = std::fs::read_to_string(path.as_path())
-                            .map_err(|e| format!("io.lines: {e}"))?;
-                        let lines: Vec<Value> = content.lines()
-                            .map(|l| Value::String(Rc::new(l.to_string())))
-                            .collect();
-                        Ok(Value::List(Rc::new(lines)))
-                    }
-                    _ => Err("io.lines expects a String or Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.readFile",
-            Value::Builtin(BuiltinFn {
-                name: "io.readFile",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => std::fs::read_to_string(path.as_str())
-                        .map(|s| Value::String(Rc::new(s)))
-                        .map_err(|e| format!("io.readFile: {e}")),
-                    _ => Err("io.readFile expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.readFilePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.readFilePath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => std::fs::read_to_string(path.as_path())
-                        .map(|s| Value::String(Rc::new(s)))
-                        .map_err(|e| format!("io.readFilePath: {e}")),
-                    _ => Err("io.readFilePath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.readFileBytesPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.readFileBytesPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => std::fs::read(path.as_path())
-                        .map(|bytes| Value::Bytes(Rc::new(bytes)))
-                        .map_err(|e| format!("io.readFileBytesPath: {e}")),
-                    _ => Err("io.readFileBytesPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.readDir",
-            Value::Builtin(BuiltinFn {
-                name: "io.readDir",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => {
-                        let entries: Result<Vec<_>, _> = std::fs::read_dir(path.as_str())
-                            .map_err(|e| format!("io.readDir: {e}"))?
-                            .map(|entry| {
-                                entry
-                                    .map(|e| {
-                                        Value::String(Rc::new(
-                                            e.file_name().to_string_lossy().to_string(),
-                                        ))
-                                    })
-                                    .map_err(|e| format!("io.readDir: {e}"))
-                            })
-                            .collect();
-                        entries.map(|v| Value::List(Rc::new(v)))
-                    }
-                    _ => Err("io.readDir expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.readDirPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.readDirPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => {
-                        let entries: Result<Vec<_>, _> = std::fs::read_dir(path.as_path())
-                            .map_err(|e| format!("io.readDirPath: {e}"))?
-                            .map(|entry| {
-                                entry
-                                    .map(|e| {
-                                        Value::String(Rc::new(
-                                            e.file_name().to_string_lossy().to_string(),
-                                        ))
-                                    })
-                                    .map_err(|e| format!("io.readDirPath: {e}"))
-                            })
-                            .collect();
-                        entries.map(|v| Value::List(Rc::new(v)))
-                    }
-                    _ => Err("io.readDirPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.readDirEntryPaths",
-            Value::Builtin(BuiltinFn {
-                name: "io.readDirEntryPaths",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => {
-                        let entries: Result<Vec<_>, _> = std::fs::read_dir(path.as_path())
-                            .map_err(|e| format!("io.readDirEntryPaths: {e}"))?
-                            .map(|entry| {
-                                entry
-                                    .map(|e| Value::Path(Rc::new(e.path())))
-                                    .map_err(|e| format!("io.readDirEntryPaths: {e}"))
-                            })
-                            .collect();
-                        entries.map(|v| Value::List(Rc::new(v)))
-                    }
-                    _ => Err("io.readDirEntryPaths expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.writeFile",
-            Value::Builtin(BuiltinFn {
-                name: "io.writeFile",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::String(path), Value::String(content)) => {
-                        std::fs::write(path.as_str(), content.as_bytes())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.writeFile: {e}"))
-                    }
-                    _ => Err("io.writeFile expects (String, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.writeFilePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.writeFilePath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(path), Value::String(content)) => {
-                        std::fs::write(path.as_path(), content.as_bytes())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.writeFilePath: {e}"))
-                    }
-                    _ => Err("io.writeFilePath expects (Path, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.writeFileBytesPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.writeFileBytesPath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(path), Value::Bytes(bytes)) => {
-                        std::fs::write(path.as_path(), bytes.as_ref())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.writeFileBytesPath: {e}"))
-                    }
-                    _ => Err("io.writeFileBytesPath expects (Path, Bytes)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.appendFile",
-            Value::Builtin(BuiltinFn {
-                name: "io.appendFile",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::String(path), Value::String(content)) => std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path.as_str())
-                        .and_then(|mut f| f.write_all(content.as_bytes()))
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.appendFile: {e}")),
-                    _ => Err("io.appendFile expects (String, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.appendFilePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.appendFilePath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(path), Value::String(content)) => std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path.as_path())
-                        .and_then(|mut f| f.write_all(content.as_bytes()))
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.appendFilePath: {e}")),
-                    _ => Err("io.appendFilePath expects (Path, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.appendFileBytesPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.appendFileBytesPath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(path), Value::Bytes(bytes)) => std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path.as_path())
-                        .and_then(|mut f| f.write_all(bytes.as_ref()))
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.appendFileBytesPath: {e}")),
-                    _ => Err("io.appendFileBytesPath expects (Path, Bytes)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.createDirAll",
-            Value::Builtin(BuiltinFn {
-                name: "io.createDirAll",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => std::fs::create_dir_all(path.as_str())
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.createDirAll: {e}")),
-                    _ => Err("io.createDirAll expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.createDirAllPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.createDirAllPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => std::fs::create_dir_all(path.as_path())
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.createDirAllPath: {e}")),
-                    _ => Err("io.createDirAllPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.removeDirAll",
-            Value::Builtin(BuiltinFn {
-                name: "io.removeDirAll",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => std::fs::remove_dir_all(path.as_str())
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.removeDirAll: {e}")),
-                    _ => Err("io.removeDirAll expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.removeDirAllPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.removeDirAllPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => std::fs::remove_dir_all(path.as_path())
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.removeDirAllPath: {e}")),
-                    _ => Err("io.removeDirAllPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        // File checks / 文件检查
-        (
-            "io.pathExists",
-            Value::Builtin(BuiltinFn {
-                name: "io.pathExists",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => {
-                        Ok(Value::Bool(std::path::Path::new(path.as_str()).exists()))
-                    }
-                    _ => Err("io.pathExists expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.pathExistsPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.pathExistsPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => Ok(Value::Bool(path.exists())),
-                    _ => Err("io.pathExistsPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.isDir",
-            Value::Builtin(BuiltinFn {
-                name: "io.isDir",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => {
-                        Ok(Value::Bool(std::path::Path::new(path.as_str()).is_dir()))
-                    }
-                    _ => Err("io.isDir expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.isDirPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.isDirPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => Ok(Value::Bool(path.is_dir())),
-                    _ => Err("io.isDirPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.isFile",
-            Value::Builtin(BuiltinFn {
-                name: "io.isFile",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => {
-                        Ok(Value::Bool(std::path::Path::new(path.as_str()).is_file()))
-                    }
-                    _ => Err("io.isFile expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.isFilePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.isFilePath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => Ok(Value::Bool(path.is_file())),
-                    _ => Err("io.isFilePath expects a Path".to_string()),
-                },
-            }),
-        ),
-        // Environment / 环境变量
-        (
-            "io.getEnv",
-            Value::Builtin(BuiltinFn {
-                name: "io.getEnv",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(name) => match std::env::var(name.as_str()) {
-                        Ok(val) => Ok(Value::Some(Box::new(Value::String(Rc::new(val))))),
-                        Err(_) => Ok(Value::None),
-                    },
-                    _ => Err("io.getEnv expects a string".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.env",
-            Value::Builtin(BuiltinFn {
-                name: "io.env",
-                arity: 0,
-                func: |_args| {
-                    let mut fields = Vec::new();
-                    for (key, value) in std::env::vars() {
-                        fields.push((key, Value::String(Rc::new(value))));
-                    }
-                    Ok(Value::Record(Rc::new(
-                        fields.into_iter().collect::<HashMap<_, _>>(),
-                    )))
-                },
-            }),
-        ),
-        (
-            "io.sleep",
-            Value::Builtin(BuiltinFn {
-                name: "io.sleep",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Int(ms) => {
-                        let ms: u64 = ms
-                            .try_into()
-                            .map_err(|_| "io.sleep: timeout must be non-negative".to_string())?;
-                        std::thread::sleep(Duration::from_millis(ms));
-                        Ok(Value::Unit)
-                    }
-                    _ => Err("io.sleep expects an integer (milliseconds)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.which",
-            Value::Builtin(BuiltinFn {
-                name: "io.which",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(cmd) => {
-                        let path = std::env::var_os("PATH").unwrap_or_default();
-                        let found = std::env::split_paths(&path).find_map(|dir| {
-                            let full = dir.join(cmd.as_str());
-                            if full.is_file() { Some(full) } else { None }
-                        });
-                        Ok(match found {
-                            Some(p) => Value::Some(Box::new(Value::String(Rc::new(
-                                p.to_string_lossy().to_string(),
-                            )))),
-                            None => Value::None,
-                        })
-                    }
-                    _ => Err("io.which expects a command name string".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.currentDir",
-            Value::Builtin(BuiltinFn {
-                name: "io.currentDir",
-                arity: 0,
-                func: |_args| {
-                    std::env::current_dir()
-                        .map(|p| Value::String(Rc::new(p.to_string_lossy().to_string())))
-                        .map_err(|e| format!("io.currentDir: {e}"))
-                },
-            }),
-        ),
-        (
-            "io.currentDirPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.currentDirPath",
-                arity: 0,
-                func: |_args| {
-                    std::env::current_dir()
-                        .map(|p| Value::Path(Rc::new(p)))
-                        .map_err(|e| format!("io.currentDirPath: {e}"))
-                },
-            }),
-        ),
-        (
-            "io.homeDirPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.homeDirPath",
-                arity: 0,
-                func: |_args| {
-                    Ok(std::env::var("HOME")
-                        .map(|p| Value::Some(Box::new(Value::Path(Rc::new(p.into())))))
-                        .unwrap_or(Value::None))
-                },
-            }),
-        ),
-        (
-            "io.args",
-            Value::Builtin(BuiltinFn {
-                name: "io.args",
-                arity: 0,
-                func: |_args| {
-                    let guard = SCRIPT_ARGS.read().map_err(|e| format!("io.args: {e}"))?;
-                    let args: Vec<Value> = guard
-                        .iter()
-                        .map(|arg| Value::String(Rc::new(arg.clone())))
-                        .collect();
-                    Ok(Value::List(Rc::new(args)))
-                },
-            }),
-        ),
-        (
-            "io.command",
-            Value::Builtin(BuiltinFn {
-                name: "io.command",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::String(program), Value::List(argv)) => {
-                        let argv = list_to_string_vec(argv, "io.command args")?;
-                        Ok(Value::Command(Rc::new(CommandValue::new(
-                            program.as_str(),
-                            argv,
-                        ))))
-                    }
-                    _ => Err("io.command expects (String, List<String>)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.commandWith",
-            Value::Builtin(BuiltinFn {
-                name: "io.commandWith",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Record(options) => {
-                        let command = command_value_from_options(options, "io.commandWith")?;
-                        Ok(Value::Command(Rc::new(command)))
-                    }
-                    _ => Err("io.commandWith expects a record options object".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.commandWithRedirects",
-            Value::Builtin(BuiltinFn {
-                name: "io.commandWithRedirects",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Command(command), Value::List(redirects)) => {
-                        let redirects =
-                            list_to_redirect_vec(redirects, "io.commandWithRedirects redirects")?;
-                        let command = command_value_with_redirects(
-                            command,
-                            &redirects,
-                            "io.commandWithRedirects",
-                        )?;
-                        Ok(Value::Command(Rc::new(command)))
-                    }
-                    _ => {
-                        Err("io.commandWithRedirects expects (Command, List<Redirect>)".to_string())
-                    }
-                },
-            }),
-        ),
-        (
-            "io.execCommand",
-            Value::Builtin(BuiltinFn {
-                name: "io.execCommand",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Command(command) => execute_command_value(command),
-                    _ => Err("io.execCommand expects a Command".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.execCommandLines",
-            Value::Builtin(BuiltinFn {
-                name: "io.execCommandLines",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Command(command) => execute_command_lines(command),
-                    _ => Err("io.execCommandLines expects a Command".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.pipeline",
-            Value::Builtin(BuiltinFn {
-                name: "io.pipeline",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::List(commands) => {
-                        let commands = list_to_command_vec(commands, "io.pipeline commands")?;
-                        let pipeline = pipeline_value_from_commands(commands, "io.pipeline")?;
-                        Ok(Value::Pipeline(Rc::new(pipeline)))
-                    }
-                    _ => Err("io.pipeline expects List<Command>".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.pipelineWithRedirects",
-            Value::Builtin(BuiltinFn {
-                name: "io.pipelineWithRedirects",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Pipeline(pipeline), Value::List(redirects)) => {
-                        let redirects =
-                            list_to_redirect_vec(redirects, "io.pipelineWithRedirects redirects")?;
-                        let pipeline = pipeline_value_with_redirects(
-                            pipeline,
-                            &redirects,
-                            "io.pipelineWithRedirects",
-                        )?;
-                        Ok(Value::Pipeline(Rc::new(pipeline)))
-                    }
-                    _ => Err(
-                        "io.pipelineWithRedirects expects (Pipeline, List<Redirect>)".to_string(),
-                    ),
-                },
-            }),
-        ),
-        (
-            "io.execPipeline",
-            Value::Builtin(BuiltinFn {
-                name: "io.execPipeline",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Pipeline(pipeline) => execute_pipeline_value(pipeline),
-                    _ => Err("io.execPipeline expects a Pipeline".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.redirectStdoutPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.redirectStdoutPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => Ok(Value::Redirect(Rc::new(RedirectValue::stdout_path(
-                        path.as_path(),
-                    )))),
-                    _ => Err("io.redirectStdoutPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.redirectStderrPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.redirectStderrPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => Ok(Value::Redirect(Rc::new(RedirectValue::stderr_path(
-                        path.as_path(),
-                    )))),
-                    _ => Err("io.redirectStderrPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.redirectStdinPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.redirectStdinPath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => Ok(Value::Redirect(Rc::new(RedirectValue::stdin_path(
-                        path.as_path(),
-                    )))),
-                    _ => Err("io.redirectStdinPath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.taskCommand",
-            Value::Builtin(BuiltinFn {
-                name: "io.taskCommand",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Command(command) => Ok(Value::Task(Rc::new(
-                        TaskValue::command_process_result(Rc::clone(command)),
-                    ))),
-                    _ => Err("io.taskCommand expects a Command".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.taskPipeline",
-            Value::Builtin(BuiltinFn {
-                name: "io.taskPipeline",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Pipeline(pipeline) => Ok(Value::Task(Rc::new(
-                        TaskValue::pipeline_process_result(Rc::clone(pipeline)),
-                    ))),
-                    _ => Err("io.taskPipeline expects a Pipeline".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.awaitTask",
-            Value::Builtin(BuiltinFn {
-                name: "io.awaitTask",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Task(task) => await_task(task),
-                    _ => Err("io.awaitTask expects a Task[ProcessResult]".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.awaitTasks",
-            Value::Builtin(BuiltinFn {
-                name: "io.awaitTasks",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::List(tasks) => {
-                        let tasks = list_to_task_vec(tasks, "io.awaitTasks tasks")?;
-                        await_tasks(&tasks)
-                    }
-                    _ => Err("io.awaitTasks expects List<Task[ProcessResult]>".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.awaitTaskWithTimeout",
-            Value::Builtin(BuiltinFn {
-                name: "io.awaitTaskWithTimeout",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Task(task), Value::Int(timeout_ms)) => {
-                        let timeout_ms: u64 = timeout_ms.try_into().map_err(|_| {
-                            "io.awaitTaskWithTimeout: timeout must be non-negative".to_string()
-                        })?;
-                        await_task_with_timeout(task, timeout_ms)
-                    }
-                    _ => {
-                        Err("io.awaitTaskWithTimeout expects (Task[ProcessResult], Int)"
-                            .to_string())
-                    }
-                },
-            }),
-        ),
-        (
-            "io.processSuccess",
-            Value::Builtin(BuiltinFn {
-                name: "io.processSuccess",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::ProcessResult(result) => Ok(Value::Bool(result.is_success())),
-                    _ => Err("io.processSuccess expects a ProcessResult".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.processStdout",
-            Value::Builtin(BuiltinFn {
-                name: "io.processStdout",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::ProcessResult(result) => {
-                        Ok(Value::String(Rc::new(result.stdout().to_string())))
-                    }
-                    _ => Err("io.processStdout expects a ProcessResult".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.processCode",
-            Value::Builtin(BuiltinFn {
-                name: "io.processCode",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::ProcessResult(result) => Ok(Value::Int(result.code().into())),
-                    _ => Err("io.processCode expects a ProcessResult".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.processStderr",
-            Value::Builtin(BuiltinFn {
-                name: "io.processStderr",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::ProcessResult(result) => {
-                        Ok(Value::String(Rc::new(result.stderr().to_string())))
-                    }
-                    _ => Err("io.processStderr expects a ProcessResult".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.homeDir",
-            Value::Builtin(BuiltinFn {
-                name: "io.homeDir",
-                arity: 0,
-                func: |_args| {
-                    Ok(std::env::var("HOME")
-                        .map(|p| Value::Some(Box::new(Value::String(Rc::new(p)))))
-                        .unwrap_or(Value::None))
-                },
-            }),
-        ),
-        // Hashing (useful for content-addressed store)
-        // 哈希（用于内容寻址存储）
-        (
-            "io.hashFile",
-            Value::Builtin(BuiltinFn {
-                name: "io.hashFile",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(path) => {
-                        let content = std::fs::read(path.as_str())
-                            .map_err(|e| format!("io.hashFile: {e}"))?;
-                        let hash = sha256_hex(&content);
-                        Ok(Value::String(Rc::new(hash)))
-                    }
-                    _ => Err("io.hashFile expects a string path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.hashFilePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.hashFilePath",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::Path(path) => {
-                        let content = std::fs::read(path.as_path())
-                            .map_err(|e| format!("io.hashFilePath: {e}"))?;
-                        let hash = sha256_hex(&content);
-                        Ok(Value::String(Rc::new(hash)))
-                    }
-                    _ => Err("io.hashFilePath expects a Path".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.hashString",
-            Value::Builtin(BuiltinFn {
-                name: "io.hashString",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::String(s) => {
-                        let hash = sha256_hex(s.as_bytes());
-                        Ok(Value::String(Rc::new(hash)))
-                    }
-                    _ => Err("io.hashString expects a string".to_string()),
-                },
-            }),
-        ),
-        // System info / 系统信息
-        (
-            "io.currentSystem",
-            Value::Builtin(BuiltinFn {
-                name: "io.currentSystem",
-                arity: 0,
-                func: |_args| {
-                    let arch = std::env::consts::ARCH;
-                    let os = std::env::consts::OS;
-                    Ok(Value::String(Rc::new(format!("{}-{}", arch, os))))
-                },
-            }),
-        ),
-        (
-            "io.execCommandStreaming",
-            Value::Builtin(BuiltinFn {
-                name: "io.execCommandStreaming",
-                arity: 2,
-                func: |_args| Err("io.execCommandStreaming is evaluator-owned".to_string()),
-            }),
-        ),
-        (
-            "io.execPipelineStreaming",
-            Value::Builtin(BuiltinFn {
-                name: "io.execPipelineStreaming",
-                arity: 2,
-                func: |_args| Err("io.execPipelineStreaming is evaluator-owned".to_string()),
-            }),
-        ),
-        (
-            "io.readFileLines",
-            Value::Builtin(BuiltinFn {
-                name: "io.readFileLines",
-                arity: 2,
-                func: |_args| Err("io.readFileLines is evaluator-owned".to_string()),
-            }),
-        ),
-        (
-            "io.readFileLinesPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.readFileLinesPath",
-                arity: 2,
-                func: |_args| Err("io.readFileLinesPath is evaluator-owned".to_string()),
-            }),
-        ),
-        // Atomic file operations / 原子文件操作
-        (
-            "io.atomicWrite",
-            Value::Builtin(BuiltinFn {
-                name: "io.atomicWrite",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::String(path), Value::String(content)) => {
-                        atomic_write(path.as_str(), content.as_bytes())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.atomicWrite: {e}"))
-                    }
-                    _ => Err("io.atomicWrite expects (String, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.atomicWritePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.atomicWritePath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(path), Value::String(content)) => {
-                        atomic_write_path(path.as_path(), content.as_bytes())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.atomicWritePath: {e}"))
-                    }
-                    _ => Err("io.atomicWritePath expects (Path, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.atomicWriteAll",
-            Value::Builtin(BuiltinFn {
-                name: "io.atomicWriteAll",
-                arity: 1,
-                func: |args| match &args[0] {
-                    Value::List(entries) => atomic_write_all(entries)
-                        .map(|_| Value::Unit)
-                        .map_err(|e| format!("io.atomicWriteAll: {e}")),
-                    _ => Err(
-                        "io.atomicWriteAll expects List[{path: String, content: String}]"
-                            .to_string(),
-                    ),
-                },
-            }),
-        ),
-        (
-            "io.copy",
-            Value::Builtin(BuiltinFn {
-                name: "io.copy",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::String(src), Value::String(dst)) => {
-                        std::fs::copy(src.as_str(), dst.as_str())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.copy: {e}"))
-                    }
-                    _ => Err("io.copy expects (String, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.copyPath",
-            Value::Builtin(BuiltinFn {
-                name: "io.copyPath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(src), Value::Path(dst)) => {
-                        std::fs::copy(src.as_path(), dst.as_path())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.copyPath: {e}"))
-                    }
-                    _ => Err("io.copyPath expects (Path, Path)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.move",
-            Value::Builtin(BuiltinFn {
-                name: "io.move",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::String(src), Value::String(dst)) => {
-                        std::fs::rename(src.as_str(), dst.as_str())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.move: {e}"))
-                    }
-                    _ => Err("io.move expects (String, String)".to_string()),
-                },
-            }),
-        ),
-        (
-            "io.movePath",
-            Value::Builtin(BuiltinFn {
-                name: "io.movePath",
-                arity: 2,
-                func: |args| match (&args[0], &args[1]) {
-                    (Value::Path(src), Value::Path(dst)) => {
-                        std::fs::rename(src.as_path(), dst.as_path())
-                            .map(|_| Value::Unit)
-                            .map_err(|e| format!("io.movePath: {e}"))
-                    }
-                    _ => Err("io.movePath expects (Path, Path)".to_string()),
-                },
-            }),
-        ),
         // Process execution / 进程执行
     ];
     bindings.extend(fs::builtins());
@@ -1256,7 +284,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
 }
 
 /// Format any Value for human-readable output (used by print/println).
-fn format_value_for_output(value: &Value) -> String {
+pub(crate) fn format_value_for_output(value: &Value) -> String {
     match value {
         Value::Unit => String::new(),
         Value::Bool(b) => b.to_string(),
@@ -1339,7 +367,7 @@ fn read_input(prompt: &str, no_echo: bool) -> Result<Value, String> {
 
 /// Compute SHA-256 hash and return as hex string.
 /// 计算 SHA-256 哈希并返回十六进制字符串。
-fn sha256_hex(data: &[u8]) -> String {
+pub(crate) fn sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
 
     let digest = Sha256::digest(data);
@@ -1350,12 +378,12 @@ fn sha256_hex(data: &[u8]) -> String {
 /// This avoids partial writes and leaves no temp residue on success.
 /// 原子写入：先写入临时文件，然后重命名为目标路径。
 /// 避免部分写入，成功时不留下临时文件残留。
-fn atomic_write(path: &str, content: &[u8]) -> Result<(), String> {
+pub(crate) fn atomic_write(path: &str, content: &[u8]) -> Result<(), String> {
     let target = std::path::Path::new(path);
     atomic_write_path(target, content)
 }
 
-fn atomic_write_path(target: &std::path::Path, content: &[u8]) -> Result<(), String> {
+pub(crate) fn atomic_write_path(target: &std::path::Path, content: &[u8]) -> Result<(), String> {
     // Generate unique temp path in same directory to ensure rename is on same filesystem
     let pid = std::process::id();
     let parent = target.parent().unwrap_or_else(|| std::path::Path::new("."));
@@ -1389,7 +417,7 @@ fn atomic_write_path(target: &std::path::Path, content: &[u8]) -> Result<(), Str
 /// 批量原子写入，使用两阶段提交。
 /// 第一阶段所有条目写入临时文件，第二阶段全部重命名。
 /// 如果任何重命名失败，所有重命名都会被回滚。
-fn atomic_write_all(entries: &[Value]) -> Result<(), String> {
+pub(crate) fn atomic_write_all(entries: &[Value]) -> Result<(), String> {
     if entries.is_empty() {
         return Ok(());
     }
@@ -1482,7 +510,7 @@ fn atomic_write_all(entries: &[Value]) -> Result<(), String> {
     Ok(())
 }
 
-fn list_to_string_vec(items: &[Value], arg_name: &str) -> Result<Vec<String>, String> {
+pub(crate) fn list_to_string_vec(items: &[Value], arg_name: &str) -> Result<Vec<String>, String> {
     items
         .iter()
         .enumerate()
@@ -1493,7 +521,7 @@ fn list_to_string_vec(items: &[Value], arg_name: &str) -> Result<Vec<String>, St
         .collect()
 }
 
-fn list_to_command_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<CommandValue>>, String> {
+pub(crate) fn list_to_command_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<CommandValue>>, String> {
     items
         .iter()
         .enumerate()
@@ -1504,7 +532,7 @@ fn list_to_command_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<Command
         .collect()
 }
 
-fn list_to_redirect_vec(items: &[Value], arg_name: &str) -> Result<Vec<RedirectValue>, String> {
+pub(crate) fn list_to_redirect_vec(items: &[Value], arg_name: &str) -> Result<Vec<RedirectValue>, String> {
     items
         .iter()
         .enumerate()
@@ -1515,7 +543,7 @@ fn list_to_redirect_vec(items: &[Value], arg_name: &str) -> Result<Vec<RedirectV
         .collect()
 }
 
-fn list_to_task_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<TaskValue>>, String> {
+pub(crate) fn list_to_task_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<TaskValue>>, String> {
     items
         .iter()
         .enumerate()
@@ -1526,7 +554,7 @@ fn list_to_task_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<TaskValue>
         .collect()
 }
 
-fn output_to_process_result_value(output: std::process::Output) -> ProcessResultValue {
+pub(crate) fn output_to_process_result_value(output: std::process::Output) -> ProcessResultValue {
     let code = output.status.code().unwrap_or(-1);
     ProcessResultValue::new(
         code,
@@ -1536,7 +564,7 @@ fn output_to_process_result_value(output: std::process::Output) -> ProcessResult
     )
 }
 
-fn execute_command_lines(command: &CommandValue) -> Result<Value, String> {
+pub(crate) fn execute_command_lines(command: &CommandValue) -> Result<Value, String> {
     let mut cmd = configured_process_command(command);
     let output = cmd
         .output()
@@ -1549,12 +577,12 @@ fn execute_command_lines(command: &CommandValue) -> Result<Value, String> {
     Ok(Value::List(Rc::new(lines)))
 }
 
-fn execute_command_value(command: &CommandValue) -> Result<Value, String> {
+pub(crate) fn execute_command_value(command: &CommandValue) -> Result<Value, String> {
     let result = execute_command_value_to_process_result(command, "io.execCommand")?;
     Ok(Value::ProcessResult(Rc::new(result)))
 }
 
-fn execute_pipeline_value(pipeline: &PipelineValue) -> Result<Value, String> {
+pub(crate) fn execute_pipeline_value(pipeline: &PipelineValue) -> Result<Value, String> {
     let result = execute_pipeline_value_to_process_result(pipeline, "io.execPipeline")?;
     Ok(Value::ProcessResult(Rc::new(result)))
 }
@@ -1696,7 +724,7 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
     }
 }
 
-fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Result<Value, String> {
+pub(crate) fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Result<Value, String> {
     let raw_target = match task.target() {
         TaskTargetValue::Command(command) => RawCommandTarget {
             program: command.program().to_string(),
@@ -1788,12 +816,12 @@ fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Result<Value, S
     }
 }
 
-fn await_task(task: &TaskValue) -> Result<Value, String> {
+pub(crate) fn await_task(task: &TaskValue) -> Result<Value, String> {
     let result = await_task_to_process_result(task, "io.awaitTask")?;
     Ok(Value::ProcessResult(Rc::new(result)))
 }
 
-fn await_tasks(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
+pub(crate) fn await_tasks(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
     let mut results = Vec::with_capacity(tasks.len());
     for (idx, task) in tasks.iter().enumerate() {
         let result = await_task_to_process_result(task, &format!("io.awaitTasks[{idx}]"))?;
@@ -1802,7 +830,7 @@ fn await_tasks(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
     Ok(Value::List(Rc::new(results)))
 }
 
-fn await_task_to_process_result(
+pub(crate) fn await_task_to_process_result(
     task: &TaskValue,
     fn_name: &str,
 ) -> Result<ProcessResultValue, String> {
@@ -1818,7 +846,7 @@ fn await_task_to_process_result(
     }
 }
 
-fn execute_pipeline_value_to_process_result(
+pub(crate) fn execute_pipeline_value_to_process_result(
     pipeline: &PipelineValue,
     fn_name: &str,
 ) -> Result<ProcessResultValue, String> {
@@ -1832,7 +860,7 @@ fn execute_pipeline_value_to_process_result(
     execute_pipeline_value_to_process_result_with_input(pipeline, None, fn_name)
 }
 
-fn execute_pipeline_value_to_process_result_with_input(
+pub(crate) fn execute_pipeline_value_to_process_result_with_input(
     pipeline: &PipelineValue,
     initial_stdin: Option<&str>,
     fn_name: &str,
@@ -1907,7 +935,7 @@ fn execute_pipeline_value_to_process_result_with_input(
     ))
 }
 
-fn execute_pipeline_value_with_redirects_to_process_result(
+pub(crate) fn execute_pipeline_value_with_redirects_to_process_result(
     pipeline: &PipelineValue,
     redirects: &[RedirectValue],
     fn_name: &str,
@@ -2002,7 +1030,7 @@ fn execute_pipeline_value_with_redirects_to_process_result(
     ))
 }
 
-fn command_value_from_options(
+pub(crate) fn command_value_from_options(
     options: &HashMap<String, Value>,
     fn_name: &str,
 ) -> Result<CommandValue, String> {
@@ -2017,7 +1045,7 @@ fn command_value_from_options(
     ))
 }
 
-fn command_value_with_redirects(
+pub(crate) fn command_value_with_redirects(
     command: &CommandValue,
     redirects: &[RedirectValue],
     fn_name: &str,
@@ -2071,7 +1099,7 @@ fn command_value_with_redirects(
     ))
 }
 
-fn pipeline_value_with_redirects(
+pub(crate) fn pipeline_value_with_redirects(
     pipeline: &PipelineValue,
     redirects: &[RedirectValue],
     fn_name: &str,
@@ -2159,7 +1187,7 @@ fn pipeline_value_with_redirects(
     ))
 }
 
-fn pipeline_value_from_commands(
+pub(crate) fn pipeline_value_from_commands(
     commands: Vec<Rc<CommandValue>>,
     fn_name: &str,
 ) -> Result<PipelineValue, String> {
@@ -2167,7 +1195,7 @@ fn pipeline_value_from_commands(
     Ok(PipelineValue::new(commands))
 }
 
-fn validate_pipeline_command_topology(
+pub(crate) fn validate_pipeline_command_topology(
     commands: &[Rc<CommandValue>],
     fn_name: &str,
 ) -> Result<(), String> {
@@ -2208,14 +1236,14 @@ fn validate_pipeline_command_topology(
     Ok(())
 }
 
-fn execute_command_value_to_process_result(
+pub(crate) fn execute_command_value_to_process_result(
     command: &CommandValue,
     fn_name: &str,
 ) -> Result<ProcessResultValue, String> {
     execute_command_value_to_process_result_with_input(command, command.stdin(), fn_name)
 }
 
-fn execute_command_value_to_process_result_with_input(
+pub(crate) fn execute_command_value_to_process_result_with_input(
     command: &CommandValue,
     stdin_text: Option<&str>,
     fn_name: &str,
@@ -2253,7 +1281,7 @@ fn execute_command_value_to_process_result_with_input(
     }
 }
 
-fn execute_command_value_with_redirects_to_process_result_with_input(
+pub(crate) fn execute_command_value_with_redirects_to_process_result_with_input(
     command: &CommandValue,
     redirects: &[RedirectValue],
     stdin_text: Option<&str>,
@@ -2346,7 +1374,7 @@ fn execute_command_value_with_redirects_to_process_result_with_input(
     }
 }
 
-fn configured_process_command(command: &CommandValue) -> std::process::Command {
+pub(crate) fn configured_process_command(command: &CommandValue) -> std::process::Command {
     let mut cmd = std::process::Command::new(command.program());
     cmd.args(command.args());
 
@@ -2360,7 +1388,7 @@ fn configured_process_command(command: &CommandValue) -> std::process::Command {
     cmd
 }
 
-fn resolve_redirect_path(command: &CommandValue, redirect: &RedirectValue) -> std::path::PathBuf {
+pub(crate) fn resolve_redirect_path(command: &CommandValue, redirect: &RedirectValue) -> std::path::PathBuf {
     let path = redirect.path();
     if path.is_relative()
         && let Some(cwd) = command.cwd()
@@ -2389,7 +1417,7 @@ fn resolve_pipeline_redirect_path(
     resolve_redirect_path(command, redirect)
 }
 
-fn record_string_required(
+pub(crate) fn record_string_required(
     options: &HashMap<String, Value>,
     key: &str,
     fn_name: &str,
@@ -2401,7 +1429,7 @@ fn record_string_required(
     }
 }
 
-fn record_string_optional(
+pub(crate) fn record_string_optional(
     options: &HashMap<String, Value>,
     key: &str,
     fn_name: &str,
@@ -2413,7 +1441,7 @@ fn record_string_optional(
     }
 }
 
-fn record_string_list_optional(
+pub(crate) fn record_string_list_optional(
     options: &HashMap<String, Value>,
     key: &str,
     fn_name: &str,
@@ -2427,7 +1455,7 @@ fn record_string_list_optional(
     }
 }
 
-fn record_env_optional(
+pub(crate) fn record_env_optional(
     options: &HashMap<String, Value>,
     key: &str,
     fn_name: &str,
