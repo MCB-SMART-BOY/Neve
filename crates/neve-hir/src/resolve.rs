@@ -350,7 +350,13 @@ impl Resolver {
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
-            imported_builtin_modules: HashMap::new(),
+                        imported_builtin_modules: {
+                let mut m = HashMap::new();
+                for prefix in ["io", "list", "path", "Map", "Set", "option", "result", "string", "math", "fetch"] {
+                    m.insert(prefix.to_string(), prefix.to_string());
+                }
+                m
+            },
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: None,
@@ -372,7 +378,13 @@ impl Resolver {
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
-            imported_builtin_modules: HashMap::new(),
+                        imported_builtin_modules: {
+                let mut m = HashMap::new();
+                for prefix in ["io", "list", "path", "Map", "Set", "option", "result", "string", "math", "fetch"] {
+                    m.insert(prefix.to_string(), prefix.to_string());
+                }
+                m
+            },
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: Some(ModuleLoader::new(root_dir)),
