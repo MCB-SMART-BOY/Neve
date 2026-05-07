@@ -92,19 +92,26 @@
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
-### 已经开始具备的能力
+### 已经具备的能力
 
-| Capability / 能力 | 当前状态 | 说明 |
-|-------------------|----------|------|
-| 文件读取 | ✅ | `std.io` 已支持 |
-| 文件写入与追加 | ✅ | `io.writeFile` / `io.appendFile` / `io.atomicWrite` 已支持 |
-| 原子文件操作 | ✅ | `io.atomicWrite` (temp file + rename) / `io.atomicWriteAll` (two-phase commit) / `io.copy` / `io.move` 已支持，含 typed-path 变体 |
-| 目录递归创建与删除 | ✅ | `io.createDirAll` / `io.removeDirAll` 已支持，且 `io.createDirAllPath` / `io.removeDirAllPath` 已提供首批 typed-path 目录创建/删除 bridges |
-| 环境变量读取 | ✅ | `io.getEnv` / `io.env()` 已支持；`io.env()` 返回所有环境变量 Record |
-| 进程执行并捕获输出 | ✅ | 对象主线由 `io.execCommand` / `io.execPipeline` 承接；需要 shell 语义时，显式构造 `io.command("sh"/"cmd", ["-c"/"/C", ...])` 再执行 |
-| 可配置执行（`cwd` / `env` / `stdin` / `redirects`） | ✅ | `io.commandWith` 已能公开构造带 `cwd` / `env` / `stdin` 的 `Command`，`io.commandWithRedirects` 也已能把 typed `Redirect` 列表收进 `Command`；配置执行现在通过 `io.execCommand(io.commandWith(...))` 走 canonical 对象主线 |
+| 能力 | 说明 |
+|------|------|
+| 文件读写 | `io.readFile` / `io.writeFile` / `io.appendFile` + typed-path 变体 |
+| 原子文件操作 | `io.atomicWrite` / `io.atomicWriteAll` (两阶段提交) / `io.copy` / `io.move` |
+| 目录操作 | `io.createDirAll` / `io.removeDirAll` + typed-path 变体 |
+| 环境变量 | `io.getEnv` / `io.env()` (返回 Record) |
+| 进程执行 | `io.execCommand` / `io.execPipeline` + 超时 + 杀进程 |
+| 流式 I/O | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` |
+| 路径字面量 | `./config` 推断为 `Path` 类型，`io.readFilePath(./x)` 直接可用 |
+| 字符串拼接 | `"a" + "b"` |
+| 输出 | `print` / `println` 全局可用 |
+| 效果系统 | `effect` 关键字；fn / impl fn / lambda 全覆盖 |
+| REPL | 历史持久化、Tab 补全、`:save` / `:cd`、智能输入完成 |
+| 事件系统 | `Event<T>`、`io.every(ms)`、`io.watchFile(p)`、`io.eventNext(e)` |
+| 反应式 | `Live<T>`、`io.reactive(e)`、`io.liveNext(l)` |
+| 时序约束 | `io.retry(fn, n, ms)`、`io.ensure(check, timeout, interval)` |
 
-### 仍然缺失的关键能力
+### 仍然缺失的关键能力### 仍然缺失的关键能力
 
 | Capability / 能力 | 当前状态 | 为什么还不能叫“替代 Bash” |
 |-------------------|----------|----------------------------|

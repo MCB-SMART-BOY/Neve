@@ -8,54 +8,28 @@ From this point onward, implementation work for semantic convergence should read
 
 ## 1. Status
 
-- State: **active** -- core pipeline convergence largely complete; effect boundary and ecosystem phases remain
-- Current phase: **Phase 3 (Effect & Runtime Layer)**
-- Overall completion: **~60-65%** toward North Star
-- Default bias:
-  - close semantic loops before expanding language surface
-  - prefer one canonical implementation over parallel "temporary" paths
-  - keep migrations incremental and reviewable
-  - update this file and feature-matrix.md when status changes
-
-### Pipeline Convergence Status
-
-| PR | Topic | Status |
-|----|-------|--------|
-| PR-001 | Split module infrastructure | Complete |
-| PR-002 | Introduce FrontendDriver | Complete |
-| PR-003 | Expose typed side tables | Complete |
-| PR-004 | Converge HIR evaluator contract | Complete |
-| PR-005 | Migrate neve check | Complete |
-| PR-006 | Migrate LSP | Complete |
-| PR-007 | Migrate neve run / neve eval | Complete |
-| PR-008 | Migrate REPL (FrontendSession) | Complete |
-| PR-009 | Downgrade AST evaluator to compat | Complete |
-| PR-010 | Migrate remaining AST-only paths | Complete |
-| PR-011 | Typed runtime objects + effect skeleton | Complete |
-| PR-012 | Layer stdlib around runtime objects | Complete |
-| PR-013 | Migrate platform crates | Complete |
-| PR-014 | Harden typed semantic artifacts | Largely done |
-| PR-015 | Pattern analysis and diagnostics | D-060 done; D-052-054 deferred |
-| PR-016 | Trait dispatch + assoc-type unification | Complete (D-070) |
-| PR-017 | Optional-flow semantics closure | Complete |
+- State: **active** — Phase 3-4，效果系统闭环，事件/反应式落地
+- Current phase: **Phase 3/4 (Effect, Reactive, Temporal)**
+- Overall completion: **~70%**
+- Recent: Lambda/impl effect closed, streaming I/O, Path literals, REPL overhaul, Event/Live/retry/ensure
 
 ### Decision Gate Status
 
 | Gate | Topic | Status |
 |------|-------|--------|
-| G1 | Canonical Pipeline | Resolved |
-| G2 | Method Semantics | Resolved (PR-016) |
-| G3 | Failure Propagation | Resolved (PR-017) |
-| G4 | Effect Boundary | Task<T> + --pure done; effect type system pending |
-| G5 | Bash Replacement Scope | Shebang/args/pipe/redirect done; streaming/cancel pending |
+| G1 | Canonical Pipeline | ✅ |
+| G2 | Method Semantics | ✅ |
+| G3 | Failure Propagation | ✅ |
+| G4 | Effect Boundary | ✅ fn/impl/lambda 全覆盖；跨函数追踪待做 |
+| G5 | Bash Replacement | ⚠️ 流式/原子/Event 就绪；信号/glob/TTY 待做 |
 
-### Remaining High-Priority Work
+### Active Work Items
 
-1. Effect type system design and implementation (G4)
-2. Streaming process output for long-running commands
-3. Pipeline timeout support (extend awaitTaskWithTimeout)
-4. Spec v2.0 freeze with parser golden tests
-5. Phase B exit criteria validation (reproducible builds, lockfile, GC)
+1. 跨函数效果追踪
+2. Match 穷尽性扩展（String/Record/Int）
+3. `|>` 管道语法
+4. defer/finally
+5. 信号处理
 
 ## 2. North Star
 
