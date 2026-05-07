@@ -4645,98 +4645,20 @@ Track progress with concrete metrics rather than narrative only:
 - CLI now auto-detects .neve files passed as the first positional argument (for #!/usr/bin/env neve invocations) and routes them to neve run.
 - Feature matrix: shebang/argv/script entry upgraded from ❌ to ⚠️.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Extended Task<T> effect model with io.awaitTaskWithTimeout (PR-011 follow-up).
 - Added io.awaitTaskWithTimeout(task: Task[ProcessResult], timeout_ms: Int) -> Option[ProcessResult].
 - Implemented with thread-based timeout: spawns process execution in a worker thread, awaits with Duration timeout.
@@ -4744,98 +4666,20 @@ Track progress with concrete metrics rather than narrative only:
 - Pipeline timeout support is deferred; current implementation covers Command-based tasks only.
 - Updated feature matrix: timeout/cancel upgraded from ❌ to ⚠️.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Added io.args() builtin for script argument access (argv support).
 - io.args() returns List[String] with the command-line arguments passed after the script path.
 - Uses a static RwLock<Vec<String>> to cross the CLI/evaluator boundary without threading concerns.
@@ -4843,98 +4687,20 @@ Track progress with concrete metrics rather than narrative only:
 - End-to-end verified: #!/usr/bin/env neve script receives args via io.args().
 - Feature matrix: shebang/argv entry updated to reflect argv support.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 neve_std::set_script_args exported from neve-std for CLI use.
 - Advanced G4 (effect boundary) by adding --pure flag to neve check.
 - Added is_effectful_builtin() to neve-std: classifies io.* (except pure inspectors) and fetch.* as effectful.
@@ -4943,195 +4709,39 @@ neve_std::set_script_args exported from neve-std for CLI use.
 - Pure inspector functions (processSuccess, processStdout, processCode, processStderr) are exempted.
 - End-to-end verified: pure code passes --pure, impure code (io.readFile, etc.) is rejected with clear error messages.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Hardened io.awaitTaskWithTimeout: timeout now kills the underlying process.
 - Redesigned from thread-based execute_raw_command to direct Child management with pid tracking.
 - On timeout, sends SIGKILL via kill -9 <pid> (Unix), preventing process leaks.
 - Removed unused execute_raw_command helper.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Added end-to-end regression tests for recent features:
   - awaitTaskWithTimeout with fast command (completes within timeout)
   - awaitTaskWithTimeout with slow command (sleep 10, 100ms timeout -> returns None + kills process)
@@ -5139,98 +4749,20 @@ neve_std::set_script_args exported from neve-std for CLI use.
   - pure expression accepted by frontend
 - All tests pass with real process execution (echo, sleep).
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Implemented Effect Type System Step 1: added effect keyword to the language.
 - Lexer: added Effect token variant to TokenKind.
 - Parser: fn definitions can now be annotated with effect keyword after the return type.
@@ -5242,294 +4774,60 @@ neve_std::set_script_args exported from neve-std for CLI use.
 - REPL inputs, let bindings, and internally-generated wrappers are unaffected (effectful: true by default).
 - Effectful inspector functions (processSuccess, processStdout, processCode, processStderr) are excluded.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Updated feature matrix and semantic convergence plan.
 - Added io.execCommandLines(command: Command) -> List[String] for line-by-line command output.
 - Splits stdout into lines using str::lines(); each line becomes a String element in the returned List.
 - Type-checked as builtin_fn(Command, List[String]); correctly classified as effectful by the effect checker.
 - Multi-line output verified: printf with embedded newlines returns separate list elements.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Implemented pipeline timeout support for io.awaitTaskWithTimeout (PR-012 follow-up).
 - Pipeline tasks now run in a worker thread with sequential stage execution; current pid tracked via Arc<Mutex<Option<u32>>>.
 - On timeout, kills the currently running pipeline stage via kill -9 <pid>.
 - Verified: fast pipeline (echo | cat) completes within timeout; slow pipeline (sleep 10 | echo) times out and is killed.
 - Removed the previous 'pipeline timeout not yet supported' error.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
 - Extended neve run to accept script arguments: neve run file.neve arg1 arg2 now passes args via io.args().
 - Previously only shebang auto-detect supported argument passing; now explicit neve run also works.
 - Updated CLI Run command with trailing_var_arg to capture all positional args after the file path.
@@ -5588,95 +4886,17 @@ neve_std::set_script_args exported from neve-std for CLI use.
 - All atomic operations correctly classified as effectful by the type checker.
 - 6 stdlib tests (atomic write/read, write-all, copy, move) all pass.
 - Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Implemented complete streaming I/O system (G4/G5 follow-up):
-  - Fixed io.execCommandStreaming to respect Command stdin (was hardcoded to null).
-  - Added io.execPipelineStreaming(pipeline: Pipeline, onLine: String -> Unit) -> ProcessResult.
-  - Added io.readFileLines(path: String, onLine: String -> Unit) -> Unit.
-  - Added io.readFileLinesPath(path: Path, onLine: String -> Unit) -> Unit.
-  - Pipeline streaming executes stages sequentially, connecting stdout->stdin, streaming final stdout.
-  - File line reading uses BufReader for memory-efficient streaming of large files.
-  - All four are evaluator-owned builtins (require runtime context for callback execution).
-  - Type checker correctly types all streaming builtins and identifies them as effectful.
-  - Stdin pipe is properly dropped after writing to signal EOF to child processes.
-- 4 end-to-end tests for streaming (stdin, pipeline, file lines, effect checking) all pass.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- Fixed #1: Lambda effect context propagation (G4 closure).
-  - Added in_effectful_fn: bool to TypeChecker to track enclosing function effect context.
-  - Lambda bodies now inherit the enclosing function's effect annotation: if the outer fn
-    is marked `effect`, lambdas inside it can call io.* without errors.
-  - Previously, lambda effect check in infer_expr was unconditional (only gated on repl_mode),
-    making effect fn lambdas unusable for effectful operations.
-  - 2 regression tests added (lambda_in_effect_fn_allows, lambda_in_pure_fn_rejects).
-- Fixed #2: Impl methods now support `effect` annotation (G4 closure).
-  - AST ImplItem: added effect: bool field.
-  - Parser: parse_impl_item now eats TokenKind::Effect after return type.
-  - HIR ImplItem: added effectful: bool field.
-  - Resolver: lower_impl_item lowers item.effect -> effectful.
-  - TypeChecker check_impl_item: sets in_effectful_fn and skips effect check when effectful.
-  - 2 regression tests added (impl_method_with_effect_allows, impl_method_without_effect_rejects).
-- Fixed #3: LSP signatureHelp capability removed (was advertised but not implemented).
-  - Set signature_help_provider to None with TODO comment for future implementation.
-- Effect system now closed: fn, impl fn, and nested lambdas all correctly respect effect annotations.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
-- REPL major usability overhaul (Phase 3 UX):
-  - History persistence: ~/.neve_history auto-loaded on start, saved on exit.
-  - Human-friendly value display: format_repl_value() replaces Debug ({:?}) output.
-    Strings print as content (not String("...")), Ints as numbers (not Int(42)), etc.
-  - Tab completion: ReplCompleter provides command completion (:help, :load, etc.)
-    and file-path completion for :load/:save/:cd. Bracket matching via MatchingBracketHighlighter.
-  - Ctrl+C now correctly resets multi-line state (no more stuck ....> prompt).
-  - New commands: :save <file> (export bindings), :cd <dir> (change directory).
-  - :load now supports file paths with spaces.
-  - Built on rustyline Editor<ReplHelper> with custom Completer + MatchingBracket* delegates.
-- Validation: cargo fmt --all && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings all pass.
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 流式 I/O 系统：io.execCommandStreaming 修了 stdin、io.execPipelineStreaming、io.readFileLines
+- stdin pipe 正确关闭发 EOF
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
+- 修了 lambda 效果上下文：TypeChecker 加了个 in_effectful_fn 标志，lambda 现在继承外层函数的 effect 注解
+- 修了 impl 方法的 effect：parser/HIR/typeck 全链路支持 `fn foo() -> T effect = ...`
+- 关了 LSP signatureHelp（声明了但没实现，直接去掉）
+- 效果系统三个面都通了：fn、impl fn、嵌套 lambda
+- REPL 大修：历史持久化、人类可读输出（42 而不是 Int(42)）、Tab 补全、Ctrl+C 多行修复、:save/:cd 命令
