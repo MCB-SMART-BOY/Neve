@@ -7,9 +7,9 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::builtin_types::{
-    builtin_bytes, builtin_command, builtin_event, builtin_live, builtin_list, builtin_map, builtin_option,
-    builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect, builtin_result,
-    builtin_set, builtin_task, is_builtin_option_type, is_builtin_result_type,
+    builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live, builtin_map,
+    builtin_option, builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect,
+    builtin_result, builtin_set, builtin_task, is_builtin_option_type, is_builtin_result_type,
 };
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
@@ -2380,11 +2380,33 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.retry" => builtin_fn(
+                vec![
+                    builtin_fn(Vec::new(), builtin_ty(TyKind::Bool, span), span),
+                    builtin_ty(TyKind::Int, span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "io.ensure" => builtin_fn(
+                vec![
+                    builtin_fn(Vec::new(), builtin_ty(TyKind::Bool, span), span),
+                    builtin_ty(TyKind::Int, span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
             "io.reactive" => {
                 let a = builtin_param(0, "a", span);
                 builtin_forall(
                     Vec::from(["a"]),
-                    builtin_fn(vec![builtin_event(a.clone(), span)], builtin_live(a, span), span),
+                    builtin_fn(
+                        vec![builtin_event(a.clone(), span)],
+                        builtin_live(a, span),
+                        span,
+                    ),
                     span,
                 )
             }
@@ -2400,7 +2422,11 @@ impl TypeChecker {
                 let a = builtin_param(0, "a", span);
                 builtin_forall(
                     Vec::from(["a"]),
-                    builtin_fn(vec![builtin_live(a.clone(), span)], builtin_option(a, span), span),
+                    builtin_fn(
+                        vec![builtin_live(a.clone(), span)],
+                        builtin_option(a, span),
+                        span,
+                    ),
                     span,
                 )
             }

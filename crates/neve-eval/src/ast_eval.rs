@@ -2420,7 +2420,7 @@ fn runtime_type_key(value: &Value) -> String {
         Value::Ok(_) | Value::Err(_) => "Result".to_string(),
         Value::Thunk(_) => "Thunk".to_string(),
         Value::Event(_) => "Event".to_string(),
-            Value::Live(_) => "Live(..)".to_string(),
+        Value::Live(_) => "Live(..)".to_string(),
     }
 }
 

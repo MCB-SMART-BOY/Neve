@@ -1881,7 +1881,7 @@ pub fn format_value(v: &Value) -> String {
         Value::Ok(v) => format!("Ok({})", format_value(v)),
         Value::Err(v) => format!("Err({})", format_value(v)),
         Value::Event(_) => "Event(..)".to_string(),
-            Value::Live(_) => "Live(..)".to_string(),
+        Value::Live(_) => "Live(..)".to_string(),
         Value::Thunk(thunk) => {
             use crate::value::ThunkState;
             match &*thunk.state() {
