@@ -35,6 +35,26 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
         // Events / 事件
         (
+            "io.eventNext",
+            Value::Builtin(BuiltinFn {
+                name: "io.eventNext",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Event(event) => match &event.kind {
+                        EventKind::Timer { interval_ms } => {
+                            std::thread::sleep(std::time::Duration::from_millis(*interval_ms));
+                            // Return a simple counter (milliseconds since some epoch)
+                            Ok(Value::Int((*interval_ms as i64).into()))
+                        }
+                        EventKind::FileWatch { .. } => {
+                            Err("io.eventNext: file watch not yet implemented".to_string())
+                        }
+                    },
+                    _ => Err("io.eventNext expects an Event".to_string()),
+                },
+            }),
+        ),
+        (
             "io.every",
             Value::Builtin(BuiltinFn {
                 name: "io.every",

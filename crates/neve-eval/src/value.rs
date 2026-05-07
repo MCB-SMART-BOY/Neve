@@ -708,7 +708,7 @@ impl fmt::Debug for Value {
             Value::None => write!(f, "None"),
             Value::Ok(v) => write!(f, "Ok({:?})", v),
             Value::Err(v) => write!(f, "Err({:?})", v),
-            Value::Event(_e) => write!(f, "Event({:?})", e.kind),
+            Value::Event(e) => write!(f, "Event({:?})", e.kind),
             Value::Thunk(thunk) => write!(f, "{:?}", thunk),
         }
     }
