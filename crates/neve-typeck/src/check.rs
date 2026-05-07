@@ -2384,6 +2384,10 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.read" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_ty(TyKind::String, span), span),
+            "io.write" => builtin_fn(vec![builtin_ty(TyKind::String, span), builtin_ty(TyKind::String, span)], builtin_ty(TyKind::Unit, span), span),
+            "io.run" => builtin_fn(vec![builtin_command(span)], builtin_process_result(span), span),
+            "io.shell" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_process_result(span), span),
             "io.lines" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_string_list(span), span),
             "io.readPassword" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_ty(TyKind::String, span), span),
             "io.input" => builtin_fn(

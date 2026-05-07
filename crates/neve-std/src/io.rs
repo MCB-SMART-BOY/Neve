@@ -33,6 +33,77 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // === Modern aliases (preferred short names) ===
+        (
+            "io.read",
+            Value::Builtin(BuiltinFn {
+                name: "io.read", arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(p) => std::fs::read_to_string(p.as_path())
+                        .map(|s| Value::String(Rc::new(s)))
+                        .map_err(|e| format!("io.read: {e}")),
+                    Value::String(s) => std::fs::read_to_string(s.as_str())
+                        .map(|s| Value::String(Rc::new(s)))
+                        .map_err(|e| format!("io.read: {e}")),
+                    _ => Err("io.read expects a Path or String".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.write",
+            Value::Builtin(BuiltinFn {
+                name: "io.write", arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::Path(p), Value::String(s)) => std::fs::write(p.as_path(), s.as_bytes())
+                        .map(|_| Value::Unit).map_err(|e| format!("io.write: {e}")),
+                    (Value::String(p), Value::String(s)) => std::fs::write(p.as_str(), s.as_bytes())
+                        .map(|_| Value::Unit).map_err(|e| format!("io.write: {e}")),
+                    _ => Err("io.write expects (Path|String, String)".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.run",
+            Value::Builtin(BuiltinFn {
+                name: "io.run", arity: 1,
+                func: |args| match &args[0] {
+                    Value::Command(cmd) => {
+                        let mut c = std::process::Command::new(cmd.program());
+                        c.args(cmd.args());
+                        if let Some(wd) = cmd.cwd() { c.current_dir(wd); }
+                        for (k, v) in cmd.env() { c.env(k, v); }
+                        let output = c.output().map_err(|e| format!("io.run: {e}"))?;
+                        Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
+                            output.status.code().unwrap_or(-1),
+                            output.status.success(),
+                            String::from_utf8_lossy(&output.stdout).to_string(),
+                            String::from_utf8_lossy(&output.stderr).to_string(),
+                        ))))
+                    }
+                    _ => Err("io.run expects a Command".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.shell",
+            Value::Builtin(BuiltinFn {
+                name: "io.shell", arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(cmd) => {
+                        let output = std::process::Command::new("sh")
+                            .arg("-c").arg(cmd.as_str())
+                            .output().map_err(|e| format!("io.shell: {e}"))?;
+                        Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
+                            output.status.code().unwrap_or(-1),
+                            output.status.success(),
+                            String::from_utf8_lossy(&output.stdout).to_string(),
+                            String::from_utf8_lossy(&output.stderr).to_string(),
+                        ))))
+                    }
+                    _ => Err("io.shell expects a String".to_string()),
+                },
+            }),
+        ),
         // Interactive / 交互输入
         (
             "io.input",
