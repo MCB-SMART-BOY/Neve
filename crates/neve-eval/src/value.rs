@@ -708,7 +708,7 @@ impl fmt::Debug for Value {
             Value::None => write!(f, "None"),
             Value::Ok(v) => write!(f, "Ok({:?})", v),
             Value::Err(v) => write!(f, "Err({:?})", v),
-            Value::Event(e) => write!(f, "Event({:?})", e.kind),
+            Value::Event(_e) => write!(f, "Event({:?})", e.kind),
             Value::Thunk(thunk) => write!(f, "{:?}", thunk),
         }
     }
@@ -1198,7 +1198,7 @@ impl KeyCtx {
             Value::None => "None".to_string(),
             Value::Ok(v) => format!("Ok({})", self.value_key(v)),
             Value::Err(v) => format!("Err({})", self.value_key(v)),
-            Value::Event(e) => "Event(..)".to_string(),
+            Value::Event(_e) => "Event(..)".to_string(),
             Value::Thunk(thunk) => {
                 let ptr = Rc::as_ptr(&thunk.inner) as usize;
                 self.key_for_ptr(ptr, |ctx| match &*thunk.state() {
