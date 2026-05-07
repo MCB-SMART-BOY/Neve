@@ -446,6 +446,33 @@ path.is_absolute(path: String) -> Bool
 ```
 
 
+
+## Event / 事件
+
+| Function | Signature | Effect |
+|----------|-----------|--------|
+| `io.every(ms)` | `Int -> Event<Int>` | effect |
+| `io.watchFile(path)` | `String -> Event<String>` | effect |
+| `io.eventNext(event)` | `Event<a> -> a` | effect |
+| `io.eventMap(event, fn)` | `Event<a> -> (a -> b) -> Event<b>` | eval-owned |
+| `io.eventFilter(event, fn)` | `Event<a> -> (a -> Bool) -> Event<a>` | eval-owned |
+
+## Reactive / 反应式
+
+| Function | Signature | Effect |
+|----------|-----------|--------|
+| `io.reactive(event)` | `Event<a> -> Live<a>` | effect |
+| `io.liveNext(live)` | `Live<a> -> a` | effect |
+| `io.liveCurrent(live)` | `Live<a> -> Option<a>` | — |
+| `io.liveCancel(live)` | `Live<a> -> ()` | effect |
+
+## Temporal / 时序
+
+| Function | Signature | Effect |
+|----------|-----------|--------|
+| `io.retry(fn, maxAttempts, backoffMs)` | `(() -> a) -> Int -> Int -> a` | effect |
+| `io.ensure(check, timeoutMs, intervalMs)` | `(() -> Bool) -> Int -> Int -> Bool` | effect |
+
 ## Map / Set Namespaces (Map.*, Set.*) / Map / Set 命名空间（Map.*、Set.*）
 
 
