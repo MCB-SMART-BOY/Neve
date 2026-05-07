@@ -7,8 +7,8 @@
 //! 主要用于包构建和配置生成期间。
 
 use neve_eval::value::{
-    BuiltinFn, CommandValue, PipelineValue, ProcessResultValue, RedirectValue, TaskTargetValue,
-    TaskValue, Value,
+    BuiltinFn, CommandValue, EventKind, EventValue, PipelineValue, ProcessResultValue,
+    RedirectValue, TaskTargetValue, TaskValue, Value,
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -33,6 +33,25 @@ pub fn set_script_args(args: Vec<String>) {
 /// 返回所有 IO 内置函数。
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
+        // Events / 事件
+        (
+            "io.every",
+            Value::Builtin(BuiltinFn {
+                name: "io.every",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Int(ms) => {
+                        let ms: u64 = ms
+                            .try_into()
+                            .map_err(|_| "io.every: interval must be non-negative".to_string())?;
+                        Ok(Value::Event(Rc::new(EventValue {
+                            kind: EventKind::Timer { interval_ms: ms },
+                        })))
+                    }
+                    _ => Err("io.every expects an Int (milliseconds)".to_string()),
+                },
+            }),
+        ),
         // Output / 输出 (also available as global print/println)
         (
             "print",

@@ -16,6 +16,7 @@ pub const PROCESS_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 8);
 pub const PIPELINE_TYPE_ID: DefId = DefId(u32::MAX - 9);
 pub const REDIRECT_TYPE_ID: DefId = DefId(u32::MAX - 10);
 pub const TASK_TYPE_ID: DefId = DefId(u32::MAX - 11);
+pub const EVENT_TYPE_ID: DefId = DefId(u32::MAX - 12);
 
 pub fn builtin_list(elem: Ty, span: Span) -> Ty {
     Ty {
@@ -101,6 +102,13 @@ pub fn builtin_task(output: Ty, span: Span) -> Ty {
     }
 }
 
+pub fn builtin_event(inner: Ty, span: Span) -> Ty {
+    Ty {
+        kind: TyKind::Named(EVENT_TYPE_ID, vec![inner]),
+        span,
+    }
+}
+
 pub fn is_builtin_option_type(def_id: DefId) -> bool {
     def_id == OPTION_TYPE_ID
 }
@@ -123,6 +131,7 @@ pub fn builtin_type_name(def_id: DefId) -> Option<&'static str> {
         PIPELINE_TYPE_ID => Some("Pipeline"),
         REDIRECT_TYPE_ID => Some("Redirect"),
         TASK_TYPE_ID => Some("Task"),
+        EVENT_TYPE_ID => Some("Event"),
         _ => None,
     }
 }
