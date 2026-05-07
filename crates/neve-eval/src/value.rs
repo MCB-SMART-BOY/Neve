@@ -462,6 +462,8 @@ pub enum Value {
     Redirect(Rc<RedirectValue>),
     /// Task runtime object / Task 运行时对象
     Task(Rc<TaskValue>),
+    /// Event runtime object / Event 运行时对象
+    Event(Rc<EventValue>),
     /// ProcessResult runtime object / ProcessResult 运行时对象
     ProcessResult(Rc<ProcessResultValue>),
 
@@ -706,6 +708,7 @@ impl fmt::Debug for Value {
             Value::None => write!(f, "None"),
             Value::Ok(v) => write!(f, "Ok({:?})", v),
             Value::Err(v) => write!(f, "Err({:?})", v),
+            Value::Event(e) => write!(f, "Event({:?})", e.kind),
             Value::Thunk(thunk) => write!(f, "{:?}", thunk),
         }
     }
@@ -865,7 +868,21 @@ impl Value {
             pipeline,
         ))))
     }
+}
 
+/// An event source — produces a stream of values over time.
+#[derive(Debug, Clone)]
+pub struct EventValue {
+    pub kind: EventKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum EventKind {
+    Timer { interval_ms: u64 },
+    FileWatch { path: std::path::PathBuf },
+}
+
+impl Value {
     /// Check if the value is truthy.
     /// 检查值是否为真值。
     ///
@@ -1181,6 +1198,7 @@ impl KeyCtx {
             Value::None => "None".to_string(),
             Value::Ok(v) => format!("Ok({})", self.value_key(v)),
             Value::Err(v) => format!("Err({})", self.value_key(v)),
+            Value::Event(e) => "Event(..)".to_string(),
             Value::Thunk(thunk) => {
                 let ptr = Rc::as_ptr(&thunk.inner) as usize;
                 self.key_for_ptr(ptr, |ctx| match &*thunk.state() {
