@@ -2384,6 +2384,7 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.lines" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_string_list(span), span),
             "io.readPassword" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_ty(TyKind::String, span), span),
             "io.input" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
