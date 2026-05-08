@@ -3166,3 +3166,158 @@ fn test_frontend_tuple_match_exhaustive() {
         analysis.diagnostics
     );
 }
+
+// === Expanded end-to-end coverage ===
+
+// -- Spawn/poll lifecycle --
+#[test]
+fn test_end_to_end_spawn_multiple_tasks() {
+    let source = r#"
+    import std.io as io;
+    let id1 = io.spawn(io.taskCommand(io.command("echo", ["first"])));
+    let id2 = io.spawn(io.taskCommand(io.command("echo", ["second"])));
+    io.cancel(id1);
+    io.cancel(id2);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+// -- Command pipe chain --
+#[test]
+fn test_end_to_end_pipe_chain_two_commands() {
+    // |> currently handles Command |> Command → Pipeline (Pipeline chaining TODO)
+    let source = r#"
+    import std.io as io;
+    let pipeline = io.command("echo", ["a"]) |> io.command("cat", []);
+    let result = io.execPipeline(pipeline);
+    let x = io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+// -- Nested match with guards --
+#[test]
+fn test_end_to_end_nested_match_with_guards() {
+    assert_runtime_parity(
+        "
+        fn classify(x: Int) -> String = match x {
+            n if n < 0 -> \"negative\",
+            0 -> \"zero\",
+            n if n > 100 -> \"large\",
+            _ -> match x % 2 {
+                0 -> \"even\",
+                _ -> \"odd\",
+            },
+        };
+        let x = classify(7);
+        ",
+        Value::String("odd".to_string().into()),
+    );
+}
+
+// -- Bytes I/O roundtrip --
+#[test]
+fn test_end_to_end_bytes_roundtrip_in_memory() {
+    // Test bytes conversion without file I/O
+    let source = r#"
+    import std.bytes as bytes;
+    let data = bytes.fromString("binary data");
+    let list = bytes.toList(data);
+    let back = bytes.fromList(list);
+    let x = bytes.toString(back) == "binary data";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+// -- Signal handler type validation --
+#[test]
+fn test_end_to_end_signal_wrong_arity_rejected() {
+    let source = r#"
+    import std.io as io;
+    let _ = io.onSignal("INT", fn(x: Int) { print("got"); () });
+    let x = true;
+    "#;
+    let analysis = analyze_source(source);
+    let hir_result = eval_hir(&analysis);
+    assert!(hir_result.is_err(), "signal handler with wrong arity should be rejected");
+}
+
+// -- Complex destructuring --
+#[test]
+fn test_end_to_end_tuple_destructure_and_match() {
+    assert_runtime_parity(
+        "
+        let pair = (1, true);
+        let x = match pair {
+            (a, true) -> a + 1,
+            _ -> 0,
+        };
+        ",
+        Value::Int(2.into()),
+    );
+}
+
+// -- List rest pattern in match --
+#[test]
+fn test_end_to_end_list_rest_match_exhaustiveness() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let x = match [1, 2, 3] {
+            [] -> 0,
+            [first, ..rest] -> first + 1,
+        };
+        "#,
+    );
+    let has_exhaustive_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        !has_exhaustive_error,
+        "[] + [first, ..rest] should be exhaustive, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+// -- Fetch (network) type check --
+#[test]
+fn test_end_to_end_fetch_type_checking() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.fetch as fetch;
+        fn get() -> fetch.Result effect = fetch.url("https://example.com");
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        !has_effect_error,
+        "effect fn calling fetch should be allowed, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+// -- Option chaining --
+#[test]
+fn test_end_to_end_option_map_then_default() {
+    assert_runtime_parity(
+        "
+        import std.option as option;
+        let x = option.some(41);
+        let y = match x {
+            Some(v) -> v + 1,
+            None -> 0,
+        };
+        ",
+        Value::Int(42.into()),
+    );
+}
