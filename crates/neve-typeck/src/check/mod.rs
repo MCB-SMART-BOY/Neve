@@ -854,6 +854,11 @@ impl TypeChecker {
         &self.global_spans
     }
 
+    /// Get the map of global definition names (for type display).
+    pub fn global_names_ref(&self) -> &HashMap<DefId, String> {
+        &self.global_names
+    }
+
     /// Get struct field type by name.
     /// 通过名称获取结构体字段类型。
     pub fn struct_field_type(&self, def_id: DefId, field_name: &str) -> Option<Ty> {
