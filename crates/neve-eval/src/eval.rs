@@ -1045,8 +1045,26 @@ impl Evaluator {
                 _ => Err(EvalError::TypeError("cannot merge".to_string())),
             },
             BinOp::Pipe => {
-                // a |> f  =>  f(a)
-                self.apply(right, vec![left])
+                // a |> f:
+                // - If left is a Command, chain into a Pipeline: cmd1 |> cmd2 => pipeline([cmd1, cmd2])
+                // - Otherwise, function application: a |> f => f(a)
+                if matches!(left, Value::Command(_)) {
+                    let cmd1 = match left {
+                        Value::Command(c) => c,
+                        _ => unreachable!(),
+                    };
+                    let cmd2 = match right {
+                        Value::Command(c) => c,
+                        _ => return Err(EvalError::TypeError(
+                            "command pipe: right side must be a Command".to_string()
+                        )),
+                    };
+                    Ok(Value::Pipeline(std::rc::Rc::new(
+                        crate::value::PipelineValue::new(vec![cmd1, cmd2])
+                    )))
+                } else {
+                    self.apply(right, vec![left])
+                }
             }
         }
     }

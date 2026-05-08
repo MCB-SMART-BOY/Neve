@@ -8,7 +8,7 @@
 
 use crate::builtin_types::{
     builtin_list, builtin_option, builtin_path, builtin_result,
-    is_builtin_option_type, is_builtin_result_type,
+    builtin_pipeline, is_builtin_option_type, is_builtin_result_type, is_command_type,
 };
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
@@ -3129,15 +3129,27 @@ impl TypeChecker {
                 self.apply(&left_ty)
             }
 
-            // Pipe: a -> (a -> b) -> b
+            // Pipe: a |> b
+            // - If left is Command, right must be Command, result is Pipeline
+            // - Otherwise, function application: a |> f  =>  f(a)
             BinOp::Pipe => {
-                let result_ty = self.fresh_var();
-                let expected_fn = Ty {
-                    kind: TyKind::Fn(vec![left_ty], Box::new(result_ty.clone())),
-                    span,
-                };
-                self.unify(&right_ty, &expected_fn, right.span);
-                self.apply(&result_ty)
+                let left_kind = self.apply(&left_ty);
+                if matches!(left_kind.kind, TyKind::Named(def_id, _) if is_command_type(def_id)) {
+                    // Command pipe: cmd1 |> cmd2 => Pipeline
+                    let right_kind = self.apply(&right_ty);
+                    if !matches!(right_kind.kind, TyKind::Named(def_id, _) if is_command_type(def_id)) {
+                        self.error(right.span, "command pipe: right side must be a Command".to_string());
+                    }
+                    builtin_pipeline(span)
+                } else {
+                    let result_ty = self.fresh_var();
+                    let expected_fn = Ty {
+                        kind: TyKind::Fn(vec![left_ty], Box::new(result_ty.clone())),
+                        span,
+                    };
+                    self.unify(&right_ty, &expected_fn, right.span);
+                    self.apply(&result_ty)
+                }
             }
         }
     }
