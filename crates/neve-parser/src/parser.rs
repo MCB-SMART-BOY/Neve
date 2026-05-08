@@ -576,7 +576,7 @@ impl Parser {
             // Parse optional default value
             // 解析可选的默认值
             let _effect = self.eat(TokenKind::Effect);
-        let default = if self.eat(TokenKind::Eq) {
+            let default = if self.eat(TokenKind::Eq) {
                 Some(self.parse_expr())
             } else {
                 None
@@ -669,7 +669,7 @@ impl Parser {
 
         // Parse optional default implementation
         // 解析可选的默认实现
-                // Parse optional effect annotation
+        // Parse optional effect annotation
         let effect = self.eat(TokenKind::Effect);
 
         let default = if self.eat(TokenKind::Eq) {

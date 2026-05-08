@@ -1,16 +1,15 @@
 //! Builtin type resolution for the type checker.
 //! 类型检查器的内置类型解析。
 
-use crate::unify::instantiate;
-use neve_common::Span;
-use neve_hir::{Ty, TyKind};
 use super::TypeChecker;
 use crate::builtin_types::{
     builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live, builtin_map,
     builtin_option, builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect,
     builtin_result, builtin_set, builtin_task,
 };
-
+use crate::unify::instantiate;
+use neve_common::Span;
+use neve_hir::{Ty, TyKind};
 
 fn builtin_ty(kind: TyKind, span: Span) -> Ty {
     Ty { kind, span }
@@ -1102,12 +1101,39 @@ impl TypeChecker {
                     span,
                 )
             }
-            "io.read" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_ty(TyKind::String, span), span),
-            "io.write" => builtin_fn(vec![builtin_ty(TyKind::String, span), builtin_ty(TyKind::String, span)], builtin_ty(TyKind::Unit, span), span),
-            "io.run" => builtin_fn(vec![builtin_command(span)], builtin_process_result(span), span),
-            "io.shell" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_process_result(span), span),
-            "io.lines" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_string_list(span), span),
-            "io.readPassword" => builtin_fn(vec![builtin_ty(TyKind::String, span)], builtin_ty(TyKind::String, span), span),
+            "io.read" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "io.write" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.run" => builtin_fn(
+                vec![builtin_command(span)],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.shell" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.lines" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_string_list(span),
+                span,
+            ),
+            "io.readPassword" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
             "io.input" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_ty(TyKind::String, span),
@@ -1119,7 +1145,10 @@ impl TypeChecker {
                 span,
             ),
             "io.onSignal" => builtin_fn(
-                vec![builtin_ty(TyKind::String, span), builtin_fn(Vec::new(), builtin_ty(TyKind::Unit, span), span)],
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_fn(Vec::new(), builtin_ty(TyKind::Unit, span), span),
+                ],
                 builtin_ty(TyKind::Unit, span),
                 span,
             ),

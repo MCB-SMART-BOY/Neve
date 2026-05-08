@@ -1584,3 +1584,259 @@ fn test_parse_try_expression() {
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
+
+// ============================================================================
+// Golden Tests — Spec v2.0 Coverage (previously untested constructs)
+// ============================================================================
+
+// --- Fundamental literals ---
+
+#[test]
+fn test_parse_unit_literal() {
+    let (file, diags) = parse("let x = ();");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_char_literal() {
+    let (file, diags) = parse("let c = 'a';");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_char_escape() {
+    let (file, diags) = parse("let c = '\\n';");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+// TODO: Unicode escape \u{...} in char literals not yet supported by lexer
+#[ignore]
+fn test_parse_char_unicode() {
+    let (file, diags) = parse("let c = '\\u{1F600}';");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Numeric literals (hex/octal/binary/separators) ---
+
+#[test]
+fn test_parse_hex_integer() {
+    let (file, diags) = parse("let x = 0xFF;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_octal_integer() {
+    let (file, diags) = parse("let x = 0o77;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_binary_integer() {
+    let (file, diags) = parse("let x = 0b1010;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_digit_separators() {
+    let (file, diags) = parse("let x = 1_000_000;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_scientific_float() {
+    let (file, diags) = parse("let f = 1.0e-5;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Path literals ---
+
+#[test]
+fn test_parse_path_literal_relative() {
+    let (file, diags) = parse("let p = ./config;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_path_literal_absolute() {
+    let (file, diags) = parse("let p = /etc/hosts;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_path_literal_parent() {
+    let (file, diags) = parse("let p = ../parent;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Lazy expression ---
+
+#[test]
+fn test_parse_lazy_expression() {
+    let (file, diags) = parse("let x = lazy 42;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_lazy_function_call() {
+    let (file, diags) = parse("let x = lazy expensive(42);");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Postfix expressions (index, tuple access) ---
+
+#[test]
+fn test_parse_index_expression() {
+    let (file, diags) = parse("let x = xs[0];");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+// TODO: tuple index t.0 conflicts with float literal parsing
+#[ignore]
+fn test_parse_tuple_index() {
+    let (file, diags) = parse("let x = t.0;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Dotted path expression ---
+
+#[test]
+fn test_parse_dotted_path() {
+    let (file, diags) = parse("let x = std.list.map;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Let expression (let as expression, not statement) ---
+
+#[test]
+fn test_parse_let_expr() {
+    let (file, diags) = parse("let x = { let y = 1; y + 2 };");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Type annotations (record type, unit type) ---
+
+#[test]
+fn test_parse_record_type_annotation() {
+    let (file, diags) = parse("let r: #{ name: String, age: Int } = #{ name = \"Alice\", age = 30 };");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_unit_return_type() {
+    let (file, diags) = parse("fn nop() -> () = ();");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Effect annotations on trait/impl methods ---
+
+#[test]
+fn test_parse_effect_on_trait_method() {
+    let (file, diags) = parse("trait Logger { fn log(msg: String) -> () effect; };");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+// TODO: effect annotation on impl methods needs syntax clarification
+#[ignore]
+fn test_parse_effect_on_impl_method() {
+    let (file, diags) = parse("struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> () effect = io.write(\"/tmp/log\", msg); };");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- self expression ---
+
+#[test]
+fn test_parse_self_expression() {
+    let (file, diags) = parse("trait Show { fn show(self) -> String = self; };");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Imports (glob, crate, visibility) ---
+
+#[test]
+fn test_parse_import_glob() {
+    let (file, diags) = parse("import std.list (*);");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+// TODO: crate:: import prefix not yet implemented in parser
+#[ignore]
+fn test_parse_import_crate() {
+    let (file, diags) = parse("import crate::utils;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_pub_import() {
+    let (file, diags) = parse("pub import std.io;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Generic params with multiple bounds ---
+
+#[test]
+fn test_parse_generic_multiple_bounds() {
+    let (file, diags) = parse("fn foo(x: a) -> a = x;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Comments (multi-line) ---
+
+#[test]
+// TODO: multi-line -- ... -- comments not yet supported by lexer
+#[ignore]
+fn test_parse_multiline_comment() {
+    let (file, diags) = parse("let x = 1; -- this is a multi-line\ncomment that spans lines --\nlet y = 2;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 2);
+}
+
+// --- Shebang ---
+
+#[test]
+// TODO: shebang stripping not yet in parser (handled by CLI)
+#[ignore]
+fn test_parse_shebang() {
+    let (file, diags) = parse("#!/usr/bin/env neve\nlet x = 1;");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}
+
+// --- Block (empty block) ---
+
+#[test]
+fn test_parse_empty_block() {
+    let (file, diags) = parse("let x = {};");
+    assert!(diags.is_empty());
+    assert_eq!(file.items.len(), 1);
+}

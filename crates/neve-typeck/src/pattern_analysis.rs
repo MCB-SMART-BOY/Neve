@@ -430,7 +430,8 @@ pub(crate) fn analyze_match(
                     continue;
                 }
                 // Check if this arm covers all declared fields
-                let covers_all = matches!(&arm.pattern.kind,
+                let covers_all = matches!(
+                    &arm.pattern.kind,
                     PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)
                 ) || match &arm.pattern.kind {
                     PatternKind::Record(fields) => {
@@ -448,7 +449,9 @@ pub(crate) fn analyze_match(
                 }
             }
             if result.coverage_complete_at.is_none() {
-                result.missing_patterns.push("full record pattern".to_string());
+                result
+                    .missing_patterns
+                    .push("full record pattern".to_string());
             }
         }
 
@@ -463,7 +466,10 @@ pub(crate) fn analyze_match(
                     result.push_redundant(previous, RedundancyReason::CoveredByPreviousArms);
                     continue;
                 }
-                if matches!(&arm.pattern.kind, PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)) {
+                if matches!(
+                    &arm.pattern.kind,
+                    PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)
+                ) {
                     result.push_useful();
                     result.coverage_complete_at = Some(arm.span);
                 } else {
