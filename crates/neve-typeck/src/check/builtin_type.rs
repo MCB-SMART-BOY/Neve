@@ -3,14 +3,12 @@
 
 use crate::unify::instantiate;
 use neve_common::Span;
-use neve_hir::{DefId, Ty, TyKind};
-use neve_diagnostic::ErrorCode;
+use neve_hir::{Ty, TyKind};
 use super::TypeChecker;
 use crate::builtin_types::{
     builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live, builtin_map,
     builtin_option, builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect,
     builtin_result, builtin_set, builtin_task,
-    is_builtin_option_type, is_builtin_result_type,
 };
 
 
