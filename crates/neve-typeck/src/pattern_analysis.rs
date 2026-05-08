@@ -1,7 +1,7 @@
 //! Match pattern coverage / usefulness analysis.
 //! match 模式覆盖与可达性分析。
 
-use crate::builtin_types::{is_builtin_option_type, is_builtin_result_type};
+use crate::builtin_types::{LIST_TYPE_ID, is_builtin_option_type, is_builtin_result_type};
 use crate::check::{EnumInfo, VariantInfo};
 use neve_common::Span;
 use neve_hir::{
@@ -481,6 +481,130 @@ pub(crate) fn analyze_match(
             }
         }
 
+        TyKind::Named(def_id, _args) if def_id.0 == LIST_TYPE_ID.0 => {
+            // List exhaustiveness: need both empty and non-empty covered
+            let mut covers_empty = false;
+            let mut covers_nonempty = false;
+            let mut empty_witness = None;
+            let mut nonempty_witness = None;
+
+            for arm in arms {
+                if let Some(previous_span) = result.coverage_complete_at {
+                    result.push_redundant(previous_span, RedundancyReason::CoveredByPreviousArms);
+                    continue;
+                }
+                if arm.guard.is_some() {
+                    result.push_guarded_ignored();
+                    continue;
+                }
+                let (arm_empty, arm_nonempty) = list_pattern_coverage(&arm.pattern);
+                let arm_can_match = arm_empty || arm_nonempty;
+                if arm_can_match && (!arm_empty || covers_empty) && (!arm_nonempty || covers_nonempty) {
+                    let witness = earliest_span(
+                        [
+                            arm_empty.then_some(empty_witness).flatten(),
+                            arm_nonempty.then_some(nonempty_witness).flatten(),
+                        ].into_iter().flatten(),
+                    ).unwrap_or(arm.span);
+                    result.push_redundant(witness, RedundancyReason::SubsetShadowed);
+                    continue;
+                }
+                result.push_useful();
+                if pattern_is_irrefutable_for(&arm.pattern, scrutinee_ty, ctx) {
+                    result.coverage_complete_at = Some(arm.span);
+                    covers_empty = true;
+                    covers_nonempty = true;
+                    continue;
+                }
+                if arm_empty && !covers_empty {
+                    empty_witness = Some(arm.span);
+                }
+                if arm_nonempty && !covers_nonempty {
+                    nonempty_witness = Some(arm.span);
+                }
+                covers_empty |= arm_empty;
+                covers_nonempty |= arm_nonempty;
+                if covers_empty && covers_nonempty {
+                    result.coverage_complete_at = Some(arm.span);
+                }
+            }
+            if !covers_empty && !covers_nonempty {
+                result.missing_patterns.push("[..] or [] (any list)".to_string());
+            } else if !covers_empty {
+                result.missing_patterns.push("[] (empty list)".to_string());
+            } else if !covers_nonempty {
+                result.missing_patterns.push("[..] (non-empty list)".to_string());
+            }
+        }
+
+        TyKind::Tuple(elem_tys) => {
+            let arity = elem_tys.len();
+            if arity == 0 {
+                // Unit tuple — always covered
+                result.coverage_complete_at = arms.first().map(|a| a.span);
+                for (i, arm) in arms.iter().enumerate() {
+                    if i > 0 && arm.guard.is_none() {
+                        if let Some(prev) = result.coverage_complete_at {
+                            result.push_redundant(prev, RedundancyReason::CoveredByPreviousArms);
+                            continue;
+                        }
+                    }
+                    if arm.guard.is_some() {
+                        result.push_guarded_ignored();
+                    } else {
+                        result.push_useful();
+                    }
+                }
+            } else {
+                let mut covered: Vec<bool> = vec![false; arity];
+                let mut witnesses: Vec<Option<Span>> = vec![None; arity];
+
+                for arm in arms {
+                    if let Some(previous_span) = result.coverage_complete_at {
+                        result.push_redundant(previous_span, RedundancyReason::CoveredByPreviousArms);
+                        continue;
+                    }
+                    if arm.guard.is_some() {
+                        result.push_guarded_ignored();
+                        continue;
+                    }
+                    if pattern_is_irrefutable_for(&arm.pattern, scrutinee_ty, ctx) {
+                        result.push_useful();
+                        result.coverage_complete_at = Some(arm.span);
+                        for i in 0..arity {
+                            covered[i] = true;
+                        }
+                        continue;
+                    }
+                    let arm_covered = tuple_pattern_coverage(&arm.pattern, arity);
+                    let all_redundant = arm_covered.iter().enumerate().all(|(i, &c)| !c || covered[i]);
+                    if all_redundant && arm_covered.iter().any(|&c| c) {
+                        let witness = witnesses.iter().enumerate()
+                            .filter_map(|(i, w)| arm_covered[i].then_some(*w).flatten())
+                            .min_by_key(|s| (s.start, s.end))
+                            .unwrap_or(arm.span);
+                        result.push_redundant(witness, RedundancyReason::SubsetShadowed);
+                        continue;
+                    }
+                    result.push_useful();
+                    for i in 0..arity {
+                        if arm_covered[i] && !covered[i] {
+                            witnesses[i] = Some(arm.span);
+                        }
+                        covered[i] |= arm_covered[i];
+                    }
+                    if covered.iter().all(|&c| c) {
+                        result.coverage_complete_at = Some(arm.span);
+                    }
+                }
+                for i in 0..arity {
+                    if !covered[i] {
+                        result.missing_patterns.push(format!("tuple element {}", i + 1));
+                    }
+                }
+            }
+        }
+
         _ => {
             result.arm_usefulness = vec![ArmUsefulness::NotAnalyzed; arms.len()];
         }
@@ -507,6 +631,55 @@ fn bool_pattern_coverage(pattern: &Pattern) -> (bool, bool) {
             (t || covers_true, f || covers_false)
         }),
         _ => (false, false),
+    }
+}
+
+/// Returns (covers_empty, covers_nonempty) for a list pattern.
+fn list_pattern_coverage(pattern: &Pattern) -> (bool, bool) {
+    match &pattern.kind {
+        PatternKind::Wildcard | PatternKind::Var(_, _) => (true, true),
+        PatternKind::Binding(_, _, inner) => list_pattern_coverage(inner),
+        PatternKind::List(elements) => {
+            (elements.is_empty(), !elements.is_empty())
+        }
+        PatternKind::ListRest { init, rest, tail } => {
+            // [..] with no init/tail and no bound rest → irrefutable
+            if init.is_empty() && tail.is_empty() && rest.is_none() {
+                (true, true)
+            } else {
+                // Anything with elements or rest covers non-empty;
+                // only covers empty if all are empty and rest is absent
+                let has_elements = !init.is_empty() || !tail.is_empty();
+                (false, has_elements || rest.is_some())
+            }
+        }
+        PatternKind::Or(patterns) => patterns.iter().fold((false, false), |(e, n), p| {
+            let (pe, pn) = list_pattern_coverage(p);
+            (e || pe, n || pn)
+        }),
+        _ => (false, false),
+    }
+}
+
+/// Returns a Vec<bool> indicating which tuple positions are covered by this pattern.
+fn tuple_pattern_coverage(pattern: &Pattern, arity: usize) -> Vec<bool> {
+    match &pattern.kind {
+        PatternKind::Wildcard | PatternKind::Var(_, _) => vec![true; arity],
+        PatternKind::Binding(_, _, inner) => tuple_pattern_coverage(inner, arity),
+        PatternKind::Tuple(patterns) if patterns.len() == arity => {
+            vec![true; arity] // Tuple pattern covers all positions of same arity
+        }
+        PatternKind::Or(patterns) => {
+            let mut covered = vec![false; arity];
+            for p in patterns {
+                let pc = tuple_pattern_coverage(p, arity);
+                for i in 0..arity {
+                    covered[i] |= pc[i];
+                }
+            }
+            covered
+        }
+        _ => vec![false; arity],
     }
 }
 
@@ -556,6 +729,15 @@ fn pattern_is_irrefutable_for(
                 .iter()
                 .zip(variant.fields.iter())
                 .all(|(pattern, ty)| pattern_is_irrefutable_for(pattern, ty, ctx))
+        }
+        PatternKind::List(_elements) => {
+            // Fixed-length list patterns are refutable (only match specific length)
+            false
+        }
+        PatternKind::ListRest { init, rest, tail } => {
+            // [..] (no init, no tail, no bound rest) is irrefutable for list types
+            init.is_empty() && tail.is_empty() && rest.is_none()
+                && matches!(expected.kind, TyKind::Named(def_id, _) if def_id.0 == LIST_TYPE_ID.0)
         }
         PatternKind::Or(patterns) => {
             let (covers_true, covers_false) = bool_pattern_coverage(pattern);
