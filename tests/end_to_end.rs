@@ -3188,11 +3188,24 @@ fn test_end_to_end_spawn_multiple_tasks() {
 // -- Command pipe chain --
 #[test]
 fn test_end_to_end_pipe_chain_two_commands() {
-    // |> currently handles Command |> Command → Pipeline (Pipeline chaining TODO)
     let source = r#"
     import std.io as io;
     let pipeline = io.command("echo", ["a"]) |> io.command("cat", []);
     let result = io.execPipeline(pipeline);
+    let x = io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_pipe_chain_three_commands() {
+    // Pipeline |> Command now works — appends to pipeline
+    let source = r#"
+    import std.io as io;
+    let p = io.command("echo", ["a"]) |> io.command("cat", []) |> io.command("cat", []);
+    let result = io.execPipeline(p);
     let x = io.processSuccess(result);
     "#;
     let analysis = analyze_without_diagnostics(source);
