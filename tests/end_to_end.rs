@@ -3546,3 +3546,27 @@ fn test_end_to_end_io_spawn_with_timeout_cancels() {
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
     assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
+
+// === TTY tests ===
+#[test]
+fn test_end_to_end_io_is_tty_returns_bool() {
+    let source = r#"
+    import std.io as io;
+    let x = typeOf(io.isTTY(1)) == "Bool";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_terminal_size_type() {
+    let source = r#"
+    import std.io as io;
+    let sz = io.terminalSize();
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}

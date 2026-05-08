@@ -1499,6 +1499,7 @@ name = "neve-std"
 version = "3.4.2"
 dependencies = [
  "glob",
+ "libc",
  "neve-common",
  "neve-derive",
  "neve-eval",
