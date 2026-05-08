@@ -6,7 +6,7 @@
   "c": "273102044667b40b.c"},
  "log":
  [{"message":
-   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/lean/Neve.lean -o /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve.olean -i /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve.ilean -c /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve.c --setup /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve.setup.json --json",
+   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/formal/Neve.lean -o /home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve.olean -i /home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve.ilean -c /home/mcbgaruda/projects/Neve/formal/.lake/build/ir/Neve.c --setup /home/mcbgaruda/projects/Neve/formal/.lake/build/ir/Neve.setup.json --json",
    "level": "trace"}],
  "inputs":
  [["Neve:deps",
@@ -21,7 +21,7 @@
         ["Neve.Eval transitive imports (legacy)", "6e9c4921f08cb43c"],
         ["Neve.Eval:importAllArts", "a2a2e9334a759c1a"],
         ["Neve.Safety transitive imports (legacy)", "6e5e20e159c355a7"],
-        ["Neve.Safety:importAllArts", "db16e2f5407f566b"]]]]],
+        ["Neve.Safety:importAllArts", "7a9182a64a050861"]]]]],
     ["libs",
      [["import dynlibs", "00000000000006bb"],
       ["package external libraries", "00000000000006bb"],
@@ -29,10 +29,10 @@
       ["module plugins", "00000000000006bb"]]]]],
   ["Lean 4.29.1, commit f72c35b3f637c8c6571d353742168ab66cc22c00",
    "fa77a35a41db35c0"],
-  ["/home/mcbgaruda/projects/Neve/lean/Neve.lean", "d9f4185134fa73b2"],
+  ["/home/mcbgaruda/projects/Neve/formal/Neve.lean", "d9f4185134fa73b2"],
   ["options", "00000000000006bb"],
   ["isModule: false", "feefd2a0d3a1847e"],
   ["Module.name: Neve", "9d49ecb303749afa"],
   ["Package.id?: (some NeveFormal)", "dfedda3e51ebba2a"],
   ["Module.leanArgs: #[]", "00000000000006bb"]],
- "depHash": "6b8ef7ccc281bf06"}
+ "depHash": "70983183910f5220"}

@@ -5,9 +5,9 @@
  "isModule": false,
  "importArts":
  {"Neve.Types":
-  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Types.olean"],
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Types.olean"],
   "Neve.Syntax":
-  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.olean"],
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Syntax.olean"],
   "Neve.Eval":
-  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Eval.olean"]},
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Eval.olean"]},
  "dynlibs": []}

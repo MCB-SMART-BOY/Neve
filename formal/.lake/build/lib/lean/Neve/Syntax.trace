@@ -6,7 +6,7 @@
   "c": "8a24d08ede5fa304.c"},
  "log":
  [{"message":
-   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/lean/Neve/Syntax.lean -o /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.olean -i /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.ilean -c /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve/Syntax.c --setup /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve/Syntax.setup.json --json",
+   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/formal/Neve/Syntax.lean -o /home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Syntax.olean -i /home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Syntax.ilean -c /home/mcbgaruda/projects/Neve/formal/.lake/build/ir/Neve/Syntax.c --setup /home/mcbgaruda/projects/Neve/formal/.lake/build/ir/Neve/Syntax.setup.json --json",
    "level": "trace"}],
  "inputs":
  [["Neve.Syntax:deps",
@@ -21,7 +21,7 @@
       ["module plugins", "00000000000006bb"]]]]],
   ["Lean 4.29.1, commit f72c35b3f637c8c6571d353742168ab66cc22c00",
    "fa77a35a41db35c0"],
-  ["/home/mcbgaruda/projects/Neve/lean/Neve/Syntax.lean", "b25b9ffec269943e"],
+  ["/home/mcbgaruda/projects/Neve/formal/Neve/Syntax.lean", "b25b9ffec269943e"],
   ["options", "00000000000006bb"],
   ["isModule: false", "feefd2a0d3a1847e"],
   ["Module.name: Neve.Syntax", "7bf01a11a1c86c65"],

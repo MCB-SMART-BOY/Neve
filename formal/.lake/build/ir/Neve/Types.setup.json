@@ -5,5 +5,5 @@
  "isModule": false,
  "importArts":
  {"Neve.Syntax":
-  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.olean"]},
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Syntax.olean"]},
  "dynlibs": []}

@@ -6,7 +6,7 @@
   "c": "fe675bd3f15b8fe8.c"},
  "log":
  [{"message":
-   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/lean/Neve/Eval.lean -o /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Eval.olean -i /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Eval.ilean -c /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve/Eval.c --setup /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve/Eval.setup.json --json",
+   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/formal/Neve/Eval.lean -o /home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Eval.olean -i /home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Eval.ilean -c /home/mcbgaruda/projects/Neve/formal/.lake/build/ir/Neve/Eval.c --setup /home/mcbgaruda/projects/Neve/formal/.lake/build/ir/Neve/Eval.setup.json --json",
    "level": "trace"}],
  "inputs":
  [["Neve.Eval:deps",
@@ -25,7 +25,7 @@
       ["module plugins", "00000000000006bb"]]]]],
   ["Lean 4.29.1, commit f72c35b3f637c8c6571d353742168ab66cc22c00",
    "fa77a35a41db35c0"],
-  ["/home/mcbgaruda/projects/Neve/lean/Neve/Eval.lean", "f20a3431f0ed2377"],
+  ["/home/mcbgaruda/projects/Neve/formal/Neve/Eval.lean", "f20a3431f0ed2377"],
   ["options", "00000000000006bb"],
   ["isModule: false", "feefd2a0d3a1847e"],
   ["Module.name: Neve.Eval", "842f7f24344715d3"],
