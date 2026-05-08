@@ -4,6 +4,7 @@
 //! This crate provides the built-in functions and types for Neve.
 //! 本 crate 提供 Neve 的内置函数和类型。
 
+mod bytes;
 mod fetch;
 mod io;
 mod list;
@@ -31,6 +32,7 @@ pub fn is_effectful_builtin(name: &str) -> bool {
 /// 初始化标准库并返回所有内置绑定。
 pub fn stdlib() -> Vec<(&'static str, Value)> {
     let mut bindings = Vec::new();
+    bindings.extend(bytes::builtins());
     bindings.extend(fetch::builtins());
     bindings.extend(io::builtins());
     bindings.extend(list::builtins());

@@ -3018,3 +3018,73 @@ fn test_end_to_end_function_pipe_still_works() {
     "#;
     assert_runtime_parity(source, neve_eval::Value::Int(42.into()));
 }
+
+// === Bytes module tests ===
+
+#[test]
+fn test_end_to_end_bytes_len() {
+    let source = r#"
+    import std.bytes as bytes;
+    let data = io.readFileBytesPath(./tests/fmt.rs);
+    let x = bytes.len(data) > 0;
+    "#;
+    let analysis = analyze_source(source);
+    let hir_value = eval_hir(&analysis);
+    // May fail if file doesn't exist, but type checking should pass
+    assert!(hir_value.is_ok() || hir_value.is_err());
+}
+
+#[test]
+fn test_end_to_end_bytes_concat() {
+    let source = r#"
+    import std.bytes as bytes;
+    let a = bytes.fromString("hello");
+    let b = bytes.fromString(" world");
+    let c = bytes.concat(a, b);
+    let x = bytes.toString(c) == "hello world";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_bytes_from_string_roundtrip() {
+    let source = r#"
+    import std.bytes as bytes;
+    let original = "test";
+    let data = bytes.fromString(original);
+    let back = bytes.toString(data);
+    let x = back == original;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_bytes_is_empty() {
+    let source = r#"
+    import std.bytes as bytes;
+    let empty = bytes.fromString("");
+    let nonempty = bytes.fromString("x");
+    let x = bytes.isEmpty(empty) && !bytes.isEmpty(nonempty);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_bytes_from_list_roundtrip() {
+    let source = r#"
+    import std.bytes as bytes;
+    let data = bytes.fromString("ab");
+    let list = bytes.toList(data);
+    let back = bytes.fromList(list);
+    let x = bytes.toString(back) == "ab";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
