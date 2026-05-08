@@ -1240,6 +1240,21 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.spawn" => builtin_fn(
+                vec![builtin_task(builtin_process_result(span), span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "io.poll" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_option(builtin_process_result(span), span),
+                span,
+            ),
+            "io.cancel" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.awaitTask" => builtin_fn(
                 vec![builtin_task(builtin_process_result(span), span)],
                 builtin_process_result(span),
