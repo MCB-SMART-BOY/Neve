@@ -72,8 +72,8 @@
 | Or pattern `a | b` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | HIR lowering/typecheck/runtime 已收敛，工具链覆盖仍需继续补齐 |
 | Binding pattern `x @ pat` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `name @ pattern` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | List rest pattern `[x, ..xs]` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `init/rest/tail` 语义已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
-| 记录模式匹配 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 语言形态存在，编译器级检查不足 |
-| Match 穷尽性检查 | N/A | N/A | ⚠️ | N/A | N/A | ⚠️ | 现已接入 typecheck 主流程，支持 `Bool`、`Unit`、用户枚举、builtin `Option/Result`；`NonExhaustiveMatch` 错误码已到位；missing patterns 按声明顺序报告；列表、记录和更复杂子模式仍需继续扩展 |
+| 记录模式匹配 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 已接入穷尽性检查：覆盖所有声明字段即为 exhaustive；缺失字段报告 non-exhaustive；工具链覆盖仍需补齐 |
+| Match 穷尽性检查 | N/A | N/A | ✅ | N/A | N/A | ⚠️ | 支持 Bool/Unit/Int/Float/Char/String、用户枚举、builtin Option/Result、Record（字段覆盖）、List（空/非空）、Tuple（逐位）；NonExhaustiveMatch 错误码；工具链覆盖仍需补齐 |
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
 | 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 已替换为真实 frontend/runtime smoke tests，但覆盖广度还不足以单独代表语言完备度 |

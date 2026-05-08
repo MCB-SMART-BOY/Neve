@@ -3475,3 +3475,46 @@ fn test_end_to_end_empty_list_match_correctly_reports_non_exhaustive() {
         analysis.diagnostics
     );
 }
+
+// === Record pattern exhaustiveness ===
+#[test]
+fn test_frontend_record_match_exhaustive() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let r = #{ name = "test", age = 30 };
+        let x = match r {
+            #{ name, age } -> name,
+        };
+        "#,
+    );
+    let has_exhaustive_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        !has_exhaustive_error,
+        "record with all fields should be exhaustive, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_record_match_non_exhaustive() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let r = #{ name = "test", age = 30 };
+        let x = match r {
+            #{ name } -> name,
+        };
+        "#,
+    );
+    let has_exhaustive_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        has_exhaustive_error,
+        "record missing fields should be non-exhaustive, got {:?}",
+        analysis.diagnostics
+    );
+}
