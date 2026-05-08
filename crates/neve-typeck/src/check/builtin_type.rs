@@ -547,6 +547,42 @@ impl TypeChecker {
                     span,
                 )
             }
+            // bytes module
+            "bytes.len" => builtin_fn(
+                vec![builtin_bytes(span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
+            "bytes.isEmpty" => builtin_fn(
+                vec![builtin_bytes(span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "bytes.concat" => builtin_fn(
+                vec![builtin_bytes(span), builtin_bytes(span)],
+                builtin_bytes(span),
+                span,
+            ),
+            "bytes.fromString" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_bytes(span),
+                span,
+            ),
+            "bytes.toString" => builtin_fn(
+                vec![builtin_bytes(span)],
+                builtin_ty(TyKind::String, span),
+                span,
+            ),
+            "bytes.toList" => builtin_fn(
+                vec![builtin_bytes(span)],
+                builtin_list(builtin_ty(TyKind::Int, span), span),
+                span,
+            ),
+            "bytes.fromList" => builtin_fn(
+                vec![builtin_list(builtin_ty(TyKind::Int, span), span)],
+                builtin_bytes(span),
+                span,
+            ),
             "string.len" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_ty(TyKind::Int, span),
