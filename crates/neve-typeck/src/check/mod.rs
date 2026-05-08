@@ -3135,15 +3135,17 @@ impl TypeChecker {
             }
 
             // Pipe: a |> b
-            // - If left is Command, right must be Command, result is Pipeline
+            // - If left is Command/Pipeline, right must be Command, result is Pipeline
             // - Otherwise, function application: a |> f  =>  f(a)
             BinOp::Pipe => {
                 let left_kind = self.apply(&left_ty);
-                if matches!(left_kind.kind, TyKind::Named(def_id, _) if is_command_type(def_id)) {
-                    // Command pipe: cmd1 |> cmd2 => Pipeline
+                let is_cmd = matches!(&left_kind.kind, TyKind::Named(def_id, _) if is_command_type(*def_id));
+                let is_pipe = matches!(&left_kind.kind, TyKind::Named(def_id, _) if def_id.0 == crate::builtin_types::PIPELINE_TYPE_ID.0);
+                if is_cmd || is_pipe {
+                    // Command/Pipeline pipe: cmd1 |> cmd2 => Pipeline (or pipe |> cmd)
                     let right_kind = self.apply(&right_ty);
-                    if !matches!(right_kind.kind, TyKind::Named(def_id, _) if is_command_type(def_id)) {
-                        self.error(right.span, "command pipe: right side must be a Command".to_string());
+                    if !matches!(&right_kind.kind, TyKind::Named(def_id, _) if is_command_type(*def_id)) {
+                        self.error(right.span, "pipe: right side must be a Command".to_string());
                     }
                     builtin_pipeline(span)
                 } else {

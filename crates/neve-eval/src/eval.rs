@@ -1046,24 +1046,33 @@ impl Evaluator {
             },
             BinOp::Pipe => {
                 // a |> f:
-                // - If left is a Command, chain into a Pipeline: cmd1 |> cmd2 => pipeline([cmd1, cmd2])
+                // - If left is Command and right is Command: cmd1 |> cmd2 => pipeline([cmd1, cmd2])
+                // - If left is Pipeline and right is Command: pipe |> cmd => pipeline.append(cmd)
                 // - Otherwise, function application: a |> f => f(a)
-                if matches!(left, Value::Command(_)) {
-                    let cmd1 = match left {
-                        Value::Command(c) => c,
-                        _ => unreachable!(),
-                    };
-                    let cmd2 = match right {
-                        Value::Command(c) => c,
-                        _ => return Err(EvalError::TypeError(
+                match (&left, &right) {
+                    (Value::Command(c1), Value::Command(c2)) => {
+                        Ok(Value::Pipeline(std::rc::Rc::new(
+                            crate::value::PipelineValue::new(vec![c1.clone(), c2.clone()])
+                        )))
+                    }
+                    (Value::Pipeline(pipe), Value::Command(cmd)) => {
+                        let mut commands = pipe.commands().to_vec();
+                        commands.push(cmd.clone());
+                        Ok(Value::Pipeline(std::rc::Rc::new(
+                            crate::value::PipelineValue::new(commands)
+                        )))
+                    }
+                    (Value::Command(_), _) => {
+                        Err(EvalError::TypeError(
                             "command pipe: right side must be a Command".to_string()
-                        )),
-                    };
-                    Ok(Value::Pipeline(std::rc::Rc::new(
-                        crate::value::PipelineValue::new(vec![cmd1, cmd2])
-                    )))
-                } else {
-                    self.apply(right, vec![left])
+                        ))
+                    }
+                    (Value::Pipeline(_), _) => {
+                        Err(EvalError::TypeError(
+                            "pipeline pipe: right side must be a Command".to_string()
+                        ))
+                    }
+                    _ => self.apply(right, vec![left]),
                 }
             }
         }
