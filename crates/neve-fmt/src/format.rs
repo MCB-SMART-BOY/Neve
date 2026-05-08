@@ -172,6 +172,7 @@ impl Formatter {
             p.dedent();
             p.write("}");
         }
+        p.write(";");
         p.newline();
     }
 
@@ -219,6 +220,7 @@ impl Formatter {
 
         p.dedent();
         p.write("}");
+        p.write(";");
         p.newline();
     }
 
@@ -249,6 +251,7 @@ impl Formatter {
 
         p.dedent();
         p.write("}");
+        p.write(";");
         p.newline();
     }
 
@@ -283,6 +286,7 @@ impl Formatter {
 
         p.dedent();
         p.write("}");
+        p.write(";");
         p.newline();
     }
 
@@ -865,7 +869,7 @@ impl Formatter {
             p.write(" if ");
             self.format_expr(p, guard);
         }
-        p.write(" => ");
+        p.write(" -> ");
         self.format_expr(p, &arm.body);
         p.write(",");
         p.newline();
