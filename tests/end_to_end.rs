@@ -3088,3 +3088,81 @@ fn test_end_to_end_bytes_from_list_roundtrip() {
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
     assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
+
+// === Match exhaustiveness tests for List/Tuple ===
+
+#[test]
+fn test_frontend_list_match_exhaustive_with_empty_and_nonempty() {
+    // match with [] and [_..] should be exhaustive for lists
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let x = match [] { [] -> 0, [..] -> 1 };
+        "#,
+    );
+    let has_exhaustive_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        !has_exhaustive_error,
+        "[] + [..] should be exhaustive, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_list_match_non_exhaustive_missing_empty() {
+    // match with only fixed-length patterns should report non-exhaustive
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let x = match [] { [a] -> a, [a, b] -> a + b };
+        "#,
+    );
+    let has_missing = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        has_missing,
+        "fixed-length list patterns without empty should be non-exhaustive, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_list_match_non_exhaustive_missing_nonempty() {
+    // match without non-empty coverage should report missing
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let x = match [] { [] -> 0 };
+        "#,
+    );
+    let has_missing = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        has_missing,
+        "expected non-exhaustive match warning, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_tuple_match_exhaustive() {
+    // match covering all tuple positions should be exhaustive
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let x = match (1, true) { (_, _) -> 0 };
+        "#,
+    );
+    let has_exhaustive_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("non-exhaustive"));
+    assert!(
+        !has_exhaustive_error,
+        "(_, _) should be exhaustive for 2-tuple, got {:?}",
+        analysis.diagnostics
+    );
+}
