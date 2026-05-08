@@ -18,3 +18,6 @@ CURSOR.md
 .codex
 .aider
 .agents
+
+# Lean 4
+lean/.lake/
