@@ -2978,3 +2978,43 @@ fn test_end_to_end_io_spawn_effect_checking() {
         analysis.diagnostics
     );
 }
+
+// === Command pipe syntax tests (cmd1 |> cmd2) ===
+
+#[test]
+fn test_end_to_end_command_pipe_creates_pipeline() {
+    let source = r#"
+    import std.io as io;
+    let cmd1 = io.command("echo", ["hello"]);
+    let cmd2 = io.command("cat", []);
+    let pipeline = cmd1 |> cmd2;
+    let x = typeOf(pipeline) == "Pipeline";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_command_pipe_executes() {
+    let source = r#"
+    import std.io as io;
+    let cmd1 = io.command("echo", ["hello pipe"]);
+    let cmd2 = io.command("cat", []);
+    let pipeline = cmd1 |> cmd2;
+    let result = io.execPipeline(pipeline);
+    let x = io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_function_pipe_still_works() {
+    let source = r#"
+    fn double(x: Int) -> Int = x * 2;
+    let x = 21 |> double;
+    "#;
+    assert_runtime_parity(source, neve_eval::Value::Int(42.into()));
+}

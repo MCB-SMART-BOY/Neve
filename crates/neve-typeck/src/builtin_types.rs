@@ -125,6 +125,11 @@ pub fn is_builtin_result_type(def_id: DefId) -> bool {
     def_id == RESULT_TYPE_ID
 }
 
+/// Check if a DefId refers to the built-in Command type.
+pub fn is_command_type(def_id: DefId) -> bool {
+    def_id == COMMAND_TYPE_ID
+}
+
 pub fn builtin_type_name(def_id: DefId) -> Option<&'static str> {
     match def_id {
         LIST_TYPE_ID => Some("List"),
