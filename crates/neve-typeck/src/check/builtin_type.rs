@@ -921,6 +921,16 @@ impl TypeChecker {
                 builtin_ty(TyKind::Bool, span),
                 span,
             ),
+            "io.setEnv" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span), builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.unsetEnv" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.getEnv" => builtin_fn(
                 vec![builtin_ty(TyKind::String, span)],
                 builtin_string_option(span),
@@ -1284,6 +1294,11 @@ impl TypeChecker {
             "io.chmod" => builtin_fn(
                 vec![builtin_path(span), builtin_ty(TyKind::Int, span)],
                 builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.readlink" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_path(span),
                 span,
             ),
             "io.symlink" => builtin_fn(

@@ -388,6 +388,38 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "io.setEnv",
+            Value::Builtin(BuiltinFn {
+                name: "io.setEnv", arity: 2,
+                func: |args| {
+                    let key = match &args[0] {
+                        Value::String(s) => s.as_str(),
+                        _ => return Err("io.setEnv expects a String key".to_string()),
+                    };
+                    let val = match &args[1] {
+                        Value::String(s) => s.as_str(),
+                        _ => return Err("io.setEnv expects a String value".to_string()),
+                    };
+                    unsafe { std::env::set_var(key, val); }
+                    Ok(Value::Unit)
+                },
+            }),
+        ),
+        (
+            "io.unsetEnv",
+            Value::Builtin(BuiltinFn {
+                name: "io.unsetEnv", arity: 1,
+                func: |args| {
+                    let key = match &args[0] {
+                        Value::String(s) => s.as_str(),
+                        _ => return Err("io.unsetEnv expects a String key".to_string()),
+                    };
+                    unsafe { std::env::remove_var(key); }
+                    Ok(Value::Unit)
+                },
+            }),
+        ),
+        (
             "io.env",
             Value::Builtin(BuiltinFn {
                 name: "io.env",
