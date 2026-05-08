@@ -6,6 +6,53 @@
 //! 这些是与文件系统交互的非纯操作。
 //! 主要用于包构建和配置生成期间。
 
+
+// === Spawn registry for non-blocking task execution ===
+
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// Global spawn registry for non-blocking task handles.
+static SPAWN_REGISTRY: OnceLock<Mutex<HashMap<i64, Arc<Mutex<SpawnState>>>>> = OnceLock::new();
+
+fn spawn_registry() -> &'static Mutex<HashMap<i64, Arc<Mutex<SpawnState>>>> {
+    SPAWN_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+static NEXT_SPAWN_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// State of a spawned (background) task.
+#[derive(Clone, Debug)]
+pub enum SpawnState {
+    Running,
+    Done(Result<(i32, bool, String, String), String>),
+    Cancelled,
+}
+
+/// Execute a command inline and return raw process result data.
+fn execute_command_raw(cmd: &neve_eval::value::CommandValue) -> Result<(i32, bool, String, String), String> {
+    let mut c = std::process::Command::new(cmd.program());
+    c.args(cmd.args());
+    if let Some(wd) = cmd.cwd() { c.current_dir(wd); }
+    for (k, v) in cmd.env() { c.env(k, v); }
+    if cmd.stdin().is_some() { c.stdin(std::process::Stdio::piped()); }
+    c.stdout(std::process::Stdio::piped());
+    c.stderr(std::process::Stdio::piped());
+    let mut child = c.spawn().map_err(|e| format!("spawn: {e}"))?;
+    if let Some(stdin_data) = cmd.stdin() {
+        use std::io::Write;
+        if let Some(mut pipe) = child.stdin.take() {
+            pipe.write_all(stdin_data.as_bytes()).map_err(|e| format!("stdin: {e}"))?;
+        }
+    }
+    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
+    Ok((
+        output.status.code().unwrap_or(-1),
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    ))
+}
+
 use neve_eval::value::{
     BuiltinFn, CommandValue, EventKind, EventValue, PipelineValue, ProcessResultValue,
     RedirectValue, TaskTargetValue, TaskValue, Value,
@@ -274,6 +321,107 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             .map_err(|e| format!("io.println: {e}"))
                     }
                     _ => Err("io.println expects a String".to_string()),
+                },
+            }),
+        ),
+        // === Non-blocking task spawn/poll/cancel ===
+        (
+            "io.spawn",
+            Value::Builtin(BuiltinFn {
+                name: "io.spawn", arity: 1,
+                func: |args| {
+                    let task = match &args[0] {
+                        Value::Task(t) => t.clone(),
+                        _ => return Err("io.spawn expects a Task".to_string()),
+                    };
+                    let state = Arc::new(Mutex::new(SpawnState::Running));
+                    let state_clone = state.clone();
+                    match task.target() {
+                        neve_eval::value::TaskTargetValue::Command(cmd) => {
+                            let program = cmd.program().to_string();
+                            let args_list = cmd.args().to_vec();
+                            let cwd = cmd.cwd().map(|s| s.to_string());
+                            let env = cmd.env().clone();
+                            let stdin_data = cmd.stdin().map(|s| s.to_string());
+                            std::thread::spawn(move || {
+                                let mut c = std::process::Command::new(&program);
+                                c.args(&args_list);
+                                if let Some(ref wd) = cwd { c.current_dir(wd); }
+                                for (k, v) in &env { c.env(k, v); }
+                                if stdin_data.is_some() { c.stdin(std::process::Stdio::piped()); }
+                                c.stdout(std::process::Stdio::piped());
+                                c.stderr(std::process::Stdio::piped());
+                                let result = (|| {
+                                    let mut child = c.spawn().map_err(|e| format!("spawn: {e}"))?;
+                                    if let Some(ref data) = stdin_data {
+                                        use std::io::Write;
+                                        if let Some(mut pipe) = child.stdin.take() {
+                                            pipe.write_all(data.as_bytes()).map_err(|e| format!("stdin: {e}"))?;
+                                        }
+                                    }
+                                    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
+                                    Ok((output.status.code().unwrap_or(-1), output.status.success(), String::from_utf8_lossy(&output.stdout).to_string(), String::from_utf8_lossy(&output.stderr).to_string()))
+                                })();
+                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                            });
+                        }
+                        neve_eval::value::TaskTargetValue::Pipeline(_pipeline) => {
+                            return Err("io.spawn: pipeline spawn not yet supported".to_string());
+                        }
+                    }
+                    let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    spawn_registry().lock().unwrap().insert(id, state);
+                    Ok(Value::Int(id.into()))
+                },
+            }),
+        ),
+        (
+            "io.poll",
+            Value::Builtin(BuiltinFn {
+                name: "io.poll", arity: 1,
+                func: |args| {
+                    let id: i64 = match &args[0] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.poll: invalid ID".to_string())?,
+                        _ => return Err("io.poll expects an Int (spawn ID)".to_string()),
+                    };
+                    let state = {
+                        let registry = spawn_registry().lock().unwrap();
+                        registry.get(&id).ok_or(format!("io.poll: no task with ID {id}"))?.clone()
+                    };
+                    let mut s = state.lock().unwrap();
+                    match &*s {
+                        SpawnState::Running => Ok(Value::None),
+                        SpawnState::Done(Ok((code, success, stdout, stderr))) => {
+                            let result = Value::Some(Box::new(Value::ProcessResult(Rc::new(
+                                ProcessResultValue::new(*code, *success, stdout.clone(), stderr.clone())
+                            ))));
+                            *s = SpawnState::Cancelled;
+                            spawn_registry().lock().unwrap().remove(&id);
+                            Ok(result)
+                        }
+                        SpawnState::Done(Err(e)) => {
+                            let err = e.clone();
+                            spawn_registry().lock().unwrap().remove(&id);
+                            Err(err)
+                        }
+                        SpawnState::Cancelled => Err(format!("io.poll: task {id} already consumed")),
+                    }
+                },
+            }),
+        ),
+        (
+            "io.cancel",
+            Value::Builtin(BuiltinFn {
+                name: "io.cancel", arity: 1,
+                func: |args| {
+                    let id: i64 = match &args[0] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.cancel: invalid ID".to_string())?,
+                        _ => return Err("io.cancel expects an Int (spawn ID)".to_string()),
+                    };
+                    if let Some(state) = spawn_registry().lock().unwrap().remove(&id) {
+                        *state.lock().unwrap() = SpawnState::Cancelled;
+                    }
+                    Ok(Value::Unit)
                 },
             }),
         ),
