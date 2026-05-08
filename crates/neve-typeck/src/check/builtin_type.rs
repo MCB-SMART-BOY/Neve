@@ -1352,11 +1352,6 @@ impl TypeChecker {
                 builtin_ty(TyKind::Int, span),
                 span,
             ),
-            "io.build" => builtin_fn(
-                vec![builtin_command(span)],
-                builtin_process_result(span),
-                span,
-            ),
             "io.spawn" => builtin_fn(
                 vec![builtin_task(builtin_process_result(span), span)],
                 builtin_ty(TyKind::Int, span),
