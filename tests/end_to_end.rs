@@ -2834,3 +2834,25 @@ fn test_end_to_end_io_event_filter_effect_checking() {
         analysis.diagnostics
     );
 }
+
+// === "undefined" suggestion tests ===
+
+#[test]
+fn test_frontend_suggests_names_for_undefined_global() {
+    // Verify that undefined globals produce suggestions when known names exist.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        fn greet(name: String) -> String = name;
+        let x = greeter("world");
+        "#,
+    );
+    let has_suggestion = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("undefined") && d.message.contains("available"));
+    assert!(
+        has_suggestion,
+        "expected suggestion with available names, got {:?}",
+        analysis.diagnostics
+    );
+}
