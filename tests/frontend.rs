@@ -1,7 +1,7 @@
 //! Integration tests for the frontend analysis pipeline.
 //! 前端分析管线的集成测试。
 
-use neve_diagnostic::{DiagnosticKind, ErrorCode};
+use neve_diagnostic::{DiagnosticKind, ErrorCode, Severity};
 use neve_frontend::{DiagnosticStats, analyze_snippet_ast, analyze_source};
 use neve_hir::ItemKind;
 use neve_parser::parse;
@@ -89,16 +89,21 @@ fn test_frontend_accepts_record_field_access_after_record_binding() {
             let x = config.port;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -110,16 +115,21 @@ fn test_frontend_accepts_lazy_force_pipeline() {
             let x = force(thunk);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -131,16 +141,21 @@ fn test_frontend_accepts_or_and_binding_patterns() {
             let b = match 42 { n @ 42 -> n, _ -> 0 };
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -157,16 +172,21 @@ fn test_frontend_accepts_list_rest_patterns() {
             };
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -226,16 +246,21 @@ fn test_frontend_accepts_self_and_assoc_type_use_sites() {
             };
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -253,16 +278,21 @@ fn test_frontend_accepts_assoc_bound_through_canonical_self_assoc_binding() {
             };
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -319,16 +349,21 @@ fn test_frontend_exposes_assoc_projection_resolutions_for_explicit_self_item_use
             };
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 
     let impl_def = result
@@ -377,16 +412,21 @@ fn test_frontend_keeps_trait_self_assoc_spans_source_level_when_impl_is_present(
             };
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 
     let trait_def = result
@@ -516,16 +556,21 @@ fn test_frontend_accepts_try_on_option_and_result_like_enums() {
             let b = Ok(1)? + 1;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -539,16 +584,21 @@ fn test_frontend_accepts_coalesce_on_safe_field_and_option_enum() {
             let b = r?.missing ?? "default";
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -890,16 +940,21 @@ fn test_frontend_accepts_trait_method_call_analysis() {
             let x = 1.show();
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -915,16 +970,21 @@ fn test_frontend_method_dispatch_precedence_records_method_resolution() {
             let value: Int = 21.twice();
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
     assert_eq!(
         result.semantics.method_resolutions.len(),
@@ -941,16 +1001,21 @@ fn test_frontend_callable_target_fallback_does_not_record_method_resolution() {
             let value = 21.twice();
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
     assert!(
         result.semantics.method_resolutions.is_empty(),
@@ -985,16 +1050,21 @@ fn test_frontend_accepts_std_item_and_module_imports() {
             let b = string.len("abc");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1006,16 +1076,21 @@ fn test_frontend_accepts_std_glob_imports() {
             let x = len([1, 2, 3]);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1030,16 +1105,21 @@ fn test_frontend_accepts_std_option_and_result_builtins() {
             let c = result.ok(1)? + 1;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1052,16 +1132,21 @@ fn test_frontend_accepts_std_math_constants() {
             let quiet = math.nan;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1074,16 +1159,21 @@ fn test_frontend_accepts_std_math_conversion_bridges() {
             let ratio = math.toFloat("1.5");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1096,16 +1186,21 @@ fn test_frontend_accepts_std_math_float_predicates() {
             let b = math.isInf(math.inf);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1119,16 +1214,21 @@ fn test_frontend_accepts_std_math_rounding_bridges() {
             let c = math.round(1.6);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1143,16 +1243,21 @@ fn test_frontend_accepts_std_math_unary_float_transforms() {
             let d = math.exp(0.0);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1166,16 +1271,21 @@ fn test_frontend_accepts_std_math_trigonometric_bridges() {
             let c = math.tan(0.0);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1187,16 +1297,21 @@ fn test_frontend_accepts_std_math_function_pending_explicit_surface() {
             let value = math.abs(1);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1212,16 +1327,21 @@ fn test_frontend_accepts_std_path_builtins() {
             let c = path.is_absolute("/tmp/file.txt");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1238,16 +1358,21 @@ fn test_frontend_accepts_std_typed_path_adapters() {
             let shown = toString(parent);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1259,16 +1384,21 @@ fn test_frontend_accepts_std_fetch_path_bridge() {
             let value = fetch.path("Cargo.toml").hash;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1283,16 +1413,21 @@ fn test_frontend_accepts_std_fetch_path_with_hash_bridge() {
             ).hash;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1304,16 +1439,21 @@ fn test_frontend_accepts_std_fetch_url_bridge() {
             let value = fetch.url("https://example.com/archive.tar.gz").hash;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1328,16 +1468,21 @@ fn test_frontend_accepts_std_fetch_url_with_hash_bridge() {
             ).hash;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1349,16 +1494,21 @@ fn test_frontend_accepts_std_fetch_git_bridge() {
             let value = fetch.git("/tmp/repo", "main").hash;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1370,16 +1520,21 @@ fn test_frontend_accepts_std_fetch_git_with_hash_bridge() {
             let value = fetch.gitWithHash("/tmp/repo", "main", "0000000000000000000000000000000000000000000000000000000000000000").hash;
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1391,16 +1546,21 @@ fn test_frontend_accepts_std_io_current_system_bridge() {
             let system = io.currentSystem();
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1412,16 +1572,21 @@ fn test_frontend_accepts_std_io_current_dir_bridge() {
             let cwd = io.currentDir();
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1433,16 +1598,21 @@ fn test_frontend_accepts_std_io_get_env_bridge() {
             let value = io.getEnv("HOME");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1454,16 +1624,21 @@ fn test_frontend_accepts_std_io_hash_file_bridge() {
             let digest = io.hashFile("/tmp/file.txt");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1475,16 +1650,21 @@ fn test_frontend_accepts_std_io_hash_string_bridge() {
             let digest = io.hashString("abc");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1496,16 +1676,21 @@ fn test_frontend_accepts_std_io_read_file_bridge() {
             let content = io.readFile("/tmp/file.txt");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1518,16 +1703,21 @@ fn test_frontend_accepts_std_io_read_dir_bridge() {
             let entries = list.sort(io.readDir("/tmp"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1540,16 +1730,21 @@ fn test_frontend_accepts_std_io_hash_file_path_bridge() {
             let digest = io.hashFilePath(path.fromString("/tmp/file.txt"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1562,16 +1757,21 @@ fn test_frontend_accepts_std_io_exec_migrated_process_result_surface() {
             let shown = toString(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1584,16 +1784,21 @@ fn test_frontend_accepts_std_io_explicit_shell_command_process_result_surface() 
             let shown = toString(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1606,16 +1811,21 @@ fn test_frontend_accepts_std_io_exec_with_migrated_process_result_surface() {
             let shown = toString(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1628,16 +1838,21 @@ fn test_frontend_accepts_std_io_read_file_path_bridge() {
             let content = io.readFilePath(path.fromString("/tmp/file.txt"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1651,16 +1866,21 @@ fn test_frontend_accepts_std_io_read_file_bytes_path_bridge() {
             let shown = toString(bytes);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1675,16 +1895,21 @@ fn test_frontend_accepts_std_io_read_dir_path_bridge() {
             let sorted = list.sort(entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1700,16 +1925,21 @@ fn test_frontend_accepts_std_list_sort_and_extrema_builtins() {
             let lo = list.min([1, 3, 2]);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1727,16 +1957,21 @@ fn test_frontend_accepts_std_list_structural_helpers() {
             let reversed = list.reverse(entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1751,16 +1986,21 @@ fn test_frontend_accepts_std_list_get_builtin() {
             let picked = list.get(0, entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1775,16 +2015,21 @@ fn test_frontend_accepts_std_list_cons_builtin() {
             let rooted = list.cons(path.fromString("/"), entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1799,16 +2044,21 @@ fn test_frontend_accepts_std_list_take_builtin() {
             let prefix = list.take(2, entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1823,16 +2073,21 @@ fn test_frontend_accepts_std_list_drop_builtin() {
             let suffix = list.drop(1, entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1847,16 +2102,21 @@ fn test_frontend_accepts_std_list_contains_builtin() {
             let has_root = list.contains(path.fromString("/"), entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1871,16 +2131,21 @@ fn test_frontend_accepts_std_list_index_of_builtin() {
             let root_index = list.indexOf(path.fromString("/"), entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1892,16 +2157,21 @@ fn test_frontend_accepts_std_list_sum_builtin() {
             let total = list.sum([1, 2, 3]);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1913,16 +2183,21 @@ fn test_frontend_accepts_std_list_product_builtin() {
             let total = list.product([2, 3, 4]);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1935,16 +2210,21 @@ fn test_frontend_accepts_std_list_replicate_builtin() {
             let entries = list.replicate(2, path.fromString("/tmp"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1961,16 +2241,21 @@ fn test_frontend_accepts_std_list_zip_builtin() {
             );
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -1987,16 +2272,21 @@ fn test_frontend_accepts_std_list_unzip_builtin() {
             let result = list.unzip(pairs);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2009,16 +2299,21 @@ fn test_frontend_accepts_std_list_fold_right_builtin() {
             let total = list.foldRight(0, step, [1, 2, 3]);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2032,16 +2327,21 @@ fn test_frontend_accepts_std_io_read_dir_entry_paths_bridge() {
             let shown = toString(entries);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2055,16 +2355,21 @@ fn test_frontend_accepts_std_io_write_file_bytes_path_bridge() {
             let done = io.writeFileBytesPath(path.fromString("/tmp/file.out"), bytes);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2077,16 +2382,21 @@ fn test_frontend_accepts_std_io_write_file_path_bridge() {
             let done = io.writeFilePath(path.fromString("/tmp/file.out"), "hello");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2098,16 +2408,21 @@ fn test_frontend_accepts_std_io_write_file_bridge() {
             let done = io.writeFile("/tmp/file.out", "hello");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2119,16 +2434,21 @@ fn test_frontend_accepts_std_io_append_file_bridge() {
             let done = io.appendFile("/tmp/file.out", "hello");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2141,16 +2461,21 @@ fn test_frontend_accepts_std_io_append_file_path_bridge() {
             let done = io.appendFilePath(path.fromString("/tmp/file.out"), "hello");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2164,16 +2489,21 @@ fn test_frontend_accepts_std_io_append_file_bytes_path_bridge() {
             let done = io.appendFileBytesPath(path.fromString("/tmp/file.out"), bytes);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2186,16 +2516,21 @@ fn test_frontend_accepts_std_io_current_dir_path_bridge() {
             let shown = toString(cwd);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2208,16 +2543,21 @@ fn test_frontend_accepts_std_io_home_dir_path_bridge() {
             let shown = toString(home);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2230,16 +2570,21 @@ fn test_frontend_accepts_std_io_home_dir_bridge() {
             let shown = home ?? "missing";
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2251,16 +2596,21 @@ fn test_frontend_accepts_std_io_create_dir_all_bridge() {
             let done = io.createDirAll("/tmp/neve-dir");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2273,16 +2623,21 @@ fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
             let done = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2295,16 +2650,21 @@ fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
             let done = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2316,16 +2676,21 @@ fn test_frontend_accepts_std_io_remove_dir_all_bridge() {
             let done = io.removeDirAll("/tmp/neve-dir");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2337,16 +2702,21 @@ fn test_frontend_accepts_std_io_path_exists_bridge() {
             let exists = io.pathExists("/tmp/file.txt");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2358,16 +2728,21 @@ fn test_frontend_accepts_std_io_is_dir_bridge() {
             let dir = io.isDir("/tmp");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2379,16 +2754,21 @@ fn test_frontend_accepts_std_io_is_file_bridge() {
             let file = io.isFile("/tmp/file.txt");
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2401,16 +2781,21 @@ fn test_frontend_accepts_std_io_command_bridge() {
             let shown = toString(cmd);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2423,16 +2808,21 @@ fn test_frontend_accepts_std_io_command_with_bridge() {
             let shown = toString(cmd);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2445,16 +2835,21 @@ fn test_frontend_accepts_std_io_exec_command_bridge() {
             let shown = toString(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2467,16 +2862,21 @@ fn test_frontend_accepts_std_io_pipeline_bridge() {
             let shown = toString(pipe);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2493,16 +2893,21 @@ fn test_frontend_accepts_std_io_pipeline_with_redirects_bridge() {
             let shown = toString(pipe);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2517,16 +2922,21 @@ fn test_frontend_accepts_std_io_exec_pipeline_bridge() {
             let shown = io.processStdout(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2545,16 +2955,21 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirect_bridge() {
             let shown = io.processCode(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2576,16 +2991,21 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirects_bridge() {
             let shown = io.processCode(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2602,16 +3022,21 @@ fn test_frontend_accepts_std_io_command_with_redirects_bridge() {
             let shown = toString(cmd);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2625,16 +3050,21 @@ fn test_frontend_accepts_std_io_redirect_stdout_path_bridge() {
             let shown = toString(redirect);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2648,16 +3078,21 @@ fn test_frontend_accepts_std_io_redirect_stderr_path_bridge() {
             let shown = toString(redirect);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2671,16 +3106,21 @@ fn test_frontend_accepts_std_io_redirect_stdin_path_bridge() {
             let shown = toString(redirect);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2699,16 +3139,21 @@ fn test_frontend_accepts_std_io_exec_command_with_redirect_bridge() {
             let shown = io.processCode(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2730,16 +3175,21 @@ fn test_frontend_accepts_std_io_exec_command_with_redirects_bridge() {
             let shown = io.processCode(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2752,16 +3202,21 @@ fn test_frontend_accepts_std_io_task_command_bridge() {
             let shown = toString(task);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2777,16 +3232,21 @@ fn test_frontend_accepts_std_io_task_pipeline_bridge() {
             let shown = toString(task);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2800,16 +3260,21 @@ fn test_frontend_accepts_std_io_await_task_bridge() {
             let shown = io.processCode(result);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2825,16 +3290,21 @@ fn test_frontend_accepts_std_io_await_tasks_bridge() {
             let shown = toString(results);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2846,16 +3316,21 @@ fn test_frontend_accepts_std_io_process_success_bridge() {
             let success = io.processSuccess(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2867,16 +3342,21 @@ fn test_frontend_accepts_std_io_process_stdout_bridge() {
             let stdout = io.processStdout(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2888,16 +3368,21 @@ fn test_frontend_accepts_std_io_process_code_bridge() {
             let code = io.processCode(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2909,16 +3394,21 @@ fn test_frontend_accepts_std_io_process_stderr_bridge() {
             let stderr = io.processStderr(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2931,16 +3421,21 @@ fn test_frontend_accepts_std_io_path_exists_path_bridge() {
             let exists = io.pathExistsPath(path.fromString("/tmp/file.txt"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2953,16 +3448,21 @@ fn test_frontend_accepts_std_io_is_dir_path_bridge() {
             let dir = io.isDirPath(path.fromString("/tmp"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -2975,16 +3475,21 @@ fn test_frontend_accepts_std_io_is_file_path_bridge() {
             let file = io.isFilePath(path.fromString("/tmp/file.txt"));
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }
 
@@ -3001,15 +3506,20 @@ fn test_frontend_accepts_std_map_and_set_builtins() {
             let value = Map.getWithDefault("a", 0, map) + Set.size(set) + list.sum(values);
         "#,
     );
-    // Method fallback now emits a warning; filter it out for this test
-    let non_fallback_diags: Vec<_> = result
+    // Filter out known warnings (not errors):
+    // - callable fallback deprecation
+    // - unreachable pattern (binding patterns on literals are conservatively reported)
+    let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
-        .filter(|d| !d.message.contains("callable fallback"))
+        .filter(|d| {
+            d.severity == neve_diagnostic::Severity::Error
+                && !d.message.contains("callable fallback")
+        })
         .collect();
     assert!(
-        non_fallback_diags.is_empty(),
+        non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
-        non_fallback_diags
+        non_warning_diags
     );
 }

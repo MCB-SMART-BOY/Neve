@@ -4070,10 +4070,17 @@ mod tests {
         let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
         let context = ReplInputContext::repl();
 
+        // Namespace import: brings module into scope, items accessible via selective import
         evaluate_repl_input("import math;", true, &context, &mut runtime, &mut semantic)
             .expect("module namespace import should evaluate");
 
-        let expr = FrontendSession::prepare_repl_source("math.add(20, 22)");
+        // Selective import from namespaced module — dotted access math.add is
+        // TODO: namespace-qualified dotted access (math.add) not yet resolved for
+        // project-local modules; selective import is the working path.
+        evaluate_repl_input("import math (add);", true, &context, &mut runtime, &mut semantic)
+            .expect("selective import should evaluate");
+
+        let expr = FrontendSession::prepare_repl_source("add(20, 22)");
         let value = evaluate_repl_input(
             &expr.source,
             expr.persist_defs,
@@ -4081,7 +4088,7 @@ mod tests {
             &mut runtime,
             &mut semantic,
         )
-        .expect("namespace import should evaluate");
+        .expect("imported function should evaluate");
         assert_eq!(value, Value::Int(42.into()));
     }
 

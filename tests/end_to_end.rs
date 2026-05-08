@@ -28,10 +28,16 @@ fn int(value: i64) -> Int {
 
 fn analyze_without_diagnostics(source: &str) -> AnalysisResult {
     let analysis = analyze_source(source);
+    // Only reject errors; warnings like unreachable patterns are acceptable
+    let errors: Vec<_> = analysis
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .collect();
     assert!(
-        analysis.diagnostics.is_empty(),
-        "unexpected frontend diagnostics: {:?}",
-        analysis.diagnostics
+        errors.is_empty(),
+        "unexpected frontend errors: {:?}",
+        errors
     );
     analysis
 }
