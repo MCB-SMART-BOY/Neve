@@ -28,31 +28,6 @@ pub enum SpawnState {
     Cancelled,
 }
 
-/// Execute a command inline and return raw process result data.
-fn execute_command_raw(cmd: &neve_eval::value::CommandValue) -> Result<(i32, bool, String, String), String> {
-    let mut c = std::process::Command::new(cmd.program());
-    c.args(cmd.args());
-    if let Some(wd) = cmd.cwd() { c.current_dir(wd); }
-    for (k, v) in cmd.env() { c.env(k, v); }
-    if cmd.stdin().is_some() { c.stdin(std::process::Stdio::piped()); }
-    c.stdout(std::process::Stdio::piped());
-    c.stderr(std::process::Stdio::piped());
-    let mut child = c.spawn().map_err(|e| format!("spawn: {e}"))?;
-    if let Some(stdin_data) = cmd.stdin() {
-        use std::io::Write;
-        if let Some(mut pipe) = child.stdin.take() {
-            pipe.write_all(stdin_data.as_bytes()).map_err(|e| format!("stdin: {e}"))?;
-        }
-    }
-    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
-    Ok((
-        output.status.code().unwrap_or(-1),
-        output.status.success(),
-        String::from_utf8_lossy(&output.stdout).to_string(),
-        String::from_utf8_lossy(&output.stderr).to_string(),
-    ))
-}
-
 use neve_eval::value::{
     BuiltinFn, CommandValue, EventKind, EventValue, PipelineValue, ProcessResultValue,
     RedirectValue, TaskTargetValue, TaskValue, Value,
