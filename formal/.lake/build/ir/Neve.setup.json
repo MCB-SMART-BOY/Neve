@@ -1,0 +1,15 @@
+{"plugins": [],
+ "package": "NeveFormal",
+ "options": {},
+ "name": "Neve",
+ "isModule": false,
+ "importArts":
+ {"Neve.Types":
+  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Types.olean"],
+  "Neve.Syntax":
+  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.olean"],
+  "Neve.Safety":
+  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Safety.olean"],
+  "Neve.Eval":
+  ["/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Eval.olean"]},
+ "dynlibs": []}
