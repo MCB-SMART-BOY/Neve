@@ -3684,3 +3684,59 @@ fn test_end_to_end_io_args_single_dash_positional() {
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
     assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
+
+// === io.tempDir tests ===
+
+#[test]
+fn test_end_to_end_io_temp_dir_type_checks() {
+    let source = r#"
+    import std.io as io;
+    let result = io.tempDir(fn(dir) { io.write(dir, "hello"); 42 });
+    let x = result == 42;
+    "#;
+    let analysis = analyze_source(source);
+    let _ = eval_hir(&analysis);
+}
+
+#[test]
+fn test_end_to_end_io_temp_dir_is_effectful() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> Int = io.tempDir(fn(dir) { 42 });
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "io.tempDir should be effectful, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+// === io.walk / io.symlink tests ===
+
+#[test]
+fn test_end_to_end_io_walk_type_checks() {
+    let source = r#"
+    import std.io as io;
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_symlink_type_checks() {
+    let source = r#"
+    import std.io as io;
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
