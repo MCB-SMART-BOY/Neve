@@ -301,6 +301,78 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         ),
         // === Non-blocking task spawn/poll/cancel ===
         (
+            "io.spawnWithTimeout",
+            Value::Builtin(BuiltinFn {
+                name: "io.spawnWithTimeout", arity: 2,
+                func: |args| {
+                    let task = match &args[0] {
+                        Value::Task(t) => t.clone(),
+                        _ => return Err("io.spawnWithTimeout expects a Task".to_string()),
+                    };
+                    let timeout_ms: u64 = match &args[1] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.spawnWithTimeout: timeout must be non-negative".to_string())?,
+                        _ => return Err("io.spawnWithTimeout expects an Int (timeout in ms)".to_string()),
+                    };
+                    let state = Arc::new(Mutex::new(SpawnState::Running));
+                    let state_clone = state.clone();
+                    match task.target() {
+                        neve_eval::value::TaskTargetValue::Command(cmd) => {
+                            let program = cmd.program().to_string();
+                            let args_list = cmd.args().to_vec();
+                            let cwd = cmd.cwd().map(|s| s.to_string());
+                            let env = cmd.env().clone();
+                            let stdin_data = cmd.stdin().map(|s| s.to_string());
+                            std::thread::spawn(move || {
+                                let mut c = std::process::Command::new(&program);
+                                c.args(&args_list);
+                                if let Some(ref wd) = cwd { c.current_dir(wd); }
+                                for (k, v) in &env { c.env(k, v); }
+                                if stdin_data.is_some() { c.stdin(std::process::Stdio::piped()); }
+                                c.stdout(std::process::Stdio::piped());
+                                c.stderr(std::process::Stdio::piped());
+                                let result = (|| {
+                                    let mut child = c.spawn().map_err(|e| format!("spawn: {e}"))?;
+                                    if let Some(ref data) = stdin_data {
+                                        use std::io::Write;
+                                        if let Some(mut pipe) = child.stdin.take() {
+                                            pipe.write_all(data.as_bytes()).map_err(|e| format!("stdin: {e}"))?;
+                                        }
+                                    }
+                                    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
+                                    Ok((output.status.code().unwrap_or(-1), output.status.success(), String::from_utf8_lossy(&output.stdout).to_string(), String::from_utf8_lossy(&output.stderr).to_string()))
+                                })();
+                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                            });
+                        }
+                        neve_eval::value::TaskTargetValue::Pipeline(pipeline) => {
+                            let stages: Vec<StageData> = pipeline.commands().iter().map(|cmd| StageData {
+                                program: cmd.program().to_string(),
+                                args: cmd.args().to_vec(),
+                                cwd: cmd.cwd().map(|s| s.to_string()),
+                                env: cmd.env().clone(),
+                                stdin: cmd.stdin().map(|s| s.to_string()),
+                            }).collect();
+                            std::thread::spawn(move || {
+                                let result = run_pipeline_stages(&stages);
+                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                            });
+                        }
+                    }
+                    let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    spawn_registry().lock().unwrap().insert(id, state.clone());
+                    // Timeout watcher
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(timeout_ms));
+                        let mut s = state.lock().unwrap();
+                        if matches!(&*s, SpawnState::Running) {
+                            *s = SpawnState::Cancelled;
+                        }
+                    });
+                    Ok(Value::Int(id.into()))
+                },
+            }),
+        ),
+        (
             "io.spawn",
             Value::Builtin(BuiltinFn {
                 name: "io.spawn", arity: 1,
