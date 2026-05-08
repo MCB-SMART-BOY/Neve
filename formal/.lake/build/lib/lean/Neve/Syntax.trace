@@ -1,0 +1,30 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["e1b963d2240a740d.olean"],
+  "i": "2f68330e790c8da0.ilean",
+  "c": "8a24d08ede5fa304.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean /home/mcbgaruda/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mcbgaruda/projects/Neve/lean/Neve/Syntax.lean -o /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.olean -i /home/mcbgaruda/projects/Neve/lean/.lake/build/lib/lean/Neve/Syntax.ilean -c /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve/Syntax.c --setup /home/mcbgaruda/projects/Neve/lean/.lake/build/ir/Neve/Syntax.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["Neve.Syntax:deps",
+   [["deps",
+     [["NeveFormal/Neve:extraDep",
+       [["@NeveFormal:extraDep", "00000000000006bb"]]],
+      ["imports", "00000000000006bb"]]],
+    ["libs",
+     [["import dynlibs", "00000000000006bb"],
+      ["package external libraries", "00000000000006bb"],
+      ["module dynlibs", "00000000000006bb"],
+      ["module plugins", "00000000000006bb"]]]]],
+  ["Lean 4.29.1, commit f72c35b3f637c8c6571d353742168ab66cc22c00",
+   "fa77a35a41db35c0"],
+  ["/home/mcbgaruda/projects/Neve/lean/Neve/Syntax.lean", "b25b9ffec269943e"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Neve.Syntax", "7bf01a11a1c86c65"],
+  ["Package.id?: (some NeveFormal)", "dfedda3e51ebba2a"],
+  ["Module.leanArgs: #[]", "00000000000006bb"]],
+ "depHash": "9dba03004de12f1d"}
