@@ -1,7 +1,6 @@
 //! Bytes operations for the standard library.
 //! 标准库的字节操作。
 
-use neve_common::Int;
 use neve_eval::value::{BuiltinFn, Value};
 use std::rc::Rc;
 
