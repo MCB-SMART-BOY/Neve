@@ -3628,28 +3628,53 @@ fn test_end_to_end_io_args_named_destructure() {
     let _ = eval_hir(&analysis);
 }
 
-) = io.args();
-    let file = list.get(files, 0) ?? "default.txt";
-    let ok = file == "input.txt" && v && j == 8;
-    "#;
-    let analysis = analyze_source(source);
-    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
-}
 
-) = io.args();
-    let file = list.get(files, 0) ?? "default.txt";
-    let ok = file == "input.txt" && !verbose && jobs == 4;
-    "#;
-    let analysis = analyze_source(source);
-    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
-}
 
 #[test]
 fn test_end_to_end_io_args_files_and_flags_access() {
     neve_std::set_script_args(vec!["a.txt".to_string(), "-v".to_string()]);
     // Access through let binding of io.args()
+    let source = r#"
+    import std.io as io;
+    let args = io.args();
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+// === Edge cases for io.args() ===
+
+#[test]
+fn test_end_to_end_io_args_negative_number_is_positional() {
+    neve_std::set_script_args(vec!["-10".to_string()]);
+    let source = r#"
+    import std.io as io;
+    let args = io.args();
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_args_dash_dash_stops() {
+    neve_std::set_script_args(vec!["-v".to_string(), "--".to_string(), "-x".to_string()]);
+    let source = r#"
+    import std.io as io;
+    let args = io.args();
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_args_single_dash_positional() {
+    neve_std::set_script_args(vec!["-".to_string()]);
     let source = r#"
     import std.io as io;
     let args = io.args();

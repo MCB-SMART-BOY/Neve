@@ -494,20 +494,39 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     let mut i = 0;
                     while i < raw_args.len() {
                         let arg = &raw_args[i];
+                        // -- stops flag parsing
                         if arg == "--" {
-                            // Rest are positional
                             for a in &raw_args[i+1..] {
                                 positional.push(Value::String(Rc::new(a.clone())));
                             }
                             break;
                         }
-                        if arg.starts_with('-') && arg.len() > 1 && !arg.starts_with("--") {
-                            let flag = arg[1..].to_string();
+                        // Flag: starts with -, not just "-", not a negative number
+                        if arg.starts_with('-') && arg.len() > 1 && arg != "-" {
+                            // Negative number check: "-" followed by digits only → positional
+                            let rest = &arg[1..];
+                            if rest.chars().all(|c| c.is_ascii_digit()) {
+                                positional.push(Value::String(Rc::new(arg.clone())));
+                                i += 1;
+                                continue;
+                            }
+                            // Compact form: -j8 → flag "j", value 8
+                            if rest.len() > 1 && rest.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {
+                                let flag = rest[..1].to_string();
+                                let val = &rest[1..];
+                                if let Ok(n) = val.parse::<i64>() {
+                                    flags.insert(flag, Value::Int(n.into()));
+                                } else {
+                                    flags.insert(flag, Value::String(Rc::new(val.to_string())));
+                                }
+                                i += 1;
+                                continue;
+                            }
+                            let flag = rest.to_string();
                             // Check if next arg is a value (doesn't start with -)
                             if i + 1 < raw_args.len() && !raw_args[i+1].starts_with('-') {
                                 i += 1;
                                 let val = &raw_args[i];
-                                // Try Int, then String
                                 if let Ok(n) = val.parse::<i64>() {
                                     flags.insert(flag, Value::Int(n.into()));
                                 } else {
