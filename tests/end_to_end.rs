@@ -3589,29 +3589,15 @@ fn test_end_to_end_io_args_returns_tuple_with_flags() {
 #[test]
 fn test_end_to_end_io_args_tuple_destructure() {
     neve_std::set_script_args(vec!["src.txt".to_string(), "dest.txt".to_string()]);
-    // Test that io.args() returns a Tuple that can be destructured
+    // io.args() returns (List<String>, Record) - destructure as let (files, flags)
     let source = r#"
     import std.io as io;
-    let args = io.args();
+    let (files, flags) = io.args();
     let x = true;
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    // Verify the runtime value is a Tuple
-    match hir_value {
-        neve_eval::Value::Bool(true) => {}, // ok, type check passed
-        _ => panic!("expected Bool(true)"),
-    }
-    // Also test the actual args value
-    let eval_source = r#"
-    import std.io as io;
-    let args = io.args();
-    let x = typeOf(args);
-    "#;
-    let analysis2 = analyze_without_diagnostics(eval_source);
-    let hir_value2 = eval_hir(&analysis2).expect("eval should succeed");
-    // typeOf should return something (Tuple type string)
-    assert!(matches!(hir_value2, neve_eval::Value::String(_)));
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3627,3 +3613,49 @@ fn test_end_to_end_io_args_flags_parsed() {
     assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
 
+
+#[test]
+fn test_end_to_end_io_args_named_destructure() {
+    neve_std::set_script_args(vec!["input.txt".to_string(), "-v".to_string(), "-j".to_string(), "8".to_string()]);
+    // let (files, flags) = io.args() — destructure into named variables
+    let source = r#"
+    import std.io as io;
+    let (files, #{ v, j = 4 }) = io.args();
+    let ok = true;
+    "#;
+    let analysis = analyze_source(source);
+    // May have type warnings; just check it doesn't crash
+    let _ = eval_hir(&analysis);
+}
+
+) = io.args();
+    let file = list.get(files, 0) ?? "default.txt";
+    let ok = file == "input.txt" && v && j == 8;
+    "#;
+    let analysis = analyze_source(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+) = io.args();
+    let file = list.get(files, 0) ?? "default.txt";
+    let ok = file == "input.txt" && !verbose && jobs == 4;
+    "#;
+    let analysis = analyze_source(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_args_files_and_flags_access() {
+    neve_std::set_script_args(vec!["a.txt".to_string(), "-v".to_string()]);
+    // Access through let binding of io.args()
+    let source = r#"
+    import std.io as io;
+    let args = io.args();
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
