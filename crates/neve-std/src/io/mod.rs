@@ -340,8 +340,21 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                 *state_clone.lock().unwrap() = SpawnState::Done(result);
                             });
                         }
-                        neve_eval::value::TaskTargetValue::Pipeline(_pipeline) => {
-                            return Err("io.spawn: pipeline spawn not yet supported".to_string());
+                        neve_eval::value::TaskTargetValue::Pipeline(pipeline) => {
+                            // Extract all stage data before moving to thread
+                            let stages: Vec<StageData> = pipeline.commands().iter().map(|cmd| {
+                                StageData {
+                                    program: cmd.program().to_string(),
+                                    args: cmd.args().to_vec(),
+                                    cwd: cmd.cwd().map(|s| s.to_string()),
+                                    env: cmd.env().clone(),
+                                    stdin: cmd.stdin().map(|s| s.to_string()),
+                                }
+                            }).collect();
+                            std::thread::spawn(move || {
+                                let result = run_pipeline_stages(&stages);
+                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                            });
                         }
                     }
                     let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1644,6 +1657,51 @@ pub(crate) fn record_env_optional(
         Some(_) => Err(format!("{fn_name}.{key} must be Record<String, String>")),
         None => Ok(HashMap::new()),
     }
+}
+
+
+/// Run pipeline stages sequentially in a background thread.
+fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, String), String> {
+    if stages.is_empty() { return Err("empty pipeline".to_string()); }
+    let mut previous_stdout: Option<Vec<u8>> = None;
+    let mut combined_stderr = Vec::new();
+    let mut last_code = 0;
+    let mut last_success = false;
+    let last_idx = stages.len() - 1;
+    for (idx, stage) in stages.iter().enumerate() {
+        let mut c = std::process::Command::new(&stage.program);
+        c.args(&stage.args);
+        if let Some(ref wd) = stage.cwd { c.current_dir(wd); }
+        for (k, v) in &stage.env { c.env(k, v); }
+        let stage_stdin = if idx == 0 { stage.stdin.as_ref().map(|s| s.as_bytes().to_vec()).or_else(|| previous_stdout.take()) } else { previous_stdout.take() };
+        if stage_stdin.is_some() { c.stdin(std::process::Stdio::piped()); } else { c.stdin(std::process::Stdio::null()); }
+        c.stdout(std::process::Stdio::piped());
+        c.stderr(std::process::Stdio::piped());
+        let mut child = c.spawn().map_err(|e| format!("stage {idx}: {e}"))?;
+        if let Some(ref data) = stage_stdin {
+            use std::io::Write;
+            if let Some(mut pipe) = child.stdin.take() { pipe.write_all(data).map_err(|e| format!("stdin: {e}"))?; }
+        }
+        let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
+        last_code = output.status.code().unwrap_or(-1);
+        last_success = output.status.success();
+        combined_stderr.extend_from_slice(&output.stderr);
+        if idx < last_idx { previous_stdout = Some(output.stdout); }
+        else {
+            let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr_str = String::from_utf8_lossy(&combined_stderr).to_string();
+            return Ok((last_code, last_success, stdout_str, stderr_str));
+        }
+    }
+    Err("unreachable".to_string())
+}
+
+struct StageData {
+    program: String,
+    args: Vec<String>,
+    cwd: Option<String>,
+    env: HashMap<String, String>,
+    stdin: Option<String>,
 }
 
 #[cfg(test)]

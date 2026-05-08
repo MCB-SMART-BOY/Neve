@@ -3334,3 +3334,21 @@ fn test_end_to_end_option_map_then_default() {
         Value::Int(42.into()),
     );
 }
+
+// -- Pipeline spawn --
+#[test]
+fn test_end_to_end_spawn_pipeline() {
+    let source = r#"
+    import std.io as io;
+    let task = io.taskPipeline(io.pipeline([
+        io.command("echo", ["hello"]),
+        io.command("cat", []),
+    ]));
+    let id = io.spawn(task);
+    io.cancel(id);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
