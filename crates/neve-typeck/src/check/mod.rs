@@ -1809,7 +1809,7 @@ impl TypeChecker {
         "Err",
     ];
 
-    fn suggest_global_name(&self, _span: Span) -> String {
+    fn suggest_global_name(&self, _span: Span, typed_name: Option<&str>) -> String {
         // Build a list of known names from global definitions and builtins
         let mut all_known: Vec<String> = self.global_names.values().cloned().collect();
         all_known.extend(Self::COMMON_BUILTINS.iter().map(|s| s.to_string()));
@@ -1817,15 +1817,40 @@ impl TypeChecker {
         all_known.dedup();
 
         if all_known.is_empty() {
-            return "undefined global".to_string();
+            return "undefined name".to_string();
         }
 
-        // Show top suggestions (up to 5 closest matches sorted alphabetically)
+        // If we know what the user typed, find closest matches via Levenshtein
+        if let Some(input) = typed_name {
+            if !input.is_empty() {
+                let max_suggestions = 3;
+                let mut scored: Vec<(usize, &String)> = all_known
+                    .iter()
+                    .map(|name| (Self::levenshtein(input, name), name))
+                    .filter(|(d, _)| *d <= input.len().max(3)) // Filter out very distant matches
+                    .collect();
+                scored.sort_by_key(|(d, _)| *d);
+                scored.truncate(max_suggestions);
+
+                if !scored.is_empty() {
+                    let suggestions: Vec<String> = scored
+                        .iter()
+                        .map(|(d, name)| format!("'{name}' (distance {d})"))
+                        .collect();
+                    return format!(
+                        "undefined name '{}'; did you mean {}?",
+                        input,
+                        suggestions.join(", ")
+                    );
+                }
+            }
+        }
+
+        // Fallback: show alphabetical preview
         let max_suggestions = 5;
         if all_known.len() <= max_suggestions {
             format!("undefined name; available: {}", all_known.join(", "))
         } else {
-            // Show first few alphabetically
             let preview: Vec<&str> = all_known
                 .iter()
                 .take(max_suggestions)
@@ -2698,7 +2723,7 @@ impl TypeChecker {
                     // Instantiate polymorphic types with fresh type variables
                     instantiate(&ty, &mut || self.fresh_var())
                 } else if def_id.0 == u32::MAX {
-                    let msg = self.suggest_global_name(span);
+                    let msg = self.suggest_global_name(span, None);
                     self.error(span, msg);
                     self.fresh_var()
                 } else {
@@ -2707,7 +2732,8 @@ impl TypeChecker {
             }
 
             ExprKind::Builtin(name) => self.builtin_type(name, span).unwrap_or_else(|| {
-                self.error(span, format!("unknown builtin: {name}"));
+                let msg = self.suggest_global_name(span, Some(name));
+                self.error(span, msg);
                 self.fresh_var()
             }),
 
@@ -2843,6 +2869,9 @@ impl TypeChecker {
                     if matches!(
                         &target.kind,
                         ExprKind::Global(def_id) if def_id.0 == u32::MAX
+                    ) || matches!(
+                        &target.kind,
+                        ExprKind::Builtin(name) if self.builtin_type(name, span).is_none()
                     ) {
                         self.emit(unknown_method_call(method, &applied_receiver_ty, span));
                         self.fresh_var()
