@@ -2912,3 +2912,69 @@ fn test_frontend_levenshtein_suggests_builtin_typo() {
         analysis.diagnostics
     );
 }
+
+// === Non-blocking Task tests (spawn/poll/cancel) ===
+
+#[test]
+fn test_end_to_end_io_spawn_returns_int_id() {
+    let source = r#"
+    import std.io as io;
+    let cmd = io.command("echo", ["hello"]);
+    let task = io.taskCommand(cmd);
+    let id = io.spawn(task);
+    let x = typeOf(id) == "Int";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_spawn_and_poll_returns_result() {
+    // Spawn a quick command and verify poll doesn't crash.
+    let source = r#"
+    import std.io as io;
+    let cmd = io.command("echo", ["hello spawn"]);
+    let task = io.taskCommand(cmd);
+    let id = io.spawn(task);
+    let result = io.poll(id);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_cancel_removes_task() {
+    let source = r#"
+    import std.io as io;
+    let cmd = io.command("sleep", ["10"]);
+    let task = io.taskCommand(cmd);
+    let id = io.spawn(task);
+    io.cancel(id);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_spawn_effect_checking() {
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> Int = io.spawn(io.taskCommand(io.command("echo", ["x"])));
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.spawn, got {:?}",
+        analysis.diagnostics
+    );
+}
