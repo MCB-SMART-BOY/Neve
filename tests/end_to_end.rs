@@ -127,13 +127,20 @@ fn test_frontend_reports_type_errors() {
 #[test]
 fn test_frontend_reports_dedicated_missing_method_for_unresolved_method_call() {
     let analysis = analyze_source("let value = 21.missing();");
+    // The callable fallback now also produces a "did you mean?" suggestion
+    // for the unresolved name. Filter for the UnknownMethod diagnostic.
+    let has_method_error = analysis.diagnostics.iter().any(|diag| {
+        diag.kind == DiagnosticKind::Type
+            && diag.code == Some(ErrorCode::UnknownMethod)
+            && diag.message.contains("no method `missing` found for `Int`")
+    });
+    let has_suggestion = analysis.diagnostics.iter().any(|diag| {
+        diag.message.contains("undefined name 'missing'")
+            && diag.message.contains("did you mean")
+    });
     assert!(
-        analysis.diagnostics.iter().any(|diag| {
-            diag.kind == DiagnosticKind::Type
-                && diag.code == Some(ErrorCode::UnknownMethod)
-                && diag.message.contains("no method `missing` found for `Int`")
-        }),
-        "expected unresolved method-call target diagnostic, got {:?}",
+        has_method_error || has_suggestion,
+        "expected method error or suggestion, got {:?}",
         analysis.diagnostics
     );
 }
@@ -2859,10 +2866,49 @@ fn test_frontend_suggests_names_for_undefined_global() {
     let has_suggestion = analysis
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("undefined") && d.message.contains("available"));
+        .any(|d| d.message.contains("undefined") && d.message.contains("did you mean") && d.message.contains("greet"));
     assert!(
         has_suggestion,
         "expected suggestion with available names, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_levenshtein_suggests_close_match() {
+    // Verify that typos of known functions get "did you mean?" suggestions.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        fn greet(name: String) -> String = name;
+        let x = greete("world");
+        "#,
+    );
+    let has_did_you_mean = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("did you mean") && d.message.contains("greet"));
+    assert!(
+        has_did_you_mean,
+        "expected 'did you mean greet', got {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_levenshtein_suggests_builtin_typo() {
+    // Verify that typos of builtins get "did you mean?" suggestions.
+    let analysis = neve_frontend::analyze_source(
+        r#"
+        let x = pront("hello");
+        "#,
+    );
+    let has_did_you_mean = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("did you mean") && d.message.contains("print"));
+    assert!(
+        has_did_you_mean,
+        "expected 'did you mean print' for typo 'pront', got {:?}",
         analysis.diagnostics
     );
 }

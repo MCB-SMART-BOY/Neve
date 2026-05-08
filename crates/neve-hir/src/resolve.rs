@@ -1020,7 +1020,8 @@ impl Resolver {
         } else if Self::is_supported_builtin(name) {
             ExprKind::Builtin(name.to_string())
         } else {
-            ExprKind::Global(DefId(u32::MAX))
+            // Preserve unresolved name as Builtin for better "did you mean?" error messages
+            ExprKind::Builtin(name.to_string())
         }
     }
 
