@@ -1291,6 +1291,11 @@ impl TypeChecker {
                 builtin_list(builtin_path(span), span),
                 span,
             ),
+            "io.chown" => builtin_fn(
+                vec![builtin_path(span), builtin_ty(TyKind::Int, span), builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
             "io.chmod" => builtin_fn(
                 vec![builtin_path(span), builtin_ty(TyKind::Int, span)],
                 builtin_ty(TyKind::Unit, span),
