@@ -1276,6 +1276,33 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.walk" => builtin_fn(
+                vec![builtin_path(span)],
+                builtin_list(builtin_path(span), span),
+                span,
+            ),
+            "io.chmod" => builtin_fn(
+                vec![builtin_path(span), builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.symlink" => builtin_fn(
+                vec![builtin_path(span), builtin_path(span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.tempDir" => {
+                let a = builtin_param(0, "a", span);
+                builtin_forall(
+                    Vec::from(["a"]),
+                    builtin_fn(
+                        vec![builtin_fn(vec![builtin_path(span)], a.clone(), span)],
+                        a,
+                        span,
+                    ),
+                    span,
+                )
+            }
             "io.args" => builtin_fn(
                 Vec::new(),
                 builtin_ty(TyKind::Tuple(vec![
