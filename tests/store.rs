@@ -1,7 +1,7 @@
 //! Integration tests for neve-store crate.
 
 use neve_derive::{Derivation, Hash, Output, StorePath};
-use neve_store::{Database, GcResult, PathInfo, Store, store_dir};
+use neve_store::{Database, GarbageCollector, GcResult, PathInfo, Store, store_dir};
 use std::env;
 use std::fs;
 
@@ -684,4 +684,98 @@ fn test_database_many_entries() {
     }
 
     let _ = fs::remove_dir_all(db.root());
+}
+
+// ============================================================================
+// GC Safety Integration Tests
+// ============================================================================
+
+#[test]
+fn test_gc_preserves_rooted_paths() {
+    let mut store = temp_store("gc-rooted");
+
+    // Add content and register as GC root
+    let path = store.add_content(b"important data", "important.txt").unwrap();
+    {
+        let gc = GarbageCollector::new(&mut store);
+        gc.add_root("my-root", &path).unwrap();
+    }
+
+    // Verify the path exists before GC
+    assert!(store.path_exists(&path));
+
+    // Run GC
+    let mut gc = GarbageCollector::new(&mut store);
+    let _result = gc.collect().unwrap();
+
+    // The rooted path should be preserved
+    assert!(store.path_exists(&path), "rooted path should survive GC");
+
+    // Cleanup
+    let _ = fs::remove_dir_all(store.root());
+}
+
+#[test]
+fn test_gc_removes_unrooted_paths() {
+    let mut store = temp_store("gc-unrooted");
+
+    // Add content WITHOUT registering a GC root
+    let path = store.add_content(b"temporary data", "temp.txt").unwrap();
+    assert!(store.path_exists(&path));
+
+    // Run GC
+    let mut gc = GarbageCollector::new(&mut store);
+    let result = gc.collect().unwrap();
+
+    // The unrooted path should be removed
+    assert!(!store.path_exists(&path), "unrooted path should be removed by GC");
+    assert!(result.deleted > 0, "GC should report deleted paths");
+
+    // Cleanup
+    let _ = fs::remove_dir_all(store.root());
+}
+
+#[test]
+fn test_gc_dry_run_does_not_delete() {
+    let mut store = temp_store("gc-dryrun");
+
+    // Add content without a GC root
+    let path = store.add_content(b"data", "file.txt").unwrap();
+    assert!(store.path_exists(&path));
+
+    // Dry run should report what would be deleted
+    let mut gc = GarbageCollector::new(&mut store);
+    let would_delete = gc.dry_run().unwrap();
+
+    assert!(would_delete.contains(&path), "dry run should list unrooted path");
+    assert!(store.path_exists(&path), "dry run should not actually delete");
+
+    // Cleanup
+    let _ = fs::remove_dir_all(store.root());
+}
+
+#[test]
+fn test_gc_updates_roots() {
+    let mut store = temp_store("gc-roots");
+
+    let path1 = store.add_content(b"data1", "file1.txt").unwrap();
+    let path2 = store.add_content(b"data2", "file2.txt").unwrap();
+
+    // Root both, then test root operations
+    {
+        let gc = GarbageCollector::new(&mut store);
+        gc.add_root("root1", &path1).unwrap();
+        gc.add_root("root2", &path2).unwrap();
+
+        let roots = gc.list_roots().unwrap();
+        assert_eq!(roots.len(), 2);
+
+        gc.remove_root("root2").unwrap();
+        let roots = gc.list_roots().unwrap();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].0, "root1");
+    }
+
+    // Cleanup
+    let _ = fs::remove_dir_all(store.root());
 }
