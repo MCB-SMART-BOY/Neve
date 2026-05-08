@@ -6,7 +6,7 @@ This document defines the effect model for Neve — the boundary between pure fu
 
 ## 1. Status
 
-- State: **hardening phase** — effect keyword done, streaming I/O complete, streaming timeout landed (v3.5.0-dev)
+- State: **shipping phase** — effect keyword done, streaming I/O + timeout complete, signal handling, non-blocking tasks, pipe syntax (v3.5.0)
 - Scope: effect classification, purity checking, effect type system design, streaming timeout
 - Related: G4 (Effect Boundary), PR-011/012 (typed runtime objects), `neve check --pure`
 
