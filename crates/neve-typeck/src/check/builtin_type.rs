@@ -1276,6 +1276,19 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.isTTY" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Bool, span),
+                span,
+            ),
+            "io.terminalSize" => builtin_fn(
+                Vec::new(),
+                builtin_option(builtin_record(vec![
+                    ("rows", builtin_ty(TyKind::Int, span)),
+                    ("cols", builtin_ty(TyKind::Int, span)),
+                ], span), span),
+                span,
+            ),
             "io.spawnWithTimeout" => builtin_fn(
                 vec![
                     builtin_task(builtin_process_result(span), span),

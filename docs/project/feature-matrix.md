@@ -125,7 +125,7 @@
 | 一等 `Task<T>` | ⚠️ | 内部已落 runtime identity，且 `std.io.taskCommand` / `std.io.taskPipeline` / `std.io.awaitTask` / `std.io.awaitTasks` 已提供最小公开构造/消费桥，让 `Command` 或 `Pipeline` 都能进入 `Task[ProcessResult] -> ProcessResult` 与 `List<Task[ProcessResult]> -> List<ProcessResult>` 的 blocking canonical path；但还没有 poll/cancel、超时控制、后台调度或任何非阻塞 task runtime |
 | 流式处理 | ✅ | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` / `io.readFileLinesPath` (逐行回调)；超时变体 `io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持总时限 + 进程终止 |
 | timeout / cancel | ⚠️ | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；cancel 与 poll 模型仍需后续 |
-| signal / TTY | ⚠️ | `io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派；TTY 控制尚未支持 |
+| signal / TTY | ⚠️ | `io.isTTY(fd)` / `io.terminalSize()` 已实现；raw mode 和更完整 TTY 控制尚未支持 | `io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派；TTY 控制尚未支持 |
 | shebang / argv / 脚本入口 | ⚠️ | shebang + argv 完整支持：`#!/usr/bin/env neve` 和 `neve run file.neve arg1 arg2` 均可传递参数；`io.args()` 返回 `List[String]` |`#!/usr/bin/env neve` 脚本可直接执行；CLI 自动检测并传递剩余参数；`io.args()` 返回 `List[String]`；全局参数通过 RwLock 传递 |
 | glob / 文件查询组合子 | ✅ | `io.glob(pattern)` 返回 `List<Path>`，可与 `list.filter`/`list.map` 组合 |
 

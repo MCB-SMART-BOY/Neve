@@ -299,6 +299,53 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // === TTY / terminal ===
+        (
+            "io.isTTY",
+            Value::Builtin(BuiltinFn {
+                name: "io.isTTY", arity: 1,
+                func: |args| {
+                    let fd: i32 = match &args[0] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.isTTY: fd must be a valid integer".to_string())?,
+                        _ => return Err("io.isTTY expects an Int (file descriptor)".to_string()),
+                    };
+                    #[cfg(unix)]
+                    unsafe {
+                        Ok(Value::Bool(libc::isatty(fd) != 0))
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = fd;
+                        Ok(Value::Bool(false))
+                    }
+                },
+            }),
+        ),
+        (
+            "io.terminalSize",
+            Value::Builtin(BuiltinFn {
+                name: "io.terminalSize", arity: 0,
+                func: |_args| {
+                    #[cfg(unix)]
+                    unsafe {
+                        let mut winsize: libc::winsize = std::mem::zeroed();
+                        if libc::ioctl(1, libc::TIOCGWINSZ, &mut winsize) == 0 {
+                            let mut fields = HashMap::new();
+                            fields.insert("rows".to_string(), Value::Int((winsize.ws_row as i64).into()));
+                            fields.insert("cols".to_string(), Value::Int((winsize.ws_col as i64).into()));
+                            Ok(Value::Some(Box::new(Value::Record(Rc::new(fields)))))
+                        } else {
+                            Ok(Value::None)
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        Ok(Value::None)
+                    }
+                },
+            }),
+        ),
+        
         // === Non-blocking task spawn/poll/cancel ===
         (
             "io.spawnWithTimeout",
