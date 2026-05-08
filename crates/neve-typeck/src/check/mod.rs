@@ -7,9 +7,8 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::builtin_types::{
-    builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live, builtin_map,
-    builtin_option, builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect,
-    builtin_result, builtin_set, builtin_task, is_builtin_option_type, is_builtin_result_type,
+    builtin_list, builtin_option, builtin_path, builtin_result,
+    is_builtin_option_type, is_builtin_result_type,
 };
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
@@ -1862,10 +1861,6 @@ impl TypeChecker {
                 preview.join(", ")
             )
         }
-    }
-
-    fn global_name_for_did(&self, def_id: DefId) -> Option<String> {
-        self.global_names.get(&def_id).cloned()
     }
 
     fn is_effectful_builtin_name(name: &str) -> bool {

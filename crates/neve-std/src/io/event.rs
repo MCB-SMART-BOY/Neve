@@ -1,7 +1,6 @@
 //! Event system, reactive, temporal — new additions live here.
 
 use neve_eval::value::{BuiltinFn, EventKind, EventValue, LiveValue, Value};
-use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 pub fn builtins() -> Vec<(&'static str, Value)> {

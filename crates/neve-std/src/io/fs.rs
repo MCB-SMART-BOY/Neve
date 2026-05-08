@@ -2,8 +2,7 @@
 //! Legacy functions remain in io/mod.rs.
 
 use neve_eval::value::{
-    BuiltinFn, CommandValue, EventKind, EventValue, LiveValue, PipelineValue, ProcessResultValue,
-    RedirectValue, TaskValue, Value,
+    BuiltinFn, CommandValue, RedirectValue, TaskValue, Value,
 };
 use std::collections::HashMap;
 use std::io::Write;
