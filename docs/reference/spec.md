@@ -575,6 +575,25 @@ let result = io.awaitTaskWithTimeout(task, 5000);
 - Remaining CLI arguments are available via `io.args() -> List[String]`
 - 剩余 CLI 参数可通过 `io.args() -> List[String]` 获取
 
+---
+
+## 12. Known Implementation Gaps / 已知实现差距
+
+The following constructs are documented in this spec but have known limitations
+in the current parser or runtime. Tracked as `#[ignore]` golden tests in
+`tests/parser.rs`.
+
+| Gap | Status | Issue |
+|-----|--------|-------|
+| Unicode `\u{...}` in char literals | ❌ Parser | Not yet supported by lexer |
+| `effect` on impl methods | ⚠️ Syntax | Syntax clarification needed |
+| `crate::` import prefix | ❌ Parser | Not yet implemented |
+| Multi-line `-- ... --` comments | ❌ Lexer | Only single-line `--` supported |
+| Shebang stripping | ⚠️ CLI | Handled by CLI, not parser |
+| Tuple index `t.0` | ❌ Parser | Conflicts with float literal |
+
+---
+
 ## Appendix A: Keywords / 附录 A: 关键字
 
 
