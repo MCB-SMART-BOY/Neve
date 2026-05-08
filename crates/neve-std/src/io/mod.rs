@@ -100,23 +100,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "io.run",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Command(cmd) => {
-                        let mut c = std::process::Command::new(cmd.program());
-                        c.args(cmd.args());
-                        if let Some(wd) = cmd.cwd() {
-                            c.current_dir(wd);
-                        }
-                        for (k, v) in cmd.env() {
-                            c.env(k, v);
-                        }
-                        let output = c.output().map_err(|e| format!("io.run: {e}"))?;
-                        Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
-                            output.status.code().unwrap_or(-1),
-                            output.status.success(),
-                            String::from_utf8_lossy(&output.stdout).to_string(),
-                            String::from_utf8_lossy(&output.stderr).to_string(),
-                        ))))
-                    }
+                    Value::Command(command) => execute_command_value(command),
                     _ => Err("io.run expects a Command".to_string()),
                 },
             }),
