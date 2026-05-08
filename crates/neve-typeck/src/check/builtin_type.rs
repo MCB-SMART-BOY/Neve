@@ -1276,6 +1276,14 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.args" => builtin_fn(
+                Vec::new(),
+                builtin_ty(TyKind::Tuple(vec![
+                    builtin_list(builtin_ty(TyKind::String, span), span),
+                    builtin_record(Vec::new(), span),
+                ]), span),
+                span,
+            ),
             "io.isTTY" => builtin_fn(
                 vec![builtin_ty(TyKind::Int, span)],
                 builtin_ty(TyKind::Bool, span),

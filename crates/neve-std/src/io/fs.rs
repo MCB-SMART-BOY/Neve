@@ -521,11 +521,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         }
                         i += 1;
                     }
-                    // Build result: Tuple(positionals..., flags Record)
-                    let mut elements = positional;
+                    // Build result: (List<String>, Record{flags})
+                    let pos_list = Value::List(Rc::new(positional));
                     let flags_map: HashMap<String, Value> = flags;
-                    elements.push(Value::Record(Rc::new(flags_map)));
-                    Ok(Value::Tuple(Rc::new(elements)))
+                    Ok(Value::Tuple(Rc::new(vec![
+                        pos_list,
+                        Value::Record(Rc::new(flags_map)),
+                    ])))
                 },
             }),
         ),
