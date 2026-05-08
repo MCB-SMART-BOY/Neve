@@ -16,8 +16,10 @@ use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::validate::{MatchingBracketValidator, Validator};
 use rustyline::{Context, Helper};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::rc::Rc;
 
 #[cfg(test)]
 const REPL_FN_TYPE_ID: DefId = DefId(u32::MAX - 100);
@@ -31,13 +33,15 @@ pub fn run() -> Result<(), String> {
     println!("Type :help for help, :quit to exit");
     println!();
 
+    let shared_names: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     let mut rl: rustyline::Editor<ReplHelper, rustyline::history::FileHistory> =
         rustyline::Editor::new().map_err(|e| e.to_string())?;
     rl.set_helper(Some(ReplHelper {
-        completer: ReplCompleter::new(),
+        completer: ReplCompleter::new(Rc::clone(&shared_names)),
         highlighter: MatchingBracketHighlighter::new(),
         hinter: HistoryHinter {},
         validator: MatchingBracketValidator::new(),
+        _names: Rc::clone(&shared_names),
     }));
     load_repl_history(&mut rl);
     let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -238,6 +242,7 @@ pub fn run() -> Result<(), String> {
                         ":clear" => {
                             runtime_state.clear();
                             semantic_state.clear();
+                            shared_names.borrow_mut().clear();
                             println!("Environment cleared");
                             input_buffer.clear();
                             continue;
@@ -264,6 +269,16 @@ pub fn run() -> Result<(), String> {
                     &mut semantic_state,
                 ) {
                     Ok(value) => {
+                        // Update tab completion names after successful evaluation
+                        let mut names: Vec<String> = runtime_state
+                            .user_bindings()
+                            .iter()
+                            .map(|(name, _)| name.to_string())
+                            .collect();
+                        names.sort();
+                        names.dedup();
+                        *shared_names.borrow_mut() = names;
+
                         if !matches!(value, Value::Unit) {
                             println!("{}", format_repl_value(&value));
                         }
@@ -506,18 +521,33 @@ fn save_repl_bindings(_path: &str, _runtime_state: &ReplHirState) -> Result<(), 
 
 // ===== REPL rustyline integration =====
 
-/// Custom REPL completer providing command and file-path completion.
+/// Custom REPL completer providing command, variable, and file-path completion.
 struct ReplCompleter {
     file_completer: FilenameCompleter,
+    /// Shared list of known names (variables, functions, builtins) for tab completion.
+    names: Rc<RefCell<Vec<String>>>,
 }
 
 impl ReplCompleter {
-    fn new() -> Self {
+    fn new(names: Rc<RefCell<Vec<String>>>) -> Self {
         Self {
             file_completer: FilenameCompleter::new(),
+            names,
         }
     }
 }
+
+/// Built-in names always available for completion.
+const BUILTIN_COMPLETIONS: &[&str] = &[
+    "print", "println", "typeOf", "force", "isLazy", "isEvaluated",
+    "toString", "toInt", "toFloat", "toChar",
+    "io", "list", "map", "path", "Map", "Set",
+    "option", "result", "string", "math", "fetch",
+    "Some", "None", "Ok", "Err",
+    "Int", "String", "Float", "Bool", "Char", "Unit",
+    "Command", "Pipeline", "ProcessResult", "Task", "Event", "Live",
+    "let", "fn", "match", "if", "else", "then", "import", "enum", "struct", "trait", "impl", "effect", "type",
+];
 
 const REPL_COMMANDS: &[&str] = &[
     ":help", ":h", ":quit", ":q", ":version", ":v", ":env", ":type", ":clear", ":load", ":save", ":cd",
@@ -559,6 +589,42 @@ impl Completer for ReplCompleter {
             }
         }
 
+        // Complete identifiers (variable/function names)
+        if !line_up_to_pos.starts_with(':') {
+            // Extract the last word being typed
+            let word_start = line_up_to_pos
+                .rfind(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let partial = &line_up_to_pos[word_start..];
+
+            if !partial.is_empty() {
+                let names = self.names.borrow();
+                let mut completions: Vec<Pair> = names
+                    .iter()
+                    .filter(|n| n.starts_with(partial) && *n != partial)
+                    .map(|n| Pair {
+                        display: n.clone(),
+                        replacement: n.clone(),
+                    })
+                    .collect();
+                // Also match builtins
+                for name in BUILTIN_COMPLETIONS {
+                    if name.starts_with(partial) && *name != partial {
+                        completions.push(Pair {
+                            display: name.to_string(),
+                            replacement: name.to_string(),
+                        });
+                    }
+                }
+                completions.sort_by(|a, b| a.display.cmp(&b.display));
+                completions.dedup_by(|a, b| a.display == b.display);
+                if !completions.is_empty() {
+                    return Ok((word_start, completions));
+                }
+            }
+        }
+
         Ok((pos, Vec::new()))
     }
 }
@@ -569,6 +635,8 @@ struct ReplHelper {
     highlighter: MatchingBracketHighlighter,
     hinter: HistoryHinter,
     validator: MatchingBracketValidator,
+    /// Shared list of known names for tab completion.
+    _names: Rc<RefCell<Vec<String>>>,
 }
 
 impl Completer for ReplHelper {
