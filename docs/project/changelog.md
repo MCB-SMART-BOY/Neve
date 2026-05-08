@@ -21,6 +21,31 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [3.6.0] - 2026-05-09
+
+### Added / 新增
+- **Structured io.args()**: Returns `(List<String>, Record)` tuple for pattern destructuring.
+  Supports `-flag` → Bool, `-j8` → Int, `-f out` → String, `-10` → positional, `--` separator.
+- **File operations**: `io.tempDir(fn)` auto-cleanup, `io.walk(dir)` recursive traversal,
+  `io.chmod`, `io.chown` (Unix), `io.symlink`, `io.readlink`.
+- **Environment**: `io.setEnv`, `io.unsetEnv` for process-level env management.
+- **Non-blocking timeout**: `io.spawnWithTimeout(task, ms)` — auto-cancel on timeout.
+- **TTY control**: `io.isTTY(fd)`, `io.terminalSize()` (Unix).
+- **Pipeline spawn**: `io.spawn` now supports `Task[Pipeline]` in addition to `Task[Command]`.
+- **Command pipe chaining**: `cmd1 |> cmd2 |> cmd3` via Pipeline append on `|>`.
+
+### Changed / 变更
+- `io.args()` return type changed from `List<String>` to `(List<String>, Record)`.
+- Feature matrix: shebang/argv upgraded to ✅; glob, record match, match exhaustiveness updated.
+- Phase 2 script polishing: 10/10 items complete per the Better Bash roadmap.
+
+### Fixed / 修复
+- `io.args`: negative numbers (`-10`) no longer parsed as flags.
+- `io.args`: compact form (`-j8`) now supported.
+- `io.args`: single dash (`-`) correctly treated as positional.
+
+---
+
 ## [3.5.0] - 2026-05-08
 
 ### Added / 新增
