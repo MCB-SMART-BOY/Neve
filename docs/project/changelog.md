@@ -21,6 +21,40 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [3.5.0] - 2026-05-08
+
+### Added / 新增
+- **Streaming timeout**: `io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` — streaming execution with total deadline + process kill on timeout.
+- **Streaming safety limits**: max lines (100k), max stdin (10MB), max intermediate buffer (50MB) enforced in evaluator; path canonicalization for `readFileLines`.
+- **Real signal handling**: `io.onSignal("INT"|"TERM"|"HUP"|"USR1"|"USR2", fn)` — OS-level signal handlers with atomic flags, dispatched at evaluator safe points.
+- **Non-blocking Task**: `io.spawn(task)` / `io.poll(id)` / `io.cancel(id)` — background Command/Pipeline execution with global spawn registry.
+- **Command pipe syntax**: `cmd1 |> cmd2` — creates Pipeline from Commands; `cmd1 |> cmd2 |> cmd3` chains through Pipeline.
+- **std.bytes module**: `bytes.len` / `bytes.isEmpty` / `bytes.concat` / `bytes.fromString` / `bytes.toString` / `bytes.toList` / `bytes.fromList`.
+- **eventMap/eventFilter**: Event chaining now stores function/predicate for lazy transformation at poll time.
+- **Variable tab completion**: REPL now auto-completes user variables, functions, builtins, keywords, and type names.
+
+### Changed / 变更
+- **"undefined" suggestions**: Unknown names now produce "did you mean X?" via Levenshtein distance (e.g., `pront` → `did you mean 'print' (distance 2)?`).
+- **LSP cross-module types**: Hover now shows readable type names (`List<Int>`) for stdlib and imported types via `global_names` in `ModuleSemantics`.
+- **Match exhaustiveness**: Extended to `List<T>` (empty/non-empty coverage) and `Tuple` (per-position coverage). Previously marked `NotAnalyzed`.
+- **Formatter idempotence**: Fixed trailing semicolons on struct/enum/trait/impl and match arm arrow (`=>` → `->`). 15 idempotence tests added.
+- **Signal handler**: `libc::signal` → `libc::sigaction` for portable semantics; `Relaxed` → `Release/Acquire` ordering for signal flags.
+- **Architecture**: `check.rs` (4848 lines) split into `check/mod.rs` (3401) + `check/builtin_type.rs` (1494).
+
+### Fixed / 修复
+- Pipeline timeout **deadlock** in error paths: removed blocking `result_rx.recv()`, added 500ms safety timeout.
+- `check_signals` **performance**: eliminated `HashMap::clone()` on every `apply()` call.
+- `kill_process_by_pid` now uses `libc::kill()` directly instead of spawning `kill` subprocess.
+- `io.onSignal` callback arity validation; OS handler installed only once per signal name.
+- Missing `io.awaitTaskWithTimeout` type signature added.
+- **Pre-existing test failures** resolved: `binding_pattern_runtime_parity`, `repl_hir_runtime_preserves_project_module_namespace_imports`.
+- Parser golden tests: 29 new tests added, 3 of 6 known gaps closed (crate import, multi-line comment, effect on impl method).
+
+### Security / 安全
+- Phase 3 security audit: streaming timeout, size limits, path validation, signal safety, effect classification fixes.
+
+---
+
 ## [3.2.0] - 2026-05-04
 
 ### Added / 新增

@@ -127,7 +127,7 @@
 | timeout / cancel | ⚠️ | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；cancel 与 poll 模型仍需后续 |
 | signal / TTY | ⚠️ | `io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派；TTY 控制尚未支持 |
 | shebang / argv / 脚本入口 | ⚠️ | shebang + argv 完整支持：`#!/usr/bin/env neve` 和 `neve run file.neve arg1 arg2` 均可传递参数；`io.args()` 返回 `List[String]` |`#!/usr/bin/env neve` 脚本可直接执行；CLI 自动检测并传递剩余参数；`io.args()` 返回 `List[String]`；全局参数通过 RwLock 传递 |
-| glob / 文件查询组合子 | ❌ | 自动化脚本里常见，但当前还没有 |
+| glob / 文件查询组合子 | ✅ | `io.glob(pattern)` 返回 `List<Path>`，可与 `list.filter`/`list.map` 组合 |
 
 ## 当前最该关注的缺口 / Most Important Gaps
 
