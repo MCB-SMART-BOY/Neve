@@ -117,6 +117,92 @@ fn test_format_error_diagnostics() {
     assert!(!diags.unwrap().is_empty());
 }
 
+// Idempotence tests — formatting already-formatted code must be stable
+
+fn assert_idempotent(source: &str) {
+    let first = format(source).expect("first format should succeed");
+    let second = format(&first).expect("second format should succeed");
+    assert_eq!(
+        first, second,
+        "formatter is not idempotent:\nsource: {source}\nfirst:  {first}\nsecond: {second}"
+    );
+}
+
+#[test]
+fn test_idempotent_simple_let() {
+    assert_idempotent("let x = 1;\n");
+}
+
+#[test]
+fn test_idempotent_function_def() {
+    assert_idempotent("fn add(a: Int, b: Int) -> Int = a + b;\n");
+}
+
+#[test]
+fn test_idempotent_record() {
+    assert_idempotent("let r = #{ a = 1, b = 2 };\n");
+}
+
+#[test]
+fn test_idempotent_list() {
+    assert_idempotent("let xs = [1, 2, 3];\n");
+}
+
+#[test]
+fn test_idempotent_if_else() {
+    assert_idempotent("let x = if true then 1 else 2;\n");
+}
+
+#[test]
+fn test_idempotent_match() {
+    assert_idempotent("let x = match 1 { 0 -> 0, _ -> 1 };\n");
+}
+
+#[test]
+fn test_idempotent_block() {
+    assert_idempotent("let x = { let y = 1; y + 2 };\n");
+}
+
+#[test]
+fn test_idempotent_pipe() {
+    assert_idempotent("let x = 1 |> fn(x) { x + 1 };\n");
+}
+
+#[test]
+fn test_idempotent_lambda() {
+    assert_idempotent("let f = fn(x: Int) x + 1;\n");
+}
+
+#[test]
+fn test_idempotent_enum() {
+    assert_idempotent("enum Option { Some(Int), None };\n");
+}
+
+#[test]
+fn test_idempotent_struct() {
+    assert_idempotent("struct Point { x: Int, y: Int };\n");
+}
+
+#[test]
+fn test_idempotent_trait() {
+    assert_idempotent("trait Show { fn show(self) -> String; };\n");
+}
+
+#[test]
+fn test_idempotent_import() {
+    assert_idempotent("import std.io as io;\n");
+}
+
+#[test]
+fn test_idempotent_effect_fn() {
+    assert_idempotent("fn run() -> Unit effect = { () };\n");
+}
+
+#[test]
+fn test_idempotent_type_alias() {
+    assert_idempotent("type Name = String;\n");
+}
+
 // Printer tests
 
 #[test]
