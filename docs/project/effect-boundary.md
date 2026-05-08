@@ -42,7 +42,6 @@ This document defines the effect model for Neve — the boundary between pure fu
 | Effect type system | High | No way to express "this function may have effects" in the type system |
 | Effect polymorphism | Medium | Can't write functions generic over purity |
 | Non-blocking Task | Medium | Tasks always block; no poll/cancel/background execution |
-| Pipeline timeout (non-streaming) | Medium | awaitTaskWithTimeout only works for Command, not Pipeline (streaming pipelines have timeout via execPipelineStreamingWithTimeout) |
 | Effect inference | Low | Purity is opt-in (--pure flag) rather than inferred |
 
 ## 4. Effect Classification
