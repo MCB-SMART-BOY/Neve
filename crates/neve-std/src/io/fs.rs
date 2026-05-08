@@ -488,11 +488,44 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     let guard = super::SCRIPT_ARGS
                         .read()
                         .map_err(|e| format!("io.args: {e}"))?;
-                    let args: Vec<Value> = guard
-                        .iter()
-                        .map(|arg| Value::String(Rc::new(arg.clone())))
-                        .collect();
-                    Ok(Value::List(Rc::new(args)))
+                    let raw_args = guard.clone();
+                    let mut positional: Vec<Value> = Vec::new();
+                    let mut flags: HashMap<String, Value> = HashMap::new();
+                    let mut i = 0;
+                    while i < raw_args.len() {
+                        let arg = &raw_args[i];
+                        if arg == "--" {
+                            // Rest are positional
+                            for a in &raw_args[i+1..] {
+                                positional.push(Value::String(Rc::new(a.clone())));
+                            }
+                            break;
+                        }
+                        if arg.starts_with('-') && arg.len() > 1 && !arg.starts_with("--") {
+                            let flag = arg[1..].to_string();
+                            // Check if next arg is a value (doesn't start with -)
+                            if i + 1 < raw_args.len() && !raw_args[i+1].starts_with('-') {
+                                i += 1;
+                                let val = &raw_args[i];
+                                // Try Int, then String
+                                if let Ok(n) = val.parse::<i64>() {
+                                    flags.insert(flag, Value::Int(n.into()));
+                                } else {
+                                    flags.insert(flag, Value::String(Rc::new(val.clone())));
+                                }
+                            } else {
+                                flags.insert(flag, Value::Bool(true));
+                            }
+                        } else {
+                            positional.push(Value::String(Rc::new(arg.clone())));
+                        }
+                        i += 1;
+                    }
+                    // Build result: Tuple(positionals..., flags Record)
+                    let mut elements = positional;
+                    let flags_map: HashMap<String, Value> = flags;
+                    elements.push(Value::Record(Rc::new(flags_map)));
+                    Ok(Value::Tuple(Rc::new(elements)))
                 },
             }),
         ),
