@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use neve_common::Span;
 use neve_frontend::{
     Diagnostic, Module, ModuleSemantics, SourceFile, analyze_source, format_type_in_module,
+    format_type_with_names_map,
     format_type_use_in_module,
 };
 use neve_hir::{
@@ -164,6 +165,14 @@ fn build_hover_maps(
 ) -> (HashMap<Span, String>, HashMap<Span, String>) {
     let mut definition_hovers = HashMap::new();
     let mut semantic_hovers = HashMap::new();
+    // Use type names from the entire module graph for cross-module type display
+    let fmt_ty = |ty: &Ty| -> String {
+        if semantics.global_names.is_empty() {
+            format_type_in_module(ty, hir)
+        } else {
+            format_type_with_names_map(ty, &semantics.global_names)
+        }
+    };
     let mut hir_items = hir.items.iter();
 
     for ast_item in &ast.items {
@@ -187,7 +196,7 @@ fn build_hover_maps(
                 {
                     definition_hovers.insert(
                         ident.span,
-                        format!("let {}: {}", ident.name, format_type_in_module(ty, hir)),
+                        format!("let {}: {}", ident.name, fmt_ty(ty)),
                     );
                 }
                 collect_expr_hovers(
@@ -203,7 +212,7 @@ fn build_hover_maps(
                 if let Some(ty) = semantics.global_type(hir_item.id) {
                     definition_hovers.insert(
                         def.name.span,
-                        format!("fn {}: {}", def.name.name, format_type_in_module(ty, hir)),
+                        format!("fn {}: {}", def.name.name, fmt_ty(ty)),
                     );
                 }
                 if let HirItemKind::Fn(hir_fn) = &hir_item.kind {
@@ -285,7 +294,7 @@ fn build_hover_maps(
                             format!(
                                 "fn {}: {}",
                                 ast_item.name.name,
-                                format_type_in_module(ty, hir)
+                                fmt_ty(ty)
                             ),
                         );
                     }

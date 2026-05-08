@@ -56,6 +56,9 @@ pub struct ModuleSemantics {
     /// Final inferred types for expressions.
     /// 表达式的最终推断类型。
     pub expr_types: HashMap<Span, Ty>,
+    /// Human-readable names for global definitions (for type display).
+    /// 全局定义的可读名称（用于类型显示）。
+    pub global_names: HashMap<DefId, String>,
 }
 
 impl ModuleSemantics {
@@ -376,6 +379,7 @@ pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics
         global_spans: checker.global_spans_ref().clone(),
         local_types,
         expr_types,
+        global_names: checker.global_names_ref().clone(),
     }
 }
 
