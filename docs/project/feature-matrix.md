@@ -96,9 +96,9 @@
 
 | 能力 | 说明 |
 |------|------|
-| 文件读写 | `io.readFile` / `io.writeFile` / `io.appendFile` + typed-path 变体 |
+| 文件操作 | `io.readFile/read` / `io.writeFile/write` / `io.appendFile` / `io.chmod` / `io.symlink` + typed-path 变体 |
 | 原子文件操作 | `io.atomicWrite` / `io.atomicWriteAll` (两阶段提交) / `io.copy` / `io.move` |
-| 目录操作 | `io.createDirAll` / `io.removeDirAll` + typed-path 变体 |
+| 目录操作 | `io.createDirAll` / `io.removeDirAll` / `io.walk` / `io.tempDir` + typed-path 变体 |
 | 环境变量 | `io.getEnv` / `io.env()` (返回 Record) |
 | 进程执行 | `io.execCommand` / `io.execPipeline` + 超时 + 杀进程 |
 | 流式 I/O | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` |

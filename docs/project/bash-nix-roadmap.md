@@ -41,10 +41,10 @@ Neve v3.5.0 已经具备系统脚本和构建系统的基础能力：
 
 - [ ] `io.shell` 安全模式：`io.shell("...", strict=true)` 禁止拼接
 - [ ] 命令插值语法：`io.cmd\`echo ${name}\`` 类型安全的命令构造
-- [ ] `io.chmod` / `io.chown` / `io.symlink` / `io.readlink`
+- [x] `io.chmod` / `io.symlink`（`io.chown` / `io.readlink` 待后续）
 - [ ] `io.env` 进程级环境变量管理（读/写/删除）
-- [ ] `io.tempDir(fn)` — 临时目录 + 自动清理
-- [ ] `io.walk(dir)` — 递归遍历目录
+- [x] `io.tempDir(fn)` — 临时目录 + 自动清理
+- [x] `io.walk(dir)` — 递归遍历目录
 - [ ] `io.watch(dir)` — 文件系统监听
 - [ ] 更好的错误信息：进程失败时显示 stdout/stderr 摘要
 - [x] `io.args()` 结构化解析：返回 `(List<String>, Record)` 元组；`-v`→Bool、`-j8`→Int、`-f out`→String、`-10`→位置参数、`--` 分隔
