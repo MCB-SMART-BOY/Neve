@@ -79,11 +79,6 @@ pub(super) fn emit_program_diagnostic_entries(entries: &[ProgramDiagnosticModule
 
 /// Emit one dependency-first sequence of loaded snippet diagnostic entries.
 /// 发射一组按依赖优先顺序排列的 snippet 已加载依赖诊断条目。
-#[allow(dead_code)]
-pub(super) fn emit_loaded_snippet_diagnostic_entries(entries: &[LoadedSnippetModule]) {
-    emit_source_attributed_entries(entries);
-}
-
 /// Emit one dependency-first sequence of session loaded-module diagnostic entries.
 /// 发射一组按依赖优先顺序排列的 session 已加载模块诊断条目。
 pub(super) fn emit_session_loaded_diagnostic_entries(entries: &[SessionLoadedDiagnostics]) {
