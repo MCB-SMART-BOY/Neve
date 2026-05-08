@@ -47,15 +47,10 @@ Neve v3.5.0 已经具备系统脚本和构建系统的基础能力：
 - [ ] `io.walk(dir)` — 递归遍历目录
 - [ ] `io.watch(dir)` — 文件系统监听
 - [ ] 更好的错误信息：进程失败时显示 stdout/stderr 摘要
-- [ ] `#!/usr/bin/env neve` 脚本的 `-h` / `-v` 风格标志支持
-- [ ] 内置 CLI 参数解析：`io.parseArgs(schema)` — schema-based，不和 `--` 注释冲突。
-  标志用 `-h` / `-v` 风格，或直接按位置匹配：
+- [x] `io.args()` 结构化解析：返回 `(List<String>, Record)` 元组；`-v`→Bool、`-j8`→Int、`-f out`→String、`-10`→位置参数、`--` 分隔
+- [x] 内置 CLI 参数解析：`io.args()` 本身即解析器，无需额外 API
   ```neve
-  let cfg = io.parseArgs(#{
-      input = #{ pos = 0, help = "input file" },
-      verbose = #{ flag = "v", help = "verbose output" },
-      jobs = #{ flag = "j", value = Int, default = 4 },
-  });
+  let (files, #{ v, j = 4 }) = io.args();  // 解构即解析
   ```
 
 **受益：** Neve 脚本比 Bash 更安全、更可读、更可维护。
