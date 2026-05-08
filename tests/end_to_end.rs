@@ -3518,3 +3518,31 @@ fn test_frontend_record_match_non_exhaustive() {
         analysis.diagnostics
     );
 }
+
+
+// === Spawn with timeout ===
+#[test]
+fn test_end_to_end_io_spawn_with_timeout_returns_id() {
+    let source = r#"
+    import std.io as io;
+    let task = io.taskCommand(io.command("echo", ["hello"]));
+    let id = io.spawnWithTimeout(task, 5000);
+    let x = typeOf(id) == "Int";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_spawn_with_timeout_cancels() {
+    let source = r#"
+    import std.io as io;
+    let task = io.taskCommand(io.command("sleep", ["10"]));
+    let id = io.spawnWithTimeout(task, 50);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+}

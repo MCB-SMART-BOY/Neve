@@ -1276,6 +1276,14 @@ impl TypeChecker {
                     span,
                 )
             }
+            "io.spawnWithTimeout" => builtin_fn(
+                vec![
+                    builtin_task(builtin_process_result(span), span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
             "io.spawn" => builtin_fn(
                 vec![builtin_task(builtin_process_result(span), span)],
                 builtin_ty(TyKind::Int, span),
