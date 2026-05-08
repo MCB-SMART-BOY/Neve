@@ -350,9 +350,12 @@ impl Resolver {
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
-                        imported_builtin_modules: {
+            imported_builtin_modules: {
                 let mut m = HashMap::new();
-                for prefix in ["io", "list", "path", "Map", "Set", "option", "result", "string", "math", "fetch"] {
+                for prefix in [
+                    "io", "list", "path", "Map", "Set", "option", "result", "string", "math",
+                    "fetch",
+                ] {
                     m.insert(prefix.to_string(), prefix.to_string());
                 }
                 m
@@ -378,9 +381,12 @@ impl Resolver {
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
-                        imported_builtin_modules: {
+            imported_builtin_modules: {
                 let mut m = HashMap::new();
-                for prefix in ["io", "list", "path", "Map", "Set", "option", "result", "string", "math", "fetch"] {
+                for prefix in [
+                    "io", "list", "path", "Map", "Set", "option", "result", "string", "math",
+                    "fetch",
+                ] {
                     m.insert(prefix.to_string(), prefix.to_string());
                 }
                 m

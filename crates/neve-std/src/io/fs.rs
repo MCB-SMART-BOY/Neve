@@ -2,19 +2,18 @@
 //! Legacy functions remain in io/mod.rs.
 
 use neve_eval::value::{
-    BuiltinFn, CommandValue, EventKind, EventValue, LiveValue, PipelineValue,
-    ProcessResultValue, RedirectValue, TaskValue, Value,
+    BuiltinFn, CommandValue, EventKind, EventValue, LiveValue, PipelineValue, ProcessResultValue,
+    RedirectValue, TaskValue, Value,
 };
 use std::collections::HashMap;
+use std::io::Write;
 use std::rc::Rc;
 use std::time::Duration;
-use std::io::Write;
-
 
 /// New builtins for the fs submodule.
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
-// File reading / 文件读取
+        // File reading / 文件读取
         (
             "io.lines",
             Value::Builtin(BuiltinFn {
@@ -24,7 +23,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::String(path) => {
                         let content = std::fs::read_to_string(path.as_str())
                             .map_err(|e| format!("io.lines: {e}"))?;
-                        let lines: Vec<Value> = content.lines()
+                        let lines: Vec<Value> = content
+                            .lines()
                             .map(|l| Value::String(Rc::new(l.to_string())))
                             .collect();
                         Ok(Value::List(Rc::new(lines)))
@@ -32,7 +32,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::Path(path) => {
                         let content = std::fs::read_to_string(path.as_path())
                             .map_err(|e| format!("io.lines: {e}"))?;
-                        let lines: Vec<Value> = content.lines()
+                        let lines: Vec<Value> = content
+                            .lines()
                             .map(|l| Value::String(Rc::new(l.to_string())))
                             .collect();
                         Ok(Value::List(Rc::new(lines)))
@@ -485,7 +486,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "io.args",
                 arity: 0,
                 func: |_args| {
-                    let guard = super::SCRIPT_ARGS.read().map_err(|e| format!("io.args: {e}"))?;
+                    let guard = super::SCRIPT_ARGS
+                        .read()
+                        .map_err(|e| format!("io.args: {e}"))?;
                     let args: Vec<Value> = guard
                         .iter()
                         .map(|arg| Value::String(Rc::new(arg.clone())))
@@ -532,8 +535,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Command(command), Value::List(redirects)) => {
-                        let redirects =
-                            super::list_to_redirect_vec(redirects, "io.commandWithRedirects redirects")?;
+                        let redirects = super::list_to_redirect_vec(
+                            redirects,
+                            "io.commandWithRedirects redirects",
+                        )?;
                         let command = super::command_value_with_redirects(
                             command,
                             &redirects,
@@ -576,8 +581,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::List(commands) => {
-                        let commands = super::list_to_command_vec(commands, "io.pipeline commands")?;
-                        let pipeline = super::pipeline_value_from_commands(commands, "io.pipeline")?;
+                        let commands =
+                            super::list_to_command_vec(commands, "io.pipeline commands")?;
+                        let pipeline =
+                            super::pipeline_value_from_commands(commands, "io.pipeline")?;
                         Ok(Value::Pipeline(Rc::new(pipeline)))
                     }
                     _ => Err("io.pipeline expects List<Command>".to_string()),
@@ -591,8 +598,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Pipeline(pipeline), Value::List(redirects)) => {
-                        let redirects =
-                            super::list_to_redirect_vec(redirects, "io.pipelineWithRedirects redirects")?;
+                        let redirects = super::list_to_redirect_vec(
+                            redirects,
+                            "io.pipelineWithRedirects redirects",
+                        )?;
                         let pipeline = super::pipeline_value_with_redirects(
                             pipeline,
                             &redirects,
@@ -860,7 +869,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             Value::Builtin(BuiltinFn {
                 name: "io.execCommandStreamingWithTimeout",
                 arity: 3,
-                func: |_args| Err("io.execCommandStreamingWithTimeout is evaluator-owned".to_string()),
+                func: |_args| {
+                    Err("io.execCommandStreamingWithTimeout is evaluator-owned".to_string())
+                },
             }),
         ),
         (
@@ -876,7 +887,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             Value::Builtin(BuiltinFn {
                 name: "io.execPipelineStreamingWithTimeout",
                 arity: 3,
-                func: |_args| Err("io.execPipelineStreamingWithTimeout is evaluator-owned".to_string()),
+                func: |_args| {
+                    Err("io.execPipelineStreamingWithTimeout is evaluator-owned".to_string())
+                },
             }),
         ),
         (
@@ -1002,5 +1015,5 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-            ]
+    ]
 }

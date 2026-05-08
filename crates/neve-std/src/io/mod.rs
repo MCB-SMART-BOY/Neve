@@ -29,11 +29,11 @@ pub fn set_script_args(args: Vec<String>) {
     }
 }
 
+mod event;
 /// Returns all IO builtins.
 /// 返回所有 IO 内置函数。
 mod fs;
 mod process;
-mod event;
 
 pub fn builtins() -> Vec<(&'static str, Value)> {
     let mut bindings = vec![
@@ -41,7 +41,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.read",
             Value::Builtin(BuiltinFn {
-                name: "io.read", arity: 1,
+                name: "io.read",
+                arity: 1,
                 func: |args| match &args[0] {
                     Value::Path(p) => std::fs::read_to_string(p.as_path())
                         .map(|s| Value::String(Rc::new(s)))
@@ -56,12 +57,17 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.write",
             Value::Builtin(BuiltinFn {
-                name: "io.write", arity: 2,
+                name: "io.write",
+                arity: 2,
                 func: |args| match (&args[0], &args[1]) {
                     (Value::Path(p), Value::String(s)) => std::fs::write(p.as_path(), s.as_bytes())
-                        .map(|_| Value::Unit).map_err(|e| format!("io.write: {e}")),
-                    (Value::String(p), Value::String(s)) => std::fs::write(p.as_str(), s.as_bytes())
-                        .map(|_| Value::Unit).map_err(|e| format!("io.write: {e}")),
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("io.write: {e}")),
+                    (Value::String(p), Value::String(s)) => {
+                        std::fs::write(p.as_str(), s.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.write: {e}"))
+                    }
                     _ => Err("io.write expects (Path|String, String)".to_string()),
                 },
             }),
@@ -69,13 +75,18 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.run",
             Value::Builtin(BuiltinFn {
-                name: "io.run", arity: 1,
+                name: "io.run",
+                arity: 1,
                 func: |args| match &args[0] {
                     Value::Command(cmd) => {
                         let mut c = std::process::Command::new(cmd.program());
                         c.args(cmd.args());
-                        if let Some(wd) = cmd.cwd() { c.current_dir(wd); }
-                        for (k, v) in cmd.env() { c.env(k, v); }
+                        if let Some(wd) = cmd.cwd() {
+                            c.current_dir(wd);
+                        }
+                        for (k, v) in cmd.env() {
+                            c.env(k, v);
+                        }
                         let output = c.output().map_err(|e| format!("io.run: {e}"))?;
                         Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
                             output.status.code().unwrap_or(-1),
@@ -91,12 +102,15 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.shell",
             Value::Builtin(BuiltinFn {
-                name: "io.shell", arity: 1,
+                name: "io.shell",
+                arity: 1,
                 func: |args| match &args[0] {
                     Value::String(cmd) => {
                         let output = std::process::Command::new("sh")
-                            .arg("-c").arg(cmd.as_str())
-                            .output().map_err(|e| format!("io.shell: {e}"))?;
+                            .arg("-c")
+                            .arg(cmd.as_str())
+                            .output()
+                            .map_err(|e| format!("io.shell: {e}"))?;
                         Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
                             output.status.code().unwrap_or(-1),
                             output.status.success(),
@@ -142,7 +156,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         let paths: Result<Vec<_>, _> = glob::glob(pattern.as_str())
                             .map_err(|e| format!("io.glob: invalid pattern: {e}"))?
                             .map(|entry| {
-                                entry.map(|p| Value::Path(Rc::new(p)))
+                                entry
+                                    .map(|p| Value::Path(Rc::new(p)))
                                     .map_err(|e| format!("io.glob: {e}"))
                             })
                             .collect();
@@ -165,7 +180,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.defer",
             Value::Builtin(BuiltinFn {
-                name: "io.defer", arity: 1,
+                name: "io.defer",
+                arity: 1,
                 func: |_args| Err("io.defer is evaluator-owned".to_string()),
             }),
         ),
@@ -261,7 +277,6 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        
     ];
     bindings.extend(fs::builtins());
     bindings.extend(process::builtins());
@@ -362,10 +377,12 @@ pub(crate) fn apply_value_function(func: &Value, args: &[Value]) -> Result<Value
 
 /// Read user input, optionally without echo.
 fn read_input(prompt: &str, no_echo: bool) -> Result<Value, String> {
-    use std::io::{Write, BufRead};
+    use std::io::{BufRead, Write};
     let stdout = std::io::stdout();
     let mut handle = stdout.lock();
-    handle.write_all(prompt.as_bytes()).map_err(|e| format!("input: {e}"))?;
+    handle
+        .write_all(prompt.as_bytes())
+        .map_err(|e| format!("input: {e}"))?;
     handle.flush().map_err(|e| format!("input: {e}"))?;
 
     let line = if no_echo {
@@ -373,7 +390,10 @@ fn read_input(prompt: &str, no_echo: bool) -> Result<Value, String> {
     } else {
         let stdin = std::io::stdin();
         let mut line = String::new();
-        stdin.lock().read_line(&mut line).map_err(|e| format!("input: {e}"))?;
+        stdin
+            .lock()
+            .read_line(&mut line)
+            .map_err(|e| format!("input: {e}"))?;
         line.trim_end().to_string()
     };
     Ok(Value::String(Rc::new(line)))
@@ -535,7 +555,10 @@ pub(crate) fn list_to_string_vec(items: &[Value], arg_name: &str) -> Result<Vec<
         .collect()
 }
 
-pub(crate) fn list_to_command_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<CommandValue>>, String> {
+pub(crate) fn list_to_command_vec(
+    items: &[Value],
+    arg_name: &str,
+) -> Result<Vec<Rc<CommandValue>>, String> {
     items
         .iter()
         .enumerate()
@@ -546,7 +569,10 @@ pub(crate) fn list_to_command_vec(items: &[Value], arg_name: &str) -> Result<Vec
         .collect()
 }
 
-pub(crate) fn list_to_redirect_vec(items: &[Value], arg_name: &str) -> Result<Vec<RedirectValue>, String> {
+pub(crate) fn list_to_redirect_vec(
+    items: &[Value],
+    arg_name: &str,
+) -> Result<Vec<RedirectValue>, String> {
     items
         .iter()
         .enumerate()
@@ -557,7 +583,10 @@ pub(crate) fn list_to_redirect_vec(items: &[Value], arg_name: &str) -> Result<Ve
         .collect()
 }
 
-pub(crate) fn list_to_task_vec(items: &[Value], arg_name: &str) -> Result<Vec<Rc<TaskValue>>, String> {
+pub(crate) fn list_to_task_vec(
+    items: &[Value],
+    arg_name: &str,
+) -> Result<Vec<Rc<TaskValue>>, String> {
     items
         .iter()
         .enumerate()
@@ -1402,7 +1431,10 @@ pub(crate) fn configured_process_command(command: &CommandValue) -> std::process
     cmd
 }
 
-pub(crate) fn resolve_redirect_path(command: &CommandValue, redirect: &RedirectValue) -> std::path::PathBuf {
+pub(crate) fn resolve_redirect_path(
+    command: &CommandValue,
+    redirect: &RedirectValue,
+) -> std::path::PathBuf {
     let path = redirect.path();
     if path.is_relative()
         && let Some(cwd) = command.cwd()

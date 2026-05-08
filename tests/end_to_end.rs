@@ -2742,7 +2742,11 @@ fn test_end_to_end_io_on_signal_rejects_unknown_signal() {
     // The analysis may or may not have type errors; the runtime should fail
     // We assert that the evaluation fails (returns Err)
     let hir_result = eval_hir(&analysis);
-    assert!(hir_result.is_err(), "expected error for unknown signal, got {:?}", hir_result);
+    assert!(
+        hir_result.is_err(),
+        "expected error for unknown signal, got {:?}",
+        hir_result
+    );
 }
 
 #[test]

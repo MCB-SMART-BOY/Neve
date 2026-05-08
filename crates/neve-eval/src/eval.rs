@@ -6,8 +6,8 @@
 //! 本模块实现了高级中间表示（HIR）的求值器。
 //! 它提供了一个带有尾调用优化的树遍历解释器。
 
-use crate::{Environment, Value};
 use crate::value::{EventKind, EventValue};
+use crate::{Environment, Value};
 use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32};
 use neve_diagnostic::Diagnostic;
 use neve_hir::{
@@ -128,15 +128,25 @@ fn set_signal_flag(index: usize) {
 }
 
 #[cfg(unix)]
-extern "C" fn handle_sigint(_: i32) { set_signal_flag(0); }
+extern "C" fn handle_sigint(_: i32) {
+    set_signal_flag(0);
+}
 #[cfg(unix)]
-extern "C" fn handle_sigterm(_: i32) { set_signal_flag(1); }
+extern "C" fn handle_sigterm(_: i32) {
+    set_signal_flag(1);
+}
 #[cfg(unix)]
-extern "C" fn handle_sighup(_: i32) { set_signal_flag(2); }
+extern "C" fn handle_sighup(_: i32) {
+    set_signal_flag(2);
+}
 #[cfg(unix)]
-extern "C" fn handle_sigusr1(_: i32) { set_signal_flag(3); }
+extern "C" fn handle_sigusr1(_: i32) {
+    set_signal_flag(3);
+}
 #[cfg(unix)]
-extern "C" fn handle_sigusr2(_: i32) { set_signal_flag(4); }
+extern "C" fn handle_sigusr2(_: i32) {
+    set_signal_flag(4);
+}
 
 #[cfg(unix)]
 fn install_signal_handler(name: &str) -> Result<(), String> {
@@ -944,17 +954,26 @@ impl Evaluator {
                 (Value::Char(c), Value::String(s)) => {
                     Ok(Value::String(Rc::new(format!("{}{}", c, s))))
                 }
-                _ => Err(EvalError::TypeError(format!("cannot add {:?} and {:?}", left, right))),
+                _ => Err(EvalError::TypeError(format!(
+                    "cannot add {:?} and {:?}",
+                    left, right
+                ))),
             },
             BinOp::Sub => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a - b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
-                _ => Err(EvalError::TypeError(format!("cannot subtract {:?} from {:?}", right, left))),
+                _ => Err(EvalError::TypeError(format!(
+                    "cannot subtract {:?} from {:?}",
+                    right, left
+                ))),
             },
             BinOp::Mul => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a * b)),
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
-                _ => Err(EvalError::TypeError(format!("cannot multiply {:?} and {:?}", left, right))),
+                _ => Err(EvalError::TypeError(format!(
+                    "cannot multiply {:?} and {:?}",
+                    left, right
+                ))),
             },
             BinOp::Div => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
@@ -965,7 +984,10 @@ impl Evaluator {
                     }
                 }
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
-                _ => Err(EvalError::TypeError(format!("cannot divide {:?} by {:?}", left, right))),
+                _ => Err(EvalError::TypeError(format!(
+                    "cannot divide {:?} by {:?}",
+                    left, right
+                ))),
             },
             BinOp::Mod => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => {
@@ -1210,7 +1232,8 @@ impl Evaluator {
                     Value::Int(ms) => {
                         let ms: u64 = ms.clone().try_into().map_err(|_| {
                             EvalError::TypeError(
-                                "execCommandStreamingWithTimeout: timeout must be non-negative".to_string(),
+                                "execCommandStreamingWithTimeout: timeout must be non-negative"
+                                    .to_string(),
                             )
                         })?;
                         ms
@@ -1221,9 +1244,9 @@ impl Evaluator {
                         ));
                     }
                 };
-                Ok(Some(
-                    self.builtin_exec_streaming_with_timeout(&args[0], &args[1], timeout_ms)?,
-                ))
+                Ok(Some(self.builtin_exec_streaming_with_timeout(
+                    &args[0], &args[1], timeout_ms,
+                )?))
             }
             "io.execPipelineStreaming" => {
                 if args.len() != 2 {
@@ -1241,7 +1264,8 @@ impl Evaluator {
                     Value::Int(ms) => {
                         let ms: u64 = ms.clone().try_into().map_err(|_| {
                             EvalError::TypeError(
-                                "execPipelineStreamingWithTimeout: timeout must be non-negative".to_string(),
+                                "execPipelineStreamingWithTimeout: timeout must be non-negative"
+                                    .to_string(),
                             )
                         })?;
                         ms
@@ -1252,9 +1276,9 @@ impl Evaluator {
                         ));
                     }
                 };
-                Ok(Some(
-                    self.builtin_exec_pipeline_streaming_with_timeout(&args[0], &args[1], timeout_ms)?,
-                ))
+                Ok(Some(self.builtin_exec_pipeline_streaming_with_timeout(
+                    &args[0], &args[1], timeout_ms,
+                )?))
             }
             "io.readFileLines" => {
                 if args.len() != 2 {
@@ -1755,7 +1779,8 @@ impl Evaluator {
         // Channel for streaming lines to the evaluator thread
         let (line_tx, line_rx) = mpsc::channel::<Result<String, String>>();
         // Channel for the final process result
-        let (result_tx, result_rx) = mpsc::channel::<Result<(i32, bool, Vec<u8>, Vec<u8>), String>>();
+        let (result_tx, result_rx) =
+            mpsc::channel::<Result<(i32, bool, Vec<u8>, Vec<u8>), String>>();
 
         // Spawn reader thread
         std::thread::spawn(move || {
@@ -1840,14 +1865,12 @@ impl Evaluator {
         // Collect final process result
         match result_rx.recv() {
             Ok(Ok((code, success, stdout, stderr))) => Ok(Value::Some(Box::new(
-                Value::ProcessResult(std::rc::Rc::new(
-                    crate::value::ProcessResultValue::new(
-                        code,
-                        success,
-                        String::from_utf8_lossy(&stdout).to_string(),
-                        String::from_utf8_lossy(&stderr).to_string(),
-                    ),
-                )),
+                Value::ProcessResult(std::rc::Rc::new(crate::value::ProcessResultValue::new(
+                    code,
+                    success,
+                    String::from_utf8_lossy(&stdout).to_string(),
+                    String::from_utf8_lossy(&stderr).to_string(),
+                ))),
             ))),
             Ok(Err(e)) => Err(EvalError::TypeError(e)),
             Err(_) => Err(EvalError::TypeError(
@@ -1880,7 +1903,8 @@ impl Evaluator {
         let commands = pipeline.commands();
         if commands.is_empty() {
             return Err(EvalError::TypeError(
-                "execPipelineStreamingWithTimeout: pipeline requires at least one command".to_string(),
+                "execPipelineStreamingWithTimeout: pipeline requires at least one command"
+                    .to_string(),
             ));
         }
 
@@ -1909,9 +1933,8 @@ impl Evaluator {
         // Channel for streaming final-stage lines
         let (line_tx, line_rx) = mpsc::channel::<Result<String, String>>();
         // Channel for the final process result
-        let (result_tx, result_rx) = mpsc::channel::<
-            Result<(i32, bool, Vec<u8>, Vec<u8>), String>,
-        >();
+        let (result_tx, result_rx) =
+            mpsc::channel::<Result<(i32, bool, Vec<u8>, Vec<u8>), String>>();
 
         // Check first stage stdin size before spawning thread
         if let Some(first) = stages.first() {
@@ -1995,9 +2018,7 @@ impl Evaluator {
                     let stdout = match child.stdout.take() {
                         Some(s) => s,
                         None => {
-                            let _ = line_tx.send(Err(
-                                "no stdout on final stage".to_string(),
-                            ));
+                            let _ = line_tx.send(Err("no stdout on final stage".to_string()));
                             return;
                         }
                     };
@@ -2112,14 +2133,12 @@ impl Evaluator {
         // Collect final process result (with timeout safety net)
         match result_rx.recv_timeout(std::time::Duration::from_millis(500)) {
             Ok(Ok((code, success, stdout, stderr))) => Ok(Value::Some(Box::new(
-                Value::ProcessResult(std::rc::Rc::new(
-                    crate::value::ProcessResultValue::new(
-                        code,
-                        success,
-                        String::from_utf8_lossy(&stdout).to_string(),
-                        String::from_utf8_lossy(&stderr).to_string(),
-                    ),
-                )),
+                Value::ProcessResult(std::rc::Rc::new(crate::value::ProcessResultValue::new(
+                    code,
+                    success,
+                    String::from_utf8_lossy(&stdout).to_string(),
+                    String::from_utf8_lossy(&stderr).to_string(),
+                ))),
             ))),
             Ok(Err(e)) => Err(EvalError::TypeError(e)),
             Err(_) => Err(EvalError::TypeError(
@@ -2229,7 +2248,11 @@ impl Evaluator {
     fn builtin_event_map(&mut self, event: &Value, func: &Value) -> Result<Value, EvalError> {
         let source = match event {
             Value::Event(e) => Rc::clone(e),
-            _ => return Err(EvalError::TypeError("eventMap expects an Event".to_string())),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "eventMap expects an Event".to_string(),
+                ));
+            }
         };
         Ok(Value::Event(Rc::new(EventValue {
             kind: EventKind::Mapped {
@@ -2239,10 +2262,18 @@ impl Evaluator {
         })))
     }
 
-    fn builtin_event_filter(&mut self, event: &Value, predicate: &Value) -> Result<Value, EvalError> {
+    fn builtin_event_filter(
+        &mut self,
+        event: &Value,
+        predicate: &Value,
+    ) -> Result<Value, EvalError> {
         let source = match event {
             Value::Event(e) => Rc::clone(e),
-            _ => return Err(EvalError::TypeError("eventFilter expects an Event".to_string())),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "eventFilter expects an Event".to_string(),
+                ));
+            }
         };
         Ok(Value::Event(Rc::new(EventValue {
             kind: EventKind::Filtered {

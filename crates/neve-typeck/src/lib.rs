@@ -28,8 +28,7 @@ pub use builtin_types::{
     RESULT_TYPE_ID, SET_TYPE_ID, TASK_TYPE_ID, builtin_bytes, builtin_command, builtin_event,
     builtin_list, builtin_live, builtin_map, builtin_option, builtin_path, builtin_pipeline,
     builtin_process_result, builtin_redirect, builtin_result, builtin_set, builtin_task,
-    builtin_type_name, format_builtin_named_type, is_builtin_option_type,
-    is_builtin_result_type,
+    builtin_type_name, format_builtin_named_type, is_builtin_option_type, is_builtin_result_type,
 };
 pub use check::TypeChecker;
 pub use errors::format_type;

@@ -1,15 +1,12 @@
 //! Event system, reactive, temporal — new additions live here.
 
-use neve_eval::value::{
-    BuiltinFn, EventKind, EventValue, LiveValue, Value,
-};
+use neve_eval::value::{BuiltinFn, EventKind, EventValue, LiveValue, Value};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-
 pub fn builtins() -> Vec<(&'static str, Value)> {
     vec![
-// Events / 事件
+        // Events / 事件
         // Reactive / 反应式
         (
             "io.reactive",
@@ -143,5 +140,5 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-            ]
+    ]
 }
