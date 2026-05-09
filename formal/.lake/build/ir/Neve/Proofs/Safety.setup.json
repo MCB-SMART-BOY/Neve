@@ -1,0 +1,17 @@
+{"plugins": [],
+ "package": "NeveFormal",
+ "options": {},
+ "name": "Neve.Proofs.Safety",
+ "isModule": false,
+ "importArts":
+ {"Neve.Spec.Typing":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Typing.olean"],
+  "Neve.Spec.Syntax":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Syntax.olean"],
+  "Neve.Spec.Eval":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Eval.olean"],
+  "Neve.Proofs.Values":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Proofs/Values.olean"],
+  "Neve.Proofs.Context":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Proofs/Context.olean"]},
+ "dynlibs": []}

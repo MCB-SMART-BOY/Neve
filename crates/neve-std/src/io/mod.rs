@@ -39,6 +39,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+/// Maximum stdin payload size in bytes for blocking process execution (10 MB).
+/// 阻塞进程执行中 stdin 负载的最大字节数。
+pub(crate) const MAX_STDIN_BYTES: usize = 10 * 1024 * 1024;
+/// Maximum stdout/stderr size in bytes for blocking process execution (50 MB).
+/// 阻塞进程执行中 stdout/stderr 的最大字节数。
+pub(crate) const MAX_OUTPUT_BYTES: usize = 50 * 1024 * 1024;
+
 /// Script arguments set by the CLI before evaluation.
 /// CLI 在求值前设置的脚本参数。
 static SCRIPT_ARGS: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
@@ -945,6 +952,10 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
             if let Some(stdin_text) = stage_stdin
                 && let Some(mut pipe) = child.stdin.take()
             {
+                if idx == 0 && stdin_text.len() > MAX_STDIN_BYTES {
+                    let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes")));
+                    return;
+                }
                 use std::io::Write;
                 if let Err(e) = pipe.write_all(stdin_text.as_bytes()) {
                     let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: {e}")));
@@ -954,6 +965,14 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
 
             match child.wait_with_output() {
                 Ok(output) => {
+                    if output.stdout.len() > MAX_OUTPUT_BYTES {
+                        let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes")));
+                        return;
+                    }
+                    if output.stderr.len() > MAX_OUTPUT_BYTES {
+                        let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes")));
+                        return;
+                    }
                     previous_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
                     combined_stderr.push_str(&String::from_utf8_lossy(&output.stderr));
                     last_code = output.status.code().unwrap_or(-1);
@@ -990,13 +1009,7 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
         Err(mpsc::RecvTimeoutError::Timeout) => {
             // Kill the currently running process
             if let Some(pid) = *current_pid.lock().unwrap() {
-                #[cfg(unix)]
-                {
-                    let _ = std::process::Command::new("kill")
-                        .arg("-9")
-                        .arg(pid.to_string())
-                        .output();
-                }
+                kill_process(pid);
             }
             Ok(Value::None)
         }
@@ -1042,6 +1055,9 @@ pub(crate) fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Resu
     if let Some(stdin_text) = &raw_target.stdin
         && let Some(mut pipe) = child.stdin.take()
     {
+        if stdin_text.len() > MAX_STDIN_BYTES {
+            return Err(format!("io.awaitTaskWithTimeout: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+        }
         use std::io::Write;
         pipe.write_all(stdin_text.as_bytes())
             .map_err(|e| format!("io.awaitTaskWithTimeout: failed writing stdin: {e}"))?;
@@ -1052,12 +1068,22 @@ pub(crate) fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Resu
     thread::spawn(move || {
         let output = child.wait_with_output();
         let result = match output {
-            Ok(out) => Ok(RawProcessResult {
-                code: out.status.code().unwrap_or(-1),
-                success: out.status.success(),
-                stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-                stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-            }),
+            Ok(out) => {
+                if out.stdout.len() > MAX_OUTPUT_BYTES {
+                    let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes")));
+                    return;
+                }
+                if out.stderr.len() > MAX_OUTPUT_BYTES {
+                    let _ = tx.send(Err(format!("io.awaitTaskWithTimeout: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes")));
+                    return;
+                }
+                Ok(RawProcessResult {
+                    code: out.status.code().unwrap_or(-1),
+                    success: out.status.success(),
+                    stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+                    stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+                })
+            }
             Err(e) => Err(format!("io.awaitTaskWithTimeout: {e}")),
         };
         let _ = tx.send(result);
@@ -1077,19 +1103,7 @@ pub(crate) fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Resu
         },
         Err(mpsc::RecvTimeoutError::Timeout) => {
             // Kill the process on timeout via platform kill command
-            #[cfg(unix)]
-            {
-                let _ = std::process::Command::new("kill")
-                    .arg("-9")
-                    .arg(pid.to_string())
-                    .output();
-            }
-            #[cfg(windows)]
-            {
-                let _ = std::process::Command::new("taskkill")
-                    .args(["/F", "/PID", &pid.to_string()])
-                    .output();
-            }
+            kill_process(pid);
             Ok(Value::None)
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -1542,6 +1556,9 @@ pub(crate) fn execute_command_value_to_process_result_with_input(
     let mut cmd = configured_process_command(command);
 
     if let Some(stdin_text) = stdin_text {
+        if stdin_text.len() > MAX_STDIN_BYTES {
+            return Err(format!("{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+        }
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
@@ -1552,14 +1569,27 @@ pub(crate) fn execute_command_value_to_process_result_with_input(
                 .map_err(|e| format!("{fn_name}: failed writing stdin: {e}"))?;
         }
 
-        child
+        let output = child
             .wait_with_output()
-            .map(output_to_process_result_value)
-            .map_err(|e| format!("{fn_name}: {e}"))
+            .map_err(|e| format!("{fn_name}: {e}"))?;
+        if output.stdout.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        if output.stderr.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        Ok(output_to_process_result_value(output))
     } else {
-        cmd.output()
-            .map(output_to_process_result_value)
-            .map_err(|e| format!("{fn_name}: {e}"))
+        let output = cmd
+            .output()
+            .map_err(|e| format!("{fn_name}: {e}"))?;
+        if output.stdout.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        if output.stderr.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        Ok(output_to_process_result_value(output))
     }
 }
 
@@ -1617,6 +1647,12 @@ pub(crate) fn execute_command_value_with_redirects_to_process_result_with_input(
             .or_else(|| command.stdin().map(str::to_owned)),
     };
 
+    if let Some(ref text) = stdin_text {
+        if text.len() > MAX_STDIN_BYTES {
+            return Err(format!("{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+        }
+    }
+
     let mut cmd = configured_process_command(command);
 
     if let Some(path) = stdout_path {
@@ -1642,17 +1678,29 @@ pub(crate) fn execute_command_value_with_redirects_to_process_result_with_input(
                 .map_err(|e| format!("{fn_name}: failed writing stdin: {e}"))?;
         }
 
-        child
+        let output = child
             .wait_with_output()
-            .map(output_to_process_result_value)
-            .map_err(|e| format!("{fn_name}: {e}"))
+            .map_err(|e| format!("{fn_name}: {e}"))?;
+        if output.stdout.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        if output.stderr.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        Ok(output_to_process_result_value(output))
     } else {
         cmd.stdin(std::process::Stdio::null());
-        cmd.spawn()
+        let output = cmd.spawn()
             .map_err(|e| format!("{fn_name}: {e}"))?
             .wait_with_output()
-            .map(output_to_process_result_value)
-            .map_err(|e| format!("{fn_name}: {e}"))
+            .map_err(|e| format!("{fn_name}: {e}"))?;
+        if output.stdout.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        if output.stderr.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        Ok(output_to_process_result_value(output))
     }
 }
 
@@ -1666,6 +1714,11 @@ pub(crate) fn configured_process_command(command: &CommandValue) -> std::process
     for (k, v) in command.env() {
         cmd.env(k, v);
     }
+    // Strip dangerous environment variables that could cause arbitrary code execution
+    cmd.env_remove("LD_PRELOAD");
+    cmd.env_remove("LD_LIBRARY_PATH");
+    cmd.env_remove("DYLD_INSERT_LIBRARIES");
+    cmd.env_remove("DYLD_LIBRARY_PATH");
 
     cmd
 }
@@ -1675,6 +1728,9 @@ pub(crate) fn resolve_redirect_path(
     redirect: &RedirectValue,
 ) -> std::path::PathBuf {
     let path = redirect.path();
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return std::path::PathBuf::from("/dev/null/neve-blocked-traversal");
+    }
     if path.is_relative()
         && let Some(cwd) = command.cwd()
     {
@@ -1763,6 +1819,22 @@ pub(crate) fn record_env_optional(
 }
 
 
+
+/// Kill a process by PID. Uses libc::kill on Unix, taskkill on Windows.
+/// 通过 PID 终止进程。
+fn kill_process(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .output();
+    }
+}
+
 /// Run pipeline stages sequentially in a background thread.
 fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, String), String> {
     if stages.is_empty() { return Err("empty pipeline".to_string()); }
@@ -1782,10 +1854,19 @@ fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, Strin
         c.stderr(std::process::Stdio::piped());
         let mut child = c.spawn().map_err(|e| format!("stage {idx}: {e}"))?;
         if let Some(ref data) = stage_stdin {
+            if idx == 0 && data.len() > MAX_STDIN_BYTES {
+                return Err(format!("stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+            }
             use std::io::Write;
             if let Some(mut pipe) = child.stdin.take() { pipe.write_all(data).map_err(|e| format!("stdin: {e}"))?; }
         }
         let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
+        if output.stdout.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
+        if output.stderr.len() > MAX_OUTPUT_BYTES {
+            return Err(format!("stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+        }
         last_code = output.status.code().unwrap_or(-1);
         last_success = output.status.success();
         combined_stderr.extend_from_slice(&output.stderr);

@@ -1,0 +1,15 @@
+{"plugins": [],
+ "package": "NeveFormal",
+ "options": {},
+ "name": "Neve.Verify.Limits",
+ "isModule": false,
+ "importArts":
+ {"Neve.Spec.Typing":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Typing.olean"],
+  "Neve.Spec.Syntax":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Syntax.olean"],
+  "Neve.Spec.Eval":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Eval.olean"],
+  "Neve.Spec.Effects":
+  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Spec/Effects.olean"]},
+ "dynlibs": []}

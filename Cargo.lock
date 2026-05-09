@@ -1547,7 +1547,7 @@ dependencies = [
 
 [[package]]
 name = "neve-workspace"
-version = "3.6.0"
+version = "3.7.0"
 dependencies = [
  "neve-builder",
  "neve-common",

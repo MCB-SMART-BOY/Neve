@@ -4,7 +4,7 @@
 
 <h1>Neve Language Specification</h1>
 
-<p><em>语言规范 v2.1</em></p>
+<p><em>语言规范 v2.2 — 含形式化语义 (Lean-verified)</em></p>
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -652,5 +652,248 @@ lazy true false effect
                     The spec is the contract. Read it well.
 ═══════════════════════════════════════════════════════════════════════════════
 ```
+
+</div>
+
+
+---
+
+# Part II: Formal Semantics / 第二部分：形式化语义
+
+> *Machine-checked in Lean 4. See `formal/` for proofs.*  
+> *Lean 4 机器检查验证。证明见 `formal/`。*
+
+## F.1 Abstract Syntax / 抽象语法
+
+The formal semantics is defined over an abstract syntax tree (AST) that strips
+away surface syntax concerns (precedence, whitespace, comments). The AST types
+are defined in `formal/Neve/Spec/Syntax.lean`.
+
+形式化语义基于抽象语法树（AST），剥离了表面语法的细节。AST 类型定义在 `formal/Neve/Spec/Syntax.lean`。
+
+### Types (Ty)
+
+```
+Ty ::= Int | Float | Bool | Char | String | Unit
+     | List Ty | Tuple (List Ty) | Record (List (String × Ty))
+     | Fn (param: Ty) (ret: Ty) (effect: Effect)
+     | Option Ty | Command | Pipeline | ProcessResult | Task Ty
+```
+
+`Fn` carries an `Effect` annotation:
+- `Effect.Pure` — no host effects
+- `Effect.Effectful` — may perform I/O, process execution, network
+
+### Expressions (Expr)
+
+```
+Expr ::= lit_int(n) | lit_float(f) | lit_bool(b) | lit_char(c)
+       | lit_string(s) | lit_unit
+       | var(x) | app(f, arg) | lam(x, body)
+       | letIn(x, val, body) | binop(op, l, r)
+       | matchOn(scrutinee, arms) | builtin(name, args)
+```
+
+### Values (Value)
+
+```
+Value ::= int(n) | float(f) | bool(b) | char(c) | string(s) | unit
+        | list(List Value) | tuple(List Value) | record(List (String × Value))
+        | processResult(code, stdout, stderr)
+        | closure(x, body, env)
+```
+
+### BinOp
+
+```
+BinOp ::= Add | Sub | Mul | Div | Mod
+        | Eq | Neq | Lt | Le | Gt | Ge
+        | And | Or | Pipe
+```
+
+### Patterns (Pattern)
+
+```
+Pattern ::= wildcard | var(x) | lit_int(n) | lit_bool(b) | lit_string(s)
+          | tuple(List Pattern) | list(List Pattern, rest: Bool)
+          | record(List (String × Pattern))
+```
+
+## F.2 Type System / 类型系统
+
+Defined in `formal/Neve/Spec/Typing.lean`. The typing judgment is:
+
+```
+Γ ⊢ e : τ   — "expression e has type τ in context Γ"
+```
+
+Where `Γ : Ctx = List (String × Ty)`.
+
+### Key typing rules
+
+| Rule | Premises | Conclusion |
+|------|----------|------------|
+| lit_int | — | Γ ⊢ lit_int(n) : Int |
+| lit_bool | — | Γ ⊢ lit_bool(b) : Bool |
+| var | (x, τ) ∈ Γ | Γ ⊢ var(x) : τ |
+| lam | (x,τ₁)::Γ ⊢ body : τ₂ | Γ ⊢ lam(x,body) : Fn τ₁ τ₂ eff |
+| app | Γ ⊢ f : Fn τ₁ τ₂ eff, Γ ⊢ arg : τ₁ | Γ ⊢ app(f,arg) : τ₂ |
+| let | Γ ⊢ val : τ, (x,τ)::Γ ⊢ body : τ' | Γ ⊢ letIn(x,val,body) : τ' |
+| match | Γ ⊢ scrutinee : τs, AllArmsMatch(Γ, arms, τs, τ) | Γ ⊢ matchOn(scrutinee, arms) : τ |
+
+The `AllArmsMatch` judgment ensures all match arms return the same type and
+patterns are well-typed in their respective extended contexts.
+
+### Pattern typing: PatHasType
+
+```
+PatHasType(Γ, p, τ, Γ') — "pattern p matches type τ, extending context Γ to Γ'"
+```
+
+| Pattern | Extended context Γ' |
+|---------|-------------------|
+| wildcard | Γ (unchanged) |
+| var(x) | (x, τ) :: Γ |
+| lit_int(n) | Γ (unchanged) |
+| lit_bool(b) | Γ (unchanged) |
+
+## F.3 Evaluation Semantics / 求值语义
+
+Defined in `formal/Neve/Spec/Eval.lean`. The evaluation judgment is:
+
+```
+env ⊢ e ⇓ v   — "expression e evaluates to value v in environment env"
+```
+
+Where `env : Env = List (String × Value)`.
+
+This is a **big-step operational semantics** (natural semantics). The rules
+define a direct relation between expressions and their values.
+
+### Key evaluation rules
+
+| Expression | Rule | Result |
+|-----------|------|--------|
+| lit_int(n) | — | int(n) |
+| lit_bool(b) | — | bool(b) |
+| var(x) | (x,v) ∈ env | v |
+| lam(x,body) | — | closure(x,body,env) |
+| app(f,arg) | f⇓closure(x,body,env'), arg⇓varg, (x,varg)::env'⊢body⇓vres | vres |
+| letIn(x,val,body) | val⇓vval, (x,vval)::env⊢body⇓vbody | vbody |
+| binop(Add,l,r) | l⇓int(n), r⇓int(m) | int(n+m) |
+| matchOn(scrutinee,arms) | scrutinee⇓v, first arm (p,e) matches v with binds, binds++env⊢e⇓vres | vres |
+
+### Pattern matching: Matches
+
+```
+Matches(p, v, binds) — "pattern p matches value v, producing bindings binds"
+```
+
+| Pattern | Binding |
+|---------|---------|
+| wildcard | [] |
+| var(x) | [(x, v)] |
+| lit_int(n) | [] (if v = int(n)) |
+| lit_bool(b) | [] (if v = bool(b)) |
+
+## F.4 Effect Semantics / 副作用语义
+
+Defined in `formal/Neve/Spec/Effects.lean` (v3, 15 rules). The effectful evaluation judgment:
+
+```
+env ⊢ e ⇓[σ] v, σ'   — "e evaluates to v, transforming I/O state σ to σ'"
+```
+
+Where `IOState = { stdin, stdout, stderr }` accumulates process I/O.
+
+### Effect rules (v3)
+
+| Category | Rule | Description |
+|----------|------|-------------|
+| Pure | `pure` | Lift BigStep, σ unchanged |
+| Blocking | `execCommand` | Execute a process |
+| Blocking | `execPipeline` | Execute a pipeline |
+| Deferred | `spawn` | Create a deferred task |
+| Deferred | `awaitTask` | Block on task completion |
+| Deferred | `awaitTaskTimeout` | Timeout before completion |
+| Streaming | `execCommandStreaming` | Streaming command execution |
+| Streaming | `execPipelineStreaming` | Streaming pipeline execution |
+| Streaming | `execCommandStreamingTimeout` | Streaming with timeout (success) |
+| Streaming | `execCommandStreamingTimeoutExpired` | Streaming with timeout (expired) |
+| Streaming | `execPipelineStreamingTimeout` | Pipeline streaming with timeout (success) |
+| Streaming | `execPipelineStreamingTimeoutExpired` | Pipeline streaming with timeout (expired) |
+| Streaming | `readFileLines` | Read file line by line |
+| File | `readFile` | Read file content |
+| File | `writeFile` | Write file content |
+
+### Size limit enforcement (v3)
+
+```
+MAX_STDIN_BYTES   = 10 * 1024 * 1024  (10 MB)
+MAX_OUTPUT_BYTES  = 50 * 1024 * 1024  (50 MB)
+MAX_STREAM_LINES  = 100_000           (100k lines)
+```
+
+These are **mandatory premises** in every applicable rule — any valid
+`EffectEval` derivation tree is a proof that limits were respected.
+
+## F.5 Type Safety / 类型安全
+
+Theorem in `formal/Neve/Proofs/Safety.lean`:
+
+```
+type_safety : [] ⊢ e : τ → ∃ v, [] ⊢ e ⇓ v
+```
+
+**"Well-typed closed programs do not get stuck."**
+
+Status: 8 of 11 HasType constructors have machine-checked proofs.
+The `app` and `pipe` constructors are proven for the lambda case
+(the most common case). `matchOn` is deferred pending a Lean 4
+improvement to dependent pattern matching on parameterized inductives.
+
+## F.6 Verified Security Properties / 已验证安全性质
+
+The following properties are stated and machine-checked in `formal/Neve/Verify/`:
+
+### Path Safety (Verify/Path.lean)
+
+```
+Theorem path_safety_with_safe_cwd:
+  For any redirect path, if the path contains "..", the sentinel is returned.
+  If cwd and redirect are both safe (no ".."), the resolved path is safe.
+```
+
+Corresponds to Rust: `resolve_redirect_path` in `crates/neve-std/src/io/mod.rs`.
+Security audit finding: M-1 (path traversal).
+
+### Environment Safety (Verify/Environ.lean)
+
+```
+Theorem env_safety_theorem:
+  For any command environment, after stripping dangerous keys
+  (LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH),
+  the child process environment is safe.
+```
+
+Corresponds to Rust: `configured_process_command` in `crates/neve-std/src/io/mod.rs`.
+Security audit finding: M-4 (environment injection).
+
+### Buffer Size Limits (Verify/Limits.lean)
+
+```
+Theorem full_check_correct:
+  The stdin check succeeds iff size ≤ MAX_STDIN_BYTES.
+  The output check succeeds iff both stdout and stderr ≤ MAX_OUTPUT_BYTES.
+
+Theorem premises_equivalent_to_checks:
+  The EffectEval premises are exactly equivalent to the check functions passing.
+```
+
+Corresponds to Rust: all five blocking execution paths in `crates/neve-std/src/io/mod.rs`.
+Security audit findings: H-1 (stdin size), H-2 (output size).
+
+---
+
 
 </div>

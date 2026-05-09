@@ -1,9 +1,0 @@
-{"plugins": [],
- "package": "NeveFormal",
- "options": {},
- "name": "Neve.Types",
- "isModule": false,
- "importArts":
- {"Neve.Syntax":
-  ["/home/mcbgaruda/projects/Neve/formal/.lake/build/lib/lean/Neve/Syntax.olean"]},
- "dynlibs": []}
