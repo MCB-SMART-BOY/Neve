@@ -8,10 +8,10 @@ From this point onward, implementation work for semantic convergence should read
 
 ## 1. Status
 
-- State: **active** — Phase 3-4，效果系统闭环，事件/反应式落地
-- Current phase: **Phase 4/5 (Polish, Architecture)**
-- Overall completion: **~85%**
-- Recent: Lambda/impl effect closed, streaming I/O, Path literals, REPL overhaul, Event/Live/retry/ensure
+- State: **active** — Phase 3 (Core Verification)，安全审计完成，差分测试 CI 落地
+- Current phase: **Phase 3/5 (Verification + Polish)**
+- Overall completion: **~87%**
+- Recent: Security audit (5 findings fixed + Lean-verified), EffectEval v2, differential testing CI, 10 examples
 
 ### Decision Gate Status
 
@@ -20,7 +20,7 @@ From this point onward, implementation work for semantic convergence should read
 | G1 | Canonical Pipeline | ✅ |
 | G2 | Method Semantics | ✅ |
 | G3 | Failure Propagation | ✅ |
-| G4 | Effect Boundary | ✅ fn/impl/lambda 全覆盖；跨函数追踪待做 |
+| G4 | Effect Boundary | ✅ EffectEval v2 (8 rules), Verify/ 三定理机器检查 |
 | G5 | Bash Replacement | ⚠️ 流式/原子/Event 就绪；信号/glob/TTY 待做 |
 
 ### Active Work Items
@@ -2271,6 +2271,32 @@ Track progress with concrete metrics rather than narrative only:
   - `cargo fmt --all`
   - `cargo test --test frontend_session -- --nocapture`
   - `cargo test -p neve --bin neve repl_ -- --nocapture`
+
+### 2026-05-09 (final)
+
+- **Version**: 3.7.0
+- **Security audit** (Phase 3 streaming I/O): 5 findings (H-1, H-2, M-1, M-2, M-4)
+  - Rust: all blocking I/O paths now check MAX_STDIN_BYTES (10MB) and MAX_OUTPUT_BYTES (50MB)
+  - Rust: resolve_redirect_path rejects `..` components (M-1)
+  - Rust: configured_process_command strips LD_PRELOAD/DYLD_* (M-4)
+  - Rust: kill mechanism unified (libc::kill) across all paths (M-2)
+  - 200 end-to-end tests pass, no regressions
+- **Lean formal verification**:
+  - Spec/Effects.lean v2: 8 effect rules (pure, execCommand, execPipeline, spawn, awaitTask, awaitTaskTimeout, readFile, writeFile)
+  - Spec/Typing.lean v4: PatHasType fix — Γ as parameter, Γ' as index
+  - Proofs/Safety.lean: type_safety is theorem (non-axiom), app/pipe lam case real proofs
+  - Verify/Path.lean: path_safety_with_safe_cwd — machine-checked proof (M-1 verified)
+  - Verify/Environ.lean: env_safety_theorem — machine-checked proof (M-4 verified)
+  - Verify/Limits.lean: stdin/output check correctness + EffectEval bridge (H-1/H-2 verified)
+  - Tests/Eval.lean: executable evaluator (11 self-tests, full pure language)
+- **Differential testing framework**:
+  - scripts/gen_diff_test.py: random program generation + Rust/Lean comparison
+  - 300+ random tests across depths 2-5, 4 seeds — ALL MATCH
+  - Effects property test mode (--effects flag)
+  - CI integration: .github/workflows/ci.yml diff-test job (every push/PR)
+  - scripts/test.sh --diff for local pre-commit
+- **Examples**: 10 categorized examples in examples/{basics,functions,control-flow,data,io}/
+- **Directory restructure**: formal/ → Spec/ Proofs/ Verify/ Tests/ (mirrors project layers)
 
 ### 2026-04-18
 

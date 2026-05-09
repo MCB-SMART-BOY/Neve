@@ -21,3 +21,4 @@ CURSOR.md
 
 # Lean 4
 lean/.lake/
+__pycache__/

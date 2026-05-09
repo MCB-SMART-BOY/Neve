@@ -124,3 +124,46 @@ jobs:
       - name: Check build (cross)
         if: matrix.cross
         run: cross check --target ${{ matrix.target }} -p neve
+
+  # Differential testing: Rust vs Lean spec
+  # 差分测试：比对 Rust 求值器与 Lean 规范
+  diff-test:
+    name: Differential Test (Rust ↔ Lean)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-diff-test
+          cache-on-failure: true
+
+      - name: Install Lean 4
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain leanprover/lean4:v4.29.1
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache Lake build
+        uses: actions/cache@v4
+        with:
+          path: |
+            formal/.lake/build
+            formal/.lake/packages
+          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/Neve/**/*.lean') }}
+          restore-keys: lake-${{ runner.os }}-
+
+      - name: Build Rust (neve CLI)
+        run: cargo build -p neve --release
+
+      - name: Build Lean (lake)
+        run: |
+          cd formal
+          lake build
+
+      - name: Run differential tests
+        run: |
+          python3 scripts/gen_diff_test.py -n 100 -d 4

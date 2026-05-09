@@ -1,4 +1,11 @@
-import Neve.Syntax
-import Neve.Types
-import Neve.Eval
-import Neve.Safety
+import Neve.Spec.Syntax
+import Neve.Spec.Typing
+import Neve.Spec.Eval
+import Neve.Spec.Effects
+import Neve.Proofs.Values
+import Neve.Proofs.Context
+import Neve.Proofs.Safety
+import Neve.Verify.Path
+import Neve.Verify.Environ
+import Neve.Verify.Limits
+import Neve.Tests.Eval

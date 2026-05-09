@@ -67,3 +67,15 @@ if [[ "$1" == "--clippy" ]]; then
     echo "额外检查: 运行 Clippy / Additional check: Running Clippy"
     cargo clippy --workspace -- -D warnings
 fi
+
+# 如果有参数 --diff 或 --all,运行差分测试
+if [[ "$1" == "--diff" || "$1" == "--all" ]]; then
+    echo ""
+    echo "额外检查: 差分测试 Rust ↔ Lean / Additional check: Differential test"
+    if command -v lake &> /dev/null; then
+        python3 scripts/gen_diff_test.py -n 100 -d 4
+    else
+        echo "⚠ Lean 4 (lake) 未安装,跳过差分测试"
+        echo "⚠ Lean 4 (lake) not found, skipping diff test"
+    fi
+fi

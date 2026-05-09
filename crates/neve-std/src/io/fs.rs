@@ -1100,5 +1100,205 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Unix file metadata / Unix 文件元数据
+        (
+            "io.walk",
+            Value::Builtin(BuiltinFn {
+                name: "io.walk",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(root) => {
+                        let mut entries: Vec<Value> = Vec::new();
+                        fn walk_dir(dir: &std::path::Path, entries: &mut Vec<Value>) -> Result<(), String> {
+                            for entry in std::fs::read_dir(dir).map_err(|e| format!("io.walk: {e}"))? {
+                                let entry = entry.map_err(|e| format!("io.walk: {e}"))?;
+                                let path = entry.path();
+                                entries.push(Value::Path(Rc::new(path.clone())));
+                                if path.is_dir() {
+                                    walk_dir(&path, entries)?;
+                                }
+                            }
+                            Ok(())
+                        }
+                        walk_dir(root.as_path(), &mut entries)?;
+                        Ok(Value::List(Rc::new(entries)))
+                    }
+                    Value::String(s) => {
+                        let root = std::path::PathBuf::from(s.as_str());
+                        let mut entries: Vec<Value> = Vec::new();
+                        fn walk_dir_str(dir: &std::path::Path, entries: &mut Vec<Value>) -> Result<(), String> {
+                            for entry in std::fs::read_dir(dir).map_err(|e| format!("io.walk: {e}"))? {
+                                let entry = entry.map_err(|e| format!("io.walk: {e}"))?;
+                                let path = entry.path();
+                                entries.push(Value::Path(Rc::new(path.clone())));
+                                if path.is_dir() {
+                                    walk_dir_str(&path, entries)?;
+                                }
+                            }
+                            Ok(())
+                        }
+                        walk_dir_str(&root, &mut entries)?;
+                        Ok(Value::List(Rc::new(entries)))
+                    }
+                    _ => Err("io.walk expects a Path or String".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.chmod",
+            Value::Builtin(BuiltinFn {
+                name: "io.chmod",
+                arity: 2,
+                func: |args| {
+                    let path = match &args[0] {
+                        Value::Path(p) => p.as_path().to_path_buf(),
+                        Value::String(s) => std::path::PathBuf::from(s.as_str()),
+                        _ => return Err("io.chmod expects (Path|String, Int)".to_string()),
+                    };
+                    let mode: u32 = match &args[1] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.chmod: mode must be non-negative".to_string())?,
+                        _ => return Err("io.chmod expects (Path|String, Int)".to_string()),
+                    };
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.chmod: {e}"))
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = (path, mode);
+                        Err("io.chmod is only supported on Unix".to_string())
+                    }
+                },
+            }),
+        ),
+        (
+            "io.chown",
+            Value::Builtin(BuiltinFn {
+                name: "io.chown",
+                arity: 3,
+                func: |args| {
+                    let path = match &args[0] {
+                        Value::Path(p) => p.as_path().to_path_buf(),
+                        Value::String(s) => std::path::PathBuf::from(s.as_str()),
+                        _ => return Err("io.chown expects (Path|String, Int, Int)".to_string()),
+                    };
+                    let uid: u32 = match &args[1] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.chown: uid must be non-negative".to_string())?,
+                        _ => return Err("io.chown expects (Path|String, Int, Int)".to_string()),
+                    };
+                    let gid: u32 = match &args[2] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.chown: gid must be non-negative".to_string())?,
+                        _ => return Err("io.chown expects (Path|String, Int, Int)".to_string()),
+                    };
+                    #[cfg(unix)]
+                    {
+                        let output = std::process::Command::new("chown")
+                            .args([format!("{}:{}", uid, gid), path.to_string_lossy().to_string()])
+                            .output()
+                            .map_err(|e| format!("io.chown: {e}"))?;
+                        if output.status.success() {
+                            Ok(Value::Unit)
+                        } else {
+                            Err(format!("io.chown: {}", String::from_utf8_lossy(&output.stderr)))
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = (path, uid, gid);
+                        Err("io.chown is only supported on Unix".to_string())
+                    }
+                },
+            }),
+        ),
+        (
+            "io.symlink",
+            Value::Builtin(BuiltinFn {
+                name: "io.symlink",
+                arity: 2,
+                func: |args| {
+                    let (target, link) = match (&args[0], &args[1]) {
+                        (Value::Path(t), Value::Path(l)) => (t.as_path().to_path_buf(), l.as_path().to_path_buf()),
+                        (Value::String(t), Value::String(l)) => (std::path::PathBuf::from(t.as_str()), std::path::PathBuf::from(l.as_str())),
+                        (Value::Path(t), Value::String(l)) => (t.as_path().to_path_buf(), std::path::PathBuf::from(l.as_str())),
+                        (Value::String(t), Value::Path(l)) => (std::path::PathBuf::from(t.as_str()), l.as_path().to_path_buf()),
+                        _ => return Err("io.symlink expects (Path|String, Path|String)".to_string()),
+                    };
+                    #[cfg(unix)]
+                    {
+                        std::os::unix::fs::symlink(&target, &link)
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("io.symlink: {e}"))
+                    }
+                    #[cfg(windows)]
+                    {
+                        if target.is_dir() {
+                            std::os::windows::fs::symlink_dir(&target, &link)
+                        } else {
+                            std::os::windows::fs::symlink_file(&target, &link)
+                        }
+                        .map(|_| Value::Unit)
+                        .map_err(|e| format!("io.symlink: {e}"))
+                    }
+                },
+            }),
+        ),
+        (
+            "io.readlink",
+            Value::Builtin(BuiltinFn {
+                name: "io.readlink",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Path(p) => {
+                        let target = std::fs::read_link(p.as_path())
+                            .map_err(|e| format!("io.readlink: {e}"))?;
+                        Ok(Value::Path(Rc::new(target)))
+                    }
+                    Value::String(s) => {
+                        let target = std::fs::read_link(s.as_str())
+                            .map_err(|e| format!("io.readlink: {e}"))?;
+                        Ok(Value::Path(Rc::new(target)))
+                    }
+                    _ => Err("io.readlink expects a Path or String".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.tempDir",
+            Value::Builtin(BuiltinFn {
+                name: "io.tempDir",
+                arity: 1,
+                func: |args| {
+                    let dir = tempfile::tempdir().map_err(|e| format!("io.tempDir: {e}"))?;
+                    let dir_path = dir.into_path();
+                    let path_value = Value::Path(Rc::new(dir_path.clone()));
+                    // Pass the path to the callback
+                    match &args[0] {
+                        Value::BuiltinFn(_, _) | Value::Builtin(_) | Value::Closure { .. } => {
+                            // Call the callback with the path, then clean up
+                            let result = match &args[0] {
+                                Value::BuiltinFn(name, func) => {
+                                    func(vec![path_value.clone()])
+                                        .map_err(|e| format!("io.tempDir callback: {e}"))
+                                }
+                                _ => Err("io.tempDir: callback must be a function".to_string()),
+                            };
+                            // Clean up temp dir regardless of callback result
+                            let _ = std::fs::remove_dir_all(&dir_path);
+                            result.map(|v| {
+                                // Return callback result as Option
+                                Value::Some(Box::new(v))
+                            })
+                        }
+                        _ => {
+                            let _ = std::fs::remove_dir_all(&dir_path);
+                            Err("io.tempDir expects a function callback".to_string())
+                        }
+                    }
+                },
+            }),
+        ),
     ]
 }

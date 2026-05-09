@@ -1,6 +1,6 @@
 [package]
 name = "neve-workspace"
-version = "3.6.0"
+version = "3.7.0"
 edition = "2024"
 license = "MPL-2.0"
 publish = false
