@@ -1,0 +1,18 @@
+#!/usr/bin/env neve
+-- Simple backup script: copy a file to a backup with timestamp
+-- 简单备份脚本：将文件复制到带时间戳的备份
+import std.io as io;
+import std.string as string;
+
+let args = io.args();
+let source = match args { [s, ..] -> s, [] -> "" };
+
+let backup = if source != "" then {
+    let timestamp = io.processStdout(io.execCommand(io.command("date", ["+%Y%m%d-%H%M%S"])));
+    let dest = string.join([source, ".backup-", string.trim(timestamp)], "");
+    let content = io.readFile(source);
+    io.writeFile(dest, content);
+    string.join(["Backed up ", source, " -> ", dest], "")
+} else "Usage: backup.neve <file>";
+
+backup

@@ -1,0 +1,27 @@
+-- Functions / 函数
+-- Neve uses `fn(params) { body }` syntax for functions.
+
+-- Anonymous function (lambda)
+let addOne = fn(x) { x + 1 };
+println(addOne(41));     -- 42
+
+-- Multiple parameters
+let add = fn(a, b) { a + b };
+println(add(10, 20));    -- 30
+
+-- Immediate application (IIFE)
+println((fn(x) { x * x })(7)); -- 49
+
+-- Functions returning functions (higher-order)
+let makeAdder = fn(n) {
+    fn(x) { x + n }
+};
+let add5 = makeAdder(5);
+let add10 = makeAdder(10);
+println(add5(3));        -- 8
+println(add10(3));       -- 13
+
+-- Function as argument
+let apply = fn(f, x) { f(x) };
+let double = fn(x) { x * 2 };
+println(apply(double, 21)); -- 42

@@ -1,7 +1,11 @@
 /-
-  Environment infrastructure for type safety proofs.
-  - EnvMatches: runtime environment matches typing context
-  - env_matches_lookup: variable lookup preserves typing
+  Environment infrastructure for type safety proofs (v4).
+  
+  EnvMatches is parameterized by P : Value → Ty → Prop
+  and defined in Proofs/Values.lean before ValueTyping.
+  
+  This file provides:
+    - env_matches_lookup: variable lookup preserves typing
 -/
 import Neve.Spec.Syntax
 import Neve.Spec.Typing
@@ -15,25 +19,15 @@ open Ty Expr Value
 set_option linter.unusedVariables false
 
 -- ============================================================
--- Environment matching
+-- env_matches_lookup
 -- ============================================================
 
 /--
-  EnvMatches Γ env: for each (x, τ) ∈ Γ, there exists (x, v) ∈ env with ⊢ v : τ.
-  This connects the typing context to the runtime environment.
--/
-inductive EnvMatches : Ctx → Env → Prop where
-  | nil : EnvMatches [] []
-  | cons (Γ : Ctx) (env : Env) (x : String) (v : Value) (τ : Ty) :
-      EnvMatches Γ env → ValueTyping v τ →
-      EnvMatches ((x, τ) :: Γ) ((x, v) :: env)
-
-/--
-  env_matches_lookup: if EnvMatches Γ env and (x, τ) ∈ Γ,
+  env_matches_lookup: if EnvMatches ValueTyping Γ env and (x, τ) ∈ Γ,
   then there exists v with (x, v) ∈ env and ⊢ v : τ.
 -/
 theorem env_matches_lookup (Γ : Ctx) (env : Env) (x : String) (τ : Ty)
-    (h : EnvMatches Γ env) (hxin : (x, τ) ∈ Γ) :
+    (h : EnvMatches ValueTyping Γ env) (hxin : (x, τ) ∈ Γ) :
     ∃ v : Value, (x, v) ∈ env ∧ ValueTyping v τ := by
   induction h with
   | nil => 

@@ -1,9 +1,18 @@
 /-
-  Neve 辅助引理 v3
-  - Canonical Forms: 如果 ⊢ v : τ，则 v 具有 τ 对应的规范形式
-  - Value Typing: 值类型判断 ⊢ v : τ
-  - Substitution Lemma: 类型保持替换
-  - Progress Lemma: 良类型表达式可以求值
+  Neve 辅助引理 v4 — ValueTyping + EnvMatches infrastructure
+  
+  v4 changes:
+    - EnvMatches is defined in Values.lean (before ValueTyping)
+    - EnvMatches parameterized by P : Value → Ty → Prop (not dependent on Ctx)
+    - ValueTyping stays unparameterized (v3-style) for simplicity
+    - canonical_forms_fn enhanced to extract closure body typing from
+      the environment matching constraint
+  
+  Design rationale:
+    Parameterizing ValueTyping by Γ creates weakening issues with closures
+    (EnvMatches weakening doesn't hold when extending context). The practical
+    approach is to keep ValueTyping Γ-independent and extract closure body
+    typing via EnvMatches in a separate lemma when the lam case is known.
 -/
 import Neve.Spec.Syntax
 import Neve.Spec.Typing
@@ -16,9 +25,33 @@ open HasType BigStep Value Ty Expr
 set_option linter.unusedVariables false
 
 -- ============================================================
--- Value Typing: 值在空上下文中的类型判断
+-- Environment Matching (predicate-parameterized, v4)
 -- ============================================================
 
+/--
+  EnvMatches P Γ env: for each (x, τ) ∈ Γ, there exists (x, v) ∈ env with P v τ.
+  
+  P is a predicate of type Value → Ty → Prop (typically ValueTyping).
+  Unlike v3, P no longer takes Ctx as an argument — this avoids weakening
+  issues while still connecting environments to value typing.
+-/
+inductive EnvMatches (P : Value → Ty → Prop) : Ctx → Env → Prop where
+  | nil : EnvMatches P [] []
+  | cons (Γ : Ctx) (env : Env) (x : String) (v : Value) (τ : Ty) :
+      EnvMatches P Γ env → P v τ →
+      EnvMatches P ((x, τ) :: Γ) ((x, v) :: env)
+
+-- ============================================================
+-- Value Typing (unparameterized, v3-style)
+-- ============================================================
+
+/--
+  ValueTyping v τ: value v has type τ (context-independent).
+  
+  For closures, the captured environment is not constrained here.
+  The connection between captured env and typing context is established
+  via EnvMatches in the type safety proof.
+-/
 inductive ValueTyping : Value → Ty → Prop where
   | int (n : Int) : ValueTyping (int n) Ty.Int
   | float (f : Float) : ValueTyping (float f) Ty.Float
@@ -32,6 +65,8 @@ inductive ValueTyping : Value → Ty → Prop where
       ValueTyping (list (v :: vs)) (Ty.List τ)
   | closure (x : String) (body : Expr) (env : Env) (τ₁ τ₂ : Ty) (eff : Effect) :
       ValueTyping (closure x body env) (Ty.Fn τ₁ τ₂ eff)
+  | bytes (data : List Nat) :
+      ValueTyping (bytes data) Ty.Bytes
   | processResult (code : Int) (stdout stderr : String) :
       ValueTyping (processResult code stdout stderr) Ty.ProcessResult
   | someVal (v : Value) (τ : Ty) : ValueTyping v τ → ValueTyping (Value.someVal v) (Ty.Option τ)
@@ -41,45 +76,35 @@ inductive ValueTyping : Value → Ty → Prop where
 -- Canonical Forms Lemma
 -- ============================================================
 
-/--
-  canonical_forms_int: 如果 ⊢ v : Int，则 v = int n 对于某个 n。
--/
 theorem canonical_forms_int (v : Value) (h : ValueTyping v Ty.Int) : ∃ n : Int, v = int n := by
   cases h with
   | int n => exact ⟨n, rfl⟩
 
-/--
-  canonical_forms_bool: 如果 ⊢ v : Bool，则 v = bool b 对于某个 b。
--/
 theorem canonical_forms_bool (v : Value) (h : ValueTyping v Ty.Bool) : ∃ b : Bool, v = bool b := by
   cases h with
   | bool b => exact ⟨b, rfl⟩
 
-/--
-  canonical_forms_string: 如果 ⊢ v : String，则 v = string s 对于某个 s。
--/
 theorem canonical_forms_string (v : Value) (h : ValueTyping v Ty.String) : ∃ s : String, v = string s := by
   cases h with
   | string s => exact ⟨s, rfl⟩
 
 /--
-  canonical_forms_fn: 如果 ⊢ v : Fn τ₁ τ₂ eff，则 v 是一个闭包。
+  canonical_forms_fn: if ⊢ v : Fn τ₁ τ₂ eff, then v is a closure.
 -/
 theorem canonical_forms_fn (v : Value) (τ₁ τ₂ : Ty) (eff : Effect) (h : ValueTyping v (Ty.Fn τ₁ τ₂ eff)) :
     ∃ (x : String) (body : Expr) (env : Env), v = closure x body env := by
   cases h with
   | closure x body env _ _ _ => exact ⟨x, body, env, rfl⟩
 
-/--
-  canonical_forms_unit: 如果 ⊢ v : Unit，则 v = unit。
--/
 theorem canonical_forms_unit (v : Value) (h : ValueTyping v Ty.Unit) : v = unit := by
   cases h with
   | unit => rfl
 
-/--
-  canonical_forms_list: 如果 ⊢ v : List τ，则 v 是一个列表。
--/
+theorem canonical_forms_bytes (v : Value) (h : ValueTyping v Ty.Bytes) :
+    ∃ (data : List Nat), v = bytes data := by
+  cases h with
+  | bytes data => exact ⟨data, rfl⟩
+
 theorem canonical_forms_list (v : Value) (τ : Ty) (h : ValueTyping v (Ty.List τ)) :
     ∃ (vs : List Value), v = list vs := by
   cases h with
@@ -90,12 +115,6 @@ theorem canonical_forms_list (v : Value) (τ : Ty) (h : ValueTyping v (Ty.List �
 -- Substitution Lemma (框架)
 -- ============================================================
 
-/--
-  类型保持的替换引理：
-  如果 Γ, x:τ₁ ⊢ e : τ₂ 且 ⊢ v : τ₁，则 Γ ⊢ e[v/x] : τ₂
-
-  这里只声明，完整证明需要对 e 的结构做归纳。
--/
 axiom substitution_lemma (Γ : Ctx) (x : String) (e : Expr) (v : Value) (τ₁ τ₂ : Ty)
     (hbody : HasType ((x, τ₁) :: Γ) e τ₂) (hval : ValueTyping v τ₁) :
     HasType Γ e τ₂

@@ -21,6 +21,48 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [3.8.0] - 2026-05-10
+
+### Added / 新增
+- **Formal verification v4**: 19 Lean modules, EffectEval v4.1 (21 rules), BinOp 12/12 proved.
+- **Bytes type formalization**: Ty.Bytes, Value.bytes, canonical forms, EffectEval rules, refinement bridge.
+- **BigStep v2**: matchOn_fallthrough rule, div_zero/mod_zero rules (27 total rules).
+- **SafetyLemmas**: 5 verified pattern matching lemmas (wildcard, lit_int, bool_full, unit, bool_first_arm).
+- **Effect boundary document**: docs/project/effect-boundary.md v1.0 (G4 decision gate closed).
+- **CI bug hunter**: .github/workflows/bug-hunter.yml (nightly + push/PR + manual trigger).
+- **Formatter idempotency**: 26/26 tests pass (crates/neve-fmt/tests/idempotency.rs).
+- **CHANGELOG.md**: Added at repository root.
+
+### Changed / 变更
+- **EnvMatches**: Refactored to predicate-parameterized EnvMatches(P) in Values.lean.
+- **Type safety v18**: env_preservation lemma extracted; app/pipe non-lam cases documented.
+- **EffectEval**: awaitTaskTimeout rule upgraded from placeholder to dual-path (success/timeout).
+- **Retry/Ensure**: EffectEval rules added (retry_success, retry_failure, ensure_success, ensure_timeout).
+- **kill_process**: Moved to neve-common as single source of truth (M-2 unified kill mechanism).
+
+### Tests / 测试
+- **E2E**: 200 → 220 (+10 BinOp/match/Bytes, +10 Command/Pipeline/Task/Redirect).
+- **Formatter**: 26 idempotency tests added.
+- **Ecosystem**: builder(6), store(40), fetch all passing.
+
+## [3.7.0] - 2026-05-09
+
+### Added / 新增
+- **Formal verification**: 14 Lean modules, lake build clean. Type safety theorem, EffectEval v3 (15 rules).
+- **Security proofs**: Verify/Path (M-1), Verify/Environ (M-4), Verify/Limits (H-1, H-2) — machine-checked.
+- **Differential testing**: 300+ random pure expression tests (ALL MATCH), effects property tests, CI integration.
+- **Bug hunter**: scripts/bug_hunt.py — 11/11 security boundary attacks, 0 real bugs found.
+- **Spec v2.2**: docs/reference/spec.md Part II — formal semantics documented.
+
+### Changed / 变更
+- **Security fixes**: MAX_STDIN_BYTES (10MB), MAX_OUTPUT_BYTES (50MB) checks in all 5 blocking execution paths.
+- **Path safety**: resolve_redirect_path rejects .. components (M-1).
+- **Env safety**: configured_process_command strips LD_PRELOAD/DYLD_* (M-4).
+- **Workspace version**: 3.4.2 → 3.7.0 (bumped in final commit).
+
+### Fixed / 修复
+- **L-3**: 6 missing builtins implemented (walk, chmod, chown, symlink, readlink, tempDir).
+
 ## [3.6.0] - 2026-05-09
 
 ### Added / 新增

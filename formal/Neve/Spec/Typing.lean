@@ -67,6 +67,22 @@ mutual
         HasType Γ l Ty.Int → HasType Γ r Ty.Int →
         HasType Γ (binop BinOp.Add l r) Ty.Int
 
+    | binop_sub (Γ : Ctx) (l r : Expr) :
+        HasType Γ l Ty.Int → HasType Γ r Ty.Int →
+        HasType Γ (binop BinOp.Sub l r) Ty.Int
+
+    | binop_mul (Γ : Ctx) (l r : Expr) :
+        HasType Γ l Ty.Int → HasType Γ r Ty.Int →
+        HasType Γ (binop BinOp.Mul l r) Ty.Int
+
+    | binop_div (Γ : Ctx) (l r : Expr) :
+        HasType Γ l Ty.Int → HasType Γ r Ty.Int →
+        HasType Γ (binop BinOp.Div l r) Ty.Int
+
+    | binop_mod (Γ : Ctx) (l r : Expr) :
+        HasType Γ l Ty.Int → HasType Γ r Ty.Int →
+        HasType Γ (binop BinOp.Mod l r) Ty.Int
+
     | binop_eq (Γ : Ctx) (l r : Expr) (τ : Ty) :
         HasType Γ l τ → HasType Γ r τ →
         HasType Γ (binop BinOp.Eq l r) Ty.Bool
@@ -74,6 +90,10 @@ mutual
     | binop_and (Γ : Ctx) (l r : Expr) :
         HasType Γ l Ty.Bool → HasType Γ r Ty.Bool →
         HasType Γ (binop BinOp.And l r) Ty.Bool
+
+    | binop_or (Γ : Ctx) (l r : Expr) :
+        HasType Γ l Ty.Bool → HasType Γ r Ty.Bool →
+        HasType Γ (binop BinOp.Or l r) Ty.Bool
 
     | pipe (Γ : Ctx) (arg f : Expr) (τ τ' : Ty) (eff : Effect) :
         HasType Γ arg τ → HasType Γ f (Ty.Fn τ τ' eff) →

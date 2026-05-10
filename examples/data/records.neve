@@ -1,0 +1,38 @@
+-- Records / 记录（类似 struct / dictionary）
+-- Records are key-value collections with named fields.
+
+-- Create a record
+let person = #{
+    name = "Alice",
+    age = 30,
+    active = true
+};
+
+-- Access fields with dot notation
+println(person.name);    -- Alice
+println(person.age);     -- 30
+
+-- Records are immutable; "updating" creates a new record
+let older = #{
+    name = person.name,
+    age = person.age + 1,
+    active = person.active
+};
+println(older.age);      -- 31
+
+-- Records as function parameters
+let describe = fn(p) {
+    p.name + " is " + toString(p.age) + " years old"
+};
+println(describe(person)); -- Alice is 30 years old
+
+-- Nested records
+let team = #{
+    name = "Neve Team",
+    lead = #{
+        name = "Bob",
+        role = "architect"
+    }
+};
+println(team.lead.name); -- Bob
+println(team.lead.role);  -- architect

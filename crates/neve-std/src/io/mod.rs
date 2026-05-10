@@ -1009,7 +1009,7 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
         Err(mpsc::RecvTimeoutError::Timeout) => {
             // Kill the currently running process
             if let Some(pid) = *current_pid.lock().unwrap() {
-                kill_process(pid);
+                neve_common::kill_process(pid);
             }
             Ok(Value::None)
         }
@@ -1103,7 +1103,7 @@ pub(crate) fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Resu
         },
         Err(mpsc::RecvTimeoutError::Timeout) => {
             // Kill the process on timeout via platform kill command
-            kill_process(pid);
+            neve_common::kill_process(pid);
             Ok(Value::None)
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -1822,18 +1822,8 @@ pub(crate) fn record_env_optional(
 
 /// Kill a process by PID. Uses libc::kill on Unix, taskkill on Windows.
 /// 通过 PID 终止进程。
-fn kill_process(pid: u32) {
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(pid as i32, libc::SIGKILL);
-    }
-    #[cfg(windows)]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/PID", &pid.to_string()])
-            .output();
-    }
-}
+// kill_process moved to neve_common::kill_process (M-2 unified kill mechanism)
+
 
 /// Run pipeline stages sequentially in a background thread.
 fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, String), String> {

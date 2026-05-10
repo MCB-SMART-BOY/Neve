@@ -177,24 +177,6 @@ fn install_signal_handler(name: &str) -> Result<(), String> {
     Err("signal handling is not supported on this platform".to_string())
 }
 
-/// Kill a process by PID. Used for timeout enforcement in streaming I/O.
-/// 通过 PID 终止进程。用于流式 I/O 的超时强制执行。
-fn kill_process_by_pid(pid: u32) {
-    #[cfg(unix)]
-    {
-        // Use libc::kill directly — more reliable than spawning a subprocess.
-        unsafe {
-            libc::kill(pid as i32, libc::SIGKILL);
-        }
-    }
-    #[cfg(windows)]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/PID", &pid.to_string()])
-            .output();
-    }
-}
-
 /// HIR 求值器。
 ///
 /// This evaluator interprets HIR expressions with support for:
@@ -1850,7 +1832,7 @@ impl Evaluator {
             let now = Instant::now();
             if now >= deadline {
                 // Timeout — kill the process
-                kill_process_by_pid(pid);
+                neve_common::kill_process(pid);
                 return Ok(Value::None);
             }
 
@@ -1859,7 +1841,7 @@ impl Evaluator {
                 Ok(Ok(line)) => {
                     line_count += 1;
                     if line_count > self.max_stream_lines {
-                        kill_process_by_pid(pid);
+                        neve_common::kill_process(pid);
                         return Err(EvalError::TypeError(format!(
                             "execCommandStreamingWithTimeout: exceeded max stream lines ({})",
                             self.max_stream_lines
@@ -1879,7 +1861,7 @@ impl Evaluator {
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     // Should not happen with correct remaining calculation,
                     // but handle as timeout
-                    kill_process_by_pid(pid);
+                    neve_common::kill_process(pid);
                     return Ok(Value::None);
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -2117,7 +2099,7 @@ impl Evaluator {
             if now >= deadline {
                 // Timeout — kill the process
                 if let Some(pid) = *current_pid.lock().unwrap() {
-                    kill_process_by_pid(pid);
+                    neve_common::kill_process(pid);
                 }
                 return Ok(Value::None);
             }
@@ -2128,7 +2110,7 @@ impl Evaluator {
                     line_count += 1;
                     if line_count > self.max_stream_lines {
                         if let Some(pid) = *current_pid.lock().unwrap() {
-                            kill_process_by_pid(pid);
+                            neve_common::kill_process(pid);
                         }
                         return Err(EvalError::TypeError(format!(
                             "execPipelineStreamingWithTimeout: exceeded max stream lines ({})",
@@ -2147,7 +2129,7 @@ impl Evaluator {
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     if let Some(pid) = *current_pid.lock().unwrap() {
-                        kill_process_by_pid(pid);
+                        neve_common::kill_process(pid);
                     }
                     return Ok(Value::None);
                 }

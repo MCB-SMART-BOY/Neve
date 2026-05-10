@@ -19,7 +19,7 @@ inductive Ty : Type where
   | Record (fields : List (String × Ty))
   | Fn (param : Ty) (ret : Ty) (effect : Effect := Effect.Pure)
   | Option (inner : Ty)
-  | Command | Pipeline | ProcessResult
+  | Bytes | Command | Pipeline | ProcessResult
   | Task (inner : Ty)
   deriving BEq, Repr, Inhabited
 
@@ -72,6 +72,7 @@ inductive Value : Type where
   | list (elems : List Value)
   | tuple (elems : List Value)
   | record (fields : List (String × Value))
+  | bytes (data : List Nat)
   | processResult (code : Int) (stdout : String) (stderr : String)
   | closure (x : String) (body : Expr) (env : List (String × Value))
   | someVal (v : Value)

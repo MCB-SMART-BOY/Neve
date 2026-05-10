@@ -1,179 +1,448 @@
-# Neve Effect Boundary Design
+# Neve Effect Boundary Design Document
 
-This document defines the effect model for Neve — the boundary between pure functional code and host-side effects (I/O, process execution, network).
+<div align="center">
 
-本文档定义 Neve 的副作用模型 — 纯函数代码与宿主机副作用（I/O、进程执行、网络）之间的边界。
+**版本**: v1.0
+**日期**: 2026-05-09
+**状态**: 当前前沿 (G4 决策门)
+**关联**: [语言路线图](./language-roadmap.md) · [语义收敛计划](./semantic-convergence-plan.md) · [功能矩阵](./feature-matrix.md)
 
-## 1. Status
+</div>
 
-- State: **shipping phase** — effect keyword done, streaming I/O + timeout complete, signal handling, non-blocking tasks, pipe syntax (v3.5.0)
-- Scope: effect classification, purity checking, effect type system design, streaming timeout
-- Related: G4 (Effect Boundary), PR-011/012 (typed runtime objects), `neve check --pure`
+---
 
-## 2. Design Principles
+## 1. 概述 / Overview
 
-1. **Core language is pure** — evaluation of Neve expressions has no side effects
-2. **Effects are explicit** — effectful operations are only reachable through typed runtime entrypoints
-3. **Effects are runtime-mediated** — the evaluator does not directly touch the host; it delegates to builtin functions
-4. **Purity is checkable** — `neve check --pure` can statically reject effectful code
-5. **Gradual adoption** — users can start pure and add effects incrementally
+### 1.1 目的
 
-## 3. Current State
+本文档是 **G4 决策门**（Effect Boundary / 副作用边界）的设计文档。它定义：
 
-### 3.1 What Exists
+1. Neve 语言中 **纯函数**（pure）与 **副作用函数**（effectful）的边界在哪里
+2. 所有副作用操作的**完整清单**及其语义
+3. Rust 实现与 Lean 形式规范的**逐条对应关系**
+4. 安全边界（H-1, H-2, M-1, M-4）在设计层面的体现
+5. 效果系统的**运行时对象模型**（Command, Pipeline, Task, Redirect 等）
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| Typed runtime objects | Done | Path, Bytes, Command, Pipeline, Redirect, ProcessResult, Task<T> |
-| Task<T> | Done | Wraps Command/Pipeline for deferred execution; blocking await only |
-| io.awaitTaskWithTimeout | Done | Timeout + process kill for Command-based tasks |
-| Streaming I/O | Done | execCommandStreaming, execPipelineStreaming, readFileLines (line-by-line callback) |
-| Streaming timeout | Done | execCommandStreamingWithTimeout, execPipelineStreamingWithTimeout (total deadline + process kill) |
-| Streaming safety limits | Done | max lines (100k), max stdin (10MB), max intermediate buffer (50MB) enforced in evaluator |
-| Signal handling | Done | io.onSignal registers OS signal handlers (INT/TERM/HUP/USR1/USR2); evaluator polls atomic flags and dispatches callbacks at safe points |
-| neve check --pure | Done | HIR walker rejects calls to effectful builtins |
-| is_effectful_builtin() | Done | Classifies stdlib builtins as pure or effectful |
-| Process inspectors | Done | processSuccess, processStdout, processCode, processStderr (pure) |
+### 1.2 为什么需要这份文档
 
-### 3.2 What's Missing
+| 问题 | 没有这份文档时 | 有这份文档后 |
+|------|--------------|------------|
+| 新功能的语义定义 | 参考实现，容易分叉 | 先查规范，再写代码 |
+| Rust 与 Lean 的对齐 | 手动比对，容易漂移 | 有对照表，CI 验证 |
+| 安全审计 | 每次重新审查全部代码 | 只审查边界变更 |
+| 效果边界判定 | 靠 `is_effectful_builtin()` 隐式定义 | 设计文档显式声明 |
 
-| Gap | Priority | Description |
-|-----|----------|-------------|
-| Effect type system | High | No way to express "this function may have effects" in the type system |
-| Effect polymorphism | Medium | Can't write functions generic over purity |
-| Non-blocking Task | Medium | Tasks always block; no poll/cancel/background execution |
-| Effect inference | Low | Purity is opt-in (--pure flag) rather than inferred |
+### 1.3 核心原则
 
-## 4. Effect Classification
+1. **所有副作用必须显式标注**：每个有副作用的 builtin 必须在 `is_effectful_builtin()` 中注册
+2. **所有副作用必须在 Lean 规范中有对应规则**：EffectEval 规则覆盖 100% 的副作用路径
+3. **安全约束是规则的显式前提**：大小限制、路径安全检查、环境变量过滤不是"实现细节"，而是语义规则的必要组成部分
+4. **纯函数化原则**：进程执行的结果是 `ProcessResult`（不可变值），不是隐式状态变更
 
-### 4.1 Effect Categories
+---
 
-| Category | Examples | Current Status |
-|----------|----------|----------------|
-| **Pure** | list.map, math.abs, string.len, option.some | Always allowed |
-| **FileSystem** | io.readFile, io.writeFile, io.readDir | Tracked by is_effectful_builtin |
-| **Process** | io.execCommand, io.execPipeline | Tracked by is_effectful_builtin |
-| **Network** | fetch.url, fetch.git | Tracked by is_effectful_builtin |
-| **Environment** | io.getEnv, io.currentDir, io.homeDir | Tracked by is_effectful_builtin |
-| **Inspector** | io.processSuccess, io.processStdout | Pure (read-only access to existing result) |
+## 2. 效果边界定义 / Effect Boundary Definition
 
-### 4.2 Current Effectful Builtins
+### 2.1 什么是"纯" / Pure
 
-All builtins under `io.*` except the four ProcessResult inspectors (`processSuccess`, `processStdout`, `processCode`, `processStderr`) are classified as effectful. All `fetch.*` builtins are effectful. All other stdlib modules (`list`, `map`, `set`, `math`, `option`, `result`, `string`, `path`) are pure.
+一个 Neve 表达式是**纯的**当且仅当：
 
-## 5. Proposed Effect Type System
+1. 它的求值不依赖任何外部状态（文件系统、网络、环境变量、时间、随机数）
+2. 它的求值不产生任何外部可观察的副作用（输出、文件写入、进程启动）
+3. 对于相同的输入，总是产生相同的输出（引用透明）
 
-### 5.1 Phase 1: Effect Annotations (Minimal)
+纯表达式走 `BigStep` 语义（`Spec/Eval.lean`），不需要 IOState。
 
-Add an `effect` keyword for function signatures:
+### 2.2 什么是"有副作用的" / Effectful
 
-```neve
-// Pure function (default)
-fn add(x: Int, y: Int) -> Int = x + y;
+一个 Neve 表达式是**有效果的**当且仅当它满足以下任一条件：
 
-// Effectful function
-fn readConfig(path: String) -> String effect { io.readFile(path) };
+1. **进程执行**：启动外部进程（execCommand, execPipeline）
+2. **文件 I/O**：读写文件系统（readFile, writeFile, readFileLines）
+3. **输出**：向 stdout/stderr 写入（print, println，以及所有进程执行的输出捕获）
+4. **网络**：通过 fetch 发起网络请求
+5. **时间**：依赖系统时间或计时器（every, timeout 系列）
+6. **信号**：注册或响应 OS 信号（onSignal）
 
-// Effectful function calling other effectful functions
-fn buildProject(name: String) -> ProcessResult effect {
-    let config = readConfig("build.neve");
-    io.execCommand(io.command("make", [name]))
-};
-```
+有效果的表达式走 `EffectEval` 语义（`Spec/Effects.lean`），需要 `IOState` 来追踪累积输出。
 
-Rules:
-- Functions without `effect` annotation cannot call effectful builtins or effectful functions
-- `effect` is transitive: calling an effectful function makes the caller effectful
-- `neve check` enforces this statically (upgrades current `--pure` opt-in to default)
-- `neve check --allow-effects` restores current permissive behavior
+### 2.3 边界判定函数
 
-### 5.2 Phase 2: Effect Polymorphism (Future)
+在 Rust 实现中，`neve_common::is_effectful_builtin(name)` 是**单一的、规范的效果判定函数**：
 
-Allow generic code over purity:
-
-```neve
-// map is pure regardless of input function purity
-fn map<A, B>(f: fn(A) -> B, xs: List<A>) -> List<B> = ...;
-
-// Higher-order functions propagate effects
-fn tap<A>(f: fn(A) -> Unit effect, x: A) -> Unit effect = { f(x); () };
-```
-
-### 5.3 Phase 3: Effect Handlers (Future)
-
-Allow catching and handling effects:
-
-```neve
-// Timeout as an effect handler
-let result = io.awaitTaskWithTimeout(task, 5000) handle {
-    Timeout -> None
-};
-```
-
-## 6. Streaming I/O Design
-
-### 6.1 Problem
-
-Current `io.execCommand` buffers all output. For long-running commands or large outputs, this is impractical.
-
-### 6.2 Proposed: Callback-based Streaming
-
-```neve
-// Line-by-line processing via callback
-io.execCommandLines(
-    io.command("tail", ["-f", "/var/log/system.log"]),
-    fn(line: String) -> Unit effect {
-        io.writeFile("/tmp/filtered.log", line);
+```rust
+// crates/neve-common/src/lib.rs
+pub fn is_effectful_builtin(name: &str) -> bool {
+    // 顶层输出函数
+    if name == "print" || name == "println" { return true; }
+    // io.* 模块中，除了纯构造函数和纯检查器之外的都有效果
+    match parts[0] {
+        "io" => !matches!(parts[1],
+            "processSuccess" | "processStdout" | "processCode" | "processStderr" |
+            "command" | "commandWith" | "commandWithRedirects" |
+            "pipeline" | "pipelineWithRedirects" |
+            "redirectStdoutPath" | "redirectStderrPath" | "redirectStdinPath" |
+            "taskCommand" | "taskPipeline" |
+            "eventMap" | "eventFilter" |
+            "reactive" | "liveCurrent" | "liveCancel" |
+            "watchFile" | "every" |
+            "hashString" | "currentSystem"
+        ),
+        "fetch" => true,
+        _ => false,
     }
-);
+}
 ```
 
-### 6.3 Proposed: Iterator-based Streaming (Future)
+**这条函数是效果边界的 Rust 侧权威来源。** 当新增效果 builtin 时，必须在同一个 PR 中更新此函数。
 
-When Neve has lazy sequences:
+---
 
-```neve
-// Lazy line iterator
-let lines: Stream<String> = io.execCommandStream("journalctl", ["-f"]);
-let filtered = stream.filter(fn(line) line.contains("error"), lines);
+## 3. 效果操作清单 / Effect Operation Inventory
+
+### 3.1 完整清单（按类别分组）
+
+#### A. 进程执行（有副作用：启动外部进程、捕获输出）
+
+| Builtin | 模式 | EffectEval 规则 | Rust 入口 |
+|---------|------|----------------|-----------|
+| `io.execCommand` | 阻塞 | `execCommand` | `builtin_exec_command` |
+| `io.execPipeline` | 阻塞 | `execPipeline` | `builtin_exec_pipeline` |
+| `io.execCommandStreaming` | 流式 | `execCommandStreaming` | `builtin_exec_streaming` |
+| `io.execPipelineStreaming` | 流式 | `execPipelineStreaming` | `builtin_exec_pipeline_streaming` |
+| `io.execCommandStreamingWithTimeout` | 流式+超时 | `execCommandStreamingTimeout` / `TimeoutExpired` | `builtin_exec_streaming_with_timeout` |
+| `io.execPipelineStreamingWithTimeout` | 流式+超时 | `execPipelineStreamingTimeout` / `TimeoutExpired` | `builtin_exec_pipeline_streaming_with_timeout` |
+
+#### B. 文件 I/O（有副作用：读写文件系统）
+
+| Builtin | 模式 | EffectEval 规则 | Rust 入口 |
+|---------|------|----------------|-----------|
+| `io.readFile` | 阻塞 | `readFile` | `builtin_read_file` |
+| `io.writeFile` | 阻塞 | `writeFile` | `builtin_write_file` |
+| `io.readFileLines` | 流式 | `readFileLines` | `builtin_read_file_lines` |
+
+#### C. 任务/并发（有副作用：创建异步任务）
+
+| Builtin | 模式 | EffectEval 规则 | Rust 入口 |
+|---------|------|----------------|-----------|
+| `io.spawn` | 延迟 | `spawn` | `builtin_spawn` |
+| `io.awaitTask` | 阻塞 | `awaitTask` | `builtin_await_task` |
+| `io.awaitTaskWithTimeout` | 阻塞+超时 | `awaitTaskTimeout` | `builtin_await_task_timeout` |
+
+#### D. 输出（有副作用：写入 stdout/stderr）
+
+| Builtin | 模式 | EffectEval 规则 | Rust 入口 |
+|---------|------|----------------|-----------|
+| `print` | 直接 | `pure` (通过 BigStep + IOState) | `builtin_print` |
+| `println` | 直接 | `pure` (通过 BigStep + IOState) | `builtin_println` |
+
+#### E. 纯构造函数（无副作用，创建运行时对象）
+
+| Builtin | 说明 |
+|---------|------|
+| `io.command` | 创建不带配置的 Command |
+| `io.commandWith` | 创建带配置的 Command（cwd, env, stdin, redirects） |
+| `io.commandWithRedirects` | 创建带重定向列表的 Command |
+| `io.pipeline` | 创建 Pipeline |
+| `io.pipelineWithRedirects` | 创建带重定向的 Pipeline |
+| `io.redirectStdoutPath` | 创建 stdout → Path 重定向 |
+| `io.redirectStderrPath` | 创建 stderr → Path 重定向 |
+| `io.redirectStdinPath` | 创建 stdin ← Path 重定向 |
+| `io.taskCommand` | 将 Command 包装为 Task |
+| `io.taskPipeline` | 将 Pipeline 包装为 Task |
+
+#### F. 纯检查器（无副作用，访问 ProcessResult 字段）
+
+| Builtin | 说明 |
+|---------|------|
+| `io.processSuccess` | 检查退出码是否为 0 |
+| `io.processStdout` | 获取 stdout 内容 |
+| `io.processCode` | 获取退出码 |
+| `io.processStderr` | 获取 stderr 内容 |
+
+### 3.2 统计
+
+| 类别 | 数量 | 有效果？ |
+|------|------|---------|
+| 进程执行 | 6 | ✅ 全部 |
+| 文件 I/O | 3 | ✅ 全部 |
+| 任务/并发 | 3 | ✅ 全部 |
+| 输出函数 | 2 | ✅ 全部 |
+| 纯构造函数 | 11 | ❌ 无 |
+| 纯检查器 | 4 | ❌ 无 |
+| **合计** | **14 个效果操作** + **15 个纯操作** | |
+
+---
+
+## 4. 运行时对象模型 / Runtime Object Model
+
+### 4.1 类型层次
+
+```
+Expr (源语言表达式)
+  └── Expr.builtin(name, args)  ← 效果 builtin 的入口
+
+Value (运行时值)
+  ├── Value.processResult(code, stdout, stderr)  ← 进程执行结果
+  ├── Value.string(s)                             ← 文件内容
+  ├── Value.closure(x, body, env)                 ← Task / spawn 结果
+  ├── Value.list(elems)                           ← readFileLines 结果
+  ├── Value.someVal(v) / Value.noneVal            ← 超时结果
+  └── Value.unit                                  ← writeFile 等操作的结果
+
+IOState (效果状态，在 EffectEval 中传递)
+  ├── stdin  : String   ← 累积的标准输入
+  ├── stdout : String   ← 累积的标准输出
+  └── stderr : String   ← 累积的标准错误
 ```
 
-## 7. Implementation Plan
+### 4.2 关键设计决策
 
-### Step 1: Effect Annotation Parsing (est. 1-2 sessions)
-- Add `effect` keyword to lexer/parser
-- Add `effectful: bool` to HIR FnDef
-- Update lowering to propagate effect annotations
+**D-009: Effects are explicit and runtime-mediated**
+- 效果不是隐式的（不像 Haskell 的 IO monad）
+- 效果通过 `effect` 关键字在类型层面标注
+- 纯函数不能调用有效果的 builtin（`neve check --pure` 强制检查）
 
-### Step 2: Effect Checking in Typeck (est. 1-2 sessions)
-- Add effect tracking to TypeChecker
-- When checking a function body, verify all calls are to pure functions (unless annotated `effect`)
-- Report errors for effectful calls in pure contexts
-- Replace `--pure` opt-in with default-on checking; add `--allow-effects` to restore old behavior
+**D-012: Process control is modeled, not inferred**
+- `Command` 是一等运行时对象，不是裸字符串
+- Shell 行为已收回到显式 `Command` 构造
+- 不再有 string-only 的 shell wrapper
 
-### Step 3: Streaming Output (est. 1-2 sessions)
-- Add `io.execCommandLines` with callback
-- Implement line-by-line process output
-- Add full-pipeline parity tests
+**D-013: Initial effect boundary is Task<T> plus effect summaries**
+- `Task[ProcessResult]` 是延迟执行的单元
+- 效果摘要由类型系统推导（不在本文档范围内）
 
-### Step 4: Pipeline Timeout (est. 1 session)
-- Extend `awaitTaskWithTimeout` to spawn pipeline processes with timeouts
-- Kill all pipeline processes on timeout
+---
 
-## 8. Migration Path
+## 5. 安全边界 / Security Boundaries
 
-1. ~~Current~~ → **Done**: `neve check` defaults to rejecting effects; `--allow-effects` for migration
-2. **Phase 1** ✅: `effect` keyword available; `neve check` defaults to rejecting effects
-3. **Phase 2**: Effect polymorphism for higher-order functions
-4. **Phase 3**: Effect handlers and streaming
+### 5.1 缓冲区大小限制（H-1, H-2）
 
-## 9. Acceptance Criteria
+**H-1: stdin 限制（10 MB）**
 
-- [ ] `effect` keyword parses and lowers correctly
-- [ ] Pure functions calling effectful builtins produce clear errors
-- [ ] Effectful functions can call other effectful functions
-- [ ] `neve check` enforces purity by default
-- [ ] Streaming process output works end-to-end
-- [ ] Pipeline timeout works with process kill
-- [ ] All existing tests pass with new effect checking
-- [ ] Feature matrix updated
+```
+MAX_STDIN_BYTES = 10 * 1024 * 1024
+```
+
+- 在所有 6 个进程执行路径中强制检查
+- `EffectEval.execCommand` 规则将 `hstdin_len : stdin_str.length ≤ MAX_STDIN_BYTES` 作为**显式前提**
+- Rust: `stdin.len() > MAX_STDIN_BYTES → Err`
+
+**H-2: stdout/stderr 限制（50 MB）**
+
+```
+MAX_OUTPUT_BYTES = 50 * 1024 * 1024
+```
+
+- 在所有 6 个进程执行路径中强制检查
+- `EffectEval.execCommand` 规则将 `hout_len` 和 `herr_len` 作为**显式前提**
+- Rust: `output.stdout.len() > MAX_OUTPUT_BYTES → Err`
+
+**Lean 定理**：`Verify/Limits.lean` 证明了对任意 stdin/stdout/stderr 大小，检查通过当且仅当大小在限制内。
+
+### 5.2 路径遍历防护（M-1）
+
+**任何包含 `..` 组件的重定向路径被替换为安全哨兵**：
+
+```
+/dev/null/neve-blocked-traversal
+```
+
+- Rust: `resolve_redirect_path()` 检查 `Path.components().any(|c| c == ParentDir)`
+- Lean: `resolve_redirect_path()` 检查 `has_parent_dir redirect`
+- **定理**：`Verify/Path.lean` 证明了 `path_safety_with_safe_cwd` — 安全的 cwd + 安全的 redirect → 安全的输出路径
+
+### 5.3 环境变量过滤（M-4）
+
+**子进程环境中永远移除以下危险变量**：
+
+```
+LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
+```
+
+- Rust: `configured_process_command()` 调用 `cmd.env_remove()` 逐个移除
+- Lean: `strip_dangerous()` 过滤列表
+- **定理**：`Verify/Environ.lean` 证明了 `env_safety_theorem` — 过滤后的环境不包含任何危险键
+
+---
+
+## 6. EffectEval 规则清单 / EffectEval Rule Inventory
+
+### 6.1 规则总览（15 条）
+
+| # | 规则名称 | 类别 | 核心前提 |
+|---|---------|------|---------|
+| 1 | `pure` | 纯桥接 | `BigStep env e v` |
+| 2 | `execCommand` | 阻塞执行 | `hstdin_len + hout_len + herr_len` |
+| 3 | `execPipeline` | 阻塞管道 | `hsize_all_stages + hfinal_out + hfinal_err` |
+| 4 | `spawn` | 延迟创建 | `body` 被包装为 closure |
+| 5 | `awaitTask` | 阻塞等待 | 完整子求值 |
+| 6 | `awaitTaskTimeout` | 超时等待 | （框架，待完善） |
+| 7 | `execCommandStreaming` | 流式执行 | `hstdin_len + hline_count + hout_len + herr_len` |
+| 8 | `execPipelineStreaming` | 流式管道 | `hsize_all_stages + hline_count + hfinal_*` |
+| 9 | `execCommandStreamingTimeout` | 流式+超时（成功） | 所有前提 + timeout 未过期 |
+| 10 | `execCommandStreamingTimeoutExpired` | 流式+超时（超时） | timeout 已过期 → None |
+| 11 | `execPipelineStreamingTimeout` | 管道+超时（成功） | 所有前提 + timeout 未过期 |
+| 12 | `execPipelineStreamingTimeoutExpired` | 管道+超时（超时） | timeout 已过期 → None |
+| 13 | `readFileLines` | 流式读文件 | `hline_count` |
+| 14 | `readFile` | 阻塞读文件 | `content = fileContent path` |
+| 15 | `writeFile` | 阻塞写文件 | （无额外前提） |
+
+### 6.2 规则与 Rust 的映射
+
+每个 EffectEval 规则对应 Rust 中的一个 `builtin_*` 函数：
+
+| EffectEval 规则 | Rust 函数（`crates/neve-eval/src/eval.rs`） | 阻塞路径数 |
+|----------------|------------------------------------------|-----------|
+| `execCommand` | `builtin_exec_command` | 5 个阻塞路径 |
+| `execPipeline` | `builtin_exec_pipeline` | 5 个阻塞路径 |
+| `execCommandStreaming` | `builtin_exec_streaming` | 流式 |
+| `execPipelineStreaming` | `builtin_exec_pipeline_streaming` | 流式 |
+| `execCommandStreamingTimeout` | `builtin_exec_streaming_with_timeout` | 流式+超时 |
+| `execPipelineStreamingTimeout` | `builtin_exec_pipeline_streaming_with_timeout` | 流式+超时 |
+| `readFileLines` | `builtin_read_file_lines` | 流式 |
+| `readFile` | `builtin_read_file` | 阻塞 |
+| `writeFile` | `builtin_write_file` | 阻塞 |
+| `spawn` | `builtin_spawn` | 延迟 |
+| `awaitTask` | `builtin_await_task` | 阻塞 |
+
+### 6.3 核心不变量
+
+从 EffectEval 规则中提取的、所有副作用路径都必须维护的不变量：
+
+1. **I-1: stdin 大小限制** — `hstdin_len : size ≤ MAX_STDIN_BYTES`
+2. **I-2: stdout 大小限制** — `hout_len : size ≤ MAX_OUTPUT_BYTES`
+3. **I-3: stderr 大小限制** — `herr_len : size ≤ MAX_OUTPUT_BYTES`
+4. **I-4: 流式行数限制** — `hline_count : lines ≤ MAX_STREAM_LINES`
+5. **I-5: 路径安全** — 重定向路径不包含 `..`
+6. **I-6: 环境安全** — 子进程环境中无 LD_PRELOAD 等危险变量
+7. **I-7: IOState 单调性** — stdout/stderr 只追加，不删除
+
+---
+
+## 7. 流式与延迟执行模型 / Streaming & Deferred Model
+
+### 7.1 流式执行
+
+流式执行与阻塞执行的区别：
+
+| 维度 | 阻塞 (Blocking) | 流式 (Streaming) |
+|------|----------------|-----------------|
+| 输出传递 | 一次性返回完整字符串 | 逐行回调 |
+| 内存占用 | O(output_size) | O(line_size) |
+| 超时支持 | 无（外部用 awaitTaskWithTimeout） | 内置（StreamingWithTimeout 变体） |
+| 行数限制 | 无 | `MAX_STREAM_LINES = 100,000` |
+| Lean 规则 | `execCommand` | `execCommandStreaming` |
+
+### 7.2 超时模型
+
+超时有两个层次：
+
+1. **流式超时**（内置）：`execCommandStreamingWithTimeout(program, args, stdin, timeout_ms)`
+   - 成功 → `Some(ProcessResult)`
+   - 超时 → `None`，进程被 `libc::kill` 终止
+
+2. **任务超时**（外部）：`awaitTaskWithTimeout(task, timeout_ms)`
+   - 适用于任何 Task（Command 或 Pipeline）
+   - 当前是**阻塞式**超时（没有取消机制）
+
+---
+
+## 8. 当前缺口与后续工作 / Gaps & Future Work
+
+### 8.1 语义缺口
+
+| 缺口 | 影响 | 优先级 |
+|------|------|--------|
+| EffectEval 的 `awaitTaskTimeout` 规则是框架占位 | Task 超时的形式语义未定义 | 中 |
+| `BigStep.matchOn` 缺少 fallthrough 规则 | 多臂模式匹配中非第一臂无法在 Lean 中直接证明 | 高 |
+| `big_step_deterministic` 引理未证明 | env_preservation 不能直接使用给定求值结果 | 中 |
+
+### 8.2 功能缺口
+
+| 缺口 | 影响 | 优先级 |
+|------|------|--------|
+| 流式处理没有 cancel/poll 模型 | 无法取消长时间运行的流 | 低 |
+| 管道的流式句柄 | 只能阻塞式消费管道输出 | 中 |
+| `cmd1 |> cmd2` 管道语法 | 目前只能用 `io.pipeline([...])` 构造 | 低 |
+| TTY raw mode | 无法做终端控制 | 低 |
+| 后台调度 / 非阻塞 task runtime | Task 只能阻塞式等待 | 低 |
+
+### 8.3 形式化缺口
+
+| 缺口 | 影响 | 优先级 |
+|------|------|--------|
+| `progress_match` 公理 | 通用模式匹配的类型安全未形式化证明 | 已记录 |
+| `progress_app_general` / `progress_pipe_general` 公理 | 非 lam 应用的类型安全未形式化证明 | 已记录 |
+| Refinement bridge 缺少 Rust 转录正确性证明 | 需要外部工具（coq-of-rust / Aeneas） | 长期 |
+
+---
+
+## 9. 对照表 / Cross-Reference
+
+### 9.1 关键文件索引
+
+| 层次 | 文件 | 职责 |
+|------|------|------|
+| 效果判定（Rust） | `crates/neve-common/src/lib.rs` | `is_effectful_builtin()` — 单一权威来源 |
+| 进程执行（Rust） | `crates/neve-std/src/io/mod.rs` | 所有 `builtin_exec_*` + 安全检查 |
+| 文件 I/O（Rust） | `crates/neve-std/src/io/fs.rs` | `builtin_read_file`, `builtin_write_file` |
+| 求值器接入（Rust） | `crates/neve-eval/src/eval.rs` | builtin 分发 |
+| 纯语义（Lean） | `formal/Neve/Spec/Eval.lean` | `BigStep` — 大步操作语义 |
+| 效果语义（Lean） | `formal/Neve/Spec/Effects.lean` | `EffectEval` — 15 条规则 |
+| 安全证明（Lean） | `formal/Neve/Verify/` | Path, Environ, Limits |
+| 精化桥（Lean） | `formal/Neve/Refinement/` | Rust ↔ Lean 对应 |
+| 类型安全（Lean） | `formal/Neve/Proofs/Safety.lean` | `progress_preservation` + `type_safety` |
+
+### 9.2 安全审计闭合状态
+
+| 审计编号 | 问题 | Rust 修复 | Lean 定理 | 精化桥 |
+|---------|------|----------|----------|--------|
+| H-1 | stdin 无大小限制 | `MAX_STDIN_BYTES` 检查 | `Verify/Limits.lean` | `Refinement/Limits.lean` |
+| H-2 | stdout/stderr 无大小限制 | `MAX_OUTPUT_BYTES` 检查 | `Verify/Limits.lean` | `Refinement/Limits.lean` |
+| M-1 | 路径遍历（`..`） | `resolve_redirect_path` | `Verify/Path.lean` | `Refinement/Path.lean` |
+| M-4 | LD_PRELOAD 注入 | `configured_process_command` | `Verify/Environ.lean` | `Refinement/Environ.lean` |
+
+**全部 4 项安全审计已完成 Rust 修复 + Lean 机器验证 + 精化桥。**
+
+---
+
+## 10. 维护规则 / Maintenance Rules
+
+### 10.1 新增效果 builtin 的检查清单
+
+当新增一个效果 builtin 时，必须：
+
+1. [ ] 在 `neve_common::is_effectful_builtin()` 中注册
+2. [ ] 在 `Spec/Effects.lean` 中添加对应的 `EffectEval` 规则
+3. [ ] 在 Rust 实现中添加安全检查（大小限制、路径安全、环境过滤）
+4. [ ] 在 `Verify/` 中添加安全定理（如果涉及新的安全属性）
+5. [ ] 在 `tests/end_to_end.rs` 中添加端到端测试
+6. [ ] 更新本文档的效果操作清单（第 3 节）
+7. [ ] 更新 `feature-matrix.md` 的功能状态
+
+### 10.2 纯/效果的边界不应被破坏
+
+以下模式是**反模式**，不应出现：
+
+- ❌ 纯函数通过隐藏的全局状态产生副作用
+- ❌ 效果 builtin 被标记为纯（绕过 `--pure` 检查）
+- ❌ Lean 规范缺少对应 Rust 实现的规则
+- ❌ 安全约束被作为"实现细节"而非语义前提
+
+---
+
+## 附录 A：EffectEval 规则完整签名
+
+见 `formal/Neve/Spec/Effects.lean`。每条规则的完整签名包含：
+
+- 求值环境 `env` 和 I/O 状态 `σ`（输入/输出）
+- 参数的纯求值前提（`BigStep` 子推导）
+- 安全约束前提（大小限制）
+- 输出值和新的 I/O 状态
+
+## 附录 B：更新日志
+
+| 日期 | 版本 | 变更 |
+|------|------|------|
+| 2026-05-09 | v1.0 | 初始版本。G4 决策门文档。覆盖 15 条 EffectEval 规则、4 项安全审计、完整的运行时对象模型。 |

@@ -1,0 +1,39 @@
+-- Lists / 列表
+-- Lists are ordered collections of values of the same type.
+
+-- Create lists
+let empty = [];
+let numbers = [1, 2, 3, 4, 5];
+let names = ["alice", "bob", "charlie"];
+
+-- List operations via recursion and match
+let sum = fn(xs) {
+    match xs {
+        [] -> 0,
+        [x, ..rest] -> x + sum(rest)
+    }
+};
+println(sum([1, 2, 3, 4, 5])); -- 15
+
+-- List mapping (via std.list)
+let double = fn(x) { x * 2 };
+let doubled = list.map(double, [1, 2, 3]);
+println(doubled);        -- [2, 4, 6]
+
+-- List filtering
+let isEven = fn(x) { x % 2 == 0 };
+let evens = list.filter(isEven, [1, 2, 3, 4, 5, 6]);
+println(evens);          -- [2, 4, 6]
+
+-- List length
+println(list.len([1, 2, 3])); -- 3
+
+-- List with match patterns
+let first = fn(xs) {
+    match xs {
+        [] -> "empty",
+        [x, ..] -> toString(x)
+    }
+};
+println(first([10, 20, 30])); -- 10
+println(first([]));            -- empty

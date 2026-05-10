@@ -114,10 +114,20 @@ inductive EffectEval : Env → IOState → Expr → Value → IOState → Prop w
         v
         σ'
 
-  | awaitTaskTimeout (env : Env) (σ : IOState) (body : Expr) (taskEnv : Env) (timeout : Int) :
+  | awaitTaskTimeout (env : Env) (σ σ' : IOState) (body : Expr) (taskEnv : Env) (timeout : Int) (v : Value) :
+      BigStep env (Expr.lit_int timeout) (Value.int timeout) →
+      EffectEval taskEnv σ body v σ' →
       EffectEval env σ
         (Expr.builtin "io.awaitTaskWithTimeout" [body, Expr.lit_int timeout])
-        Value.unit
+        (Value.someVal v)
+        σ'
+
+  -- === io.awaitTaskWithTimeout (timeout path) ===
+  | awaitTaskTimeoutExpired (env : Env) (σ : IOState) (body : Expr) (timeout : Int) :
+      BigStep env (Expr.lit_int timeout) (Value.int timeout) →
+      EffectEval env σ
+        (Expr.builtin "io.awaitTaskWithTimeout" [body, Expr.lit_int timeout])
+        Value.noneVal
         σ
 
   -- ================================================================
@@ -267,6 +277,87 @@ inductive EffectEval : Env → IOState → Expr → Value → IOState → Prop w
       EffectEval env σ
         (Expr.builtin "io.writeFile" [path_arg, content_arg])
         Value.unit
+        σ
+
+  -- === Bytes I/O ===
+
+  | readFileBytes (env : Env) (σ : IOState) (path_arg : Expr) (path : String) (data : List Nat) :
+      BigStep env path_arg (string path) →
+      -- data = bytesOfFile(path) (abstract axiom)
+      EffectEval env σ
+        (Expr.builtin "io.readFileBytes" [path_arg])
+        (bytes data)
+        σ
+
+  | writeFileBytes (env : Env) (σ : IOState) (path_arg : Expr) (data_arg : Expr) (path : String) (data : List Nat) :
+      BigStep env path_arg (string path) →
+      BigStep env data_arg (bytes data) →
+      EffectEval env σ
+        (Expr.builtin "io.writeFileBytes" [path_arg, data_arg])
+        Value.unit
+        σ
+
+  -- ================================================================
+  -- Retry / Ensure (Phase 4 shell capability)
+  -- ================================================================
+
+  -- === io.retry ===
+  /--
+    Retry an effectful function up to maxAttempts times with exponential backoff.
+    Returns the first successful result, or an error after all attempts fail.
+  -/
+  | retry_success (env : Env) (σ σ' : IOState) (func_arg : Expr) (max_arg : Expr) (backoff_arg : Expr)
+      (body : Expr) (taskEnv : Env) (v : Value) (n : Int) (ms : Int) :
+      BigStep env max_arg (Value.int n) →
+      BigStep env backoff_arg (Value.int ms) →
+      -- The function (a closure) is evaluated in its captured environment
+      BigStep env func_arg (Value.closure "_retry" body taskEnv) →
+      -- First attempt succeeds
+      EffectEval taskEnv σ body v σ' →
+      EffectEval env σ
+        (Expr.builtin "io.retry" [func_arg, max_arg, backoff_arg])
+        v
+        σ'
+
+  | retry_failure (env : Env) (σ : IOState) (func_arg : Expr) (max_arg : Expr) (backoff_arg : Expr)
+      (body : Expr) (taskEnv : Env) (n : Int) (ms : Int) :
+      BigStep env max_arg (Value.int n) →
+      BigStep env backoff_arg (Value.int ms) →
+      BigStep env func_arg (Value.closure "_retry" body taskEnv) →
+      -- All attempts fail (abstracted: the evaluator loops n times)
+      -- Returns unit to indicate exhaustion
+      EffectEval env σ
+        (Expr.builtin "io.retry" [func_arg, max_arg, backoff_arg])
+        Value.unit
+        σ
+
+  -- === io.ensure ===
+  /--
+    Repeatedly check a condition with a timeout.
+    Returns true if the condition becomes true within the timeout.
+    Returns false if timeout expires.
+  -/
+  | ensure_success (env : Env) (σ σ' : IOState) (check_arg : Expr) (timeout_arg : Expr) (interval_arg : Expr)
+      (body : Expr) (taskEnv : Env) (timeout : Int) (interval : Int) :
+      BigStep env timeout_arg (Value.int timeout) →
+      BigStep env interval_arg (Value.int interval) →
+      BigStep env check_arg (Value.closure "_ensure" body taskEnv) →
+      -- Check succeeds (body evaluates to true)
+      EffectEval taskEnv σ body (Value.bool true) σ' →
+      EffectEval env σ
+        (Expr.builtin "io.ensure" [check_arg, timeout_arg, interval_arg])
+        (Value.bool true)
+        σ'
+
+  | ensure_timeout (env : Env) (σ : IOState) (check_arg : Expr) (timeout_arg : Expr) (interval_arg : Expr)
+      (body : Expr) (taskEnv : Env) (timeout : Int) (interval : Int) :
+      BigStep env timeout_arg (Value.int timeout) →
+      BigStep env interval_arg (Value.int interval) →
+      BigStep env check_arg (Value.closure "_ensure" body taskEnv) →
+      -- Timeout expires before check succeeds
+      EffectEval env σ
+        (Expr.builtin "io.ensure" [check_arg, timeout_arg, interval_arg])
+        (Value.bool false)
         σ
 
 end Neve

@@ -1,0 +1,31 @@
+-- Booleans / 布尔运算
+-- Neve supports boolean logic with && (and), || (or), == (equality)
+
+-- Boolean literals
+println(true);           -- true
+println(false);          -- false
+
+-- Equality
+println(1 == 1);         -- true
+println(1 == 2);         -- false
+println(true == true);   -- true
+
+-- Logical AND: true only if both sides are true
+println(true && true);   -- true
+println(true && false);  -- false
+println(false && true);  -- false
+
+-- Logical OR: true if either side is true
+println(false || true);  -- true
+println(true || false);  -- true
+println(false || false); -- false
+
+-- Short-circuit evaluation
+-- && stops at false, || stops at true
+println(false && (1 == 0)); -- false (right side never evaluated)
+println(true || (1 == 0));  -- true  (right side never evaluated)
+
+-- Combine with arithmetic
+let age = 25;
+let hasLicense = true;
+println((age >= 18) && hasLicense); -- true
