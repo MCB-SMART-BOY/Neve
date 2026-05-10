@@ -86,10 +86,17 @@ def run_rust(neve_source):
     tmp = os.path.join(NEVE_DIR, "tmp_gen_diff.neve")
     with open(tmp, "w") as f:
         f.write(neve_source)
-    result = subprocess.run(
-        ["cargo", "run", "-q", "-p", "neve", "--", "run", tmp],
-        capture_output=True, text=True, cwd=NEVE_DIR, timeout=30
-    )
+    neve_bin = os.path.join(NEVE_DIR, "target", "release", "neve")
+    if os.path.exists(neve_bin):
+        result = subprocess.run(
+            [neve_bin, "run", tmp],
+            capture_output=True, text=True, cwd=NEVE_DIR, timeout=30
+        )
+    else:
+        result = subprocess.run(
+            ["cargo", "run", "-q", "-p", "neve", "--", "run", tmp],
+            capture_output=True, text=True, cwd=NEVE_DIR, timeout=30
+        )
     os.remove(tmp)
     return result.stdout.strip()
 

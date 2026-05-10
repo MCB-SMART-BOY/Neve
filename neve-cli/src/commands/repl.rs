@@ -4077,8 +4077,14 @@ mod tests {
         // Selective import from namespaced module — dotted access math.add is
         // TODO: namespace-qualified dotted access (math.add) not yet resolved for
         // project-local modules; selective import is the working path.
-        evaluate_repl_input("import math (add);", true, &context, &mut runtime, &mut semantic)
-            .expect("selective import should evaluate");
+        evaluate_repl_input(
+            "import math (add);",
+            true,
+            &context,
+            &mut runtime,
+            &mut semantic,
+        )
+        .expect("selective import should evaluate");
 
         let expr = FrontendSession::prepare_repl_source("add(20, 22)");
         let value = evaluate_repl_input(

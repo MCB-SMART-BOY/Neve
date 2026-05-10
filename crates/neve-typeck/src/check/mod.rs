@@ -7,8 +7,8 @@
 //! 采用带有 Hindley-Milner 推断的双向类型检查。
 
 use crate::builtin_types::{
-    builtin_list, builtin_option, builtin_path, builtin_result,
-    builtin_pipeline, is_builtin_option_type, is_builtin_result_type, is_command_type,
+    builtin_list, builtin_option, builtin_path, builtin_pipeline, builtin_result,
+    is_builtin_option_type, is_builtin_result_type, is_command_type,
 };
 use crate::errors::{
     TypeMismatchError, format_type, missing_assoc_type, missing_method, non_exhaustive_match,
@@ -3139,12 +3139,14 @@ impl TypeChecker {
             // - Otherwise, function application: a |> f  =>  f(a)
             BinOp::Pipe => {
                 let left_kind = self.apply(&left_ty);
-                let is_cmd = matches!(&left_kind.kind, TyKind::Named(def_id, _) if is_command_type(*def_id));
+                let is_cmd =
+                    matches!(&left_kind.kind, TyKind::Named(def_id, _) if is_command_type(*def_id));
                 let is_pipe = matches!(&left_kind.kind, TyKind::Named(def_id, _) if def_id.0 == crate::builtin_types::PIPELINE_TYPE_ID.0);
                 if is_cmd || is_pipe {
                     // Command/Pipeline pipe: cmd1 |> cmd2 => Pipeline (or pipe |> cmd)
                     let right_kind = self.apply(&right_ty);
-                    if !matches!(&right_kind.kind, TyKind::Named(def_id, _) if is_command_type(*def_id)) {
+                    if !matches!(&right_kind.kind, TyKind::Named(def_id, _) if is_command_type(*def_id))
+                    {
                         self.error(right.span, "pipe: right side must be a Command".to_string());
                     }
                     builtin_pipeline(span)

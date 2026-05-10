@@ -499,13 +499,19 @@ pub(crate) fn analyze_match(
                 }
                 let (arm_empty, arm_nonempty) = list_pattern_coverage(&arm.pattern);
                 let arm_can_match = arm_empty || arm_nonempty;
-                if arm_can_match && (!arm_empty || covers_empty) && (!arm_nonempty || covers_nonempty) {
+                if arm_can_match
+                    && (!arm_empty || covers_empty)
+                    && (!arm_nonempty || covers_nonempty)
+                {
                     let witness = earliest_span(
                         [
                             arm_empty.then_some(empty_witness).flatten(),
                             arm_nonempty.then_some(nonempty_witness).flatten(),
-                        ].into_iter().flatten(),
-                    ).unwrap_or(arm.span);
+                        ]
+                        .into_iter()
+                        .flatten(),
+                    )
+                    .unwrap_or(arm.span);
                     result.push_redundant(witness, RedundancyReason::SubsetShadowed);
                     continue;
                 }
@@ -529,11 +535,15 @@ pub(crate) fn analyze_match(
                 }
             }
             if !covers_empty && !covers_nonempty {
-                result.missing_patterns.push("[..] or [] (any list)".to_string());
+                result
+                    .missing_patterns
+                    .push("[..] or [] (any list)".to_string());
             } else if !covers_empty {
                 result.missing_patterns.push("[] (empty list)".to_string());
             } else if !covers_nonempty {
-                result.missing_patterns.push("[..] (non-empty list)".to_string());
+                result
+                    .missing_patterns
+                    .push("[..] (non-empty list)".to_string());
             }
         }
 
@@ -561,7 +571,8 @@ pub(crate) fn analyze_match(
 
                 for arm in arms {
                     if let Some(previous_span) = result.coverage_complete_at {
-                        result.push_redundant(previous_span, RedundancyReason::CoveredByPreviousArms);
+                        result
+                            .push_redundant(previous_span, RedundancyReason::CoveredByPreviousArms);
                         continue;
                     }
                     if arm.guard.is_some() {
@@ -577,9 +588,14 @@ pub(crate) fn analyze_match(
                         continue;
                     }
                     let arm_covered = tuple_pattern_coverage(&arm.pattern, arity);
-                    let all_redundant = arm_covered.iter().enumerate().all(|(i, &c)| !c || covered[i]);
+                    let all_redundant = arm_covered
+                        .iter()
+                        .enumerate()
+                        .all(|(i, &c)| !c || covered[i]);
                     if all_redundant && arm_covered.iter().any(|&c| c) {
-                        let witness = witnesses.iter().enumerate()
+                        let witness = witnesses
+                            .iter()
+                            .enumerate()
                             .filter_map(|(i, w)| arm_covered[i].then_some(*w).flatten())
                             .min_by_key(|s| (s.start, s.end))
                             .unwrap_or(arm.span);
@@ -599,7 +615,9 @@ pub(crate) fn analyze_match(
                 }
                 for i in 0..arity {
                     if !covered[i] {
-                        result.missing_patterns.push(format!("tuple element {}", i + 1));
+                        result
+                            .missing_patterns
+                            .push(format!("tuple element {}", i + 1));
                     }
                 }
             }
@@ -639,9 +657,7 @@ fn list_pattern_coverage(pattern: &Pattern) -> (bool, bool) {
     match &pattern.kind {
         PatternKind::Wildcard | PatternKind::Var(_, _) => (true, true),
         PatternKind::Binding(_, _, inner) => list_pattern_coverage(inner),
-        PatternKind::List(elements) => {
-            (elements.is_empty(), !elements.is_empty())
-        }
+        PatternKind::List(elements) => (elements.is_empty(), !elements.is_empty()),
         PatternKind::ListRest { init, rest, tail } => {
             // [..] with no init/tail and no bound rest → irrefutable
             if init.is_empty() && tail.is_empty() && rest.is_none() {
@@ -736,7 +752,9 @@ fn pattern_is_irrefutable_for(
         }
         PatternKind::ListRest { init, rest, tail } => {
             // [..] (no init, no tail, no bound rest) is irrefutable for list types
-            init.is_empty() && tail.is_empty() && rest.is_none()
+            init.is_empty()
+                && tail.is_empty()
+                && rest.is_none()
                 && matches!(expected.kind, TyKind::Named(def_id, _) if def_id.0 == LIST_TYPE_ID.0)
         }
         PatternKind::Or(patterns) => {

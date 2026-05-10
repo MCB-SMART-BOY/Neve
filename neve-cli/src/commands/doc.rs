@@ -61,7 +61,11 @@ const TOPICS: &[(&str, &str, &str)] = &[
         DOC_BOOTSTRAP,
         "Bootstrap examples / bootstrap 示例",
     ),
-    ("roadmap", DOC_LANGUAGE_ROADMAP, "Language roadmap / 语言路线图"),
+    (
+        "roadmap",
+        DOC_LANGUAGE_ROADMAP,
+        "Language roadmap / 语言路线图",
+    ),
     (
         "language-roadmap",
         DOC_LANGUAGE_ROADMAP,

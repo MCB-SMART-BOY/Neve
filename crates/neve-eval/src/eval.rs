@@ -1034,26 +1034,22 @@ impl Evaluator {
                 match (&left, &right) {
                     (Value::Command(c1), Value::Command(c2)) => {
                         Ok(Value::Pipeline(std::rc::Rc::new(
-                            crate::value::PipelineValue::new(vec![c1.clone(), c2.clone()])
+                            crate::value::PipelineValue::new(vec![c1.clone(), c2.clone()]),
                         )))
                     }
                     (Value::Pipeline(pipe), Value::Command(cmd)) => {
                         let mut commands = pipe.commands().to_vec();
                         commands.push(cmd.clone());
                         Ok(Value::Pipeline(std::rc::Rc::new(
-                            crate::value::PipelineValue::new(commands)
+                            crate::value::PipelineValue::new(commands),
                         )))
                     }
-                    (Value::Command(_), _) => {
-                        Err(EvalError::TypeError(
-                            "command pipe: right side must be a Command".to_string()
-                        ))
-                    }
-                    (Value::Pipeline(_), _) => {
-                        Err(EvalError::TypeError(
-                            "pipeline pipe: right side must be a Command".to_string()
-                        ))
-                    }
+                    (Value::Command(_), _) => Err(EvalError::TypeError(
+                        "command pipe: right side must be a Command".to_string(),
+                    )),
+                    (Value::Pipeline(_), _) => Err(EvalError::TypeError(
+                        "pipeline pipe: right side must be a Command".to_string(),
+                    )),
                     _ => self.apply(right, vec![left]),
                 }
             }

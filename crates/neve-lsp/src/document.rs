@@ -9,8 +9,7 @@ use std::collections::HashMap;
 use neve_common::Span;
 use neve_frontend::{
     Diagnostic, Module, ModuleSemantics, SourceFile, analyze_source, format_type_in_module,
-    format_type_with_names_map,
-    format_type_use_in_module,
+    format_type_use_in_module, format_type_with_names_map,
 };
 use neve_hir::{
     Expr as HirExpr, ExprKind as HirExprKind, ItemKind as HirItemKind, LocalId,
@@ -194,10 +193,8 @@ fn build_hover_maps(
                 if let AstPatternKind::Var(ident) = &def.pattern.kind
                     && let Some(ty) = semantics.global_type(hir_item.id)
                 {
-                    definition_hovers.insert(
-                        ident.span,
-                        format!("let {}: {}", ident.name, fmt_ty(ty)),
-                    );
+                    definition_hovers
+                        .insert(ident.span, format!("let {}: {}", ident.name, fmt_ty(ty)));
                 }
                 collect_expr_hovers(
                     &def.value,
@@ -291,11 +288,7 @@ fn build_hover_maps(
                     if let Some(ty) = semantics.global_type(hir_item.id) {
                         definition_hovers.insert(
                             ast_item.name.span,
-                            format!(
-                                "fn {}: {}",
-                                ast_item.name.name,
-                                fmt_ty(ty)
-                            ),
+                            format!("fn {}: {}", ast_item.name.name, fmt_ty(ty)),
                         );
                     }
                     collect_param_hovers(

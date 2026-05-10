@@ -8,8 +8,13 @@ NEVE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def run_rust(source, timeout=30):
     tmp = os.path.join(NEVE_DIR, "tmp_bug.neve")
     with open(tmp, "w") as f: f.write(source)
-    r = subprocess.run(["cargo", "run", "-q", "-p", "neve", "--", "run", tmp],
-        capture_output=True, text=True, cwd=NEVE_DIR, timeout=timeout)
+    neve_bin = os.path.join(NEVE_DIR, "target", "release", "neve")
+    if os.path.exists(neve_bin):
+        r = subprocess.run([neve_bin, "run", tmp],
+            capture_output=True, text=True, cwd=NEVE_DIR, timeout=timeout)
+    else:
+        r = subprocess.run(["cargo", "run", "-q", "-p", "neve", "--", "run", tmp],
+            capture_output=True, text=True, cwd=NEVE_DIR, timeout=timeout)
     os.remove(tmp)
     return r.stdout.strip(), r.stderr.strip(), r.returncode
 

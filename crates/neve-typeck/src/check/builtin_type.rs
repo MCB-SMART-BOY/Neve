@@ -922,7 +922,10 @@ impl TypeChecker {
                 span,
             ),
             "io.setEnv" => builtin_fn(
-                vec![builtin_ty(TyKind::String, span), builtin_ty(TyKind::String, span)],
+                vec![
+                    builtin_ty(TyKind::String, span),
+                    builtin_ty(TyKind::String, span),
+                ],
                 builtin_ty(TyKind::Unit, span),
                 span,
             ),
@@ -1292,7 +1295,11 @@ impl TypeChecker {
                 span,
             ),
             "io.chown" => builtin_fn(
-                vec![builtin_path(span), builtin_ty(TyKind::Int, span), builtin_ty(TyKind::Int, span)],
+                vec![
+                    builtin_path(span),
+                    builtin_ty(TyKind::Int, span),
+                    builtin_ty(TyKind::Int, span),
+                ],
                 builtin_ty(TyKind::Unit, span),
                 span,
             ),
@@ -1301,11 +1308,7 @@ impl TypeChecker {
                 builtin_ty(TyKind::Unit, span),
                 span,
             ),
-            "io.readlink" => builtin_fn(
-                vec![builtin_path(span)],
-                builtin_path(span),
-                span,
-            ),
+            "io.readlink" => builtin_fn(vec![builtin_path(span)], builtin_path(span), span),
             "io.symlink" => builtin_fn(
                 vec![builtin_path(span), builtin_path(span)],
                 builtin_ty(TyKind::Unit, span),
@@ -1325,10 +1328,13 @@ impl TypeChecker {
             }
             "io.args" => builtin_fn(
                 Vec::new(),
-                builtin_ty(TyKind::Tuple(vec![
-                    builtin_list(builtin_ty(TyKind::String, span), span),
-                    builtin_record(Vec::new(), span),
-                ]), span),
+                builtin_ty(
+                    TyKind::Tuple(vec![
+                        builtin_list(builtin_ty(TyKind::String, span), span),
+                        builtin_record(Vec::new(), span),
+                    ]),
+                    span,
+                ),
                 span,
             ),
             "io.isTTY" => builtin_fn(
@@ -1338,10 +1344,16 @@ impl TypeChecker {
             ),
             "io.terminalSize" => builtin_fn(
                 Vec::new(),
-                builtin_option(builtin_record(vec![
-                    ("rows", builtin_ty(TyKind::Int, span)),
-                    ("cols", builtin_ty(TyKind::Int, span)),
-                ], span), span),
+                builtin_option(
+                    builtin_record(
+                        vec![
+                            ("rows", builtin_ty(TyKind::Int, span)),
+                            ("cols", builtin_ty(TyKind::Int, span)),
+                        ],
+                        span,
+                    ),
+                    span,
+                ),
                 span,
             ),
             "io.spawnWithTimeout" => builtin_fn(

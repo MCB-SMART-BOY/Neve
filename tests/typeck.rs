@@ -22,7 +22,10 @@ fn check_source(source: &str) -> Vec<Diagnostic> {
 
 fn check_no_errors(source: &str) {
     let diags = check_source(source);
-    let errors: Vec<_> = diags.iter().filter(|d| d.severity == Severity::Error).collect();
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .collect();
     assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
 }
 

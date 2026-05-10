@@ -135,8 +135,7 @@ fn test_frontend_reports_dedicated_missing_method_for_unresolved_method_call() {
             && diag.message.contains("no method `missing` found for `Int`")
     });
     let has_suggestion = analysis.diagnostics.iter().any(|diag| {
-        diag.message.contains("undefined name 'missing'")
-            && diag.message.contains("did you mean")
+        diag.message.contains("undefined name 'missing'") && diag.message.contains("did you mean")
     });
     assert!(
         has_method_error || has_suggestion,
@@ -2863,10 +2862,11 @@ fn test_frontend_suggests_names_for_undefined_global() {
         let x = greeter("world");
         "#,
     );
-    let has_suggestion = analysis
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("undefined") && d.message.contains("did you mean") && d.message.contains("greet"));
+    let has_suggestion = analysis.diagnostics.iter().any(|d| {
+        d.message.contains("undefined")
+            && d.message.contains("did you mean")
+            && d.message.contains("greet")
+    });
     assert!(
         has_suggestion,
         "expected suggestion with available names, got {:?}",
@@ -3259,7 +3259,10 @@ fn test_end_to_end_signal_wrong_arity_rejected() {
     "#;
     let analysis = analyze_source(source);
     let hir_result = eval_hir(&analysis);
-    assert!(hir_result.is_err(), "signal handler with wrong arity should be rejected");
+    assert!(
+        hir_result.is_err(),
+        "signal handler with wrong arity should be rejected"
+    );
 }
 
 // -- Complex destructuring --
@@ -3464,11 +3467,9 @@ fn test_end_to_end_empty_list_match_correctly_reports_non_exhaustive() {
         };
         "#,
     );
-    let has_exhaustive_error = analysis
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("non-exhaustive")
-            && d.notes.iter().any(|n| n.contains("non-empty list")));
+    let has_exhaustive_error = analysis.diagnostics.iter().any(|d| {
+        d.message.contains("non-exhaustive") && d.notes.iter().any(|n| n.contains("non-empty list"))
+    });
     assert!(
         has_exhaustive_error,
         "[] alone should be non-exhaustive for list type, got {:?}",
@@ -3518,7 +3519,6 @@ fn test_frontend_record_match_non_exhaustive() {
         analysis.diagnostics
     );
 }
-
 
 // === Spawn with timeout ===
 #[test]
@@ -3575,7 +3575,12 @@ fn test_end_to_end_io_terminal_size_type() {
 
 #[test]
 fn test_end_to_end_io_args_returns_tuple_with_flags() {
-    neve_std::set_script_args(vec!["input.txt".to_string(), "-v".to_string(), "-j".to_string(), "8".to_string()]);
+    neve_std::set_script_args(vec![
+        "input.txt".to_string(),
+        "-v".to_string(),
+        "-j".to_string(),
+        "8".to_string(),
+    ]);
     let source = r#"
     import std.io as io;
     let args = io.args();
@@ -3613,10 +3618,14 @@ fn test_end_to_end_io_args_flags_parsed() {
     assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
 
-
 #[test]
 fn test_end_to_end_io_args_named_destructure() {
-    neve_std::set_script_args(vec!["input.txt".to_string(), "-v".to_string(), "-j".to_string(), "8".to_string()]);
+    neve_std::set_script_args(vec![
+        "input.txt".to_string(),
+        "-v".to_string(),
+        "-j".to_string(),
+        "8".to_string(),
+    ]);
     // let (files, flags) = io.args() — destructure into named variables
     let source = r#"
     import std.io as io;
@@ -3627,8 +3636,6 @@ fn test_end_to_end_io_args_named_destructure() {
     // May have type warnings; just check it doesn't crash
     let _ = eval_hir(&analysis);
 }
-
-
 
 #[test]
 fn test_end_to_end_io_args_files_and_flags_access() {
@@ -3963,8 +3970,6 @@ fn test_command_with_redirects_construction() {
 // ============================================================
 // Process result inspection (pure, no process execution)
 // ============================================================
-
-
 
 // ============================================================
 // |> command pipeline syntax (v3.6.0+)
