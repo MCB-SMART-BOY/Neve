@@ -1309,6 +1309,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        #[cfg(unix)]
         (
             "io.tempDir",
             Value::Builtin(BuiltinFn {
@@ -1318,21 +1319,15 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     let dir = tempfile::tempdir().map_err(|e| format!("io.tempDir: {e}"))?;
                     let dir_path = dir.into_path();
                     let path_value = Value::Path(Rc::new(dir_path.clone()));
-                    // Pass the path to the callback
                     match &args[0] {
                         Value::BuiltinFn(_, _) | Value::Builtin(_) | Value::Closure { .. } => {
-                            // Call the callback with the path, then clean up
                             let result = match &args[0] {
                                 Value::BuiltinFn(name, func) => func(vec![path_value.clone()])
                                     .map_err(|e| format!("io.tempDir callback: {e}")),
                                 _ => Err("io.tempDir: callback must be a function".to_string()),
                             };
-                            // Clean up temp dir regardless of callback result
                             let _ = std::fs::remove_dir_all(&dir_path);
-                            result.map(|v| {
-                                // Return callback result as Option
-                                Value::Some(Box::new(v))
-                            })
+                            result.map(|v| Value::Some(Box::new(v)))
                         }
                         _ => {
                             let _ = std::fs::remove_dir_all(&dir_path);
