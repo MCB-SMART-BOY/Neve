@@ -112,6 +112,16 @@ inductive BigStep : Env → Expr → Value → Prop where
       BigStep env l (int n) → BigStep env r (int m) →
       BigStep env (binop BinOp.Mod l r) (int (n % m))
 
+  -- Division by zero: returns 0 (safe default, type safety preserved)
+  | binop_div_zero (env : Env) (l r : Expr) (n : Int) :
+      BigStep env l (int n) → BigStep env r (int 0) →
+      BigStep env (binop BinOp.Div l r) (int 0)
+
+  -- Modulo by zero: returns 0 (safe default, type safety preserved)
+  | binop_mod_zero (env : Env) (l r : Expr) (n : Int) :
+      BigStep env l (int n) → BigStep env r (int 0) →
+      BigStep env (binop BinOp.Mod l r) (int 0)
+
   -- BinOp: Equality (polymorphic - works for any value type)
   | binop_eq_true (env : Env) (l r : Expr) (v₁ v₂ : Value) :
       BigStep env l v₁ → BigStep env r v₂ → v₁ = v₂ →
@@ -161,6 +171,15 @@ inductive BigStep : Env → Expr → Value → Prop where
       (p, e) :: rest = arms →
       Matches p vscrut binds →
       BigStep (binds ++ env) e vres →
+      BigStep env (matchOn scrutinee arms) vres
+
+  -- Match fallthrough: first arm does NOT match, skip to remaining arms
+  | matchOn_fallthrough (env : Env) (scrutinee : Expr) (arms : List (Pattern × Expr))
+             (p : Pattern) (e : Expr) (rest : List (Pattern × Expr)) (vscrut vres : Value) :
+      BigStep env scrutinee vscrut →
+      (p, e) :: rest = arms →
+      (∀ binds, ¬ Matches p vscrut binds) →
+      BigStep env (matchOn scrutinee rest) vres →
       BigStep env (matchOn scrutinee arms) vres
 
 end Neve

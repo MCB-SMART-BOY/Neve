@@ -2,70 +2,87 @@
 
 用 [Lean 4](https://lean-lang.org/) 对 Neve 语言核心语义的形式化验证。
 
-## 目录
+## 目录结构
 
 ```
 formal/
+├── Neve.lean                   — 主模块（导入所有子模块）
 ├── Neve/
-│   ├── Syntax.lean    — 核心语法（类型、值、表达式、模式、运算）
-│   ├── Types.lean     — 类型检查规则（Γ ⊢ e : τ）
-│   ├── Eval.lean      — 操作语义（大步骤：env ⊢ e ⇓ v）
-│   └── Safety.lean    — 类型安全定理
-│                         · Progress:  类型正确的表达式不是 stuck
-│                         · Preservation: 求值保持类型
-├── lakefile.lean      — Lean 项目配置
-└── README.md          — 本文件
+│   ├── Spec/
+│   │   ├── Syntax.lean         — 核心语法（类型、值、表达式、模式、BinOp、Effect）
+│   │   ├── Typing.lean v4      — 类型检查规则（12 条 BinOp 全覆盖）
+│   │   ├── Eval.lean v2        — 大步操作语义（27 条规则，含 matchOn_fallthrough）
+│   │   └── Effects.lean v4     — 效果求值语义（19 条规则，含 Bytes I/O）
+│   ├── Proofs/
+│   │   ├── Values.lean v4      — ValueTyping + EnvMatches（谓词参数化）
+│   │   ├── Context.lean v4     — env_matches_lookup 引理
+│   │   ├── Safety.lean v18     — 类型安全（13 个已验证 case）
+│   │   └── SafetyLemmas.lean   — 已验证的模式匹配引理（5 个）
+│   ├── Verify/
+│   │   ├── Path.lean           — 路径遍历安全（M-1）
+│   │   ├── Environ.lean        — 环境变量过滤（M-4）
+│   │   └── Limits.lean         — 缓冲区大小限制（H-1, H-2）
+│   ├── Refinement/
+│   │   ├── Types.lean          — Rust-Lean 精化关系
+│   │   ├── Path.lean           — 路径解析精化（M-1）
+│   │   ├── Environ.lean        — 环境过滤精化（M-4）
+│   │   └── Limits.lean         — 大小限制精化（H-1, H-2）
+│   └── Tests/
+│       └── Eval.lean           — 可执行规范求值器（11 个自测试）
+├── lakefile.lean               — Lean 项目配置
+├── lake-manifest.json          — 依赖清单
+└── README.md                   — 本文件
 ```
 
-## 如何使用
+## 构建
 
 ```bash
 # 安装 Lean 4
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
 
-# 构建
+# 构建（19 个模块，lake build 全部通过）
 cd formal
 lake build
-
-# 交互式证明
-lake exe lean --run
 ```
 
-## 当前状态
+## 当前状态（v4）
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| Syntax | ✅ 完成 | 完整的 Neve 核心语法 |
-| Types | ✅ 完成 | 14 条类型规则（λ 演算 + 管道 + 部分内置） |
-| Eval | ✅ 完成 | 10 条求值规则（大步骤语义） |
-| Safety | ⚠️ 框架 | 定理已声明，证明待完成（当前 `sorry`） |
+| 层次 | 模块数 | 状态 | 说明 |
+|------|--------|------|------|
+| Spec（规范） | 4 | ✅ | Syntax, Typing v4, Eval v2, Effects v4 |
+| Proofs（证明） | 4 | ✅ | Values, Context, Safety v18, SafetyLemmas |
+| Verify（安全） | 3 | ✅ | Path (M-1), Environ (M-4), Limits (H-1/H-2) |
+| Refinement（精化） | 4 | ✅ | Types, Path, Environ, Limits |
+| Tests（测试） | 1 | ✅ | 可执行规范求值器 |
+| **合计** | **19** | ✅ | `lake build` 全部通过 |
 
 ## 形式化范围
 
-### 已验证
-- 基本类型系统：`Int`, `Bool`, `String`, `Unit`
-- 函数类型：`τ₁ → τ₂`
-- λ 演算：变量、抽象、应用
-- `let` 绑定
-- 二元运算：`+`, `==`, `&&`
-- 管道 `|>`
+### 已验证（机器检查）
+- 基本类型：Int, Bool, String, Unit, Float, Char, **Bytes**
+- 函数类型：Fn(param)(ret)(effect)
+- λ 演算：变量、抽象、应用（lam 情况）
+- let 绑定
+- 二元运算：**12/12 BinOp 全覆盖**（+ - * / % == && || |>）
+- 管道 |> （lam 情况）
+- 模式匹配：通配符、字面量（int/bool）、布尔全覆盖（两臂 + fallthrough）
+- 效果系统：**19 条 EffectEval 规则**（阻塞、流式、超时、Bytes I/O）
+- 类型安全定理：type_safety（空上下文，13 个已验证 case）
+- 安全审计 4 项全部 Lean 验证：H-1, H-2, M-1, M-4
 
-### 未涉及
-- I/O 效果系统（`effect`）
-- 模式匹配
-- 记录 / 列表 / 元组类型
-- 泛型
-- 内置函数（`io.*`）
+### 已知限制
+- app/pipe 非 lam 情况：需良基递归（已文档化）
+- 通用 matchOn：受 Lean 4.29 mutual inductive 限制
+- 无构造子模式（Some/None, Ok/Err）：Pattern 类型简化
 
-## 与 Rust 实现的关系
+## 与 Rust 的对照
 
-这个形式化是 Neve 语言规范的数学定义。Rust 实现（`crates/`）应该符合这里的类型规则和求值规则。
-
-- `formal/Neve/Types.lean` 对应 `crates/neve-typeck/`
-- `formal/Neve/Eval.lean` 对应 `crates/neve-eval/`
-- `formal/Neve/Syntax.lean` 对应 `crates/neve-hir/`
-
-## 参考文献
-
-- [Types and Programming Languages](https://www.cis.upenn.edu/~bcpierce/tapl/) — Benjamin Pierce
-- [Software Foundations](https://softwarefoundations.cis.upenn.edu/) — 类型安全证明的标准写法
+| Lean 模块 | Rust 对应 | 精化桥 |
+|-----------|----------|--------|
+| Spec/Syntax.lean | crates/neve-hir/ | — |
+| Spec/Typing.lean | crates/neve-typeck/ | — |
+| Spec/Eval.lean | crates/neve-eval/ | — |
+| Spec/Effects.lean | crates/neve-std/src/io/ | — |
+| Verify/Path.lean | resolve_redirect_path | Refinement/Path.lean |
+| Verify/Environ.lean | configured_process_command | Refinement/Environ.lean |
+| Verify/Limits.lean | MAX_*_BYTES checks | Refinement/Limits.lean |

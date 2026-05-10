@@ -1,0 +1,8 @@
+import std;
+
+let nums = std.list.range(1, 3);
+let total = std.list.len(nums);
+
+let words = ["root", "import"];
+let joined = std.string.join(words, " ");
+let result = #{ total = total, joined = joined };

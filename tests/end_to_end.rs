@@ -3740,3 +3740,260 @@ fn test_end_to_end_io_symlink_type_checks() {
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
     assert_eq!(hir_value, neve_eval::Value::Bool(true));
 }
+
+// ============================================================
+// BinOp coverage (12/12 typing rules proved in Lean v4)
+// ============================================================
+
+#[test]
+fn test_binop_sub_negative_result() {
+    let source = "let x = 3 - 7;";
+    assert_runtime_parity(source, Value::Int((-4).into()));
+}
+
+#[test]
+fn test_binop_mul_zero() {
+    let source = "let x = 42 * 0;";
+    assert_runtime_parity(source, Value::Int(0.into()));
+}
+
+#[test]
+fn test_binop_div_exact() {
+    let source = "let x = 10 / 2;";
+    assert_runtime_parity(source, Value::Int(5.into()));
+}
+
+#[test]
+fn test_binop_mod_positive() {
+    let source = "let x = 17 % 5;";
+    assert_runtime_parity(source, Value::Int(2.into()));
+}
+
+#[test]
+fn test_binop_or_shortcircuit() {
+    let source = "let x = true || false;";
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_binop_or_both_false() {
+    let source = "let x = false || false;";
+    assert_runtime_parity(source, Value::Bool(false));
+}
+
+// ============================================================
+// Boolean match exhaustiveness (proved in SafetyLemmas.lean)
+// ============================================================
+
+#[test]
+fn test_match_bool_both_arms_true_branch() {
+    let source = r#"
+        let x = match true {
+            true -> "yes",
+            false -> "no",
+        };
+    "#;
+    assert_runtime_parity(source, Value::String("yes".to_string().into()));
+}
+
+#[test]
+fn test_match_bool_both_arms_false_branch() {
+    let source = r#"
+        let x = match false {
+            true -> "yes",
+            false -> "no",
+        };
+    "#;
+    assert_runtime_parity(source, Value::String("no".to_string().into()));
+}
+
+#[test]
+fn test_match_bool_exhaustive_wildcard() {
+    let source = r#"
+        let x = match true {
+            true -> 1,
+            _ -> 0,
+        };
+    "#;
+    assert_runtime_parity(source, Value::Int(1.into()));
+}
+
+// ============================================================
+// Bytes type (formalized in Lean v4: Ty.Bytes + Value.bytes)
+// ============================================================
+
+#[test]
+fn test_bytes_read_type_check() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("bytes-type.neve.bin");
+    std::fs::write(&file_path, [0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
+    let path_str = file_path.to_string_lossy().to_string();
+
+    let source = format!(
+        "import std.io as io; import std.path as path; let bytes = io.readFileBytesPath(path.fromString(\"{}\")); let x = typeOf(bytes) == \"Bytes\";",
+        path_str.replace('\\', "\\\\"),
+    );
+    assert_runtime_parity(&source, Value::Bool(true));
+}
+
+// ============================================================
+// Phase 4: Command / Pipeline construction API
+// Runtime object model tests (pure constructors, no process execution)
+// ============================================================
+
+#[test]
+fn test_command_construction_default() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("echo", ["hello"]);
+        let x = typeOf(cmd) == "Command";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_command_construction_with_config() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.commandWith(#{
+            program = "echo",
+            args = ["hello"],
+            cwd = "/tmp",
+            stdin = "input",
+            env = #{FOO = "bar"},
+        });
+        let x = typeOf(cmd) == "Command";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_pipeline_construction_basic() {
+    let source = r#"
+        import std.io as io;
+        let p = io.pipeline([
+            io.command("echo", ["hello"]),
+            io.command("cat", []),
+        ]);
+        let x = typeOf(p) == "Pipeline";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_pipeline_rejects_empty() {
+    let source = r#"
+        import std.io as io;
+        let p = io.pipeline([]);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    // Pipeline construction with empty list should fail at runtime
+    let result = eval_hir(&analysis);
+    assert!(result.is_err(), "empty pipeline should fail");
+}
+
+#[test]
+fn test_task_command_construction() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.command("echo", ["task-test"]);
+        let task = io.taskCommand(cmd);
+        let x = typeOf(task) == "Task";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_task_pipeline_construction() {
+    let source = r#"
+        import std.io as io;
+        let p = io.pipeline([
+            io.command("echo", ["hello"]),
+            io.command("cat", []),
+        ]);
+        let task = io.taskPipeline(p);
+        let x = typeOf(task) == "Task";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_redirect_stdout_path_construction() {
+    let source = r#"
+        import std.io as io;
+        let redir = io.redirectStdoutPath(./output.log);
+        let x = typeOf(redir) == "Redirect";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_redirect_stderr_path_construction() {
+    let source = r#"
+        import std.io as io;
+        let redir = io.redirectStderrPath(./error.log);
+        let x = typeOf(redir) == "Redirect";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_redirect_stdin_path_construction() {
+    let source = r#"
+        import std.io as io;
+        let redir = io.redirectStdinPath(./input.txt);
+        let x = typeOf(redir) == "Redirect";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+#[test]
+fn test_command_with_redirects_construction() {
+    let source = r#"
+        import std.io as io;
+        let cmd = io.commandWithRedirects(
+            io.command("echo", ["hello"]),
+            [io.redirectStdoutPath(./out.log)],
+        );
+        let x = typeOf(cmd) == "Command";
+    "#;
+    assert_runtime_parity(source, Value::Bool(true));
+}
+
+// ============================================================
+// Process result inspection (pure, no process execution)
+// ============================================================
+
+
+
+// ============================================================
+// |> command pipeline syntax (v3.6.0+)
+// ============================================================
+
+#[test]
+fn test_pipe_syntax_command_to_command() {
+    let source = r#"
+        import std.io as io;
+        let cmd1 = io.command("echo", ["hello"]);
+        let cmd2 = io.command("cat", []);
+        let p = cmd1 |> cmd2;
+        let x = typeOf(p) == "Pipeline";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(value, Value::Bool(true));
+}
+
+#[test]
+fn test_pipe_syntax_command_chain() {
+    let source = r#"
+        import std.io as io;
+        let p = io.command("echo", ["a"]) |>
+                io.command("cat", []) |>
+                io.command("cat", []);
+        let x = typeOf(p) == "Pipeline";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(value, Value::Bool(true));
+}

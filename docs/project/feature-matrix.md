@@ -88,7 +88,7 @@
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 现在既能显示定义点类型，也能在局部变量引用、全局函数引用、方法名和一般表达式位置显示真实语义类型；函数参数、lambda 参数和块级 `let` 的 pattern 绑定也已闭环。`goto definition` / `references` / `rename` 对局部遮蔽场景已开始按实际绑定解析。跨模块命名类型显示与更多 IDE 语义功能仍在补 |
-| End-to-end tests | ⚠️ 可信 smoke baseline | 已经覆盖真实 frontend/runtime 路径与 AST/HIR 一致性烟雾测试，但覆盖深度仍需继续扩展 |
+| End-to-end tests | ⚠️ 可信 smoke baseline（222 个测试） | 已覆盖真实 frontend/runtime 路径、AST/HIR 一致性、BinOp 全覆盖、布尔匹配、Bytes 类型；覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
@@ -117,14 +117,14 @@
 | Capability / 能力 | 当前状态 | 为什么还不能叫“替代 Bash” |
 |-------------------|----------|----------------------------|
 | 一等 `Path` 类型 | ✅ | `./path` 字面量推断为 `Path` 类型；`io.readFilePath(./test)` 直接可用，无需 `path.fromString()`；typed adapter（`path.joinPath` / `path.parentPath` / `path.filenamePath` / `path.extensionPath`）和 typed bridge（`io.readFilePath` / `io.writeFilePath` / `io.*Path`）已覆盖核心场景 |
-| 一等 `Bytes` 类型 | ⚠️ | 内部已落 stable runtime identity，且 `std.io.readFileBytesPath : Path -> Bytes` / `std.io.writeFileBytesPath : Path -> Bytes -> Unit` / `std.io.appendFileBytesPath : Path -> Bytes -> Unit` 已提供首批公开 file-boundary bridges；但还没有独立 `std.bytes` 模块、进程字节流桥或更完整的 binary-safe API 面 |
+| 一等 `Bytes` 类型 | ✅ | 内部已落 stable runtime identity；`std.io.readFileBytesPath : Path -> Bytes` / `std.io.writeFileBytesPath : Path -> Bytes -> Unit` / `std.io.appendFileBytesPath : Path -> Bytes -> Unit` 已提供公开 file-boundary bridges；Lean 形式化已完成（Ty.Bytes + Value.bytes + EffectEval 规则 + 精化桥） |
 | 一等 `Command` 类型 | ⚠️ | 内部已落 runtime identity，且 `std.io.command` / `std.io.commandWith` / `std.io.commandWithRedirects` 与 `std.io.execCommand` 已提供首批公开构造/执行桥；`Command` 现在已能承载 `cwd` / `env` / `stdin` 与 typed `Redirect` 列表，而 shell 行为也已收回到显式 `Command` 构造，而不是额外的 string-only wrapper |
 | 一等 `ProcessResult` 类型 | ⚠️ | `std.io.execCommand` / `std.io.execPipeline` 已能公开返回 `ProcessResult`，且 `std.io.processSuccess` / `std.io.processStdout` / `std.io.processCode` / `std.io.processStderr` 已提供首批 pure inspector bridge；当前剩余问题不再是结果对象缺失，而是更丰富的 effect model 仍未完成 |
-| 一等管道 | ⚠️ | 内部已落 runtime identity，且 `std.io.pipeline` 已提供最小公开构造桥；`std.io.pipeline` / `std.io.pipelineWithRedirects` 现在都会在构造时拒绝明显无效的 pipeline object，例如空 pipeline、non-final stage 的 `stdout` redirect、以及 non-first stage 的 configured `stdin` 或 `stdin` redirect，`std.io.pipelineWithRedirects` 也会拒绝 boundary `stdin/stdout/stderr` 与 stage-local attachment 的冲突；`std.io.execPipeline` 已提供首批阻塞、缓冲式执行桥，而 boundary-level redirect composition 也已收回到 `io.execPipeline(io.pipelineWithRedirects(...))` 这条对象携带主线上，`io.commandWithRedirects` 还让 `Pipeline` 开始拥有最小逐 stage redirect attachment，但还没有 `cmd1 |> cmd2` 语法、流式句柄或更广的进程编排模型 |
+| 一等管道 | ✅ 语法；⚠️ 流式句柄 | `cmd1 |> cmd2 |> cmd3` 管道语法已实现（HIR evaluator）；`io.pipeline([...])` / `io.pipelineWithRedirects` 构造时拒绝无效 pipeline；`io.execPipeline` / `io.execPipelineStreaming` / `io.execPipelineStreamingWithTimeout` 提供阻塞+流式+超时执行；boundary-level redirect 已收敛到对象携带主线；还没有流式句柄或更广的进程编排模型 |
 | 一等重定向 | ⚠️ | 内部已落 runtime identity，且 `std.io.redirectStdoutPath` / `std.io.redirectStderrPath` / `std.io.redirectStdinPath` 已提供最小公开构造桥；边界级 `stdout -> Path` / `stderr -> Path` / `stdin <- Path` 组合现在通过 `io.commandWithRedirects` / `io.pipelineWithRedirects` 收进一等对象，再走 `io.execCommand` / `io.execPipeline` 的 canonical 执行主线；同时对 boundary/stage-local 重复 redirect、non-final `stdout` 截流、以及 non-first stage 的 `stdin` 配置冲突继续做显式拒绝；但还没有更广的流模型或 stage-local redirect 语法 |
 | 一等 `Task<T>` | ⚠️ | 内部已落 runtime identity，且 `std.io.taskCommand` / `std.io.taskPipeline` / `std.io.awaitTask` / `std.io.awaitTasks` 已提供最小公开构造/消费桥，让 `Command` 或 `Pipeline` 都能进入 `Task[ProcessResult] -> ProcessResult` 与 `List<Task[ProcessResult]> -> List<ProcessResult>` 的 blocking canonical path；但还没有 poll/cancel、超时控制、后台调度或任何非阻塞 task runtime |
 | 流式处理 | ✅ | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` / `io.readFileLinesPath` (逐行回调)；超时变体 `io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持总时限 + 进程终止 |
-| timeout / cancel | ⚠️ | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；cancel 与 poll 模型仍需后续 |
+| timeout / cancel | ✅ 超时；⚠️ cancel | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；统一 kill 机制（M-2）已落地 `neve-common::kill_process`；cancel 与 poll 模型仍需后续 |
 | signal / TTY | ⚠️ | `io.isTTY(fd)` / `io.terminalSize()` 已实现；raw mode 和更完整 TTY 控制尚未支持 | `io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派；TTY 控制尚未支持 |
 | shebang / argv / 脚本入口 | ✅ | shebang + argv：`io.args()` 返回 `(List<String>, Record)` 结构化元组；`-flag` 解析为 Record 字段，负数自动识别为位置参数；支持紧凑格式 `-j8` 和 `--` 分隔 |
 | glob / 文件查询组合子 | ✅ | `io.glob(pattern)` 返回 `List<Path>`，可与 `list.filter`/`list.map` 组合 |

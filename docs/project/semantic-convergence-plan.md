@@ -8,10 +8,10 @@ From this point onward, implementation work for semantic convergence should read
 
 ## 1. Status
 
-- State: **active** — Phase 3 (Core Verification)，安全审计完成，差分测试 CI 落地
-- Current phase: **Phase 3/5 (Verification + Polish)**
-- Overall completion: **~87%**
-- Recent: Security audit (5 findings fixed + Lean-verified), EffectEval v2, differential testing CI, 10 examples
+- State: **active** — Phase 3 (Core Verification) 完成，Phase 4 待启动
+- Current phase: **Phase 3/5 → Phase 4 过渡期**
+- Overall completion: **~90%**（语言核心）；系统脚本 **~40%**
+- Recent: Type safety v18, EffectEval v4 (19 rules), BinOp 12/12, Bytes formalized, M-2 kill unified, 210 E2E tests, CI bug hunter, Effect boundary doc v1.0
 
 ### Decision Gate Status
 
@@ -20,16 +20,16 @@ From this point onward, implementation work for semantic convergence should read
 | G1 | Canonical Pipeline | ✅ |
 | G2 | Method Semantics | ✅ |
 | G3 | Failure Propagation | ✅ |
-| G4 | Effect Boundary | ✅ EffectEval v2 (8 rules), Verify/ 三定理机器检查 |
-| G5 | Bash Replacement | ⚠️ 流式/原子/Event 就绪；信号/glob/TTY 待做 |
+| G4 | Effect Boundary | ✅ EffectEval v4 (19 rules), Verify/ 三定理, effect-boundary.md v1.0 |
+| G5 | Bash Replacement | ⚠️ 流式/超时/kill 就绪；\|> 语法/信号/TTY 待做 |
 
 ### Active Work Items
 
-1. 跨函数效果追踪
-2. Match 穷尽性扩展（String/Record/Int）
+1. Formatter 幂等性验证
+2. 端到端测试扩展（210 → 400+）
 3. `|>` 管道语法
-4. defer/finally
-5. 信号处理
+4. 流式句柄 + cancel/poll
+5. Phase 4 完整推进
 
 ## 2. North Star
 

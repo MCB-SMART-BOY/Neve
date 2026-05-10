@@ -1,24 +1,41 @@
+# === Rust ===
 /target
-/examples
 
-# Local AI / agent coordination files
-# 本地 AI / agent 协作文件
+# === Lean 4 ===
+formal/.lake/
+*.olean
+*.ilean
+*.c
+*.c.hash
+*.setup.json
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === AI / agent coordination (local-only) ===
 AGENTS.md
 CLAUDE.md
 GEMINI.md
 COPILOT.md
 CURSOR.md
+.claude/
+.cursor/
+.windsurf/
+.roo/
+.codex/
+.aider/
+.agents/
 
-# Local AI / agent workspaces
-# 本地 AI / agent 工作目录
-.claude
-.cursor
-.windsurf
-.roo
-.codex
-.aider
-.agents
-
-# Lean 4
-lean/.lake/
+# === Python ===
 __pycache__/
+*.pyc
+dist/
+dist/

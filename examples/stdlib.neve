@@ -1,0 +1,14 @@
+import std.list;
+import std.string;
+import std.Map;
+import std.Set;
+
+let nums = list.range(1, 4);
+let total = list.len(nums);
+
+let words = ["neve", "lang"];
+let joined = string.join(words, "-");
+
+let m = Map.fromList([("a", 1), ("b", 2)]);
+let s = Set.fromList([1, 2, 2, 3]);
+let result = #{ total = total, joined = joined, mapSize = Map.size(m), setSize = Set.size(s) };

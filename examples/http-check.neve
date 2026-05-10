@@ -1,0 +1,22 @@
+#!/usr/bin/env neve
+-- HTTP health checker: check if a URL is reachable
+import std.string as string;
+-- HTTP 健康检查：检查 URL 是否可访问
+import std.io as io;
+
+let url = match io.args() {
+    [u, ..] -> u,
+    [] -> "https://github.com"
+};
+
+let cmd = io.command("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", url]);
+let task = io.taskCommand(cmd);
+let result = io.awaitTaskWithTimeout(task, 10000);
+
+match result {
+    Some(pr) -> if io.processSuccess(pr) then
+        string.join(["OK: ", url, " -> ", io.processStdout(pr)], "")
+    else
+        string.join(["FAIL: ", url, " code=", io.processStdout(pr)], ""),
+    None -> string.join(["TIMEOUT: ", url], "")
+}

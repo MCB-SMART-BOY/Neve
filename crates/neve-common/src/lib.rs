@@ -19,6 +19,25 @@ pub use int::{
 pub use interner::{Interner, Symbol};
 pub use span::{BytePos, Span};
 
+/// Kill a process by PID using the platform-appropriate mechanism.
+/// This is the SINGLE SOURCE OF TRUTH for process termination across all crates.
+/// Used by both neve-std (awaitTaskWithTimeout) and neve-eval (streaming timeout).
+///
+/// Unix: sends SIGKILL via libc::kill
+/// Windows: uses taskkill /F /PID
+pub fn kill_process(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .output();
+    }
+}
+
 /// Check if a builtin function name is effectful (touches the host).
 /// This is the single source of truth for effect classification,
 /// shared by neve-typeck and neve-std to prevent drift.

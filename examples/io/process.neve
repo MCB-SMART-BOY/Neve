@@ -1,0 +1,32 @@
+-- Processes / 进程执行
+-- Neve can execute external commands and capture their output.
+
+-- Run a simple command
+let result = io.execCommand(io.command("echo", ["hello world"]));
+println(io.processSuccess(result));  -- true
+println(io.processStdout(result));   -- hello world
+
+-- Run with stdin
+let cmd = io.commandWith(#{
+    program = "cat",
+    args = [],
+    stdin = "input from neve"
+});
+let result = io.execCommand(cmd);
+println(io.processStdout(result));   -- input from neve
+
+-- Pipeline: connect two commands
+let pipeline = io.pipeline([
+    io.command("echo", ["neve is great"]),
+    io.command("wc", ["-w"])
+]);
+let result = io.execPipeline(pipeline);
+println(io.processStdout(result));   -- 3
+
+-- Check exit code
+let result = io.execCommand(io.command("test", ["-f", "/etc/hosts"]));
+println(io.processCode(result));     -- 0 (success)
+
+-- Error output
+let result = io.execCommand(io.command("ls", ["/nonexistent"]));
+println(io.processSuccess(result));  -- false

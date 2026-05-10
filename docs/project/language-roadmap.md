@@ -885,13 +885,13 @@ Updated 2026-04-18. WP-0 (Reality Alignment), WP-1 (Semantic Convergence), and W
 
 | Priority | Task | Files | Status |
 |----------|------|-------|--------|
-| 1 | Effect type system design doc (G4) | `docs/project/effect-boundary.md` (new) | Not started |
-| 2 | Streaming process output | `crates/neve-std/src/io.rs` | Not started |
-| 3 | Pipeline timeout support | `crates/neve-std/src/io.rs` | Not started |
-| 4 | Spec v2.0 freeze | `docs/reference/spec.md` | Not started |
-| 5 | Parser golden tests | `tests/parser.rs` | Not started |
+| 1 | Effect type system design doc (G4) | `docs/project/effect-boundary.md` | ✅ v1.0 complete |
+| 2 | Streaming process output | `crates/neve-std/src/io.rs` | ✅ Lean + Rust implemented |
+| 3 | Pipeline timeout support | `crates/neve-std/src/io.rs` | ✅ Lean + Rust implemented |
+| 4 | Spec v2.3 freeze | `docs/reference/spec.md` | ✅ Part II formal semantics |
+| 5 | Parser golden tests | `tests/parser.rs` | Next priority |
 | 6 | Phase B exit criteria validation | `neve-builder`, `neve-store` | Not started |
-| 7 | Formatter idempotency verification | `neve-fmt` | Not started |
+| 7 | Formatter idempotency verification | `neve-fmt` | ✅ 26/26 tests pass |
 | 8 | Pattern analysis architecture (D-052-054) | `crates/neve-typeck/src/pattern_analysis.rs` | Deferred |
 
 ## Acceptance Standard / 验收标准

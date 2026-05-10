@@ -167,3 +167,31 @@ jobs:
       - name: Run differential tests
         run: |
           python3 scripts/gen_diff_test.py -n 100 -d 4
+
+  # 轻量级 Bug Hunt：每次 push/PR 运行安全边界攻击测试
+  # Lightweight Bug Hunt: security boundary attacks on every push/PR
+  bug-hunt-light:
+    name: Bug Hunt (Security Boundary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-bug-hunt-light
+          cache-on-failure: true
+
+      - name: Build Rust (neve CLI, release)
+        run: cargo build -p neve --release
+
+      - name: Run bug hunt (security boundary attacks)
+        run: python3 scripts/bug_hunt.py
+
+      - name: Report
+        run: |
+          echo "Bug hunt completed — no security boundary violations"

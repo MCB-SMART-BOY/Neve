@@ -1,0 +1,20 @@
+-- Arithmetic / 算术运算
+-- Neve supports standard integer arithmetic with +, -, *, /
+
+-- Basic operations
+println(1 + 2);          -- 3
+println(10 - 3);         -- 7
+println(4 * 5);          -- 20
+
+-- Operator precedence: * before +
+println(2 + 3 * 4);      -- 14
+println((2 + 3) * 4);    -- 20
+
+-- Negative numbers
+println(-5 + 10);        -- 5
+println(3 * (-4));       -- -12
+
+-- Nested expressions
+let x = (10 + 20) * 3;
+let y = x - 15;
+println(y);              -- 75

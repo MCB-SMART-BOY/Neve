@@ -22,7 +22,6 @@ const DOC_ARCHITECTURE: &str = include_str!("../../../docs/contributor/architect
 const DOC_ONBOARDING: &str = include_str!("../../../docs/contributor/onboarding.md");
 const DOC_CONTRIBUTING: &str = include_str!("../../../docs/contributor/contributing.md");
 const DOC_BOOTSTRAP: &str = include_str!("../../../docs/contributor/bootstrap.md");
-const DOC_ROADMAP: &str = include_str!("../../../docs/project/roadmap.md");
 const DOC_LANGUAGE_ROADMAP: &str = include_str!("../../../docs/project/language-roadmap.md");
 const DOC_FEATURE_MATRIX: &str = include_str!("../../../docs/project/feature-matrix.md");
 const DOC_CHANGELOG: &str = include_str!("../../../docs/project/changelog.md");
@@ -62,7 +61,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
         DOC_BOOTSTRAP,
         "Bootstrap examples / bootstrap 示例",
     ),
-    ("roadmap", DOC_ROADMAP, "Project roadmap / 项目路线图"),
+    ("roadmap", DOC_LANGUAGE_ROADMAP, "Language roadmap / 语言路线图"),
     (
         "language-roadmap",
         DOC_LANGUAGE_ROADMAP,
