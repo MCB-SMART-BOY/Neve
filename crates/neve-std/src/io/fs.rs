@@ -548,7 +548,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             }
                             // Compact form: -j8 → flag "j", value 8
                             if rest.len() > 1
-                                && rest.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+                                && rest.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
                             {
                                 let flag = rest[..1].to_string();
                                 let val = &rest[1..];
@@ -1322,7 +1322,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     match &args[0] {
                         Value::BuiltinFn(_, _) | Value::Builtin(_) | Value::Closure { .. } => {
                             let result = match &args[0] {
-                                Value::BuiltinFn(name, func) => func(vec![path_value.clone()])
+                                Value::BuiltinFn(_name, func) => func(vec![path_value.clone()])
                                     .map_err(|e| format!("io.tempDir callback: {e}")),
                                 _ => Err("io.tempDir: callback must be a function".to_string()),
                             };

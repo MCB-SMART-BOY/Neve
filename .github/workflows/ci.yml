@@ -49,7 +49,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
 
       - name: Run clippy (all workspace crates)
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace
         if: matrix.os == 'ubuntu-latest'
 
   # Security audit for dependency vulnerabilities

@@ -1825,28 +1825,28 @@ impl TypeChecker {
         }
 
         // If we know what the user typed, find closest matches via Levenshtein
-        if let Some(input) = typed_name {
-            if !input.is_empty() {
-                let max_suggestions = 3;
-                let mut scored: Vec<(usize, &String)> = all_known
-                    .iter()
-                    .map(|name| (Self::levenshtein(input, name), name))
-                    .filter(|(d, _)| *d <= input.len().max(3)) // Filter out very distant matches
-                    .collect();
-                scored.sort_by_key(|(d, _)| *d);
-                scored.truncate(max_suggestions);
+        if let Some(input) = typed_name
+            && !input.is_empty()
+        {
+            let max_suggestions = 3;
+            let mut scored: Vec<(usize, &String)> = all_known
+                .iter()
+                .map(|name| (Self::levenshtein(input, name), name))
+                .filter(|(d, _)| *d <= input.len().max(3)) // Filter out very distant matches
+                .collect();
+            scored.sort_by_key(|(d, _)| *d);
+            scored.truncate(max_suggestions);
 
-                if !scored.is_empty() {
-                    let suggestions: Vec<String> = scored
-                        .iter()
-                        .map(|(d, name)| format!("'{name}' (distance {d})"))
-                        .collect();
-                    return format!(
-                        "undefined name '{}'; did you mean {}?",
-                        input,
-                        suggestions.join(", ")
-                    );
-                }
+            if !scored.is_empty() {
+                let suggestions: Vec<String> = scored
+                    .iter()
+                    .map(|(d, name)| format!("'{name}' (distance {d})"))
+                    .collect();
+                return format!(
+                    "undefined name '{}'; did you mean {}?",
+                    input,
+                    suggestions.join(", ")
+                );
             }
         }
 
