@@ -56,9 +56,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "bytes.fromString",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::String(s) => {
-                        Ok(Value::Bytes(Rc::new(s.as_bytes().to_vec())))
-                    }
+                    Value::String(s) => Ok(Value::Bytes(Rc::new(s.as_bytes().to_vec()))),
                     _ => Err("bytes.fromString expects a String".to_string()),
                 },
             }),
@@ -70,12 +68,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "bytes.toString",
                 arity: 1,
                 func: |args| match &args[0] {
-                    Value::Bytes(b) => {
-                        match String::from_utf8(b.to_vec()) {
-                            Ok(s) => Ok(Value::String(Rc::new(s))),
-                            Err(e) => Err(format!("bytes.toString: invalid UTF-8: {e}")),
-                        }
-                    }
+                    Value::Bytes(b) => match String::from_utf8(b.to_vec()) {
+                        Ok(s) => Ok(Value::String(Rc::new(s))),
+                        Err(e) => Err(format!("bytes.toString: invalid UTF-8: {e}")),
+                    },
                     _ => Err("bytes.toString expects Bytes".to_string()),
                 },
             }),
@@ -88,7 +84,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| match &args[0] {
                     Value::Bytes(b) => {
-                        let ints: Vec<Value> = b.iter()
+                        let ints: Vec<Value> = b
+                            .iter()
                             .map(|byte| Value::Int((*byte as i64).into()))
                             .collect();
                         Ok(Value::List(Rc::new(ints)))
@@ -109,8 +106,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         for item in items.iter() {
                             match item {
                                 Value::Int(n) => {
-                                    let byte: u8 = n.clone().try_into()
-                                        .map_err(|_| "bytes.fromList: value out of byte range (0-255)".to_string())?;
+                                    let byte: u8 = n.clone().try_into().map_err(|_| {
+                                        "bytes.fromList: value out of byte range (0-255)"
+                                            .to_string()
+                                    })?;
                                     bytes.push(byte);
                                 }
                                 _ => return Err("bytes.fromList expects List<Int>".to_string()),

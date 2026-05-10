@@ -6,7 +6,6 @@
 //! 这些是与文件系统交互的非纯操作。
 //! 主要用于包构建和配置生成期间。
 
-
 // === Spawn registry for non-blocking task execution ===
 
 use std::sync::{Arc, Mutex, OnceLock};
@@ -294,10 +293,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.isTTY",
             Value::Builtin(BuiltinFn {
-                name: "io.isTTY", arity: 1,
+                name: "io.isTTY",
+                arity: 1,
                 func: |args| {
                     let fd: i32 = match &args[0] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.isTTY: fd must be a valid integer".to_string())?,
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.isTTY: fd must be a valid integer".to_string())?,
                         _ => return Err("io.isTTY expects an Int (file descriptor)".to_string()),
                     };
                     #[cfg(unix)]
@@ -315,15 +318,22 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.terminalSize",
             Value::Builtin(BuiltinFn {
-                name: "io.terminalSize", arity: 0,
+                name: "io.terminalSize",
+                arity: 0,
                 func: |_args| {
                     #[cfg(unix)]
                     unsafe {
                         let mut winsize: libc::winsize = std::mem::zeroed();
                         if libc::ioctl(1, libc::TIOCGWINSZ, &mut winsize) == 0 {
                             let mut fields = HashMap::new();
-                            fields.insert("rows".to_string(), Value::Int((winsize.ws_row as i64).into()));
-                            fields.insert("cols".to_string(), Value::Int((winsize.ws_col as i64).into()));
+                            fields.insert(
+                                "rows".to_string(),
+                                Value::Int((winsize.ws_row as i64).into()),
+                            );
+                            fields.insert(
+                                "cols".to_string(),
+                                Value::Int((winsize.ws_col as i64).into()),
+                            );
                             Ok(Value::Some(Box::new(Value::Record(Rc::new(fields)))))
                         } else {
                             Ok(Value::None)
@@ -336,20 +346,26 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        
         // === Non-blocking task spawn/poll/cancel ===
         (
             "io.spawnWithTimeout",
             Value::Builtin(BuiltinFn {
-                name: "io.spawnWithTimeout", arity: 2,
+                name: "io.spawnWithTimeout",
+                arity: 2,
                 func: |args| {
                     let task = match &args[0] {
                         Value::Task(t) => t.clone(),
                         _ => return Err("io.spawnWithTimeout expects a Task".to_string()),
                     };
                     let timeout_ms: u64 = match &args[1] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.spawnWithTimeout: timeout must be non-negative".to_string())?,
-                        _ => return Err("io.spawnWithTimeout expects an Int (timeout in ms)".to_string()),
+                        Value::Int(n) => n.clone().try_into().map_err(|_| {
+                            "io.spawnWithTimeout: timeout must be non-negative".to_string()
+                        })?,
+                        _ => {
+                            return Err(
+                                "io.spawnWithTimeout expects an Int (timeout in ms)".to_string()
+                            );
+                        }
                     };
                     let state = Arc::new(Mutex::new(SpawnState::Running));
                     let state_clone = state.clone();
@@ -363,9 +379,15 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             std::thread::spawn(move || {
                                 let mut c = std::process::Command::new(&program);
                                 c.args(&args_list);
-                                if let Some(ref wd) = cwd { c.current_dir(wd); }
-                                for (k, v) in &env { c.env(k, v); }
-                                if stdin_data.is_some() { c.stdin(std::process::Stdio::piped()); }
+                                if let Some(ref wd) = cwd {
+                                    c.current_dir(wd);
+                                }
+                                for (k, v) in &env {
+                                    c.env(k, v);
+                                }
+                                if stdin_data.is_some() {
+                                    c.stdin(std::process::Stdio::piped());
+                                }
                                 c.stdout(std::process::Stdio::piped());
                                 c.stderr(std::process::Stdio::piped());
                                 let result = (|| {
@@ -373,23 +395,35 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                     if let Some(ref data) = stdin_data {
                                         use std::io::Write;
                                         if let Some(mut pipe) = child.stdin.take() {
-                                            pipe.write_all(data.as_bytes()).map_err(|e| format!("stdin: {e}"))?;
+                                            pipe.write_all(data.as_bytes())
+                                                .map_err(|e| format!("stdin: {e}"))?;
                                         }
                                     }
-                                    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
-                                    Ok((output.status.code().unwrap_or(-1), output.status.success(), String::from_utf8_lossy(&output.stdout).to_string(), String::from_utf8_lossy(&output.stderr).to_string()))
+                                    let output = child
+                                        .wait_with_output()
+                                        .map_err(|e| format!("wait: {e}"))?;
+                                    Ok((
+                                        output.status.code().unwrap_or(-1),
+                                        output.status.success(),
+                                        String::from_utf8_lossy(&output.stdout).to_string(),
+                                        String::from_utf8_lossy(&output.stderr).to_string(),
+                                    ))
                                 })();
                                 *state_clone.lock().unwrap() = SpawnState::Done(result);
                             });
                         }
                         neve_eval::value::TaskTargetValue::Pipeline(pipeline) => {
-                            let stages: Vec<StageData> = pipeline.commands().iter().map(|cmd| StageData {
-                                program: cmd.program().to_string(),
-                                args: cmd.args().to_vec(),
-                                cwd: cmd.cwd().map(|s| s.to_string()),
-                                env: cmd.env().clone(),
-                                stdin: cmd.stdin().map(|s| s.to_string()),
-                            }).collect();
+                            let stages: Vec<StageData> = pipeline
+                                .commands()
+                                .iter()
+                                .map(|cmd| StageData {
+                                    program: cmd.program().to_string(),
+                                    args: cmd.args().to_vec(),
+                                    cwd: cmd.cwd().map(|s| s.to_string()),
+                                    env: cmd.env().clone(),
+                                    stdin: cmd.stdin().map(|s| s.to_string()),
+                                })
+                                .collect();
                             std::thread::spawn(move || {
                                 let result = run_pipeline_stages(&stages);
                                 *state_clone.lock().unwrap() = SpawnState::Done(result);
@@ -413,7 +447,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.spawn",
             Value::Builtin(BuiltinFn {
-                name: "io.spawn", arity: 1,
+                name: "io.spawn",
+                arity: 1,
                 func: |args| {
                     let task = match &args[0] {
                         Value::Task(t) => t.clone(),
@@ -431,9 +466,15 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             std::thread::spawn(move || {
                                 let mut c = std::process::Command::new(&program);
                                 c.args(&args_list);
-                                if let Some(ref wd) = cwd { c.current_dir(wd); }
-                                for (k, v) in &env { c.env(k, v); }
-                                if stdin_data.is_some() { c.stdin(std::process::Stdio::piped()); }
+                                if let Some(ref wd) = cwd {
+                                    c.current_dir(wd);
+                                }
+                                for (k, v) in &env {
+                                    c.env(k, v);
+                                }
+                                if stdin_data.is_some() {
+                                    c.stdin(std::process::Stdio::piped());
+                                }
                                 c.stdout(std::process::Stdio::piped());
                                 c.stderr(std::process::Stdio::piped());
                                 let result = (|| {
@@ -441,26 +482,36 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                     if let Some(ref data) = stdin_data {
                                         use std::io::Write;
                                         if let Some(mut pipe) = child.stdin.take() {
-                                            pipe.write_all(data.as_bytes()).map_err(|e| format!("stdin: {e}"))?;
+                                            pipe.write_all(data.as_bytes())
+                                                .map_err(|e| format!("stdin: {e}"))?;
                                         }
                                     }
-                                    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
-                                    Ok((output.status.code().unwrap_or(-1), output.status.success(), String::from_utf8_lossy(&output.stdout).to_string(), String::from_utf8_lossy(&output.stderr).to_string()))
+                                    let output = child
+                                        .wait_with_output()
+                                        .map_err(|e| format!("wait: {e}"))?;
+                                    Ok((
+                                        output.status.code().unwrap_or(-1),
+                                        output.status.success(),
+                                        String::from_utf8_lossy(&output.stdout).to_string(),
+                                        String::from_utf8_lossy(&output.stderr).to_string(),
+                                    ))
                                 })();
                                 *state_clone.lock().unwrap() = SpawnState::Done(result);
                             });
                         }
                         neve_eval::value::TaskTargetValue::Pipeline(pipeline) => {
                             // Extract all stage data before moving to thread
-                            let stages: Vec<StageData> = pipeline.commands().iter().map(|cmd| {
-                                StageData {
+                            let stages: Vec<StageData> = pipeline
+                                .commands()
+                                .iter()
+                                .map(|cmd| StageData {
                                     program: cmd.program().to_string(),
                                     args: cmd.args().to_vec(),
                                     cwd: cmd.cwd().map(|s| s.to_string()),
                                     env: cmd.env().clone(),
                                     stdin: cmd.stdin().map(|s| s.to_string()),
-                                }
-                            }).collect();
+                                })
+                                .collect();
                             std::thread::spawn(move || {
                                 let result = run_pipeline_stages(&stages);
                                 *state_clone.lock().unwrap() = SpawnState::Done(result);
@@ -476,22 +527,34 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.poll",
             Value::Builtin(BuiltinFn {
-                name: "io.poll", arity: 1,
+                name: "io.poll",
+                arity: 1,
                 func: |args| {
                     let id: i64 = match &args[0] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.poll: invalid ID".to_string())?,
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.poll: invalid ID".to_string())?,
                         _ => return Err("io.poll expects an Int (spawn ID)".to_string()),
                     };
                     let state = {
                         let registry = spawn_registry().lock().unwrap();
-                        registry.get(&id).ok_or(format!("io.poll: no task with ID {id}"))?.clone()
+                        registry
+                            .get(&id)
+                            .ok_or(format!("io.poll: no task with ID {id}"))?
+                            .clone()
                     };
                     let mut s = state.lock().unwrap();
                     match &*s {
                         SpawnState::Running => Ok(Value::None),
                         SpawnState::Done(Ok((code, success, stdout, stderr))) => {
                             let result = Value::Some(Box::new(Value::ProcessResult(Rc::new(
-                                ProcessResultValue::new(*code, *success, stdout.clone(), stderr.clone())
+                                ProcessResultValue::new(
+                                    *code,
+                                    *success,
+                                    stdout.clone(),
+                                    stderr.clone(),
+                                ),
                             ))));
                             *s = SpawnState::Cancelled;
                             spawn_registry().lock().unwrap().remove(&id);
@@ -502,7 +565,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             spawn_registry().lock().unwrap().remove(&id);
                             Err(err)
                         }
-                        SpawnState::Cancelled => Err(format!("io.poll: task {id} already consumed")),
+                        SpawnState::Cancelled => {
+                            Err(format!("io.poll: task {id} already consumed"))
+                        }
                     }
                 },
             }),
@@ -510,10 +575,14 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.cancel",
             Value::Builtin(BuiltinFn {
-                name: "io.cancel", arity: 1,
+                name: "io.cancel",
+                arity: 1,
                 func: |args| {
                     let id: i64 = match &args[0] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.cancel: invalid ID".to_string())?,
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.cancel: invalid ID".to_string())?,
                         _ => return Err("io.cancel expects an Int (spawn ID)".to_string()),
                     };
                     if let Some(state) = spawn_registry().lock().unwrap().remove(&id) {
@@ -1056,7 +1125,9 @@ pub(crate) fn await_task_with_timeout(task: &TaskValue, timeout_ms: u64) -> Resu
         && let Some(mut pipe) = child.stdin.take()
     {
         if stdin_text.len() > MAX_STDIN_BYTES {
-            return Err(format!("io.awaitTaskWithTimeout: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+            return Err(format!(
+                "io.awaitTaskWithTimeout: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"
+            ));
         }
         use std::io::Write;
         pipe.write_all(stdin_text.as_bytes())
@@ -1557,7 +1628,9 @@ pub(crate) fn execute_command_value_to_process_result_with_input(
 
     if let Some(stdin_text) = stdin_text {
         if stdin_text.len() > MAX_STDIN_BYTES {
-            return Err(format!("{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"
+            ));
         }
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
@@ -1573,21 +1646,27 @@ pub(crate) fn execute_command_value_to_process_result_with_input(
             .wait_with_output()
             .map_err(|e| format!("{fn_name}: {e}"))?;
         if output.stdout.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         if output.stderr.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         Ok(output_to_process_result_value(output))
     } else {
-        let output = cmd
-            .output()
-            .map_err(|e| format!("{fn_name}: {e}"))?;
+        let output = cmd.output().map_err(|e| format!("{fn_name}: {e}"))?;
         if output.stdout.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         if output.stderr.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         Ok(output_to_process_result_value(output))
     }
@@ -1649,7 +1728,9 @@ pub(crate) fn execute_command_value_with_redirects_to_process_result_with_input(
 
     if let Some(ref text) = stdin_text {
         if text.len() > MAX_STDIN_BYTES {
-            return Err(format!("{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"
+            ));
         }
     }
 
@@ -1682,23 +1763,32 @@ pub(crate) fn execute_command_value_with_redirects_to_process_result_with_input(
             .wait_with_output()
             .map_err(|e| format!("{fn_name}: {e}"))?;
         if output.stdout.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         if output.stderr.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         Ok(output_to_process_result_value(output))
     } else {
         cmd.stdin(std::process::Stdio::null());
-        let output = cmd.spawn()
+        let output = cmd
+            .spawn()
             .map_err(|e| format!("{fn_name}: {e}"))?
             .wait_with_output()
             .map_err(|e| format!("{fn_name}: {e}"))?;
         if output.stdout.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         if output.stderr.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "{fn_name}: stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         Ok(output_to_process_result_value(output))
     }
@@ -1728,7 +1818,10 @@ pub(crate) fn resolve_redirect_path(
     redirect: &RedirectValue,
 ) -> std::path::PathBuf {
     let path = redirect.path();
-    if path.components().any(|c| c == std::path::Component::ParentDir) {
+    if path
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+    {
         return std::path::PathBuf::from("/dev/null/neve-blocked-traversal");
     }
     if path.is_relative()
@@ -1818,16 +1911,15 @@ pub(crate) fn record_env_optional(
     }
 }
 
-
-
 /// Kill a process by PID. Uses libc::kill on Unix, taskkill on Windows.
 /// 通过 PID 终止进程。
 // kill_process moved to neve_common::kill_process (M-2 unified kill mechanism)
 
-
 /// Run pipeline stages sequentially in a background thread.
 fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, String), String> {
-    if stages.is_empty() { return Err("empty pipeline".to_string()); }
+    if stages.is_empty() {
+        return Err("empty pipeline".to_string());
+    }
     let mut previous_stdout: Option<Vec<u8>> = None;
     let mut combined_stderr = Vec::new();
     let mut last_code = 0;
@@ -1836,32 +1928,57 @@ fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, Strin
     for (idx, stage) in stages.iter().enumerate() {
         let mut c = std::process::Command::new(&stage.program);
         c.args(&stage.args);
-        if let Some(ref wd) = stage.cwd { c.current_dir(wd); }
-        for (k, v) in &stage.env { c.env(k, v); }
-        let stage_stdin = if idx == 0 { stage.stdin.as_ref().map(|s| s.as_bytes().to_vec()).or_else(|| previous_stdout.take()) } else { previous_stdout.take() };
-        if stage_stdin.is_some() { c.stdin(std::process::Stdio::piped()); } else { c.stdin(std::process::Stdio::null()); }
+        if let Some(ref wd) = stage.cwd {
+            c.current_dir(wd);
+        }
+        for (k, v) in &stage.env {
+            c.env(k, v);
+        }
+        let stage_stdin = if idx == 0 {
+            stage
+                .stdin
+                .as_ref()
+                .map(|s| s.as_bytes().to_vec())
+                .or_else(|| previous_stdout.take())
+        } else {
+            previous_stdout.take()
+        };
+        if stage_stdin.is_some() {
+            c.stdin(std::process::Stdio::piped());
+        } else {
+            c.stdin(std::process::Stdio::null());
+        }
         c.stdout(std::process::Stdio::piped());
         c.stderr(std::process::Stdio::piped());
         let mut child = c.spawn().map_err(|e| format!("stage {idx}: {e}"))?;
         if let Some(ref data) = stage_stdin {
             if idx == 0 && data.len() > MAX_STDIN_BYTES {
-                return Err(format!("stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"));
+                return Err(format!(
+                    "stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"
+                ));
             }
             use std::io::Write;
-            if let Some(mut pipe) = child.stdin.take() { pipe.write_all(data).map_err(|e| format!("stdin: {e}"))?; }
+            if let Some(mut pipe) = child.stdin.take() {
+                pipe.write_all(data).map_err(|e| format!("stdin: {e}"))?;
+            }
         }
         let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
         if output.stdout.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "stdout exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         if output.stderr.len() > MAX_OUTPUT_BYTES {
-            return Err(format!("stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"));
+            return Err(format!(
+                "stderr exceeds maximum size of {MAX_OUTPUT_BYTES} bytes"
+            ));
         }
         last_code = output.status.code().unwrap_or(-1);
         last_success = output.status.success();
         combined_stderr.extend_from_slice(&output.stderr);
-        if idx < last_idx { previous_stdout = Some(output.stdout); }
-        else {
+        if idx < last_idx {
+            previous_stdout = Some(output.stdout);
+        } else {
             let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr_str = String::from_utf8_lossy(&combined_stderr).to_string();
             return Ok((last_code, last_success, stdout_str, stderr_str));

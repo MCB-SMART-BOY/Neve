@@ -1736,7 +1736,8 @@ fn test_parse_let_expr() {
 
 #[test]
 fn test_parse_record_type_annotation() {
-    let (file, diags) = parse("let r: #{ name: String, age: Int } = #{ name = \"Alice\", age = 30 };");
+    let (file, diags) =
+        parse("let r: #{ name: String, age: Int } = #{ name = \"Alice\", age = 30 };");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -1761,7 +1762,9 @@ fn test_parse_effect_on_trait_method() {
 // TODO: effect annotation on impl methods needs syntax clarification
 fn test_parse_effect_on_impl_method() {
     // effect on impl methods uses the same syntax as fn definitions
-    let (file, diags) = parse("struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> String effect = msg; };");
+    let (file, diags) = parse(
+        "struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> String effect = msg; };",
+    );
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 2);
 }

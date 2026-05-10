@@ -1,9 +1,7 @@
 //! File system operations — new additions live here.
 //! Legacy functions remain in io/mod.rs.
 
-use neve_eval::value::{
-    BuiltinFn, CommandValue, RedirectValue, TaskValue, Value,
-};
+use neve_eval::value::{BuiltinFn, CommandValue, RedirectValue, TaskValue, Value};
 use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
@@ -390,7 +388,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.setEnv",
             Value::Builtin(BuiltinFn {
-                name: "io.setEnv", arity: 2,
+                name: "io.setEnv",
+                arity: 2,
                 func: |args| {
                     let key = match &args[0] {
                         Value::String(s) => s.as_str(),
@@ -400,7 +399,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::String(s) => s.as_str(),
                         _ => return Err("io.setEnv expects a String value".to_string()),
                     };
-                    unsafe { std::env::set_var(key, val); }
+                    unsafe {
+                        std::env::set_var(key, val);
+                    }
                     Ok(Value::Unit)
                 },
             }),
@@ -408,13 +409,16 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         (
             "io.unsetEnv",
             Value::Builtin(BuiltinFn {
-                name: "io.unsetEnv", arity: 1,
+                name: "io.unsetEnv",
+                arity: 1,
                 func: |args| {
                     let key = match &args[0] {
                         Value::String(s) => s.as_str(),
                         _ => return Err("io.unsetEnv expects a String key".to_string()),
                     };
-                    unsafe { std::env::remove_var(key); }
+                    unsafe {
+                        std::env::remove_var(key);
+                    }
                     Ok(Value::Unit)
                 },
             }),
@@ -528,7 +532,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         let arg = &raw_args[i];
                         // -- stops flag parsing
                         if arg == "--" {
-                            for a in &raw_args[i+1..] {
+                            for a in &raw_args[i + 1..] {
                                 positional.push(Value::String(Rc::new(a.clone())));
                             }
                             break;
@@ -543,7 +547,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                 continue;
                             }
                             // Compact form: -j8 → flag "j", value 8
-                            if rest.len() > 1 && rest.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {
+                            if rest.len() > 1
+                                && rest.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+                            {
                                 let flag = rest[..1].to_string();
                                 let val = &rest[1..];
                                 if let Ok(n) = val.parse::<i64>() {
@@ -556,7 +562,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             }
                             let flag = rest.to_string();
                             // Check if next arg is a value (doesn't start with -)
-                            if i + 1 < raw_args.len() && !raw_args[i+1].starts_with('-') {
+                            if i + 1 < raw_args.len() && !raw_args[i + 1].starts_with('-') {
                                 i += 1;
                                 let val = &raw_args[i];
                                 if let Ok(n) = val.parse::<i64>() {
@@ -1109,8 +1115,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |args| match &args[0] {
                     Value::Path(root) => {
                         let mut entries: Vec<Value> = Vec::new();
-                        fn walk_dir(dir: &std::path::Path, entries: &mut Vec<Value>) -> Result<(), String> {
-                            for entry in std::fs::read_dir(dir).map_err(|e| format!("io.walk: {e}"))? {
+                        fn walk_dir(
+                            dir: &std::path::Path,
+                            entries: &mut Vec<Value>,
+                        ) -> Result<(), String> {
+                            for entry in
+                                std::fs::read_dir(dir).map_err(|e| format!("io.walk: {e}"))?
+                            {
                                 let entry = entry.map_err(|e| format!("io.walk: {e}"))?;
                                 let path = entry.path();
                                 entries.push(Value::Path(Rc::new(path.clone())));
@@ -1126,8 +1137,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     Value::String(s) => {
                         let root = std::path::PathBuf::from(s.as_str());
                         let mut entries: Vec<Value> = Vec::new();
-                        fn walk_dir_str(dir: &std::path::Path, entries: &mut Vec<Value>) -> Result<(), String> {
-                            for entry in std::fs::read_dir(dir).map_err(|e| format!("io.walk: {e}"))? {
+                        fn walk_dir_str(
+                            dir: &std::path::Path,
+                            entries: &mut Vec<Value>,
+                        ) -> Result<(), String> {
+                            for entry in
+                                std::fs::read_dir(dir).map_err(|e| format!("io.walk: {e}"))?
+                            {
                                 let entry = entry.map_err(|e| format!("io.walk: {e}"))?;
                                 let path = entry.path();
                                 entries.push(Value::Path(Rc::new(path.clone())));
@@ -1156,7 +1172,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         _ => return Err("io.chmod expects (Path|String, Int)".to_string()),
                     };
                     let mode: u32 = match &args[1] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.chmod: mode must be non-negative".to_string())?,
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.chmod: mode must be non-negative".to_string())?,
                         _ => return Err("io.chmod expects (Path|String, Int)".to_string()),
                     };
                     #[cfg(unix)]
@@ -1186,23 +1205,35 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         _ => return Err("io.chown expects (Path|String, Int, Int)".to_string()),
                     };
                     let uid: u32 = match &args[1] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.chown: uid must be non-negative".to_string())?,
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.chown: uid must be non-negative".to_string())?,
                         _ => return Err("io.chown expects (Path|String, Int, Int)".to_string()),
                     };
                     let gid: u32 = match &args[2] {
-                        Value::Int(n) => n.clone().try_into().map_err(|_| "io.chown: gid must be non-negative".to_string())?,
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.chown: gid must be non-negative".to_string())?,
                         _ => return Err("io.chown expects (Path|String, Int, Int)".to_string()),
                     };
                     #[cfg(unix)]
                     {
                         let output = std::process::Command::new("chown")
-                            .args([format!("{}:{}", uid, gid), path.to_string_lossy().to_string()])
+                            .args([
+                                format!("{}:{}", uid, gid),
+                                path.to_string_lossy().to_string(),
+                            ])
                             .output()
                             .map_err(|e| format!("io.chown: {e}"))?;
                         if output.status.success() {
                             Ok(Value::Unit)
                         } else {
-                            Err(format!("io.chown: {}", String::from_utf8_lossy(&output.stderr)))
+                            Err(format!(
+                                "io.chown: {}",
+                                String::from_utf8_lossy(&output.stderr)
+                            ))
                         }
                     }
                     #[cfg(not(unix))]
@@ -1220,11 +1251,24 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 2,
                 func: |args| {
                     let (target, link) = match (&args[0], &args[1]) {
-                        (Value::Path(t), Value::Path(l)) => (t.as_path().to_path_buf(), l.as_path().to_path_buf()),
-                        (Value::String(t), Value::String(l)) => (std::path::PathBuf::from(t.as_str()), std::path::PathBuf::from(l.as_str())),
-                        (Value::Path(t), Value::String(l)) => (t.as_path().to_path_buf(), std::path::PathBuf::from(l.as_str())),
-                        (Value::String(t), Value::Path(l)) => (std::path::PathBuf::from(t.as_str()), l.as_path().to_path_buf()),
-                        _ => return Err("io.symlink expects (Path|String, Path|String)".to_string()),
+                        (Value::Path(t), Value::Path(l)) => {
+                            (t.as_path().to_path_buf(), l.as_path().to_path_buf())
+                        }
+                        (Value::String(t), Value::String(l)) => (
+                            std::path::PathBuf::from(t.as_str()),
+                            std::path::PathBuf::from(l.as_str()),
+                        ),
+                        (Value::Path(t), Value::String(l)) => (
+                            t.as_path().to_path_buf(),
+                            std::path::PathBuf::from(l.as_str()),
+                        ),
+                        (Value::String(t), Value::Path(l)) => (
+                            std::path::PathBuf::from(t.as_str()),
+                            l.as_path().to_path_buf(),
+                        ),
+                        _ => {
+                            return Err("io.symlink expects (Path|String, Path|String)".to_string());
+                        }
                     };
                     #[cfg(unix)]
                     {
@@ -1279,10 +1323,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::BuiltinFn(_, _) | Value::Builtin(_) | Value::Closure { .. } => {
                             // Call the callback with the path, then clean up
                             let result = match &args[0] {
-                                Value::BuiltinFn(name, func) => {
-                                    func(vec![path_value.clone()])
-                                        .map_err(|e| format!("io.tempDir callback: {e}"))
-                                }
+                                Value::BuiltinFn(name, func) => func(vec![path_value.clone()])
+                                    .map_err(|e| format!("io.tempDir callback: {e}")),
                                 _ => Err("io.tempDir: callback must be a function".to_string()),
                             };
                             // Clean up temp dir regardless of callback result
