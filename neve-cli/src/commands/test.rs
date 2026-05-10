@@ -26,13 +26,13 @@ pub fn run(dir: &str, verbose: bool) -> Result<(), String> {
     }
 
     // Find test/*.neve
-    if test_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&test_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().map(|e| e == "neve").unwrap_or(false) {
-                    test_files.push(path);
-                }
+    if test_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&test_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "neve").unwrap_or(false) {
+                test_files.push(path);
             }
         }
     }
