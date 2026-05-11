@@ -1,13 +1,8 @@
-<div align="center">
+# Contributing to Neve
 
-<h1>Contributing to Neve</h1>
+完整贡献指南 → [docs/contributor/contributing.md](docs/contributor/contributing.md)
 
-<p><em>贡献入口</em></p>
-
-</div>
-
-GitHub expects a repository-root `CONTRIBUTING.md`.
-完整贡献指南已整理到 [docs/contributor/contributing.md](docs/contributor/contributing.md)。
-
-- Contributor guide / 贡献指南: [docs/contributor/contributing.md](docs/contributor/contributing.md)
-- Documentation hub / 文档中心: [docs/README.md](docs/README.md)
+- 贡献指南: [docs/contributor/contributing.md](docs/contributor/contributing.md)
+- 架构总览: [docs/contributor/architecture.md](docs/contributor/architecture.md)
+- 新手上路: [docs/contributor/onboarding.md](docs/contributor/onboarding.md)
+- 文档中心: [docs/README.md](docs/README.md)
