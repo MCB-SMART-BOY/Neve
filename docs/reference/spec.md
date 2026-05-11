@@ -816,7 +816,7 @@ Matches(p, v, binds) — "pattern p matches value v, producing bindings binds"
 
 ## F.4 Effect Semantics / 副作用语义
 
-Defined in `formal/Neve/Spec/Effects.lean` (v3, 15 rules). The effectful evaluation judgment:
+Defined in `formal/Neve/Spec/Effects.lean` (v4.1, 21 rules). The effectful evaluation judgment:
 
 ```
 env ⊢ e ⇓[σ] v, σ'   — "e evaluates to v, transforming I/O state σ to σ'"
@@ -824,7 +824,7 @@ env ⊢ e ⇓[σ] v, σ'   — "e evaluates to v, transforming I/O state σ to �
 
 Where `IOState = { stdin, stdout, stderr }` accumulates process I/O.
 
-### Effect rules (v3)
+### Effect rules (v4.1)
 
 | Category | Rule | Description |
 |----------|------|-------------|
@@ -844,7 +844,7 @@ Where `IOState = { stdin, stdout, stderr }` accumulates process I/O.
 | File | `readFile` | Read file content |
 | File | `writeFile` | Write file content |
 
-### Size limit enforcement (v3)
+### Size limit enforcement (v4)
 
 ```
 MAX_STDIN_BYTES   = 10 * 1024 * 1024  (10 MB)
@@ -865,10 +865,14 @@ type_safety : [] ⊢ e : τ → ∃ v, [] ⊢ e ⇓ v
 
 **"Well-typed closed programs do not get stuck."**
 
-Status: 8 of 11 HasType constructors have machine-checked proofs.
-The `app` and `pipe` constructors are proven for the lambda case
-(the most common case). `matchOn` is deferred pending a Lean 4
-improvement to dependent pattern matching on parameterized inductives.
+Status: 13 of 17 HasType constructors have machine-checked proofs
+(lit_*, var, lam, letIn, app lam case, pipe lam case,
+all 12 BinOp operators). Additional verified lemmas in
+`SafetyLemmas.lean` cover wildcard, lit_int, lit_bool,
+bool_full (both arms via matchOn_fallthrough), and unit
+pattern matching. Three axioms remain for non-lam app/pipe
+(big-step closure body recursion) and general matchOn
+(Lean 4.29 mutual inductive limitation).
 
 ## F.6 Verified Security Properties / 已验证安全性质
 

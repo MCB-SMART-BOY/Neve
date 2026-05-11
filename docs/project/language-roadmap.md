@@ -699,15 +699,15 @@ Non-goals / 非目标:
 - shell replacement APIs
 - registry and lockfile work
 
-### Phase 3: Effect and Runtime Layer / 阶段 3：副作用与运行时层
+### Phase 3: Effect and Runtime Layer / 阶段 3：副作用与运行时层 ✅ Complete
 
 | Item | Details |
 |------|---------|
 | Priority | High |
 | Work packages | `WP-3A`, `WP-3B`, `WP-3C`, `WP-3D`, `WP-4A`, `WP-4B`, `WP-4C` |
-| Entry criteria | Phase 1 complete; Phase 2 strongly preferred |
+| Status | **Complete** — runtime types, EffectEval v4.1 (21 rules), effect-boundary.md v1.0 |
 | Main output | Typed runtime objects plus explicit effect boundary |
-| Why this phase exists | Neve cannot be a system language while paths, commands, and effects stay stringly and implicit |
+| Entry criteria | Phase 1-2 complete |
 | Blocks later phases | Yes, shell replacement depends on this phase |
 
 Detailed scope / 详细范围:
