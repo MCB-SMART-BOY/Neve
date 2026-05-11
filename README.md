@@ -4,119 +4,159 @@
 
 <h1>Neve</h1>
 
-<p>A typed language for system automation — configs, builds, monitoring, scripting. Not a config DSL, not a Bash wrapper.</p>
+<p>A typed language that replaces Bash, Python, and YAML for system automation.</p>
 
 <p>
   <a href="https://github.com/MCB-SMART-BOY/Neve/actions/workflows/ci.yml">
     <img src="https://github.com/MCB-SMART-BOY/Neve/actions/workflows/ci.yml/badge.svg" alt="CI">
   </a>
   <a href="https://github.com/MCB-SMART-BOY/Neve/releases">
-    <img src="https://img.shields.io/github/v/release/MCB-SMART-BOY/Neve?color=blue" alt="Release">
+    <img src="https://img.shields.io/github/v/release/MCB-SMART-BOY/Neve?color=blue">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg" alt="License">
-  </a>
-  <a href="https://aur.archlinux.org/packages/neve-bin">
-    <img src="https://img.shields.io/aur/version/neve-bin?color=1793d1&label=AUR" alt="AUR">
+    <img src="https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg">
   </a>
 </p>
 
-<p><strong>Linux</strong> · <strong>macOS</strong> · <strong>Windows</strong></p>
-
 </div>
-
-**Docs**: [Quickstart](docs/user/quickstart.md) · [Spec](docs/reference/spec.md) · [API](docs/reference/api.md) · [Feature Matrix](docs/project/feature-matrix.md) · [Roadmap](docs/project/language-roadmap.md) · [Changelog](docs/project/changelog.md)
 
 ---
 
-## 怎么回事
+## 看一眼
 
-Neve 是一门自己写的语言，给系统运维用。parser、type checker、evaluator、LSP、formatter、包管理器都在一个仓库里。
+Bash 写部署脚本：
 
-已经在跑的东西：
+```bash
+#!/bin/bash
+set -euo pipefail
+if [ ! -f "$CONFIG" ]; then
+    echo "missing config" >&2; exit 1
+fi
+PORT=$(grep port "$CONFIG" | cut -d= -f2)
+if [ -z "$PORT" ]; then PORT=8080; fi
+curl -sf "http://localhost:$PORT/health" || {
+    systemctl restart myapp; sleep 2
+    curl -sf "http://localhost:$PORT/health" || {
+        echo "startup failed" >&2; exit 1
+    }
+}
+```
 
-- **管道和重定向** — `io.execPipeline`、`io.commandWithRedirects`
-- **流式 I/O** — 命令输出逐行处理、文件逐行读，带超时自动杀进程
-- **原子写入** — 临时文件 + rename，批量两阶段提交
-- **路径字面量** — `./config.toml` 类型是 `Path`，不是 `String`
-- **效果系统** — `effect` 关键字标记副作用，`neve check` 默认拒绝 IO
-- **超时 + 杀进程** — `io.awaitTaskWithTimeout`，超时后 `kill -9`
-- **一等管道** — `cmd1 |> cmd2 |> cmd3` 管道语法（HIR evaluator）
-- **REPL** — 历史持久化、Tab 补全、括号匹配、`:type` 查询
+Neve 写同样的东西：
 
-形式化验证（`formal/`，19 个 Lean 4 模块）：
+```neve
+#!/usr/bin/env neve run
+import std.io as io;
 
-- 核心语义的完整形式规范（Syntax, Typing, Eval, Effects）
-- 效果系统 21 条 EffectEval 规则，覆盖全部 I/O 路径
-- 全部二元运算符的类型安全证明（12/12 BinOp）
-- 类型安全定理（`type_safety`）和 `env_preservation` 引理
-- 5 项安全审计全部机器检查通过（H-1, H-2, M-1, M-2, M-4）
+let config = io.readFilePath(./config.toml);
+let port = config.port or 8080;
+
+io.retry(
+    fn() = io.httpGet("http://localhost:{port}/health"),
+    maxAttempts = 3,
+    backoffMs = 2000,
+);
+```
+
+类型系统在编译期就告诉你 `config.port` 不存在会怎样、`or` 的默认值类型对不对、`io.httpGet` 返回什么。不用等到半夜脚本挂了才发现拼写错误。
+
+---
+
+## 类型不是负担
+
+```neve
+-- 代数数据类型
+enum Health { Alive, Dead(exitCode: Int) }
+
+-- 模式匹配 + 穷尽性检查（漏了分支编译不过）
+fn describe(h: Health) -> String = match h {
+    Alive -> "ok",
+    Dead(code) -> "exit {code}",
+};
+
+-- 错误传播，? 自动处理 None/Error
+fn loadConfig() -> Result<Config, String> = {
+    let raw = io.readFilePath(./config.toml)?;   -- IO 可能失败
+    parseConfig(raw)?                              -- 解析可能失败
+};
+
+-- trait + 泛型
+trait HealthCheck {
+    fn check(self) -> Health;
+}
+```
+
+没有 `null`，没有 `undefined`，没有 `try-catch` 的缩进地狱。
+
+---
+
+## Bash 做不到的事
+
+**流式管道 + 超时**。`journalctl -f` 的输出逐行处理，超过 5 秒没新行就自动 kill：
+
+```neve
+io.execCommandStreamingWithTimeout(
+    io.command("journalctl", ["-f"]),
+    fn(line) {
+        if line.contains("error") {
+            io.writeFilePath(./errors.log, line);
+        }
+    },
+    timeoutMs = 5000,
+);
+```
+
+**一等管道**。命令之间用 `|>` 串联，类型是 `Pipeline`：
+
+```neve
+let p = io.command("ls", ["-la"]) |> io.command("grep", ["neve"]);
+let result = io.execPipeline(p);
+let lines = io.processStdout(result);
+```
+
+**原子写**。不会出现写到一半断电文件损坏：
+
+```neve
+io.atomicWrite(./critical.json, newConfig);
+io.atomicWriteAll(./dir/, [("./a.txt", contentA), ("./b.txt", contentB)]);
+```
 
 ---
 
 ## 装一个
 
 ```bash
-# 预编译
 curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
-
-# Arch
-paru -S neve-bin
-
-# 或者从源码
-git clone https://github.com/MCB-SMART-BOY/Neve.git
-cd Neve && cargo install --path neve-cli --locked
 ```
 
----
+或者 Arch：`paru -S neve-bin`。源码：`cargo install --path neve-cli --locked`。
 
-## 跑一下
-
-```neve
--- Hello world（不需要 import）
-println("Hello, world!");
-
--- 路径字面量直接是 Path 类型
-let content = io.readFilePath(./Cargo.toml);
-
--- 流式处理命令输出
-io.execCommandStreaming(
-    io.command("journalctl", ["-f"]),
-    fn(line) { println(line) }
-);
-
--- 管道
-let result = io.execPipeline(
-    io.pipeline([io.command("echo", ["hello"]), io.command("cat", [])])
-);
-
--- 原子写
-io.atomicWrite("/etc/config.toml", newConfig);
-
--- 效果注解
-fn save(path: Path, data: String) effect = io.writeFilePath(path, data);
-```
+然后：
 
 ```bash
-neve run script.neve     # 跑脚本
-neve repl                # 交互式
-neve check script.neve   # 类型检查（默认拒绝 IO）
-neve fmt file script.neve # 格式化
+neve repl          # 交互式，有 Tab 补全
+neve run foo.neve  # 跑脚本
+neve check foo.neve # 类型检查
 ```
 
 ---
 
-## 开发
+## 形式化验证
 
-```bash
-cargo check --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all
-```
+核心语义用 Lean 4 做了机器检查的证明。不是"我们觉得没问题"，是编译器级别的保证：
+
+- 效果系统 21 条规则覆盖全部 I/O 路径
+- 全部二元运算符 12/12 有类型安全证明
+- 管道安全、环境注入防护、缓冲区溢出防护——5 项安全审计全部机器验证
+
+`formal/` 目录，`lake build` 一把过。
 
 ---
 
-## License
+## 更多
+
+[语言规范](docs/reference/spec.md) · [功能矩阵](docs/project/feature-matrix.md) · [路线图](docs/project/language-roadmap.md) · [更新日志](docs/project/changelog.md)
+
+---
 
 MPL-2.0
