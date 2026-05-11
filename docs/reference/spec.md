@@ -155,7 +155,8 @@ String  -- UTF-8 string
 Unit    -- empty type ()
 ```
 
-Note: Path literals currently evaluate to `String`. A dedicated `Path` type is planned.
+Path literals (`./config`, `/etc/hosts`) are first-class `Path` values.
+`io.readFilePath(./x)` and typed-path adapters are available.
 
 ### Compound Types
 
@@ -164,8 +165,16 @@ List<Int>                       -- list
 Option<Int>                     -- optional value
 Result<Int, String>             -- result with error
 (Int, String)                   -- tuple
-(Int, Int) -> Int               -- function
+(Int, Int) -> Int               -- function (single tuple param)
+Int -> Int -> Int               -- curried function
 #{ name: String, port: Int }    -- record type
+
+-- Runtime object types
+Command                         -- process command
+Pipeline                        -- command pipeline
+ProcessResult                   -- process execution result
+Task<T>                         -- deferred task
+Bytes                           -- binary data
 ```
 
 
@@ -180,7 +189,8 @@ String  -- UTF-8 字符串
 Unit    -- 空类型 ()
 ```
 
-注意：路径字面量目前会被当成 `String`，独立的 `Path` 类型计划中。
+路径字面量（`./config`、`/etc/hosts`）是一等 `Path` 值。
+`io.readFilePath(./x)` 和 typed-path adapter 均已可用。
 
 ### 复合类型
 
@@ -189,8 +199,16 @@ List<Int>                       -- 列表
 Option<Int>                     -- 可选值
 Result<Int, String>             -- 带错误的结果
 (Int, String)                   -- 元组
-(Int, Int) -> Int               -- 函数
+(Int, Int) -> Int               -- 函数（单参数元组）
+Int -> Int -> Int               -- 柯里化函数
 #{ name: String, port: Int }    -- 记录类型
+
+-- 运行时对象类型
+Command                         -- 进程命令
+Pipeline                        -- 命令管道
+ProcessResult                   -- 进程执行结果
+Task<T>                         -- 延迟任务
+Bytes                           -- 二进制数据
 ```
 
 

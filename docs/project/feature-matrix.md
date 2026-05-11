@@ -62,7 +62,7 @@
 | 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，主 CLI 路径在常见本地导入与 `std` 导入场景下已优先走 HIR，但边缘场景仍会回退 |
 | 列表推导 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 语言层基本可用，工具链覆盖不足 |
 | 安全字段访问 `?.` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / record / option-record；类型拒绝非 record 非 option 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
-| 路径字面量 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ⚠️ | 目前本质上仍被当成 `String`，不是独立 `Path` |
+| 路径字面量 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `./config` 推断为 `Path` 类型；typed-path adapter 和 bridge 全覆盖 |
 | 惰性表达式 `lazy` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `lazy/force/isLazy/isEvaluated` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | 空值合并 `??` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / user enum `Some/None`；类型拒绝非 Option-like 的 `??` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | 错误传播 `?` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option/Result / user enum `Some/None`/`Ok/Err`；类型拒绝非 optional 的 `?` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
