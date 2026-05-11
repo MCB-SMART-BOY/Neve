@@ -26,7 +26,7 @@ Welcome to the Neve documentation hub. Start from your current goal instead of r
 - New user / 初次上手: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
 - Language reference / 语言参考: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
 - Contributor / 贡献者: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
-- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/roadmap.md](project/roadmap.md), [project/language-roadmap.md](project/language-roadmap.md), [project/changelog.md](project/changelog.md)
+- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/language-roadmap.md](project/language-roadmap.md), [project/semantic-convergence-plan.md](project/semantic-convergence-plan.md), [project/effect-boundary.md](project/effect-boundary.md), [project/changelog.md](project/changelog.md)
 - Bootstrap examples / bootstrap 示例: [contributor/bootstrap.md](contributor/bootstrap.md), [examples/bootstrap](../examples/bootstrap)
 
 ---
@@ -48,8 +48,8 @@ Welcome to the Neve documentation hub. Start from your current goal instead of r
 ### I want to understand project reality / 我想看项目真实完成度
 
 - [project/feature-matrix.md](project/feature-matrix.md): real support matrix
-- [project/roadmap.md](project/roadmap.md): product-level roadmap
-- [project/language-roadmap.md](project/language-roadmap.md): language-completion and shell-replacement roadmap
+- [project/bash-nix-roadmap.md](project/bash-nix-roadmap.md): Bash/Nix replacement roadmap
+- [project/language-roadmap.md](project/language-roadmap.md): language completion roadmap
 - [project/changelog.md](project/changelog.md): released changes only
 
 ### I want to contribute / 我想参与开发
