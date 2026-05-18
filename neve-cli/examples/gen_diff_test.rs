@@ -461,7 +461,9 @@ fn main() {
     println!("  Lean: {} results", lean_results.len());
 
     let mut passed = 0;
+    #[allow(clippy::needless_range_loop)]
     let mut mismatches = Vec::new();
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n_tests {
         let rust = rust_results.get(i).map(|s| s.as_str()).unwrap_or("N/A");
         let lean = lean_results.get(i).map(|s| s.as_str()).unwrap_or("N/A");
