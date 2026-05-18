@@ -2,8 +2,8 @@
 
 <div align="center">
 
-**版本**: v1.0
-**日期**: 2026-05-09
+**版本**: v1.1
+**日期**: 2026-05-12
 **状态**: 当前前沿 (G4 决策门)
 **关联**: [语言路线图](./language-roadmap.md) · [语义收敛计划](./semantic-convergence-plan.md) · [功能矩阵](./feature-matrix.md)
 
@@ -127,7 +127,10 @@ pub fn is_effectful_builtin(name: &str) -> bool {
 |---------|------|----------------|-----------|
 | `io.spawn` | 延迟 | `spawn` | `builtin_spawn` |
 | `io.awaitTask` | 阻塞 | `awaitTask` | `builtin_await_task` |
+| `io.awaitTasks` | 阻塞 | `awaitTasks` | `builtin_await_tasks` |
 | `io.awaitTaskWithTimeout` | 阻塞+超时 | `awaitTaskTimeout` | `builtin_await_task_timeout` |
+| `io.cancel` | 直接 | `cancel` | `builtin_cancel` |
+| `io.awaitAny` | 阻塞 | `awaitAny` | `builtin_await_any` |
 
 #### D. 输出（有副作用：写入 stdout/stderr）
 
@@ -160,17 +163,60 @@ pub fn is_effectful_builtin(name: &str) -> bool {
 | `io.processCode` | 获取退出码 |
 | `io.processStderr` | 获取 stderr 内容 |
 
+#### G. Stream 操作（Phase 4 新增，已完成 ✅）
+
+| Builtin | 模式 | 效果 | EffectEval 规则 | 说明 |
+|---------|------|------|----------------|------|
+| `io.streamList` | 构造 | ❌ 无 | — | 列表转惰性流 |
+| `io.streamLines` | 构造 | ❌ 无 | — | 惰性文件行流 |
+| `io.streamCommand` | 构造 | ❌ 无 | — | 惰性命令 stdout 流 |
+| `io.streamBytes` | 构造 | ❌ 无 | — | 惰性字节块流 |
+| `io.streamMap` | 变换 | ❌ 无 | streamMap | 逐元素映射 ✅ |
+| `io.streamFilter` | 变换 | ❌ 无 | streamFilter | 惰性过滤 ✅ |
+| `io.streamTake` | 变换 | ❌ 无 | streamTake | 截断 ✅ |
+| `io.streamDrop` | 变换 | ❌ 无 | streamDrop | 跳过 ✅ |
+| `io.streamCollect` | 消费 | ✅ | streamCollect | 收集为列表 |
+| `io.streamPipe` | 消费 | ✅ | streamPipe | 流入命令 stdin |
+| `io.streamWrite` | 消费 | ✅ | streamWrite | 写入文件 |
+| `io.streamForEach` | 消费 | ✅ | streamForEach | 逐元素消费 |
+| `io.streamFold` | 消费 | ✅ | streamFold | 严格折叠 |
+| `io.streamWithTimeout` | 包装 | ❌ 无 | — | 元素级超时 |
+
+#### H. TTY 控制（有副作用：配置终端设备）
+
+| Builtin | 模式 | 效果 | EffectEval 规则 | 说明 |
+|---------|------|------|----------------|------|
+| `io.setRawMode` | 直接 | ✅ | `setRawMode` | 设置终端 raw mode |
+| `io.resetTerminal` | 直接 | ✅ | `resetTerminal` | 恢复终端默认模式 |
+
+#### I. Job 控制（有副作用：查询/等待后台作业）
+
+| Builtin | 模式 | 效果 | EffectEval 规则 | 说明 |
+|---------|------|------|----------------|------|
+| `io.jobs` | 直接 | ✅ | `jobs` | 列出活跃 spawn ID |
+| `io.waitAnyJob` | 阻塞 | ✅ | `waitAnyJob` | 等待任意作业完成 |
+
 ### 3.2 统计
 
 | 类别 | 数量 | 有效果？ |
 |------|------|---------|
 | 进程执行 | 6 | ✅ 全部 |
-| 文件 I/O | 3 | ✅ 全部 |
-| 任务/并发 | 3 | ✅ 全部 |
+| 文件 I/O | 5 | ✅ 全部 |
+| 任务/并发 | 7 | ✅ 全部 |
 | 输出函数 | 2 | ✅ 全部 |
+| Stream 消费 | 5 | ✅ 全部 |
+| TTY 控制 | 2 | ✅ 全部 |
+| Job 控制 | 2 | ✅ 全部 |
 | 纯构造函数 | 11 | ❌ 无 |
 | 纯检查器 | 4 | ❌ 无 |
-| **合计** | **14 个效果操作** + **15 个纯操作** | |
+| Stream 构造/变换 | 9 | ❌ 无 |
+| **合计** | **34 个效果操作** + **24 个纯操作** | (Phase 4 complete, Phase 5 ongoing) |
+
+> **注**: Stream 构造器 (4) 和变换器 (5) 是无副作用的纯操作；Stream 消费者 (5) 是有副作用的。
+> Stream 消费者的副作用是间接的——它们在求值流时触发构造阶段创建的惰性 I/O。
+>
+> **io.cancel、io.awaitAny、io.setRawMode、io.resetTerminal、io.jobs、io.waitAnyJob 已实现 (Phase 4)**
+> **Registry CLI 命令 (registry-update/registry-serve/registry-publish) 已实现 (Phase 5)**
 
 ---
 
@@ -188,6 +234,7 @@ Value (运行时值)
   ├── Value.closure(x, body, env)                 ← Task / spawn 结果
   ├── Value.list(elems)                           ← readFileLines 结果
   ├── Value.someVal(v) / Value.noneVal            ← 超时结果
+  ├── Value.stream(StreamValue)                  ← Phase 4 (planned)
   └── Value.unit                                  ← writeFile 等操作的结果
 
 IOState (效果状态，在 EffectEval 中传递)
@@ -268,7 +315,7 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 
 ## 6. EffectEval 规则清单 / EffectEval Rule Inventory
 
-### 6.1 规则总览（15 条）
+### 6.1 规则总览（34 条，EffectEval v4.3）
 
 | # | 规则名称 | 类别 | 核心前提 |
 |---|---------|------|---------|
@@ -277,7 +324,7 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 | 3 | `execPipeline` | 阻塞管道 | `hsize_all_stages + hfinal_out + hfinal_err` |
 | 4 | `spawn` | 延迟创建 | `body` 被包装为 closure |
 | 5 | `awaitTask` | 阻塞等待 | 完整子求值 |
-| 6 | `awaitTaskTimeout` | 超时等待 | （框架，待完善） |
+| 6 | `awaitTaskTimeout` | 超时等待 | 完成子求值或超时 → Option |
 | 7 | `execCommandStreaming` | 流式执行 | `hstdin_len + hline_count + hout_len + herr_len` |
 | 8 | `execPipelineStreaming` | 流式管道 | `hsize_all_stages + hline_count + hfinal_*` |
 | 9 | `execCommandStreamingTimeout` | 流式+超时（成功） | 所有前提 + timeout 未过期 |
@@ -287,6 +334,15 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 | 13 | `readFileLines` | 流式读文件 | `hline_count` |
 | 14 | `readFile` | 阻塞读文件 | `content = fileContent path` |
 | 15 | `writeFile` | 阻塞写文件 | （无额外前提） |
+| 16 | `retry_success` | 重试成功 | action 在 maxAttempts 内成功 |
+| 17 | `retry_failure` | 重试失败 | action 在 maxAttempts 内均失败 |
+| 18 | `ensure_success` | 确保成功 | action 在 timeoutMs 内成功 |
+| 19 | `ensure_timeout` | 确保超时 | action 在 timeoutMs 内未成功 |
+| 20 | `cancel` | 任务取消 | 终止运行中的 TaskHandle |
+| 21 | `awaitAny` | 等待最先完成 | 多个 TaskHandle 中首个完成者 |
+| 22-26 | `streamConstruct` | Stream 构造 (5) | streamList/streamLines/streamCommand/streamBytes/streamCollect |
+| 27-31 | `streamTransform` | Stream 变换+管道 (5) | streamMap/streamFilter/streamTake/streamDrop/streamPipe |
+| 32-34 | `streamConsume` | Stream 消费 (3) | streamForEach/streamFold/streamWithTimeout |
 
 ### 6.2 规则与 Rust 的映射
 
@@ -446,3 +502,13 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 | 日期 | 版本 | 变更 |
 |------|------|------|
 | 2026-05-09 | v1.0 | 初始版本。G4 决策门文档。覆盖 15 条 EffectEval 规则、4 项安全审计、完整的运行时对象模型。 |
+
+---
+
+## 11. 变更记录 / Changelog
+
+### 11.1 v1.1 (2026-05-12)
+- 新增 Stream<T> 效果分类 (G 组，14 个 API)
+- 更新统计数字
+- 更新类型层次图
+- 关联: `stream-design.md` v1.0

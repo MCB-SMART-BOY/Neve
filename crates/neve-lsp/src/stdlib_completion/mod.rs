@@ -92,6 +92,20 @@ mod tests {
         assert!(labels.contains(&"io.processStdout"));
         assert!(labels.contains(&"io.processCode"));
         assert!(labels.contains(&"io.processStderr"));
+        // Stream<T> APIs
+        assert!(labels.contains(&"io.streamList"));
+        assert!(labels.contains(&"io.streamLines"));
+        assert!(labels.contains(&"io.streamCommand"));
+        assert!(labels.contains(&"io.streamBytes"));
+        assert!(labels.contains(&"io.streamMap"));
+        assert!(labels.contains(&"io.streamFilter"));
+        assert!(labels.contains(&"io.streamTake"));
+        assert!(labels.contains(&"io.streamDrop"));
+        assert!(labels.contains(&"io.streamCollect"));
+        assert!(labels.contains(&"io.streamPipe"));
+        assert!(labels.contains(&"io.streamForEach"));
+        assert!(labels.contains(&"io.streamFold"));
+        assert!(labels.contains(&"io.streamWithTimeout"));
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //! 本模块实现了高级中间表示（HIR）的求值器。
 //! 它提供了一个带有尾调用优化的树遍历解释器。
 
-use crate::value::{EventKind, EventValue};
+use crate::value::{EventKind, EventValue, StreamState, StreamTransform, StreamValue};
 use crate::{Environment, Value};
 use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32};
 use neve_diagnostic::Diagnostic;
@@ -1045,10 +1045,10 @@ impl Evaluator {
                         )))
                     }
                     (Value::Command(_), _) => Err(EvalError::TypeError(
-                        "command pipe: right side must be a Command".to_string(),
+                        "pipe: right side must be a Command".to_string(),
                     )),
                     (Value::Pipeline(_), _) => Err(EvalError::TypeError(
-                        "pipeline pipe: right side must be a Command".to_string(),
+                        "pipe: right side must be a Command".to_string(),
                     )),
                     _ => self.apply(right, vec![left]),
                 }
@@ -1345,6 +1345,26 @@ impl Evaluator {
                     return Err(EvalError::WrongArity);
                 }
                 Ok(Some(self.builtin_any(&args[0], &args[1])?))
+            }
+            "io.streamCollect" => {
+                if args.len() != 1 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_stream_collect(&args[0])?))
+            }
+            "io.streamForEach" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_stream_for_each(&args[0], &args[1])?))
+            }
+            "io.streamFold" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(
+                    self.builtin_stream_fold(&args[0], &args[1], &args[2])?,
+                ))
             }
             _ => Ok(None),
         }
@@ -1942,16 +1962,15 @@ impl Evaluator {
             mpsc::channel::<Result<(i32, bool, Vec<u8>, Vec<u8>), String>>();
 
         // Check first stage stdin size before spawning thread
-        if let Some(first) = stages.first() {
-            if let Some(ref stdin_str) = first.stdin {
-                if stdin_str.len() > self.max_stdin_bytes {
-                    return Err(EvalError::TypeError(format!(
-                        "execPipelineStreamingWithTimeout: stage 1 stdin size {} exceeds limit {}",
-                        stdin_str.len(),
-                        self.max_stdin_bytes
-                    )));
-                }
-            }
+        if let Some(first) = stages.first()
+            && let Some(ref stdin_str) = first.stdin
+            && stdin_str.len() > self.max_stdin_bytes
+        {
+            return Err(EvalError::TypeError(format!(
+                "execPipelineStreamingWithTimeout: stage 1 stdin size {} exceeds limit {}",
+                stdin_str.len(),
+                self.max_stdin_bytes
+            )));
         }
 
         // Capture limits for use inside the thread
@@ -1964,8 +1983,8 @@ impl Evaluator {
         std::thread::spawn(move || {
             let mut previous_stdout: Option<Vec<u8>> = None;
             let mut combined_stderr = Vec::new();
-            let mut last_code = 0;
-            let mut last_success = false;
+            let mut last_code;
+            let mut last_success;
 
             for (idx, stage) in stages.iter().enumerate() {
                 let mut proc = std::process::Command::new(&stage.program);
@@ -2011,11 +2030,10 @@ impl Evaluator {
                 // Write stdin for this stage
                 if let Some(data) = stage_stdin
                     && let Some(mut stdin_pipe) = child.stdin.take()
+                    && let Err(e) = stdin_pipe.write_all(data)
                 {
-                    if let Err(e) = stdin_pipe.write_all(data) {
-                        let _ = line_tx.send(Err(format!("stage {idx}: stdin write: {e}")));
-                        return;
-                    }
+                    let _ = line_tx.send(Err(format!("stage {idx}: stdin write: {e}")));
+                    return;
                 }
 
                 if is_last {
@@ -2070,8 +2088,10 @@ impl Evaluator {
                                 )));
                                 return;
                             }
-                            last_code = output.status.code().unwrap_or(-1);
-                            last_success = output.status.success();
+                            // Status tracked per-stage; only the final stage's
+                            // values are consumed via result_tx below.
+                            let _ = output.status.code().unwrap_or(-1);
+                            let _ = output.status.success();
                             previous_stdout = Some(output.stdout);
                             combined_stderr.extend_from_slice(&output.stderr);
                         }
@@ -2341,10 +2361,10 @@ impl Evaluator {
         }
 
         // Install OS signal handler only once per signal name
-        if !self.signal_handlers.contains_key(name) {
-            if let Err(e) = install_signal_handler(name) {
-                return Err(EvalError::TypeError(format!("io.onSignal: {e}")));
-            }
+        if !self.signal_handlers.contains_key(name)
+            && let Err(e) = install_signal_handler(name)
+        {
+            return Err(EvalError::TypeError(format!("io.onSignal: {e}")));
         }
 
         // Store the handler callback (last registration wins)
@@ -2362,10 +2382,10 @@ impl Evaluator {
         // Avoid cloning the HashMap — only clone handler Values that need dispatch.
         let mut pending: Vec<String> = Vec::new();
         for name in self.signal_handlers.keys() {
-            if let Some(idx) = signal_index(name) {
-                if SIGNAL_FLAGS[idx].load(Ordering::Acquire) {
-                    pending.push(name.clone());
-                }
+            if let Some(idx) = signal_index(name)
+                && SIGNAL_FLAGS[idx].load(Ordering::Acquire)
+            {
+                pending.push(name.clone());
             }
         }
         // Dispatch handlers for pending signals (outside the borrow of signal_handlers)
@@ -2407,6 +2427,185 @@ impl Evaluator {
             }
         }
         Ok(Value::Bool(false))
+    }
+
+    /// Collect all elements from a stream into a list.
+    /// 将流中的所有元素收集到列表中。
+    fn builtin_stream_collect(&mut self, stream_val: &Value) -> Result<Value, EvalError> {
+        let stream = match stream_val {
+            Value::Stream(s) => s.clone(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.streamCollect expects a Stream".to_string(),
+                ));
+            }
+        };
+        let mut items = Vec::new();
+        loop {
+            match self.stream_next(&stream) {
+                Ok(Some(v)) => items.push(v),
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!("io.streamCollect: {e}")));
+                }
+            }
+        }
+        Ok(Value::List(Rc::new(items)))
+    }
+
+    /// Call a callback for each element in a stream.
+    /// 对流中的每个元素调用回调。
+    fn builtin_stream_for_each(
+        &mut self,
+        stream_val: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        let stream = match stream_val {
+            Value::Stream(s) => s.clone(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.streamForEach expects a Stream".to_string(),
+                ));
+            }
+        };
+        loop {
+            match self.stream_next(&stream) {
+                Ok(Some(v)) => {
+                    self.apply(callback.clone(), vec![v])?;
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!("io.streamForEach: {e}")));
+                }
+            }
+        }
+        Ok(Value::Unit)
+    }
+
+    /// Fold a stream with an initial accumulator and a folder function.
+    /// 使用初始累加器和折叠函数对流进行折叠。
+    fn builtin_stream_fold(
+        &mut self,
+        stream_val: &Value,
+        init: &Value,
+        folder: &Value,
+    ) -> Result<Value, EvalError> {
+        let stream = match stream_val {
+            Value::Stream(s) => s.clone(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.streamFold expects a Stream".to_string(),
+                ));
+            }
+        };
+        let mut acc = init.clone();
+        loop {
+            match self.stream_next(&stream) {
+                Ok(Some(v)) => {
+                    acc = self.apply(folder.clone(), vec![acc, v])?;
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!("io.streamFold: {e}")));
+                }
+            }
+        }
+        Ok(acc)
+    }
+
+    /// Get the next element from a stream, handling Wrapped transforms.
+    /// Unlike StreamValue::next(), this can apply Value::Closure transforms
+    /// because we have evaluator context.
+    /// 从流中获取下一个元素，处理 Wrapped 变换。
+    /// 与 StreamValue::next() 不同，此方法可以应用 Value::Closure 变换，
+    /// 因为我们有求值器上下文。
+    fn stream_next(&mut self, stream: &StreamValue) -> Result<Option<Value>, EvalError> {
+        let state = stream.inner.borrow();
+        match &*state {
+            StreamState::Done => Ok(None),
+            StreamState::Iterator { .. }
+            | StreamState::LinesChannel { .. }
+            | StreamState::BytesChannel { .. } => {
+                // Non-wrapped: delegate to the regular next()
+                drop(state);
+                stream.next().map_err(EvalError::TypeError)
+            }
+            StreamState::Wrapped { source, transform } => {
+                // Clone everything we need, then drop the RefCell borrow
+                let source = source.clone();
+                let xf = transform.clone();
+                drop(state);
+
+                match &*xf {
+                    StreamTransform::Take { remaining } => {
+                        if *remaining == 0 {
+                            *stream.inner.borrow_mut() = StreamState::Done;
+                            return Ok(None);
+                        }
+                        match self.stream_next(&source)? {
+                            Some(v) => {
+                                // Update remaining counter
+                                let mut s = stream.inner.borrow_mut();
+                                if let StreamState::Wrapped { transform: t, .. } = &mut *s
+                                    && let StreamTransform::Take { remaining: r } = &mut **t
+                                {
+                                    *r = *remaining - 1;
+                                }
+                                Ok(Some(v))
+                            }
+                            None => Ok(None),
+                        }
+                    }
+                    StreamTransform::Drop { remaining } => {
+                        if *remaining == 0 {
+                            return self.stream_next(&source);
+                        }
+                        // Skip one element from source
+                        match self.stream_next(&source)? {
+                            Some(_) => {
+                                // Decrement counter (scope the RefMut guard)
+                                {
+                                    let mut s = stream.inner.borrow_mut();
+                                    if let StreamState::Wrapped { transform: t, .. } = &mut *s
+                                        && let StreamTransform::Drop { remaining: r } = &mut **t
+                                    {
+                                        *r = *remaining - 1;
+                                    }
+                                }
+                                // Recurse after dropping the borrow
+                                self.stream_next(stream)
+                            }
+                            None => Ok(None),
+                        }
+                    }
+                    StreamTransform::Map { func } => match self.stream_next(&source)? {
+                        Some(v) => {
+                            let mapped = self.apply(func.clone(), vec![v])?;
+                            Ok(Some(mapped))
+                        }
+                        None => Ok(None),
+                    },
+                    StreamTransform::Filter { predicate } => loop {
+                        match self.stream_next(&source)? {
+                            Some(v) => {
+                                let pred_result = self.apply(predicate.clone(), vec![v.clone()])?;
+                                if pred_result.is_truthy() {
+                                    return Ok(Some(v));
+                                }
+                                // else continue looping
+                            }
+                            None => return Ok(None),
+                        }
+                    },
+                    StreamTransform::Timeout { deadline } => {
+                        if std::time::Instant::now() >= *deadline {
+                            return Ok(None);
+                        }
+                        self.stream_next(&source)
+                    }
+                }
+            }
+        }
     }
 
     fn force_thunk(&mut self, thunk: &crate::value::Thunk) -> Result<Value, EvalError> {
@@ -2759,6 +2958,7 @@ impl Evaluator {
             Value::Closure { .. } => "<function>".to_string(),
             Value::Event(_) => "Event(..)".to_string(),
             Value::Live(_) => "Live(..)".to_string(),
+            Value::Stream(_) => "<stream>".to_string(),
             Value::Thunk(thunk) => {
                 use crate::value::ThunkState;
                 match &*thunk.state() {

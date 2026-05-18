@@ -1,0 +1,16 @@
+import std.list as list;
+
+fn complete(t) = #{ title = t.title, done = true };
+fn is_done(t) = t.done;
+
+fn summarize(tasks) = {
+    let done_count = len(list.filter(is_done, tasks));
+    "Tasks: " ++ toString(done_count) ++ "/" ++ toString(len(tasks)) ++ " done"
+};
+
+let tasks = [
+    #{ title = "Learn Neve", done = true },
+    #{ title = "Build project", done = false },
+];
+
+let r = summarize(tasks);

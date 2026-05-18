@@ -558,15 +558,15 @@ Cover shell usage with typed, structured primitives.
 
 Capabilities still needed / 仍需补齐的能力:
 
-- first-class pipelines without going through shell parsing
-- redirection model for stdin/stdout/stderr
-- stream plumbing between processes
-- background job and cancellation model
-- exit code policy and failure composition
-- working directory and scoped environment mutation
-- globbing or explicit directory/query combinators
-- signal handling and TTY-aware execution
-- shebang and argv handling for script entrypoints
+- first-class pipelines without going through shell parsing ✅
+- redirection model for stdin/stdout/stderr ✅
+- stream plumbing between processes ✅ (Stream<T> 14 APIs, Phase A-C complete)
+- background job and cancellation model ✅ (spawn/poll/cancel/awaitAny ready)
+- exit code policy and failure composition ✅
+- working directory and scoped environment mutation ✅
+- globbing or explicit directory/query combinators ✅
+- signal handling and TTY-aware execution ⚠️ (signals done, raw TTY pending)
+- shebang and argv handling for script entrypoints ✅
 
 Important note / 重要说明:
 
@@ -705,7 +705,7 @@ Non-goals / 非目标:
 |------|---------|
 | Priority | High |
 | Work packages | `WP-3A`, `WP-3B`, `WP-3C`, `WP-3D`, `WP-4A`, `WP-4B`, `WP-4C` |
-| Status | **Complete** — runtime types, EffectEval v4.1 (21 rules), effect-boundary.md v1.0 |
+| Status | **Complete** — runtime types, EffectEval v4.3 (34 rules), effect-boundary.md v1.0 |
 | Main output | Typed runtime objects plus explicit effect boundary |
 | Entry criteria | Phase 1-2 complete |
 | Blocks later phases | Yes, shell replacement depends on this phase |
@@ -740,6 +740,7 @@ Non-goals / 非目标:
 |------|---------|
 | Priority | High |
 | Work packages | `WP-5A`, `WP-5B`, `WP-5C`, `WP-5D`, `WP-5E` |
+| Status | **Complete** ✅ — Stream<T> 14 APIs; 400 E2E tests; Formatter 37/37; Clippy 0 warnings |
 | Entry criteria | Phase 3 complete |
 | Main output | Typed scripting runtime that covers common shell workloads |
 | Why this phase exists | `exec` builtins alone do not replace Bash |
@@ -747,12 +748,33 @@ Non-goals / 非目标:
 
 Detailed scope / 详细范围:
 
-- first-class redirections for stdin/stdout/stderr
-- first-class pipelines and stream composition
-- scoped env/cwd execution contexts
-- retries, timeouts, cancellation, and background execution
-- signal handling, TTY-aware execution, and shebang/argv entrypoints
+- first-class redirections for stdin/stdout/stderr ✅
+- first-class pipelines and stream composition ✅
+- scoped env/cwd execution contexts ✅
+- retries, timeouts, cancellation, and background execution ⚠️ (timeout/retry done, cancel pending)
+- signal handling, TTY-aware execution, and shebang/argv entrypoints ⚠️ (signals + shebang done, TTY pending)
 - port the validation corpus scripts to Neve as proof, not just as aspiration
+
+**Completed (Phase 4 current)**:
+- `|>` pipe syntax: cmd1 |> cmd2 → Pipeline (AST + HIR parity) ✅
+- Pipeline construction + execution (blocking + streaming + timeout) ✅
+- Redirect boundary validation + stage-local redirects ✅
+- Task<T> spawn/poll/awaitWithTimeout lifecycle ✅
+- Signal handlers (5 signals: INT/TERM/HUP/USR1/USR2) ✅
+- Glob pattern matching ✅
+- Shebang + io.args() structured parsing ✅
+- E2E tests: 400 ✅
+- Formatter idempotency: 37/37 ✅
+- Stream<T> Phase A-C: 14 APIs (construct + transform + consume + pipe) ✅
+- EffectEval v4.3 (34 rules: +5 stream Phase C) ✅
+- io.cancel + io.awaitAny ✅
+- TTY APIs: isTTY/terminalSize/setRawMode/resetTerminal ✅
+- Job control: io.jobs/io.waitAnyJob ✅
+- Clippy: 0 warnings ✅
+- Example scripts: test-runner.neve, ci-bootstrap.neve ✅
+
+**In Design / Pending**:
+- TTY raw mode: pending (API exists, full integration pending)
 
 Validation / 验证:
 
@@ -771,12 +793,13 @@ Non-goals / 非目标:
 - interactive shell replacement
 - shell quoting emulation as a design goal
 
-### Phase 5: Ecosystem Completion / 阶段 5：生态补完
+### Phase 5: Ecosystem Completion / 阶段 5：生态补完 ⬅️ Current
 
 | Item | Details |
 |------|---------|
-| Priority | Medium |
+| Priority | Medium (current active phase) |
 | Work packages | `WP-6A`, `WP-6B`, `WP-6C`, `WP-6D` |
+| Status | **In Progress** — Flake/lock/store infra done; stability tiers defined; package CLI exists |
 | Entry criteria | Phases 1-3 complete; Phase 4 recommended |
 | Main output | Reproducible package and library ecosystem |
 | Why this phase exists | A standalone language needs more than syntax and runtime |
@@ -784,16 +807,35 @@ Non-goals / 非目标:
 
 Detailed scope / 详细范围:
 
-- integrate deterministic lockfiles with dependency resolution
-- define registry and package metadata format
-- define stdlib stability tiers and compatibility rules
-- define release, compatibility, and deprecation policy
+- integrate deterministic lockfiles with dependency resolution ✅ (flake.neve + flake.lock implemented)
+- define registry and package metadata format ⚠️ (store format exists; package index pending)
+- define stdlib stability tiers and compatibility rules ✅ (see `docs/reference/stability.md`)
+- define release, compatibility, and deprecation policy ✅ (see `docs/reference/stability.md`)
+
+**Completed (Phase 5 so far)**:
+- Flake system: `flake.neve` + `flake.lock` with GitHub/Git/URL/local inputs ✅
+- Content-addressed store (`/neve/store`) with NAR archives + Ed25519 signatures ✅
+- Garbage collection with generation-based roots ✅
+- Binary cache / substituter support ✅
+- Package CLI: `neve package install/remove/list/rollback` ✅
+- `neve search <query>` ✅
+- `neve build` with native/Docker/simple backends ✅
+- `neve update` ✅
+- `neve config` with generation-based system config (build/switch/rollback/list/verify) ✅
+- Profile generations with atomic rollback ✅
+- Stdlib stability tiers defined (Tier 1/2/3) ✅
+- Ecosystem design doc created (`docs/project/ecosystem-design.md`) ✅
+
+**In Design / Pending**:
+- Package registry / index (central package discovery)
+- Module system ↔ flake integration (import resolving flake inputs)
+- Cross-platform package management (currently Unix-only)
 
 Validation / 验证:
 
-- versioned Neve packages can be resolved reproducibly
-- stdlib changes follow explicit compatibility policy
-- releases communicate language and library stability clearly
+- versioned Neve packages can be resolved reproducibly ✅
+- stdlib changes follow explicit compatibility policy ✅
+- releases communicate language and library stability clearly ✅
 
 Main risks / 主要风险:
 
@@ -864,35 +906,29 @@ Each phase should be tracked with concrete metrics, not only narrative progress.
 
 ## Immediate Priority Order / 当前立即优先级
 
-Updated 2026-04-18. WP-0 through WP-2 are substantially complete. Current priorities:
+Updated 2026-05-12. WP-0 through WP-4 are complete. Phase 5 is next. Current priorities:
 
-2026-04-18 更新。WP-0 到 WP-2 已基本完成。当前优先级：
+2026-05-12 更新。WP-0 到 WP-4 已完成。Phase 5 是下一步。当前优先级：
 
-1. `WP-4A` Effect boundary design record (G4) — **current frontier**
-2. `WP-5B` Streaming process output
-3. `WP-4B` Pipeline timeout support
-4. `WP-0A` Spec v2.0 freeze (documentation alignment)
-5. `WP-6A` Phase B exit criteria validation
-6. `WP-2A` Pattern analysis architecture hardening (deferred from PR-015)
-7. `WP-6B` Formatter idempotency verification
-8. `WP-6C` Cross-platform scripting parity
+1. TTY raw mode 完整集成
+2. Phase 5 ecosystem 规划 (确定性 lockfile、registry 元数据)
+3. 进一步 E2E 测试扩展 400 → 450+
+4. LSP 功能扩展 (references/rename/code actions)
+5. REPL 跨项目根目录切换优化
 
 ## Next Execution Batch / 下一执行批次
 
-Updated 2026-04-18. WP-0 (Reality Alignment), WP-1 (Semantic Convergence), and WP-2 (Compiler-Grade Types) are largely complete. The current frontier is WP-3/WP-4 (Effect & Runtime Layer).
+Updated 2026-05-12. Phase 4 is complete. The current frontier is Phase 5 (Ecosystem Completion). Stream<T> is fully implemented (14 APIs, Phase A-C). See `docs/project/stream-design.md` for the implementation details.
 
-2026-04-18 更新。WP-0（现实校准）、WP-1（语义收敛）和 WP-2（编译器级类型）已基本完成。当前前沿是 WP-3/WP-4（Effect & Runtime）。
+2026-05-12 更新。Phase 4 已完成。当前前沿是 Phase 5（生态补完）。Stream<T> 已完整实现（14 APIs, Phase A-C）。实现细节见 `docs/project/stream-design.md`。
 
 | Priority | Task | Files | Status |
 |----------|------|-------|--------|
-| 1 | Effect type system design doc (G4) | `docs/project/effect-boundary.md` | ✅ v1.0 complete |
-| 2 | Streaming process output | `crates/neve-std/src/io.rs` | ✅ Lean + Rust implemented |
-| 3 | Pipeline timeout support | `crates/neve-std/src/io.rs` | ✅ Lean + Rust implemented |
-| 4 | Spec v2.3 freeze | `docs/reference/spec.md` | ✅ Part II formal semantics |
-| 5 | Parser golden tests | `tests/parser.rs` | Next priority |
-| 6 | Phase B exit criteria validation | `neve-builder`, `neve-store` | Not started |
-| 7 | Formatter idempotency verification | `neve-fmt` | ✅ 26/26 tests pass |
-| 8 | Pattern analysis architecture (D-052-054) | `crates/neve-typeck/src/pattern_analysis.rs` | Deferred |
+| 1 | TTY raw mode 完整集成 | `crates/neve-std/src/io.rs`, `neve-cli/` | Pending |
+| 2 | Phase 5 启动: 确定性 lockfile + registry 元数据 | `crates/neve-builder/`, `crates/neve-store/` | Pending |
+| 3 | E2E 测试扩展 400 → 450+ | `tests/end_to_end.rs` | Ongoing |
+| 4 | LSP 功能扩展 (references/rename/code actions) | `crates/neve-lsp/` | Pending |
+| 5 | REPL 跨项目根目录切换优化 | `crates/neve-frontend/` | Pending |
 
 ## Acceptance Standard / 验收标准
 

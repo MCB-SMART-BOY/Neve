@@ -165,6 +165,41 @@ enum Commands {
     #[cfg(unix)]
     Update,
 
+    /// Update the package index from a remote registry (Unix only). / 从远程注册表更新软件包索引（仅限 Unix）。
+    #[cfg(unix)]
+    RegistryUpdate {
+        /// Registry URL (defaults to $NEVE_REGISTRY or https://registry.neve.dev/packages.json).
+        registry_url: Option<String>,
+    },
+
+    /// Start a local package registry server (Unix only).
+    /// 启动本地软件包注册服务器（仅限 Unix）。
+    #[cfg(unix)]
+    RegistryServe {
+        /// Directory containing package data.
+        /// 包含软件包数据的目录。
+        #[arg(default_value = "./registry-data")]
+        dir: String,
+        /// Port to listen on.
+        /// 要监听的端口。
+        #[arg(long, default_value = "8080")]
+        port: u16,
+    },
+
+    /// Publish a package to a registry (Unix only).
+    /// 将软件包发布到注册表（仅限 Unix）。
+    #[cfg(unix)]
+    RegistryPublish {
+        /// Directory containing flake.neve or package.neve.
+        /// 包含 flake.neve 或 package.neve 的目录。
+        #[arg(default_value = ".")]
+        dir: String,
+        /// Registry URL (defaults to $NEVE_REGISTRY).
+        /// 注册表 URL（默认为 $NEVE_REGISTRY）。
+        #[arg(long)]
+        registry_url: Option<String>,
+    },
+
     /// System configuration commands (Unix only). / 系统配置命令（仅限 Unix）。
     #[cfg(unix)]
     Config {
@@ -350,6 +385,16 @@ fn main() {
         },
         #[cfg(unix)]
         Commands::Search { query } => commands::search::run(&query),
+        #[cfg(unix)]
+        Commands::RegistryUpdate { registry_url } => {
+            commands::registry::update(registry_url.as_deref())
+        }
+        #[cfg(unix)]
+        Commands::RegistryServe { dir, port } => commands::registry_serve::run(&dir, port),
+        #[cfg(unix)]
+        Commands::RegistryPublish { dir, registry_url } => {
+            commands::registry_publish::run(&dir, registry_url.as_deref())
+        }
         #[cfg(unix)]
         Commands::Update => commands::update::run(),
         #[cfg(unix)]

@@ -12,7 +12,7 @@ formal/
 │   │   ├── Syntax.lean         — 核心语法（类型、值、表达式、模式、BinOp、Effect）
 │   │   ├── Typing.lean v4      — 类型检查规则（12 条 BinOp 全覆盖）
 │   │   ├── Eval.lean v2        — 大步操作语义（27 条规则，含 matchOn_fallthrough）
-│   │   └── Effects.lean v4     — 效果求值语义（21 条规则，含 Bytes I/O + retry/ensure）
+│   │   └── Effects.lean v4.3   — 效果求值语义（34 条规则，含 5 stream Phase C）
 │   ├── Proofs/
 │   │   ├── Values.lean v4      — ValueTyping + EnvMatches（谓词参数化）
 │   │   ├── Context.lean v4     — env_matches_lookup 引理
@@ -49,7 +49,7 @@ lake build
 
 | 层次 | 模块数 | 状态 | 说明 |
 |------|--------|------|------|
-| Spec（规范） | 4 | ✅ | Syntax, Typing v4, Eval v2, Effects v4 |
+| Spec（规范） | 4 | ✅ | Syntax, Typing v4, Eval v2, Effects v4.3 (34 rules, +5 stream Phase C) |
 | Proofs（证明） | 4 | ✅ | Values, Context, Safety v18, SafetyLemmas |
 | Verify（安全） | 3 | ✅ | Path (M-1), Environ (M-4), Limits (H-1/H-2) |
 | Refinement（精化） | 4 | ✅ | Types, Path, Environ, Limits |
@@ -66,7 +66,7 @@ lake build
 - 二元运算：**12/12 BinOp 全覆盖**（+ - * / % == && || |>）
 - 管道 |> （lam 情况）
 - 模式匹配：通配符、字面量（int/bool）、布尔全覆盖（两臂 + fallthrough）
-- 效果系统：**21 条 EffectEval 规则**（阻塞、流式、超时、Bytes I/O）
+- 效果系统：**34 条 EffectEval 规则（v4.3: +5 stream Phase C: streamCollect/streamPipe/streamForEach/streamFold/streamWithTimeout）**（阻塞、流式、超时、Bytes I/O、stream、cancel/awaitAny）
 - 类型安全定理：type_safety（空上下文，13 个已验证 case）
 - 安全审计 5 项（含 M-2 kill 统一）全部 Lean 验证：H-1, H-2, M-1, M-4
 
@@ -82,7 +82,7 @@ lake build
 | Spec/Syntax.lean | crates/neve-hir/ | — |
 | Spec/Typing.lean | crates/neve-typeck/ | — |
 | Spec/Eval.lean | crates/neve-eval/ | — |
-| Spec/Effects.lean | crates/neve-std/src/io/ | — |
+| Spec/Effects.lean v4.3 (34 rules, +5 stream Phase C) | crates/neve-std/src/io/ | — |
 | Verify/Path.lean | resolve_redirect_path | Refinement/Path.lean |
 | Verify/Environ.lean | configured_process_command | Refinement/Environ.lean |
 | Verify/Limits.lean | MAX_*_BYTES checks | Refinement/Limits.lean |

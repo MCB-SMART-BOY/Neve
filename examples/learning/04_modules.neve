@@ -1,0 +1,9 @@
+import std.io as io;
+import std.string as str;
+
+let msg = "hello neve";
+let upper = str.to_upper(msg);
+let has = str.contains(msg, "neve");
+
+-- File I/O via io module
+let content = io.readFile("/etc/hostname");

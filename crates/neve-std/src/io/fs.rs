@@ -1,9 +1,11 @@
 //! File system operations — new additions live here.
 //! Legacy functions remain in io/mod.rs.
 
-use neve_eval::value::{BuiltinFn, CommandValue, RedirectValue, TaskValue, Value};
+use neve_eval::value::{
+    BuiltinFn, CommandValue, RedirectValue, StreamTransform, StreamValue, TaskValue, Value,
+};
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -827,6 +829,20 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "io.awaitAny",
+            Value::Builtin(BuiltinFn {
+                name: "io.awaitAny",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::List(tasks) => {
+                        let tasks = super::list_to_task_vec(tasks, "io.awaitAny tasks")?;
+                        super::await_any(&tasks)
+                    }
+                    _ => Err("io.awaitAny expects List<Task[ProcessResult]>".to_string()),
+                },
+            }),
+        ),
+        (
             "io.processSuccess",
             Value::Builtin(BuiltinFn {
                 name: "io.processSuccess",
@@ -1317,7 +1333,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 1,
                 func: |args| {
                     let dir = tempfile::tempdir().map_err(|e| format!("io.tempDir: {e}"))?;
-                    let dir_path = dir.into_path();
+                    let dir_path = dir.keep();
                     let path_value = Value::Path(Rc::new(dir_path.clone()));
                     match &args[0] {
                         Value::BuiltinFn(_, _) | Value::Builtin(_) | Value::Closure { .. } => {
@@ -1334,6 +1350,340 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             Err("io.tempDir expects a function callback".to_string())
                         }
                     }
+                },
+            }),
+        ),
+        // === Stream construction (pure, lazy) ===
+        (
+            "io.streamLines",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamLines",
+                arity: 1,
+                func: |args| {
+                    let path = match &args[0] {
+                        Value::Path(p) => p.clone(),
+                        Value::String(s) => Rc::new(std::path::PathBuf::from(s.as_str())),
+                        _ => return Err("io.streamLines expects a Path or String".to_string()),
+                    };
+                    let file_path = path.as_path().to_path_buf();
+                    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<String, String>>(16);
+                    std::thread::spawn(move || {
+                        let file = match std::fs::File::open(&file_path) {
+                            Ok(f) => f,
+                            Err(e) => {
+                                let _ = tx.send(Err(format!("io.streamLines: {e}")));
+                                return;
+                            }
+                        };
+                        let reader = std::io::BufReader::new(file);
+                        for line in reader.lines() {
+                            match line {
+                                Ok(l) => {
+                                    if tx.send(Ok(l)).is_err() {
+                                        break; // consumer dropped
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(Err(format!("io.streamLines: {e}")));
+                                    return;
+                                }
+                            }
+                        }
+                    });
+                    Ok(Value::Stream(Rc::new(StreamValue::from_lines_channel(rx))))
+                },
+            }),
+        ),
+        (
+            "io.streamCommand",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamCommand",
+                arity: 1,
+                func: |args| {
+                    let command = match &args[0] {
+                        Value::Command(cmd) => cmd.clone(),
+                        _ => return Err("io.streamCommand expects a Command".to_string()),
+                    };
+                    let program = command.program().to_string();
+                    let args_list = command.args().to_vec();
+                    let cwd = command.cwd().map(|s| s.to_string());
+                    let env = command.env().clone();
+                    let stdin_data = command.stdin().map(|s| s.to_string());
+                    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<String, String>>(16);
+                    let max_lines = 100_000usize;
+                    std::thread::spawn(move || {
+                        let mut c = std::process::Command::new(&program);
+                        c.args(&args_list);
+                        if let Some(ref wd) = cwd {
+                            c.current_dir(wd);
+                        }
+                        for (k, v) in &env {
+                            c.env(k, v);
+                        }
+                        if stdin_data.is_some() {
+                            c.stdin(std::process::Stdio::piped());
+                        } else {
+                            c.stdin(std::process::Stdio::null());
+                        }
+                        c.stdout(std::process::Stdio::piped());
+                        c.stderr(std::process::Stdio::piped());
+                        let mut child = match c.spawn() {
+                            Ok(child) => child,
+                            Err(e) => {
+                                let _ = tx.send(Err(format!("io.streamCommand: {e}")));
+                                return;
+                            }
+                        };
+                        if let Some(ref data) = stdin_data {
+                            use std::io::Write;
+                            let write_err = child
+                                .stdin
+                                .take()
+                                .is_some_and(|mut pipe| pipe.write_all(data.as_bytes()).is_err());
+                            if write_err {
+                                let _ = tx
+                                    .send(Err("io.streamCommand: stdin write failed".to_string()));
+                                return;
+                            }
+                        }
+                        let stdout = match child.stdout.take() {
+                            Some(s) => s,
+                            None => {
+                                let _ = tx.send(Err("io.streamCommand: no stdout".to_string()));
+                                return;
+                            }
+                        };
+                        let reader = std::io::BufReader::new(stdout);
+                        let mut line_count = 0usize;
+                        for line in reader.lines() {
+                            line_count += 1;
+                            if line_count > max_lines {
+                                let _ = child.kill();
+                                let _ = tx.send(Err(format!(
+                                    "io.streamCommand: exceeded max stream lines ({max_lines})"
+                                )));
+                                return;
+                            }
+                            match line {
+                                Ok(l) => {
+                                    if tx.send(Ok(l)).is_err() {
+                                        break; // consumer dropped
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(Err(format!("io.streamCommand: {e}")));
+                                    return;
+                                }
+                            }
+                        }
+                        let _ = child.wait();
+                    });
+                    Ok(Value::Stream(Rc::new(StreamValue::from_lines_channel(rx))))
+                },
+            }),
+        ),
+        (
+            "io.streamBytes",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamBytes",
+                arity: 1,
+                func: |args| {
+                    let path = match &args[0] {
+                        Value::Path(p) => p.clone(),
+                        Value::String(s) => Rc::new(std::path::PathBuf::from(s.as_str())),
+                        _ => return Err("io.streamBytes expects a Path or String".to_string()),
+                    };
+                    let file_path = path.as_path().to_path_buf();
+                    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(16);
+                    std::thread::spawn(move || {
+                        let mut file = match std::fs::File::open(&file_path) {
+                            Ok(f) => f,
+                            Err(e) => {
+                                let _ = tx.send(Err(format!("io.streamBytes: {e}")));
+                                return;
+                            }
+                        };
+                        let mut buf = [0u8; 8192];
+                        loop {
+                            match std::io::Read::read(&mut file, &mut buf) {
+                                Ok(0) => break, // EOF
+                                Ok(n) => {
+                                    if tx.send(Ok(buf[..n].to_vec())).is_err() {
+                                        break; // consumer dropped
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(Err(format!("io.streamBytes: {e}")));
+                                    return;
+                                }
+                            }
+                        }
+                    });
+                    Ok(Value::Stream(Rc::new(StreamValue::from_bytes_channel(rx))))
+                },
+            }),
+        ),
+        // === Stream transforms (pure, lazy, wrapped) ===
+        (
+            "io.streamTake",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamTake",
+                arity: 2,
+                func: |args| {
+                    let source = match &args[0] {
+                        Value::Stream(s) => s.clone(),
+                        _ => return Err("io.streamTake expects a Stream".to_string()),
+                    };
+                    let n: usize = match &args[1] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| {
+                            "io.streamTake: n must be non-negative and fit in usize".to_string()
+                        })?,
+                        _ => return Err("io.streamTake expects an Int".to_string()),
+                    };
+                    Ok(Value::Stream(Rc::new(StreamValue::from_wrapped(
+                        source,
+                        StreamTransform::Take { remaining: n },
+                    ))))
+                },
+            }),
+        ),
+        (
+            "io.streamDrop",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamDrop",
+                arity: 2,
+                func: |args| {
+                    let source = match &args[0] {
+                        Value::Stream(s) => s.clone(),
+                        _ => return Err("io.streamDrop expects a Stream".to_string()),
+                    };
+                    let n: usize = match &args[1] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| {
+                            "io.streamDrop: n must be non-negative and fit in usize".to_string()
+                        })?,
+                        _ => return Err("io.streamDrop expects an Int".to_string()),
+                    };
+                    Ok(Value::Stream(Rc::new(StreamValue::from_wrapped(
+                        source,
+                        StreamTransform::Drop { remaining: n },
+                    ))))
+                },
+            }),
+        ),
+        (
+            "io.streamMap",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamMap",
+                arity: 2,
+                func: |args| {
+                    let source = match &args[0] {
+                        Value::Stream(s) => s.clone(),
+                        _ => return Err("io.streamMap expects a Stream".to_string()),
+                    };
+                    let func = args[1].clone();
+                    Ok(Value::Stream(Rc::new(StreamValue::from_wrapped(
+                        source,
+                        StreamTransform::Map { func },
+                    ))))
+                },
+            }),
+        ),
+        (
+            "io.streamFilter",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamFilter",
+                arity: 2,
+                func: |args| {
+                    let source = match &args[0] {
+                        Value::Stream(s) => s.clone(),
+                        _ => return Err("io.streamFilter expects a Stream".to_string()),
+                    };
+                    let predicate = args[1].clone();
+                    Ok(Value::Stream(Rc::new(StreamValue::from_wrapped(
+                        source,
+                        StreamTransform::Filter { predicate },
+                    ))))
+                },
+            }),
+        ),
+        // === Stream consumers (effectful) ===
+        (
+            "io.streamPipe",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamPipe",
+                arity: 2,
+                func: |args| {
+                    let source = match &args[0] {
+                        Value::Stream(s) => s.clone(),
+                        _ => return Err("io.streamPipe expects a Stream".to_string()),
+                    };
+                    let command = match &args[1] {
+                        Value::Command(cmd) => cmd.clone(),
+                        _ => return Err("io.streamPipe expects a Command".to_string()),
+                    };
+                    // Collect all lines from the stream
+                    let mut lines: Vec<String> = Vec::new();
+                    loop {
+                        match source.next() {
+                            Ok(Some(v)) => {
+                                lines.push(super::format_value_for_output(&v));
+                            }
+                            Ok(None) => break,
+                            Err(e) => return Err(format!("io.streamPipe: {e}")),
+                        }
+                    }
+                    let stdin_text = lines.join("\n");
+                    let result = super::execute_command_value_to_process_result_with_input(
+                        &command,
+                        Some(&stdin_text),
+                        "io.streamPipe",
+                    )?;
+                    Ok(Value::ProcessResult(Rc::new(result)))
+                },
+            }),
+        ),
+        (
+            "io.streamForEach",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamForEach",
+                arity: 2,
+                func: |_args| Err("io.streamForEach is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.streamFold",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamFold",
+                arity: 3,
+                func: |_args| Err("io.streamFold is evaluator-owned".to_string()),
+            }),
+        ),
+        (
+            "io.streamWithTimeout",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamWithTimeout",
+                arity: 2,
+                func: |args| {
+                    let source = match &args[0] {
+                        Value::Stream(s) => s.clone(),
+                        _ => return Err("io.streamWithTimeout expects a Stream".to_string()),
+                    };
+                    let timeout_ms: u64 = match &args[1] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| {
+                            "io.streamWithTimeout: timeout must be non-negative".to_string()
+                        })?,
+                        _ => return Err("io.streamWithTimeout expects an Int".to_string()),
+                    };
+                    // Uses Timeout transform: deadline checked on each next() call.
+                    // Note: for channel-based streams, a blocking recv() in next()
+                    // is NOT interrupted by the timeout. The deadline is checked
+                    // between successful element retrievals only.
+                    let deadline =
+                        std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+                    Ok(Value::Stream(Rc::new(StreamValue::from_wrapped(
+                        source,
+                        StreamTransform::Timeout { deadline },
+                    ))))
                 },
             }),
         ),

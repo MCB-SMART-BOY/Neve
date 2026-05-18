@@ -572,6 +572,61 @@ impl Flake {
         self.lock.save(&lock_file)
     }
 
+    /// Update a single input in the lock file.
+    /// 更新锁定文件中的单个输入。
+    pub fn update_input(&mut self, name: &str) -> Result<(), ConfigError> {
+        let input = self
+            .inputs
+            .get(name)
+            .ok_or_else(|| ConfigError::Flake(format!("input '{}' not found", name)))?
+            .clone();
+
+        let entry = self.resolve_input(&input)?;
+        self.lock.inputs.insert(name.to_string(), entry);
+
+        // Save the updated lock file
+        let lock_path = self.root.join("flake.lock");
+        self.lock.save(&lock_path)?;
+
+        Ok(())
+    }
+
+    /// Update all inputs that have changed since last lock.
+    /// 更新自上次锁定以来已更改的所有输入。
+    pub fn update_changed_inputs(&mut self) -> Result<Vec<String>, ConfigError> {
+        let mut updated = Vec::new();
+
+        for (name, input) in &self.inputs.clone() {
+            // Check if this input was previously locked
+            if let Some(locked) = self.lock.inputs.get(name) {
+                // For git sources, check if HEAD has moved
+                if input.url.starts_with("git+")
+                    || input.url.ends_with(".git")
+                    || input.url.starts_with("github:")
+                {
+                    // Re-resolve to check for updates
+                    let new_entry = self.resolve_input(input)?;
+                    if new_entry.rev != locked.rev {
+                        self.lock.inputs.insert(name.clone(), new_entry);
+                        updated.push(name.clone());
+                    }
+                }
+            } else {
+                // New input — resolve and lock
+                let entry = self.resolve_input(input)?;
+                self.lock.inputs.insert(name.clone(), entry);
+                updated.push(name.clone());
+            }
+        }
+
+        if !updated.is_empty() {
+            let lock_path = self.root.join("flake.lock");
+            self.lock.save(&lock_path)?;
+        }
+
+        Ok(updated)
+    }
+
     /// Evaluate the flake outputs.
     /// 评估 flake 输出。
     pub fn eval_outputs(&mut self) -> Result<HashMap<String, FlakeOutput>, ConfigError> {

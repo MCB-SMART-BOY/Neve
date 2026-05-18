@@ -927,6 +927,10 @@ impl Backend {
             ("List", "List<T>"),
             ("Option", "Option<T> - Some or None"),
             ("Result", "Result<T, E> - Ok or Err"),
+            ("Stream", "Stream<T> - Lazily evaluated stream of values"),
+            ("Command", "Command value"),
+            ("Pipeline", "Pipeline value"),
+            ("ProcessResult", "Process exit result"),
         ];
 
         types

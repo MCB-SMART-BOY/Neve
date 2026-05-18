@@ -39,4 +39,5 @@ neve-store.workspace = true
 neve-derive.workspace = true
 neve-builder.workspace = true
 neve-fetch.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
 libc = "0.2"

@@ -4,7 +4,7 @@
 
 <h1>Neve Language Specification</h1>
 
-<p><em>语言规范 v2.2 — 含形式化语义 (Lean-verified)</em></p>
+<p><em>语言规范 v2.3 — 含形式化语义 (Lean-verified)</em></p>
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -816,7 +816,7 @@ Matches(p, v, binds) — "pattern p matches value v, producing bindings binds"
 
 ## F.4 Effect Semantics / 副作用语义
 
-Defined in `formal/Neve/Spec/Effects.lean` (v4.1, 21 rules). The effectful evaluation judgment:
+Defined in `formal/Neve/Spec/Effects.lean` (v4.3, 34 rules). The effectful evaluation judgment:
 
 ```
 env ⊢ e ⇓[σ] v, σ'   — "e evaluates to v, transforming I/O state σ to σ'"
@@ -824,7 +824,7 @@ env ⊢ e ⇓[σ] v, σ'   — "e evaluates to v, transforming I/O state σ to �
 
 Where `IOState = { stdin, stdout, stderr }` accumulates process I/O.
 
-### Effect rules (v4.1)
+### Effect rules (v4.3, 34 rules)
 
 | Category | Rule | Description |
 |----------|------|-------------|
@@ -834,6 +834,9 @@ Where `IOState = { stdin, stdout, stderr }` accumulates process I/O.
 | Deferred | `spawn` | Create a deferred task |
 | Deferred | `awaitTask` | Block on task completion |
 | Deferred | `awaitTaskTimeout` | Timeout before completion |
+| Deferred | `awaitTasks` | Await multiple tasks |
+| Deferred | `cancel` | Cancel a spawned task |
+| Deferred | `awaitAny` | Await first completing task |
 | Streaming | `execCommandStreaming` | Streaming command execution |
 | Streaming | `execPipelineStreaming` | Streaming pipeline execution |
 | Streaming | `execCommandStreamingTimeout` | Streaming with timeout (success) |
@@ -843,6 +846,17 @@ Where `IOState = { stdin, stdout, stderr }` accumulates process I/O.
 | Streaming | `readFileLines` | Read file line by line |
 | File | `readFile` | Read file content |
 | File | `writeFile` | Write file content |
+| File | `readFileBytes` | Read file as Bytes |
+| File | `writeFileBytes` | Write Bytes to file |
+| Stream | `streamCollect` | Collect stream into list |
+| Stream | `streamPipe` | Pipe stream into command stdin |
+| Stream | `streamForEach` | Consume stream element-wise |
+| Stream | `streamFold` | Strict fold over stream |
+| Stream | `streamWithTimeout` | Element-level timeout wrapper |
+| Retry | `retrySuccess` | Retry on success |
+| Retry | `retryFailure` | Retry exhausted |
+| Ensure | `ensureSuccess` | Condition wait success |
+| Ensure | `ensureTimeout` | Condition wait timeout |
 
 ### Size limit enforcement (v4)
 

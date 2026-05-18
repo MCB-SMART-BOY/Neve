@@ -1,7 +1,7 @@
 //! Integration tests for the frontend analysis pipeline.
 //! 前端分析管线的集成测试。
 
-use neve_diagnostic::{DiagnosticKind, ErrorCode, Severity};
+use neve_diagnostic::{DiagnosticKind, ErrorCode};
 use neve_frontend::{DiagnosticStats, analyze_snippet_ast, analyze_source};
 use neve_hir::ItemKind;
 use neve_parser::parse;

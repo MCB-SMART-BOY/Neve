@@ -1,0 +1,37 @@
+#!/usr/bin/env neve run
+-- Neve test runner / Neve 测试运行器
+-- Usage: neve run scripts/test.neve [--clippy]
+import std.io as io;
+
+let runStep = fn(name, cmd) {
+    io.print("  [" ++ name ++ "] ... ");
+    let result = io.execCommand(cmd);
+    if io.processSuccess(result) then {
+        io.println("OK");
+        true
+    } else {
+        io.println("FAILED");
+        io.println(io.processStderr(result));
+        false
+    }
+};
+
+io.println("=== Neve Test Pipeline ===");
+
+-- Step 1: Check compilation (short-circuit on failure)
+let ok_check = runStep("check", io.command("cargo", ["check", "--workspace"]));
+
+-- Step 2: Run tests (short-circuit on failure)
+let ok_test = ok_check && runStep("test", io.command("cargo", ["test", "--workspace"]));
+
+-- Step 3: Check formatting (always run, warn on failure)
+let ok_fmt = runStep("fmt", io.command("cargo", ["fmt", "--all", "--", "--check"]));
+if !ok_fmt then {
+    io.println("  Run 'cargo fmt --all' to fix formatting");
+} else {};
+
+io.println("");
+if ok_test then {
+    io.println("=== All checks passed ===");
+    0
+} else 1

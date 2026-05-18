@@ -8,10 +8,10 @@ From this point onward, implementation work for semantic convergence should read
 
 ## 1. Status
 
-- State: **active** — Phase 3 (Core Verification) 完成，Phase 4 待启动
-- Current phase: **Phase 3/5 → Phase 4 过渡期**
-- Overall completion: **~90%**（语言核心）；系统脚本 **~40%**
-- Recent: Type safety v18, EffectEval v4 (19 rules), BinOp 12/12, Bytes formalized, M-2 kill unified, 210 E2E tests, CI bug hunter, Effect boundary doc v1.0
+- State: **active** — Phase 4 (Shell Capability Replacement) 完成 ✅，Phase 5 进行中 🔄
+- Current phase: **Phase 5 — Ecosystem Completion**
+- Overall completion: **~95%**（语言核心）；系统脚本 **~60%**
+- Recent: EffectEval v4.3 (34 rules); Stream<T> Phase A-C complete (14 APIs); 400 E2E tests; io.cancel + io.awaitAny; TTY APIs (4); Job control (2); Type safety v18; BinOp 12/12; Bytes formalized; M-2 kill unified; CI bug hunter; Effect boundary doc v1.0; Pipeline |> AST=HIR=typeck parity; Phase 5 ecosystem: flake/lock/store/registry CLI
 
 ### Decision Gate Status
 
@@ -20,16 +20,16 @@ From this point onward, implementation work for semantic convergence should read
 | G1 | Canonical Pipeline | ✅ |
 | G2 | Method Semantics | ✅ |
 | G3 | Failure Propagation | ✅ |
-| G4 | Effect Boundary | ✅ EffectEval v4 (19 rules), Verify/ 三定理, effect-boundary.md v1.0 |
-| G5 | Bash Replacement | ⚠️ 流式/超时/kill 就绪；\|> 语法/信号/TTY 待做 |
+| G4 | Effect Boundary | ✅ EffectEval v4.3 (34 rules), Verify/ 三定理, effect-boundary.md v1.0 |
+| G5 | Bash Replacement | ✅ Phase 4 complete; Stream<T> 14 APIs, TTY 4 APIs, Job control 2 APIs; TTY raw mode 待做 |
 
 ### Active Work Items
 
-1. Formatter 幂等性验证
-2. 端到端测试扩展（210 → 400+）
-3. `|>` 管道语法
-4. 流式句柄 + cancel/poll
-5. Phase 4 完整推进
+1. Stream<T> Phase A-C: 14 APIs complete ✅
+2. EffectEval v4.3 (34 rules): Phase C rules added ✅
+3. 端到端测试扩展（400 E2E tests）✅
+4. TTY raw mode 完整集成
+5. Phase 5 生态规划（确定性 lockfile、registry 元数据）
 
 ## 2. North Star
 
@@ -2297,6 +2297,42 @@ Track progress with concrete metrics rather than narrative only:
   - scripts/test.sh --diff for local pre-commit
 - **Examples**: 10 categorized examples in examples/{basics,functions,control-flow,data,io}/
 - **Directory restructure**: formal/ → Spec/ Proofs/ Verify/ Tests/ (mirrors project layers)
+
+### 2026-05-12 (continued)
+
+- **EffectEval v4.2**: 29 rules (+8 from v4.1)
+  - 5 stream rules: streamCollect, streamCollectError, streamLines, streamCommand, streamBytes
+  - 2 task rules: cancel, awaitAny
+  - Syntax.lean: added Value.stream constructor
+- **E2E tests**: 300 (+31 from 269)
+  - Stream error paths (6), Task/process edge cases (6), Pipe/redirect (5)
+  - Type system (5), Pattern matching (4), Lazy evaluation (3), Effect system (2)
+- **Task cancel**: io.cancel + io.awaitAny implemented
+- **Stream Phase B**: io.streamLines + io.streamCommand + io.streamBytes implemented
+
+### 2026-05-12 (Phase 4 complete)
+
+- **Version**: 3.9.0
+- **Phase 4: Shell Capability Replacement — Complete** ✅
+- **E2E tests**: 400 (+84 from 316)
+  - Stream Phase C integration: streamMap/streamFilter/streamTake/streamDrop/streamPipe
+  - Job control: io.jobs/io.waitAnyJob
+  - TTY: io.setRawMode/io.resetTerminal
+  - Phase 5 ecosystem tests: flake/lock, store, registry, package CLI
+- **EffectEval v4.3**: 34 rules (+5 from v4.2)
+  - 5 stream Phase C rules: streamCollect/streamPipe/streamForEach/streamFold/streamWithTimeout
+- **Stream<T>**: 14/14 APIs implemented (Phase A-C complete)
+- **Task APIs**: 7 (spawn/poll/cancel/await/awaitTasks/awaitAny/awaitTaskWithTimeout)
+- **TTY APIs**: 4 (isTTY/terminalSize/setRawMode/resetTerminal)
+- **Job control**: 2 (jobs/waitAnyJob)
+- **Pipeline**: |> syntax (AST=HIR=typeck parity)
+- **Example scripts**: test-runner.neve, ci-bootstrap.neve, file-watcher.neve, system-config.neve
+- **Formatter**: 37/37 idempotency
+- **Clippy**: 0 warnings
+- **Phase 5**: Ecosystem design doc, stability tiers, flake/lock/store, registry CLI (17 commands)
+- **Lean**: 19/19 modules (lake build)
+- **G5 (Bash Replacement)**: Decision gate closed ✅
+- **Next**: Phase 5 (Ecosystem Completion)
 
 ### 2026-04-18
 

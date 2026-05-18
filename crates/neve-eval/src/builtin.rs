@@ -827,6 +827,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::Err(_) => "Err",
                         Value::Event(_) => "Event",
                         Value::Live(_) => "Live",
+                        Value::Stream(_) => "Stream",
                         Value::Thunk(_) => "Thunk",
                     };
                     Ok(Value::String(Rc::new(type_name.to_string())))
@@ -1882,6 +1883,7 @@ pub fn format_value(v: &Value) -> String {
         Value::Err(v) => format!("Err({})", format_value(v)),
         Value::Event(_) => "Event(..)".to_string(),
         Value::Live(_) => "Live(..)".to_string(),
+        Value::Stream(_) => "<stream>".to_string(),
         Value::Thunk(thunk) => {
             use crate::value::ThunkState;
             match &*thunk.state() {
