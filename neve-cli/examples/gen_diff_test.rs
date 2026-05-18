@@ -32,7 +32,7 @@ impl Rng {
         (self.next() % (max - min + 1) as u64) as i64 + min
     }
     fn rand_bool(&mut self) -> bool {
-        self.next() % 2 == 0
+        self.next().is_multiple_of(2)
     }
     fn rand_choice(&mut self, n: usize) -> usize {
         (self.next() as usize) % n
@@ -187,7 +187,7 @@ fn run_rust(neve_source: &str) -> String {
     fs::write(&tmp, neve_source).expect("write tempfile");
 
     let bin = neve_bin();
-    let output = if bin.file_name().map_or(false, |n| n == "neve") {
+    let output = if bin.file_name().is_some_and(|n| n == "neve") {
         Command::new(&bin)
             .args(["run", tmp.to_str().unwrap()])
             .output()
