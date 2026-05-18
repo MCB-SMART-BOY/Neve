@@ -9,8 +9,8 @@ on:
     paths:
       - 'crates/neve-std/src/io/**'
       - 'crates/neve-eval/src/**'
-      - 'scripts/bug_hunt.py'
-      - 'scripts/gen_diff_test.py'
+      - 'neve-cli/examples/bug_hunt.rs'
+      - 'neve-cli/examples/gen_diff_test.rs'
       - 'formal/Neve/Spec/**'
       - 'formal/Neve/Verify/**'
       - '.github/workflows/bug-hunter.yml'
@@ -19,8 +19,8 @@ on:
     paths:
       - 'crates/neve-std/src/io/**'
       - 'crates/neve-eval/src/**'
-      - 'scripts/bug_hunt.py'
-      - 'scripts/gen_diff_test.py'
+      - 'neve-cli/examples/bug_hunt.rs'
+      - 'neve-cli/examples/gen_diff_test.rs'
       - 'formal/Neve/Spec/**'
       - 'formal/Neve/Verify/**'
       - '.github/workflows/bug-hunter.yml'
@@ -56,7 +56,7 @@ jobs:
         run: cargo build -p neve --release
 
       - name: Run bug hunt (security boundary attacks)
-        run: python3 scripts/bug_hunt.py
+        run: cargo run --release -p neve --example bug_hunt
         env:
           # 使用 release 构建以获得更快的执行速度
           CARGO_TARGET_DIR: target
@@ -91,7 +91,7 @@ jobs:
         run: cargo build -p neve --release
 
       - name: Run effects property tests
-        run: python3 scripts/gen_diff_test.py --effects -n 50
+        run: cargo run --release -p neve --example gen_diff_test -- --effects -n 50
         env:
           CARGO_TARGET_DIR: target
 
@@ -179,7 +179,7 @@ jobs:
           lake build
 
       - name: Run quick diff test (50 expressions, depth 3)
-        run: python3 scripts/gen_diff_test.py -n 50 -d 3
+        run: cargo run --release -p neve --example gen_diff_test -- -n 50 -d 3
         env:
           CARGO_TARGET_DIR: target
 
