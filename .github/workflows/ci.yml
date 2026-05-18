@@ -45,11 +45,11 @@ jobs:
         run: cargo test --verbose -p neve-lexer -p neve-parser -p neve-eval -p neve-typeck -p neve-fmt -- --nocapture
 
       - name: Check formatting
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
         if: matrix.os == 'ubuntu-latest'
 
       - name: Run clippy (all workspace crates)
-        run: cargo clippy --workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
         if: matrix.os == 'ubuntu-latest'
 
   # Security audit for dependency vulnerabilities
