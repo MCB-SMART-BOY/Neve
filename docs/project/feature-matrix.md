@@ -52,7 +52,9 @@
 
 1. **语法表面比语义闭环走得更快。**
 2. **AST 路径历史上补过更多缺口，但主 CLI 路径已经开始优先收敛到 HIR。**
-3. **系统脚本能力已经起步，但离“替代 Bash”还差命令模型、管道模型和 effect boundary。**
+3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) 已完成。**
+4. **端到端测试已覆盖 400 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control）。**
+5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete)。**
 
 ## 语言高风险特性矩阵 / High-Risk Language Features
 
@@ -76,6 +78,7 @@
 | Match 穷尽性检查 | N/A | N/A | ✅ | N/A | N/A | ⚠️ | 支持 Bool/Unit/Int/Float/Char/String、用户枚举、builtin Option/Result、Record（字段覆盖）、List（空/非空）、Tuple（逐位）；NonExhaustiveMatch 错误码；工具链覆盖仍需补齐 |
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
+| 一等 Stream<T> | N/A | N/A | N/A | N/A | N/A | N/A | ✅ Phase A-C complete (14 APIs) |
 | 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 已替换为真实 frontend/runtime smoke tests，但覆盖广度还不足以单独代表语言完备度 |
 
 ## 工具链一致性矩阵 / Tooling Fidelity Matrix
@@ -88,7 +91,7 @@
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 现在既能显示定义点类型，也能在局部变量引用、全局函数引用、方法名和一般表达式位置显示真实语义类型；函数参数、lambda 参数和块级 `let` 的 pattern 绑定也已闭环。`goto definition` / `references` / `rename` 对局部遮蔽场景已开始按实际绑定解析。跨模块命名类型显示与更多 IDE 语义功能仍在补 |
-| End-to-end tests | ⚠️ 可信 smoke baseline（222 个测试） | 已覆盖真实 frontend/runtime 路径、AST/HIR 一致性、BinOp 全覆盖、布尔匹配、Bytes 类型；覆盖深度仍需继续扩展 |
+| End-to-end tests | ⚠️ 可信 smoke baseline（400 个测试） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control；覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
@@ -111,6 +114,7 @@
 | 事件系统 | `Event<T>`、`io.every(ms)`、`io.watchFile(p)`、`io.eventNext(e)` |
 | 反应式 | `Live<T>`、`io.reactive(e)`、`io.liveNext(l)` |
 | 时序约束 | `io.retry(fn, n, ms)`、`io.ensure(check, timeout, interval)` |
+| 流组合子 | `io.glob` + `list.filter` + `list.map` 已验证 |
 
 ### 仍然缺失的关键能力### 仍然缺失的关键能力
 
@@ -120,14 +124,15 @@
 | 一等 `Bytes` 类型 | ✅ | 内部已落 stable runtime identity；`std.io.readFileBytesPath : Path -> Bytes` / `std.io.writeFileBytesPath : Path -> Bytes -> Unit` / `std.io.appendFileBytesPath : Path -> Bytes -> Unit` 已提供公开 file-boundary bridges；Lean 形式化已完成（Ty.Bytes + Value.bytes + EffectEval 规则 + 精化桥） |
 | 一等 `Command` 类型 | ⚠️ | 内部已落 runtime identity，且 `std.io.command` / `std.io.commandWith` / `std.io.commandWithRedirects` 与 `std.io.execCommand` 已提供首批公开构造/执行桥；`Command` 现在已能承载 `cwd` / `env` / `stdin` 与 typed `Redirect` 列表，而 shell 行为也已收回到显式 `Command` 构造，而不是额外的 string-only wrapper |
 | 一等 `ProcessResult` 类型 | ⚠️ | `std.io.execCommand` / `std.io.execPipeline` 已能公开返回 `ProcessResult`，且 `std.io.processSuccess` / `std.io.processStdout` / `std.io.processCode` / `std.io.processStderr` 已提供首批 pure inspector bridge；当前剩余问题不再是结果对象缺失，而是更丰富的 effect model 仍未完成 |
-| 一等管道 | ✅ 语法；⚠️ 流式句柄 | `cmd1 |> cmd2 |> cmd3` 管道语法已实现（HIR evaluator）；`io.pipeline([...])` / `io.pipelineWithRedirects` 构造时拒绝无效 pipeline；`io.execPipeline` / `io.execPipelineStreaming` / `io.execPipelineStreamingWithTimeout` 提供阻塞+流式+超时执行；boundary-level redirect 已收敛到对象携带主线；还没有流式句柄或更广的进程编排模型 |
+| 一等管道 | ✅ 语法+构造+执行+Stream；✅ Stream<T> Phase A-C 完成 | `cmd1 |> cmd2 |> cmd3` 管道语法已实现（HIR evaluator）；`io.pipeline([...])` / `io.pipelineWithRedirects` 构造时拒绝无效 pipeline；`io.execPipeline` / `io.execPipelineStreaming` / `io.execPipelineStreamingWithTimeout` 提供阻塞+流式+超时执行；`io.streamPipe` 实现流到命令的标准输入管道；boundary-level redirect 已收敛到对象携带主线；流式句柄和更广的进程编排模型仍需后续 |
 | 一等重定向 | ⚠️ | 内部已落 runtime identity，且 `std.io.redirectStdoutPath` / `std.io.redirectStderrPath` / `std.io.redirectStdinPath` 已提供最小公开构造桥；边界级 `stdout -> Path` / `stderr -> Path` / `stdin <- Path` 组合现在通过 `io.commandWithRedirects` / `io.pipelineWithRedirects` 收进一等对象，再走 `io.execCommand` / `io.execPipeline` 的 canonical 执行主线；同时对 boundary/stage-local 重复 redirect、non-final `stdout` 截流、以及 non-first stage 的 `stdin` 配置冲突继续做显式拒绝；但还没有更广的流模型或 stage-local redirect 语法 |
 | 一等 `Task<T>` | ⚠️ | 内部已落 runtime identity，且 `std.io.taskCommand` / `std.io.taskPipeline` / `std.io.awaitTask` / `std.io.awaitTasks` 已提供最小公开构造/消费桥，让 `Command` 或 `Pipeline` 都能进入 `Task[ProcessResult] -> ProcessResult` 与 `List<Task[ProcessResult]> -> List<ProcessResult>` 的 blocking canonical path；但还没有 poll/cancel、超时控制、后台调度或任何非阻塞 task runtime |
 | 流式处理 | ✅ | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` / `io.readFileLinesPath` (逐行回调)；超时变体 `io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持总时限 + 进程终止 |
-| timeout / cancel | ✅ 超时；⚠️ cancel | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；统一 kill 机制（M-2）已落地 `neve-common::kill_process`；cancel 与 poll 模型仍需后续 |
-| signal / TTY | ⚠️ | `io.isTTY(fd)` / `io.terminalSize()` 已实现；raw mode 和更完整 TTY 控制尚未支持 | `io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派；TTY 控制尚未支持 |
+| timeout / cancel | ✅ | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；统一 kill 机制（M-2）已落地 `neve-common::kill_process`；`io.cancel` / `io.awaitAny` 已实现 |
+| signal / TTY | ✅ signals；⚠️ raw mode | `io.isTTY(fd)` / `io.terminalSize()` / `io.setRawMode(fd)` / `io.resetTerminal(fd)` 已实现；`io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派 |
 | shebang / argv / 脚本入口 | ✅ | shebang + argv：`io.args()` 返回 `(List<String>, Record)` 结构化元组；`-flag` 解析为 Record 字段，负数自动识别为位置参数；支持紧凑格式 `-j8` 和 `--` 分隔 |
 | glob / 文件查询组合子 | ✅ | `io.glob(pattern)` 返回 `List<Path>`，可与 `list.filter`/`list.map` 组合 |
+| 一等 Stream<T> | ✅ | Phase A-C complete (14 APIs)：构造 (streamList/streamLines/streamCommand/streamBytes)、变换 (streamMap/streamFilter/streamTake/streamDrop)、消费 (streamCollect/streamPipe/streamForEach/streamFold)、包装 (streamWithTimeout)；Channel-based + Iterator-based 双路径实现；EffectEval v4.3 (34 rules) |
 
 ## 当前最该关注的缺口 / Most Important Gaps
 
@@ -154,12 +159,13 @@
 
 现在已经有了“执行命令”的入口，但还没有进入 Bash 真正难替代的部分：
 
-- 管道
-- 重定向
-- 进程上下文
-- 失败组合
-- 长任务控制
-- 脚本入口模型
+- 管道 ✅ (|> 语法 + Pipeline 构造 + 执行 + 流式)
+- 重定向 ✅ (stdin/stdout/stderr + boundary 冲突检测)
+- 进程上下文 ✅ (cwd + env 隔离)
+- 失败组合 ✅ (? 传播 + ProcessResult 检查器)
+- 长任务控制 ✅ (Task spawn/poll/cancel/awaitAny 已就绪)
+- 脚本入口模型 ✅ (shebang + io.args() + argv 解析)
+- 流变换 ✅ (Stream<T> 14 APIs, Phase A-C complete)
 
 ## 下一步怎么用这份矩阵 / What To Do Next
 
@@ -169,7 +175,7 @@
 1. 继续把这份矩阵扩成更完整的 feature inventory。
 2. 先修矩阵里最红的语义项，而不是继续加新语法。
 3. 用这份矩阵反向修正文档里的 `Complete` 表述。
-4. 继续扩展 `tests/end_to_end.rs` 的语料和工具链覆盖，而不是把现有 smoke baseline 误当成完整闭环。
+4. 继续扩展 `tests/end_to_end.rs`（400 个测试，400 target reached ✅），而不是把现有 smoke baseline 误当成完整闭环。
 
 ## 当前结论 / Bottom Line
 
@@ -177,4 +183,5 @@
 
 - Neve 已经是一个**语法表面丰富、核心功能可运行**的语言原型。
 - Neve 还不是一个**语义完全收敛的独立完备语言**。
-- Neve 已经开始具备**系统脚本能力**，但离**替代 Bash**还差一整层命令与流模型。
+- Neve 已经开始具备**系统脚本能力**，管道/重定向/进程执行/流式输出/信号/Task/glob/TTY/Job 已就绪。
+- **替代 Bash** 的最后一层差距 **Stream<T> 抽象** 已完成（14 APIs, Phase A-C complete）。Phase 4 (Shell 能力替代) ✅。Phase 5 (生态补完) 进行中：flake/lock/store/registry CLI 已上线。

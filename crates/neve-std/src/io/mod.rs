@@ -19,6 +19,16 @@ fn spawn_registry() -> &'static Mutex<HashMap<i64, Arc<Mutex<SpawnState>>>> {
 
 static NEXT_SPAWN_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 
+// === TTY raw mode saved terminal settings ===
+/// Saved terminal settings for raw mode restore, keyed by file descriptor.
+#[cfg(unix)]
+static SAVED_TERMIOS: OnceLock<Mutex<HashMap<i32, libc::termios>>> = OnceLock::new();
+
+#[cfg(unix)]
+fn saved_termios() -> &'static Mutex<HashMap<i32, libc::termios>> {
+    SAVED_TERMIOS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 /// State of a spawned (background) task.
 #[derive(Clone, Debug)]
 pub enum SpawnState {
@@ -29,7 +39,7 @@ pub enum SpawnState {
 
 use neve_eval::value::{
     BuiltinFn, CommandValue, EventKind, EventValue, PipelineValue, ProcessResultValue,
-    RedirectValue, TaskTargetValue, TaskValue, Value,
+    RedirectValue, StreamValue, TaskTargetValue, TaskValue, Value,
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -346,6 +356,112 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // === TTY raw mode ===
+        (
+            "io.setRawMode",
+            Value::Builtin(BuiltinFn {
+                name: "io.setRawMode",
+                arity: 2,
+                func: |args| {
+                    let fd: i32 =
+                        match &args[0] {
+                            Value::Int(n) => n.clone().try_into().map_err(|_| {
+                                "io.setRawMode: fd must be a valid integer".to_string()
+                            })?,
+                            _ => {
+                                return Err("io.setRawMode expects an Int (fd) and Bool (enable)"
+                                    .to_string());
+                            }
+                        };
+                    let enable: bool = match &args[1] {
+                        Value::Bool(b) => *b,
+                        _ => return Err("io.setRawMode: second arg must be Bool".to_string()),
+                    };
+                    #[cfg(unix)]
+                    {
+                        let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+                        if unsafe { libc::tcgetattr(fd, &mut termios) } != 0 {
+                            return Err(format!("io.setRawMode: tcgetattr failed on fd {fd}"));
+                        }
+                        if enable {
+                            // Save original terminal settings for later restore
+                            let mut saved = saved_termios().lock().unwrap();
+                            saved.insert(fd, termios);
+                            // Set raw mode: cfmakeraw equivalent
+                            termios.c_iflag &= !(libc::IGNBRK
+                                | libc::BRKINT
+                                | libc::PARMRK
+                                | libc::ISTRIP
+                                | libc::INLCR
+                                | libc::IGNCR
+                                | libc::ICRNL
+                                | libc::IXON);
+                            termios.c_oflag &= !(libc::OPOST);
+                            termios.c_lflag &= !(libc::ECHO
+                                | libc::ECHONL
+                                | libc::ICANON
+                                | libc::ISIG
+                                | libc::IEXTEN);
+                            termios.c_cflag &= !(libc::CSIZE | libc::PARENB);
+                            termios.c_cflag |= libc::CS8;
+                            termios.c_cc[libc::VMIN] = 1;
+                            termios.c_cc[libc::VTIME] = 0;
+                        } else {
+                            // Restore saved settings
+                            let mut saved = saved_termios().lock().unwrap();
+                            if let Some(&saved_termios) = saved.get(&fd) {
+                                termios = saved_termios;
+                                saved.remove(&fd);
+                            }
+                        }
+                        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &termios) } != 0 {
+                            return Err(format!("io.setRawMode: tcsetattr failed on fd {fd}"));
+                        }
+                        Ok(Value::Unit)
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = (fd, enable);
+                        Err("io.setRawMode: not supported on this platform".to_string())
+                    }
+                },
+            }),
+        ),
+        (
+            "io.resetTerminal",
+            Value::Builtin(BuiltinFn {
+                name: "io.resetTerminal",
+                arity: 1,
+                func: |args| {
+                    let fd: i32 = match &args[0] {
+                        Value::Int(n) => n.clone().try_into().map_err(|_| {
+                            "io.resetTerminal: fd must be a valid integer".to_string()
+                        })?,
+                        _ => return Err("io.resetTerminal expects an Int (fd)".to_string()),
+                    };
+                    #[cfg(unix)]
+                    {
+                        let mut saved = saved_termios().lock().unwrap();
+                        if let Some(&saved_termios) = saved.get(&fd) {
+                            if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &saved_termios) } != 0 {
+                                return Err(format!(
+                                    "io.resetTerminal: tcsetattr failed on fd {fd}"
+                                ));
+                            }
+                            saved.remove(&fd);
+                            Ok(Value::Unit)
+                        } else {
+                            Err(format!("io.resetTerminal: no saved settings for fd {fd}"))
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = fd;
+                        Err("io.resetTerminal: not supported on this platform".to_string())
+                    }
+                },
+            }),
+        ),
         // === Non-blocking task spawn/poll/cancel ===
         (
             "io.spawnWithTimeout",
@@ -592,6 +708,89 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // === Job control ===
+        (
+            "io.jobs",
+            Value::Builtin(BuiltinFn {
+                name: "io.jobs",
+                arity: 0,
+                func: |_args| {
+                    let registry = spawn_registry().lock().unwrap();
+                    let mut jobs = Vec::new();
+                    for (&id, state) in registry.iter() {
+                        let state_str = match &*state.lock().unwrap() {
+                            SpawnState::Running => "Running",
+                            SpawnState::Done(Ok(_)) => "Done",
+                            SpawnState::Done(Err(_)) => "Failed",
+                            SpawnState::Cancelled => "Cancelled",
+                        };
+                        let mut fields = std::collections::HashMap::new();
+                        fields.insert("id".to_string(), Value::Int(id.into()));
+                        fields.insert(
+                            "state".to_string(),
+                            Value::String(Rc::new(state_str.to_string())),
+                        );
+                        jobs.push(Value::Record(Rc::new(fields)));
+                    }
+                    Ok(Value::List(Rc::new(jobs)))
+                },
+            }),
+        ),
+        (
+            "io.waitAnyJob",
+            Value::Builtin(BuiltinFn {
+                name: "io.waitAnyJob",
+                arity: 0,
+                func: |_args| {
+                    loop {
+                        let registry = spawn_registry().lock().unwrap();
+                        for (&id, state) in registry.iter() {
+                            let mut s = state.lock().unwrap();
+                            if let SpawnState::Done(Ok((code, success, stdout, stderr))) = &*s {
+                                let result =
+                                    Value::ProcessResult(Rc::new(ProcessResultValue::new(
+                                        *code,
+                                        *success,
+                                        stdout.clone(),
+                                        stderr.clone(),
+                                    )));
+                                let mut fields = std::collections::HashMap::new();
+                                fields.insert("id".to_string(), Value::Int(id.into()));
+                                fields.insert("result".to_string(), result);
+                                *s = SpawnState::Cancelled;
+                                drop(s);
+                                drop(registry);
+                                return Ok(Value::Record(Rc::new(fields)));
+                            }
+                        }
+                        drop(registry);
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                },
+            }),
+        ),
+        // === Stream operations ===
+        (
+            "io.streamList",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamList",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::List(items) => Ok(Value::Stream(Rc::new(StreamValue::from_list(
+                        (**items).clone(),
+                    )))),
+                    _ => Err("io.streamList expects a List".to_string()),
+                },
+            }),
+        ),
+        (
+            "io.streamCollect",
+            Value::Builtin(BuiltinFn {
+                name: "io.streamCollect",
+                arity: 1,
+                func: |_args| Err("io.streamCollect is evaluator-owned".to_string()),
+            }),
+        ),
     ];
     bindings.extend(fs::builtins());
     bindings.extend(process::builtins());
@@ -635,6 +834,7 @@ pub(crate) fn format_value_for_output(value: &Value) -> String {
                 r.stderr().trim_end().to_string()
             }
         }
+        Value::Stream(_) => "<stream>".to_string(),
         _ => format!("{:?}", value),
     }
 }
@@ -664,7 +864,7 @@ pub(crate) fn poll_event(event: &EventValue) -> Result<Value, String> {
             // Limit to 1000 attempts to prevent infinite loops
             for _ in 0..1000 {
                 let source_val = poll_event(source)?;
-                match apply_value_function(predicate, &[source_val.clone()]) {
+                match apply_value_function(predicate, std::slice::from_ref(&source_val)) {
                     Ok(Value::Bool(true)) => return Ok(source_val),
                     Ok(_) => continue, // Predicate returned non-true, try again
                     Err(e) => return Err(e),
@@ -687,8 +887,6 @@ pub(crate) fn apply_value_function(func: &Value, args: &[Value]) -> Result<Value
         )),
     }
 }
-
-/// Call a builtin/closure function value with arguments.
 
 /// Read user input, optionally without echo.
 fn read_input(prompt: &str, no_echo: bool) -> Result<Value, String> {
@@ -1195,6 +1393,139 @@ pub(crate) fn await_tasks(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
         results.push(Value::ProcessResult(Rc::new(result)));
     }
     Ok(Value::List(Rc::new(results)))
+}
+
+/// Spawns all tasks via the spawn registry, polls until one completes,
+/// cancels remaining tasks, and returns the first ProcessResult.
+pub(crate) fn await_any(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
+    if tasks.is_empty() {
+        return Err("io.awaitAny: requires at least one task".to_string());
+    }
+
+    let mut spawn_ids: Vec<i64> = Vec::with_capacity(tasks.len());
+
+    // Spawn all tasks
+    for task in tasks {
+        let state = Arc::new(Mutex::new(SpawnState::Running));
+        let state_clone = state.clone();
+
+        match task.target() {
+            TaskTargetValue::Command(cmd) => {
+                let program = cmd.program().to_string();
+                let args_list = cmd.args().to_vec();
+                let cwd = cmd.cwd().map(|s| s.to_string());
+                let env = cmd.env().clone();
+                let stdin_data = cmd.stdin().map(|s| s.to_string());
+                std::thread::spawn(move || {
+                    let mut c = std::process::Command::new(&program);
+                    c.args(&args_list);
+                    if let Some(ref wd) = cwd {
+                        c.current_dir(wd);
+                    }
+                    for (k, v) in &env {
+                        c.env(k, v);
+                    }
+                    if stdin_data.is_some() {
+                        c.stdin(std::process::Stdio::piped());
+                    }
+                    c.stdout(std::process::Stdio::piped());
+                    c.stderr(std::process::Stdio::piped());
+                    let result = (|| {
+                        let mut child = c.spawn().map_err(|e| format!("spawn: {e}"))?;
+                        if let Some(ref data) = stdin_data {
+                            use std::io::Write;
+                            if let Some(mut pipe) = child.stdin.take() {
+                                pipe.write_all(data.as_bytes())
+                                    .map_err(|e| format!("stdin: {e}"))?;
+                            }
+                        }
+                        let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
+                        Ok((
+                            output.status.code().unwrap_or(-1),
+                            output.status.success(),
+                            String::from_utf8_lossy(&output.stdout).to_string(),
+                            String::from_utf8_lossy(&output.stderr).to_string(),
+                        ))
+                    })();
+                    *state_clone.lock().unwrap() = SpawnState::Done(result);
+                });
+            }
+            TaskTargetValue::Pipeline(pipeline) => {
+                let stages: Vec<StageData> = pipeline
+                    .commands()
+                    .iter()
+                    .map(|cmd| StageData {
+                        program: cmd.program().to_string(),
+                        args: cmd.args().to_vec(),
+                        cwd: cmd.cwd().map(|s| s.to_string()),
+                        env: cmd.env().clone(),
+                        stdin: cmd.stdin().map(|s| s.to_string()),
+                    })
+                    .collect();
+                std::thread::spawn(move || {
+                    let result = run_pipeline_stages(&stages);
+                    *state_clone.lock().unwrap() = SpawnState::Done(result);
+                });
+            }
+        }
+
+        let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        spawn_registry().lock().unwrap().insert(id, state);
+        spawn_ids.push(id);
+    }
+
+    // Poll all tasks in a loop until one completes
+    loop {
+        for &id in &spawn_ids {
+            let state = {
+                let registry = spawn_registry().lock().unwrap();
+                match registry.get(&id) {
+                    Some(s) => s.clone(),
+                    None => continue,
+                }
+            };
+            let mut s = state.lock().unwrap();
+            match &*s {
+                SpawnState::Running => continue,
+                SpawnState::Done(Ok((code, success, stdout, stderr))) => {
+                    let result = Value::ProcessResult(Rc::new(ProcessResultValue::new(
+                        *code,
+                        *success,
+                        stdout.clone(),
+                        stderr.clone(),
+                    )));
+                    *s = SpawnState::Cancelled;
+                    // Cancel all other tasks
+                    for &other_id in &spawn_ids {
+                        if other_id != id
+                            && let Some(other_state) =
+                                spawn_registry().lock().unwrap().remove(&other_id)
+                        {
+                            *other_state.lock().unwrap() = SpawnState::Cancelled;
+                        }
+                    }
+                    spawn_registry().lock().unwrap().remove(&id);
+                    return Ok(result);
+                }
+                SpawnState::Done(Err(e)) => {
+                    let err = e.clone();
+                    // Cancel all other tasks
+                    for &other_id in &spawn_ids {
+                        if other_id != id
+                            && let Some(other_state) =
+                                spawn_registry().lock().unwrap().remove(&other_id)
+                        {
+                            *other_state.lock().unwrap() = SpawnState::Cancelled;
+                        }
+                    }
+                    spawn_registry().lock().unwrap().remove(&id);
+                    return Err(err);
+                }
+                SpawnState::Cancelled => continue,
+            }
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 pub(crate) fn await_task_to_process_result(
@@ -1726,12 +2057,12 @@ pub(crate) fn execute_command_value_with_redirects_to_process_result_with_input(
             .or_else(|| command.stdin().map(str::to_owned)),
     };
 
-    if let Some(ref text) = stdin_text {
-        if text.len() > MAX_STDIN_BYTES {
-            return Err(format!(
-                "{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"
-            ));
-        }
+    if let Some(ref text) = stdin_text
+        && text.len() > MAX_STDIN_BYTES
+    {
+        return Err(format!(
+            "{fn_name}: stdin exceeds maximum size of {MAX_STDIN_BYTES} bytes"
+        ));
     }
 
     let mut cmd = configured_process_command(command);
@@ -1911,8 +2242,6 @@ pub(crate) fn record_env_optional(
     }
 }
 
-/// Kill a process by PID. Uses libc::kill on Unix, taskkill on Windows.
-/// 通过 PID 终止进程。
 // kill_process moved to neve_common::kill_process (M-2 unified kill mechanism)
 
 /// Run pipeline stages sequentially in a background thread.
@@ -1922,8 +2251,8 @@ fn run_pipeline_stages(stages: &[StageData]) -> Result<(i32, bool, String, Strin
     }
     let mut previous_stdout: Option<Vec<u8>> = None;
     let mut combined_stderr = Vec::new();
-    let mut last_code = 0;
-    let mut last_success = false;
+    let mut last_code;
+    let mut last_success;
     let last_idx = stages.len() - 1;
     for (idx, stage) in stages.iter().enumerate() {
         let mut c = std::process::Command::new(&stage.program);

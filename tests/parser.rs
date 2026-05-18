@@ -1844,6 +1844,6 @@ fn test_parse_empty_block() {
 
 #[test]
 fn test_parse_multi_param_function_type() {
-    let (file, diags) = parse("let f: (Int, String) -> Bool = true;");
+    let (_file, diags) = parse("let f: (Int, String) -> Bool = true;");
     assert!(diags.is_empty());
 }

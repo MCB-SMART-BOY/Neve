@@ -116,3 +116,60 @@ fn test_struct() {
 fn test_trait() {
     assert_idempotent("trait Show { fn show(self) -> String; };");
 }
+
+#[test]
+fn test_nested_match() {
+    assert_idempotent(
+        "let x = match a { Some(v) -> match v { 0 -> \"zero\", _ -> \"other\" }, None -> \"none\" };",
+    );
+}
+
+#[test]
+fn test_pipe_chain() {
+    assert_idempotent("let x = 40 |> double |> double;");
+}
+
+#[test]
+fn test_complex_record() {
+    assert_idempotent("let r = #{ name = \"test\", items = [1, 2, 3], meta = #{ version = 1 } };");
+}
+
+#[test]
+fn test_lazy_expression() {
+    assert_idempotent("let x = lazy 1 + 2;");
+}
+
+#[test]
+fn test_path_literal() {
+    assert_idempotent("let p = ./config;");
+}
+
+#[test]
+fn test_option_type() {
+    assert_idempotent("let x: Option<Int> = Some(42);");
+}
+
+#[test]
+fn test_generic_fn() {
+    assert_idempotent("fn id<T>(x: T) -> T = x;");
+}
+
+#[test]
+fn test_if_else_chain() {
+    assert_idempotent("let x = if a > 0 then 1 else if a < 0 then -1 else 0;");
+}
+
+#[test]
+fn test_pattern_with_alias() {
+    assert_idempotent("let x = match pair { (a, b) -> a + b };");
+}
+
+#[test]
+fn test_or_pattern() {
+    assert_idempotent("let x = match v { 0 | 1 -> \"small\", _ -> \"large\" };");
+}
+
+#[test]
+fn test_comment_preserved() {
+    assert_idempotent("-- this is a comment\nlet x = 42;");
+}

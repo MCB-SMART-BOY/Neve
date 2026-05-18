@@ -75,6 +75,7 @@ inductive Value : Type where
   | bytes (data : List Nat)
   | processResult (code : Int) (stdout : String) (stderr : String)
   | closure (x : String) (body : Expr) (env : List (String × Value))
+  | stream (items : List Value)
   | someVal (v : Value)
   | noneVal
   deriving Repr, Inhabited, BEq

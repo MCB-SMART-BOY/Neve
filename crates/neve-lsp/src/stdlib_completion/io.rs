@@ -296,5 +296,84 @@ pub(super) fn specs() -> Vec<CompletionSpec> {
             "io.currentSystem()",
             "String",
         ),
+        // === Stream<T> APIs (Phase 4) ===
+        (
+            "io.streamList",
+            "Create a stream from a list",
+            "io.streamList(${1:list})",
+            "Stream<T>",
+        ),
+        (
+            "io.streamLines",
+            "Stream lines from a file",
+            "io.streamLines(${1:path})",
+            "Stream<String>",
+        ),
+        (
+            "io.streamCommand",
+            "Stream stdout lines from a command",
+            "io.streamCommand(${1:command})",
+            "Stream<String>",
+        ),
+        (
+            "io.streamBytes",
+            "Stream byte chunks from a file",
+            "io.streamBytes(${1:path})",
+            "Stream<Bytes>",
+        ),
+        (
+            "io.streamMap",
+            "Transform each element of a stream",
+            "io.streamMap(${1:stream}, ${2:fn})",
+            "Stream<B>",
+        ),
+        (
+            "io.streamFilter",
+            "Filter elements of a stream",
+            "io.streamFilter(${1:stream}, ${2:predicate})",
+            "Stream<T>",
+        ),
+        (
+            "io.streamTake",
+            "Take first N elements from a stream",
+            "io.streamTake(${1:stream}, ${2:n})",
+            "Stream<T>",
+        ),
+        (
+            "io.streamDrop",
+            "Drop first N elements from a stream",
+            "io.streamDrop(${1:stream}, ${2:n})",
+            "Stream<T>",
+        ),
+        (
+            "io.streamCollect",
+            "Collect all elements from a stream into a list",
+            "io.streamCollect(${1:stream})",
+            "List<T>",
+        ),
+        (
+            "io.streamPipe",
+            "Pipe stream contents to a command",
+            "io.streamPipe(${1:stream}, ${2:command})",
+            "ProcessResult",
+        ),
+        (
+            "io.streamForEach",
+            "Execute callback for each stream element",
+            "io.streamForEach(${1:stream}, ${2:callback})",
+            "()",
+        ),
+        (
+            "io.streamFold",
+            "Fold a stream with an accumulator",
+            "io.streamFold(${1:stream}, ${2:initial}, ${3:fn})",
+            "A",
+        ),
+        (
+            "io.streamWithTimeout",
+            "Add a timeout to a stream",
+            "io.streamWithTimeout(${1:stream}, ${2:timeout_ms})",
+            "Stream<Option<T>>",
+        ),
     ]
 }

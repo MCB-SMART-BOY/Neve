@@ -1,0 +1,38 @@
+-- Flake definition for system-config example
+-- 系统配置示例的 Flake 定义
+let flake = #{
+    description = "Example system configuration for Neve",
+    inputs = #{
+        nevepkgs = #{ url = "github:neve-lang/nevepkgs" }
+    },
+    outputs = fn(inputs) #{
+        system = #{
+            hostname = "neve-server",
+            timezone = "Asia/Shanghai",
+            locale = "en_US.UTF-8",
+            packages = [
+                inputs.nevepkgs.git,
+                inputs.nevepkgs.curl,
+                inputs.nevepkgs.neve,
+            ],
+            services = #{
+                sshd = #{ enable = true },
+                nginx = #{ enable = true },
+            },
+            users = #{
+                admin = #{
+                    isAdmin = true,
+                    home = "/home/admin",
+                    shell = "/bin/bash",
+                },
+            },
+            firewall = #{
+                enable = true,
+                allowedTCPPorts = [22, 80, 443],
+            },
+        },
+        checks = #{
+            minimal = fn() { true },
+        },
+    }
+};

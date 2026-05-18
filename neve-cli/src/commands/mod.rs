@@ -23,6 +23,12 @@ pub mod config;
 #[cfg(unix)]
 pub mod install;
 #[cfg(unix)]
+pub mod registry;
+#[cfg(unix)]
+pub mod registry_publish;
+#[cfg(unix)]
+pub mod registry_serve;
+#[cfg(unix)]
 pub mod remove;
 #[cfg(unix)]
 pub mod search;

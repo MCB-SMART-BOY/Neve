@@ -553,11 +553,12 @@ pub(crate) fn analyze_match(
                 // Unit tuple — always covered
                 result.coverage_complete_at = arms.first().map(|a| a.span);
                 for (i, arm) in arms.iter().enumerate() {
-                    if i > 0 && arm.guard.is_none() {
-                        if let Some(prev) = result.coverage_complete_at {
-                            result.push_redundant(prev, RedundancyReason::CoveredByPreviousArms);
-                            continue;
-                        }
+                    if i > 0
+                        && arm.guard.is_none()
+                        && let Some(prev) = result.coverage_complete_at
+                    {
+                        result.push_redundant(prev, RedundancyReason::CoveredByPreviousArms);
+                        continue;
                     }
                     if arm.guard.is_some() {
                         result.push_guarded_ignored();
@@ -582,8 +583,8 @@ pub(crate) fn analyze_match(
                     if pattern_is_irrefutable_for(&arm.pattern, scrutinee_ty, ctx) {
                         result.push_useful();
                         result.coverage_complete_at = Some(arm.span);
-                        for i in 0..arity {
-                            covered[i] = true;
+                        for covered_item in covered.iter_mut().take(arity) {
+                            *covered_item = true;
                         }
                         continue;
                     }
@@ -603,18 +604,18 @@ pub(crate) fn analyze_match(
                         continue;
                     }
                     result.push_useful();
-                    for i in 0..arity {
-                        if arm_covered[i] && !covered[i] {
+                    for (i, covered_item) in covered.iter_mut().enumerate().take(arity) {
+                        if arm_covered[i] && !*covered_item {
                             witnesses[i] = Some(arm.span);
                         }
-                        covered[i] |= arm_covered[i];
+                        *covered_item |= arm_covered[i];
                     }
                     if covered.iter().all(|&c| c) {
                         result.coverage_complete_at = Some(arm.span);
                     }
                 }
-                for i in 0..arity {
-                    if !covered[i] {
+                for (i, covered_item) in covered.iter().enumerate().take(arity) {
+                    if !covered_item {
                         result
                             .missing_patterns
                             .push(format!("tuple element {}", i + 1));

@@ -16,7 +16,7 @@
 
 use crate::EvalError;
 use crate::builtin::builtins;
-use crate::value::{Thunk, ThunkState, Value};
+use crate::value::{StreamState, StreamTransform, StreamValue, Thunk, ThunkState, Value};
 use neve_common::{int_is_negative, int_is_zero, int_to_f64, int_to_u32, int_to_usize};
 use neve_hir::{ModuleLoader, ModulePath};
 use neve_syntax::*;
@@ -1358,8 +1358,31 @@ impl AstEvaluator {
                 _ => Err(EvalError::TypeError("cannot merge".to_string())),
             },
             BinOp::Pipe => {
-                // a |> f  =>  f(a)
-                self.apply_immut(right, vec![left])
+                // a |> f:
+                // - If left is Command and right is Command: cmd1 |> cmd2 => pipeline([cmd1, cmd2])
+                // - If left is Pipeline and right is Command: pipe |> cmd => pipeline.append(cmd)
+                // - Otherwise, function application: a |> f => f(a)
+                match (&left, &right) {
+                    (Value::Command(c1), Value::Command(c2)) => {
+                        Ok(Value::Pipeline(std::rc::Rc::new(
+                            crate::value::PipelineValue::new(vec![c1.clone(), c2.clone()]),
+                        )))
+                    }
+                    (Value::Pipeline(pipe), Value::Command(cmd)) => {
+                        let mut commands = pipe.commands().to_vec();
+                        commands.push(cmd.clone());
+                        Ok(Value::Pipeline(std::rc::Rc::new(
+                            crate::value::PipelineValue::new(commands),
+                        )))
+                    }
+                    (Value::Command(_), _) => Err(EvalError::TypeError(
+                        "pipe: right side must be a Command".to_string(),
+                    )),
+                    (Value::Pipeline(_), _) => Err(EvalError::TypeError(
+                        "pipe: right side must be a Command".to_string(),
+                    )),
+                    _ => self.apply_immut(right, vec![left]),
+                }
             }
         }
     }
@@ -1491,6 +1514,29 @@ impl AstEvaluator {
                                 return Err(EvalError::WrongArity);
                             }
                             return self.builtin_sort(&current_args[0], &current_args[1]);
+                        }
+                        "io.streamCollect" => {
+                            if current_args.len() != 1 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_stream_collect(&current_args[0]);
+                        }
+                        "io.streamForEach" => {
+                            if current_args.len() != 2 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self
+                                .builtin_stream_for_each(&current_args[0], &current_args[1]);
+                        }
+                        "io.streamFold" => {
+                            if current_args.len() != 3 {
+                                return Err(EvalError::WrongArity);
+                            }
+                            return self.builtin_stream_fold(
+                                &current_args[0],
+                                &current_args[1],
+                                &current_args[2],
+                            );
                         }
                         _ => {}
                     }
@@ -1771,6 +1817,172 @@ impl AstEvaluator {
             }
         }
         Ok(Value::Bool(false))
+    }
+
+    /// Collect all elements from a stream into a list.
+    fn builtin_stream_collect(&mut self, stream_val: &Value) -> Result<Value, EvalError> {
+        let stream = match stream_val {
+            Value::Stream(s) => s.clone(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.streamCollect expects a Stream".to_string(),
+                ));
+            }
+        };
+        let mut items = Vec::new();
+        loop {
+            match self.stream_next(&stream) {
+                Ok(Some(v)) => items.push(v),
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!("io.streamCollect: {e}")));
+                }
+            }
+        }
+        Ok(Value::List(Rc::new(items)))
+    }
+
+    /// Call a callback for each element in a stream.
+    fn builtin_stream_for_each(
+        &mut self,
+        stream_val: &Value,
+        callback: &Value,
+    ) -> Result<Value, EvalError> {
+        let stream = match stream_val {
+            Value::Stream(s) => s.clone(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.streamForEach expects a Stream".to_string(),
+                ));
+            }
+        };
+        loop {
+            match self.stream_next(&stream) {
+                Ok(Some(v)) => {
+                    self.apply(callback.clone(), vec![v])?;
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!("io.streamForEach: {e}")));
+                }
+            }
+        }
+        Ok(Value::Unit)
+    }
+
+    /// Fold a stream with an initial accumulator and a folder function.
+    fn builtin_stream_fold(
+        &mut self,
+        stream_val: &Value,
+        init: &Value,
+        folder: &Value,
+    ) -> Result<Value, EvalError> {
+        let stream = match stream_val {
+            Value::Stream(s) => s.clone(),
+            _ => {
+                return Err(EvalError::TypeError(
+                    "io.streamFold expects a Stream".to_string(),
+                ));
+            }
+        };
+        let mut acc = init.clone();
+        loop {
+            match self.stream_next(&stream) {
+                Ok(Some(v)) => {
+                    acc = self.apply(folder.clone(), vec![acc, v])?;
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(EvalError::TypeError(format!("io.streamFold: {e}")));
+                }
+            }
+        }
+        Ok(acc)
+    }
+
+    /// Get the next element from a stream, handling Wrapped transforms.
+    fn stream_next(&mut self, stream: &StreamValue) -> Result<Option<Value>, EvalError> {
+        let state = stream.inner.borrow();
+        match &*state {
+            StreamState::Done => Ok(None),
+            StreamState::Iterator { .. }
+            | StreamState::LinesChannel { .. }
+            | StreamState::BytesChannel { .. } => {
+                drop(state);
+                stream.next().map_err(EvalError::TypeError)
+            }
+            StreamState::Wrapped { source, transform } => {
+                let source = source.clone();
+                let xf = transform.clone();
+                drop(state);
+
+                match &*xf {
+                    StreamTransform::Take { remaining } => {
+                        if *remaining == 0 {
+                            *stream.inner.borrow_mut() = StreamState::Done;
+                            return Ok(None);
+                        }
+                        match self.stream_next(&source)? {
+                            Some(v) => {
+                                let mut s = stream.inner.borrow_mut();
+                                if let StreamState::Wrapped { transform: t, .. } = &mut *s
+                                    && let StreamTransform::Take { remaining: r } = &mut **t
+                                {
+                                    *r = *remaining - 1;
+                                }
+                                Ok(Some(v))
+                            }
+                            None => Ok(None),
+                        }
+                    }
+                    StreamTransform::Drop { remaining } => {
+                        if *remaining == 0 {
+                            return self.stream_next(&source);
+                        }
+                        match self.stream_next(&source)? {
+                            Some(_) => {
+                                // Decrement counter (scope the RefMut guard)
+                                {
+                                    let mut s = stream.inner.borrow_mut();
+                                    if let StreamState::Wrapped { transform: t, .. } = &mut *s
+                                        && let StreamTransform::Drop { remaining: r } = &mut **t
+                                    {
+                                        *r = *remaining - 1;
+                                    }
+                                }
+                                // Recurse after dropping the borrow
+                                self.stream_next(stream)
+                            }
+                            None => Ok(None),
+                        }
+                    }
+                    StreamTransform::Map { func } => match self.stream_next(&source)? {
+                        Some(v) => {
+                            let mapped = self.apply(func.clone(), vec![v])?;
+                            Ok(Some(mapped))
+                        }
+                        None => Ok(None),
+                    },
+                    StreamTransform::Filter { predicate } => loop {
+                        match self.stream_next(&source)? {
+                            Some(v) => {
+                                let pred_result = self.apply(predicate.clone(), vec![v.clone()])?;
+                                if pred_result.is_truthy() {
+                                    return Ok(Some(v));
+                                }
+                            }
+                            None => return Ok(None),
+                        }
+                    },
+                    StreamTransform::Timeout { deadline } => {
+                        if std::time::Instant::now() >= *deadline {
+                            return Ok(None);
+                        }
+                        self.stream_next(&source)
+                    }
+                }
+            }
+        }
     }
 
     /// foldl(op, init, list) - Left fold: op(op(op(init, x1), x2), x3)...
@@ -2335,6 +2547,7 @@ impl AstEvaluator {
             Value::Closure { .. } => "<function>".to_string(),
             Value::Event(_) => "Event(..)".to_string(),
             Value::Live(_) => "Live(..)".to_string(),
+            Value::Stream(_) => "<stream>".to_string(),
             Value::Thunk(thunk) => match &*thunk.state() {
                 ThunkState::Evaluated(v) => Self::value_to_string(v),
                 ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
@@ -2421,6 +2634,7 @@ fn runtime_type_key(value: &Value) -> String {
         Value::Thunk(_) => "Thunk".to_string(),
         Value::Event(_) => "Event".to_string(),
         Value::Live(_) => "Live(..)".to_string(),
+        Value::Stream(_) => "Stream".to_string(),
     }
 }
 

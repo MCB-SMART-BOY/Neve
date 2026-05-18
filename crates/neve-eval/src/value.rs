@@ -466,6 +466,8 @@ pub enum Value {
     Event(Rc<EventValue>),
     /// Live reactive value
     Live(Rc<LiveValue>),
+    /// Stream runtime object / Stream 运行时对象
+    Stream(Rc<StreamValue>),
     /// ProcessResult runtime object / ProcessResult 运行时对象
     ProcessResult(Rc<ProcessResultValue>),
 
@@ -533,6 +535,7 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Live(_) => write!(f, "Live(..)"),
+            Value::Stream(s) => write!(f, "{:?}", s),
             Value::Int(n) => write!(f, "{}", n),
             Value::Float(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
@@ -751,6 +754,9 @@ impl PartialEq for Value {
                     _ => false, // Unevaluated thunks are not equal / 未求值的 thunk 不相等
                 }
             }
+            // Streams are never equal (identity-based)
+            // 流永远不相等（基于标识）
+            (Value::Stream(_), Value::Stream(_)) => false,
             // Closures and builtins are never equal
             // 闭包和内置函数永远不相等
             _ => false,
@@ -909,6 +915,286 @@ pub struct LiveValue {
     pub cancelled: Rc<std::cell::Cell<bool>>,
 }
 
+/// Opaque stream runtime object.
+/// 不透明的流运行时对象。
+#[derive(Clone)]
+pub struct StreamValue {
+    pub(crate) inner: Rc<RefCell<StreamState>>,
+}
+
+/// Type alias for the line-oriented stream channel receiver.
+pub type LinesChannelRx = std::sync::mpsc::Receiver<Result<String, String>>;
+
+/// Type alias for the byte-oriented stream channel receiver.
+pub type BytesChannelRx = std::sync::mpsc::Receiver<Result<Vec<u8>, String>>;
+
+/// Transform applied to a wrapped stream.
+/// 应用于包装流的变换。
+#[derive(Clone)]
+pub enum StreamTransform {
+    /// Skip the first N elements, then pass through.
+    Drop { remaining: usize },
+    /// Pass through the first N elements, then stop.
+    Take { remaining: usize },
+    /// Apply a function to each element.
+    Map { func: Value },
+    /// Keep only elements for which the predicate returns true.
+    Filter { predicate: Value },
+    /// Timeout: stop returning elements after a deadline.
+    Timeout { deadline: std::time::Instant },
+}
+
+/// The internal state of a stream.
+/// 流的内部状态。
+#[derive(Clone)]
+pub enum StreamState {
+    /// Iterator-based: wraps an eager iterator (for list sources).
+    Iterator {
+        iter: Rc<RefCell<Box<dyn Iterator<Item = Value>>>>,
+    },
+    /// Channel-based (lines): producer thread sends `String` lines.
+    LinesChannel {
+        rx: Rc<RefCell<LinesChannelRx>>,
+        cancelled: Rc<std::sync::atomic::AtomicBool>,
+    },
+    /// Channel-based (bytes): producer thread sends `Vec<u8>` chunks.
+    BytesChannel {
+        rx: Rc<RefCell<BytesChannelRx>>,
+        cancelled: Rc<std::sync::atomic::AtomicBool>,
+    },
+    /// Wrapped: transforms an upstream stream (pure, lazy).
+    /// Used by streamTake, streamDrop, streamMap, streamFilter.
+    Wrapped {
+        source: Rc<StreamValue>,
+        transform: Box<StreamTransform>,
+    },
+    /// Exhausted or consumed.
+    Done,
+}
+
+impl StreamValue {
+    /// Create a stream from a list of values (iterator-based).
+    pub fn from_list(values: Vec<Value>) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(StreamState::Iterator {
+                iter: Rc::new(RefCell::new(Box::new(values.into_iter()))),
+            })),
+        }
+    }
+
+    /// Create a stream from a lines channel (producer sends `String`).
+    pub fn from_lines_channel(rx: LinesChannelRx) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(StreamState::LinesChannel {
+                rx: Rc::new(RefCell::new(rx)),
+                cancelled: Rc::new(std::sync::atomic::AtomicBool::new(false)),
+            })),
+        }
+    }
+
+    /// Create a stream from a bytes channel (producer sends `Vec<u8>`).
+    pub fn from_bytes_channel(rx: BytesChannelRx) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(StreamState::BytesChannel {
+                rx: Rc::new(RefCell::new(rx)),
+                cancelled: Rc::new(std::sync::atomic::AtomicBool::new(false)),
+            })),
+        }
+    }
+
+    /// Create a wrapped stream that transforms an upstream source.
+    pub fn from_wrapped(source: Rc<StreamValue>, transform: StreamTransform) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(StreamState::Wrapped {
+                source,
+                transform: Box::new(transform),
+            })),
+        }
+    }
+
+    /// Get the next element from the stream. Returns None at end or on cancel.
+    pub fn next(&self) -> Result<Option<Value>, String> {
+        let mut state = self.inner.borrow_mut();
+        match &mut *state {
+            StreamState::Iterator { iter } => Ok(iter.borrow_mut().next()),
+            StreamState::LinesChannel { rx: _, cancelled }
+            | StreamState::BytesChannel { rx: _, cancelled } => {
+                if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+                    *state = StreamState::Done;
+                    return Ok(None);
+                }
+                // Drop the borrow before recv (recv may block)
+                drop(state);
+                let mut inner_guard = self.inner.borrow_mut();
+                match &mut *inner_guard {
+                    StreamState::LinesChannel { rx, cancelled } => {
+                        if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+                            return Ok(None);
+                        }
+                        match rx.borrow_mut().recv() {
+                            Ok(Ok(s)) => Ok(Some(Value::String(Rc::new(s)))),
+                            Ok(Err(e)) => Err(e),
+                            Err(_) => Ok(None), // Channel closed
+                        }
+                    }
+                    StreamState::BytesChannel { rx, cancelled } => {
+                        if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+                            return Ok(None);
+                        }
+                        match rx.borrow_mut().recv() {
+                            Ok(Ok(v)) => Ok(Some(Value::Bytes(Rc::new(v)))),
+                            Ok(Err(e)) => Err(e),
+                            Err(_) => Ok(None), // Channel closed
+                        }
+                    }
+                    _ => Ok(None),
+                }
+            }
+            StreamState::Wrapped { source, transform } => {
+                // Clone everything we need, then drop the RefCell borrow.
+                let source = source.clone();
+                let xf = transform.clone();
+                drop(state);
+
+                match &*xf {
+                    StreamTransform::Take { remaining } if *remaining == 0 => {
+                        *self.inner.borrow_mut() = StreamState::Done;
+                        Ok(None)
+                    }
+                    StreamTransform::Take { remaining } => {
+                        match source.next() {
+                            Ok(Some(v)) => {
+                                // Update remaining counter (drop guard before returning)
+                                {
+                                    let mut s = self.inner.borrow_mut();
+                                    if let StreamState::Wrapped { transform: t, .. } = &mut *s
+                                        && let StreamTransform::Take { remaining: r } = &mut **t
+                                    {
+                                        *r = *remaining - 1;
+                                    }
+                                }
+                                Ok(Some(v))
+                            }
+                            other => other,
+                        }
+                    }
+                    StreamTransform::Drop { remaining } if *remaining == 0 => {
+                        // All skipped, pass through directly
+                        source.next()
+                    }
+                    StreamTransform::Drop { remaining } => {
+                        // Skip one element from source
+                        match source.next() {
+                            Ok(Some(_)) => {
+                                // Decrement counter (drop guard before recursion)
+                                {
+                                    let mut s = self.inner.borrow_mut();
+                                    if let StreamState::Wrapped { transform: t, .. } = &mut *s
+                                        && let StreamTransform::Drop { remaining: r } = &mut **t
+                                    {
+                                        *r = *remaining - 1;
+                                    }
+                                }
+                                // Recurse to process next element
+                                self.next()
+                            }
+                            other => other,
+                        }
+                    }
+                    StreamTransform::Map { func } => match source.next() {
+                        Ok(Some(v)) => Self::try_apply_function(func, v).map(Some),
+                        other => other,
+                    },
+                    StreamTransform::Filter { predicate } => {
+                        // Loop until predicate matches or source ends
+                        loop {
+                            match source.next() {
+                                Ok(Some(v)) => {
+                                    match Self::try_apply_function(predicate, v.clone()) {
+                                        Ok(Value::Bool(true)) => return Ok(Some(v)),
+                                        Ok(_) => continue, // skipped
+                                        Err(e) => return Err(e),
+                                    }
+                                }
+                                other => return other,
+                            }
+                        }
+                    }
+                    StreamTransform::Timeout { deadline } => {
+                        if std::time::Instant::now() >= *deadline {
+                            return Ok(None); // timeout expired
+                        }
+                        source.next()
+                    }
+                }
+            }
+            StreamState::Done => Ok(None),
+        }
+    }
+
+    /// Try to apply a function value to a single argument.
+    /// Supports Builtin, BuiltinFn, and Closure (since we're on the evaluator thread).
+    pub fn try_apply_function(func: &Value, arg: Value) -> Result<Value, String> {
+        match func {
+            Value::Builtin(b) => (b.func)(&[arg]),
+            Value::BuiltinFn(_, f) => f(vec![arg]),
+            Value::Closure { .. } | Value::AstClosure(_) => Err(
+                "stream transform: closures require evaluator context (not yet supported)"
+                    .to_string(),
+            ),
+            _ => Err(format!(
+                "stream transform: cannot apply {:?} as a function",
+                func
+            )),
+        }
+    }
+
+    /// Cancel the stream (signal producer to stop).
+    pub fn cancel(&self) {
+        match &*self.inner.borrow() {
+            StreamState::LinesChannel { cancelled, .. }
+            | StreamState::BytesChannel { cancelled, .. } => {
+                cancelled.store(true, std::sync::atomic::Ordering::Release);
+            }
+            StreamState::Wrapped { source, .. } => {
+                // Cancel the upstream source first
+                source.cancel();
+            }
+            _ => {}
+        }
+        // Mark this stream as done
+        *self.inner.borrow_mut() = StreamState::Done;
+    }
+}
+
+impl fmt::Debug for StreamValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &*self.inner.borrow() {
+            StreamState::Iterator { .. } => write!(f, "<stream:iterator>"),
+            StreamState::LinesChannel { .. } => write!(f, "<stream:lines>"),
+            StreamState::BytesChannel { .. } => write!(f, "<stream:bytes>"),
+            StreamState::Wrapped { transform, .. } => match &**transform {
+                StreamTransform::Take { remaining } => {
+                    write!(f, "<stream:take({})>", remaining)
+                }
+                StreamTransform::Drop { remaining } => {
+                    write!(f, "<stream:drop({})>", remaining)
+                }
+                StreamTransform::Map { .. } => write!(f, "<stream:map>"),
+                StreamTransform::Filter { .. } => write!(f, "<stream:filter>"),
+                StreamTransform::Timeout { .. } => write!(f, "<stream:timeout>"),
+            },
+            StreamState::Done => write!(f, "<stream:done>"),
+        }
+    }
+}
+
+impl PartialEq for StreamValue {
+    fn eq(&self, _other: &Self) -> bool {
+        false // Streams are never equal (identity-based)
+    }
+}
+
 impl Value {
     /// Check if the value is truthy.
     /// 检查值是否为真值。
@@ -1003,6 +1289,7 @@ impl KeyCtx {
     fn value_key(&mut self, value: &Value) -> String {
         match value {
             Value::Live(_) => "Live(..)".to_string(),
+            Value::Stream(s) => format!("Stream({:?})", s),
             Value::Int(n) => format!("Int({n})"),
             Value::Float(f) => format!("Float({})", canonical_float(*f)),
             Value::Bool(b) => format!("Bool({b})"),

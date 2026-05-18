@@ -5,7 +5,7 @@ use super::TypeChecker;
 use crate::builtin_types::{
     builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live, builtin_map,
     builtin_option, builtin_path, builtin_pipeline, builtin_process_result, builtin_redirect,
-    builtin_result, builtin_set, builtin_task,
+    builtin_result, builtin_set, builtin_stream, builtin_task,
 };
 use crate::unify::instantiate;
 use neve_common::Span;
@@ -57,8 +57,12 @@ fn builtin_safe_record_base(fields: Vec<(&str, Ty)>, span: Span) -> Ty {
     )
 }
 
+fn builtin_string(span: Span) -> Ty {
+    builtin_ty(TyKind::String, span)
+}
+
 fn builtin_string_option(span: Span) -> Ty {
-    builtin_option(builtin_ty(TyKind::String, span), span)
+    builtin_option(builtin_string(span), span)
 }
 
 fn builtin_path_option(span: Span) -> Ty {
@@ -1392,6 +1396,14 @@ impl TypeChecker {
                 builtin_list(builtin_process_result(span), span),
                 span,
             ),
+            "io.awaitAny" => builtin_fn(
+                vec![builtin_list(
+                    builtin_task(builtin_process_result(span), span),
+                    span,
+                )],
+                builtin_process_result(span),
+                span,
+            ),
             "io.awaitTaskWithTimeout" => builtin_fn(
                 vec![
                     builtin_task(builtin_process_result(span), span),
@@ -1418,6 +1430,125 @@ impl TypeChecker {
             "io.processStderr" => builtin_fn(
                 vec![builtin_process_result(span)],
                 builtin_ty(TyKind::String, span),
+                span,
+            ),
+            // === Stream<T> APIs (Phase 4) ===
+            "io.streamList" => builtin_fn(
+                vec![builtin_list(builtin_param(0, "T", span), span)],
+                builtin_stream(builtin_param(0, "T", span), span),
+                span,
+            ),
+            "io.streamLines" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_stream(builtin_string(span), span),
+                span,
+            ),
+            "io.streamCommand" => builtin_fn(
+                vec![builtin_command(span)],
+                builtin_stream(builtin_string(span), span),
+                span,
+            ),
+            "io.streamBytes" => builtin_fn(
+                vec![builtin_ty(TyKind::String, span)],
+                builtin_stream(builtin_bytes(span), span),
+                span,
+            ),
+            "io.streamMap" => builtin_forall(
+                vec!["A", "B"],
+                builtin_fn(
+                    vec![
+                        builtin_stream(builtin_param(0, "A", span), span),
+                        builtin_fn(
+                            vec![builtin_param(0, "A", span)],
+                            builtin_param(1, "B", span),
+                            span,
+                        ),
+                    ],
+                    builtin_stream(builtin_param(1, "B", span), span),
+                    span,
+                ),
+                span,
+            ),
+            "io.streamFilter" => builtin_forall(
+                vec!["T"],
+                builtin_fn(
+                    vec![
+                        builtin_stream(builtin_param(0, "T", span), span),
+                        builtin_fn(
+                            vec![builtin_param(0, "T", span)],
+                            builtin_ty(TyKind::Bool, span),
+                            span,
+                        ),
+                    ],
+                    builtin_stream(builtin_param(0, "T", span), span),
+                    span,
+                ),
+                span,
+            ),
+            "io.streamTake" => builtin_fn(
+                vec![
+                    builtin_stream(builtin_param(0, "T", span), span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_stream(builtin_param(0, "T", span), span),
+                span,
+            ),
+            "io.streamDrop" => builtin_fn(
+                vec![
+                    builtin_stream(builtin_param(0, "T", span), span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_stream(builtin_param(0, "T", span), span),
+                span,
+            ),
+            "io.streamCollect" => builtin_fn(
+                vec![builtin_stream(builtin_param(0, "T", span), span)],
+                builtin_list(builtin_param(0, "T", span), span),
+                span,
+            ),
+            "io.streamPipe" => builtin_fn(
+                vec![
+                    builtin_stream(builtin_string(span), span),
+                    builtin_command(span),
+                ],
+                builtin_process_result(span),
+                span,
+            ),
+            "io.streamForEach" => builtin_fn(
+                vec![
+                    builtin_stream(builtin_param(0, "T", span), span),
+                    builtin_fn(
+                        vec![builtin_param(0, "T", span)],
+                        builtin_ty(TyKind::Unit, span),
+                        span,
+                    ),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.streamFold" => builtin_forall(
+                vec!["T", "A"],
+                builtin_fn(
+                    vec![
+                        builtin_stream(builtin_param(0, "T", span), span),
+                        builtin_param(1, "A", span),
+                        builtin_fn(
+                            vec![builtin_param(1, "A", span), builtin_param(0, "T", span)],
+                            builtin_param(1, "A", span),
+                            span,
+                        ),
+                    ],
+                    builtin_param(1, "A", span),
+                    span,
+                ),
+                span,
+            ),
+            "io.streamWithTimeout" => builtin_fn(
+                vec![
+                    builtin_stream(builtin_param(0, "T", span), span),
+                    builtin_ty(TyKind::Int, span),
+                ],
+                builtin_stream(builtin_option(builtin_param(0, "T", span), span), span),
                 span,
             ),
             "io.homeDir" => builtin_fn(Vec::new(), builtin_string_option(span), span),

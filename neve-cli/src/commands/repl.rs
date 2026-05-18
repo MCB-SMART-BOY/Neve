@@ -61,8 +61,8 @@ pub fn run() -> Result<(), String> {
                 let line_trimmed = line.trim_end();
 
                 // Handle backslash continuation (explicit multi-line)
-                if line_trimmed.ends_with('\\') {
-                    input_buffer.push_str(&line_trimmed[..line_trimmed.len() - 1]);
+                if let Some(stripped) = line_trimmed.strip_suffix('\\') {
+                    input_buffer.push_str(stripped);
                     input_buffer.push('\n');
                     in_multiline = true;
                     continue;
@@ -753,8 +753,6 @@ fn neve_config_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
-/// Get the REPL history file path (~/.config/neve/history).
-
 /// Check if a string has unclosed braces/brackets/parens.
 fn has_unclosed_braces(input: &str) -> bool {
     let mut depth_paren = 0i32;
@@ -872,6 +870,7 @@ fn format_repl_value(value: &Value) -> String {
         Value::Bytes(b) => format!("<{} bytes>", b.len()),
         Value::Event(_) => "Event(..)".to_string(),
         Value::Live(_) => "Live(..)".to_string(),
+        Value::Stream(_) => "<stream>".to_string(),
         Value::Thunk(_) => "<thunk>".to_string(),
         Value::Builtin(_) => "<builtin>".to_string(),
         Value::BuiltinFn(n, _) => format!("<builtin {}>", n),
@@ -945,7 +944,8 @@ mod tests {
         PIPELINE_TYPE_ID, PROCESS_RESULT_TYPE_ID, REDIRECT_TYPE_ID, RESULT_TYPE_ID, SET_TYPE_ID,
         TASK_TYPE_ID, builtin_bytes, builtin_command, builtin_event, builtin_list, builtin_live,
         builtin_map, builtin_option, builtin_path, builtin_pipeline, builtin_process_result,
-        builtin_redirect, builtin_result, builtin_set, builtin_task, format_builtin_named_type,
+        builtin_redirect, builtin_result, builtin_set, builtin_stream, builtin_task,
+        format_builtin_named_type,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1040,6 +1040,7 @@ mod tests {
             },
             Value::Event(_) => builtin_event(unknown_ty(), Span::DUMMY),
             Value::Live(_) => builtin_live(unknown_ty(), Span::DUMMY),
+            Value::Stream(_) => builtin_stream(unknown_ty(), Span::DUMMY),
         }
     }
 

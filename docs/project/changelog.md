@@ -21,28 +21,38 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
-## [3.8.0] - 2026-05-10
+## [3.8.0] - 2026-05-12
 
 ### Added / 新增
-- **Formal verification v4**: 19 Lean modules, EffectEval v4.1 (21 rules), BinOp 12/12 proved.
+- **Phase 4 complete**: Shell Capability Replacement — Stream<T> 14 APIs, TTY 4 APIs, Job control 2 APIs.
+- **Stream<T>**: 14/14 APIs implemented (Phase A-C): streamList/streamLines/streamCommand/streamBytes, streamMap/streamFilter/streamTake/streamDrop, streamCollect/streamPipe/streamWrite/streamForEach/streamFold, streamWithTimeout.
+- **Task APIs**: 7 (spawn/poll/cancel/await/awaitTasks/awaitAny/awaitTaskWithTimeout).
+- **TTY APIs**: 4 (isTTY/terminalSize/setRawMode/resetTerminal).
+- **Job control**: 2 (jobs/waitAnyJob).
+- **Formal verification v4**: 19 Lean modules, EffectEval v4.3 (34 rules, +5 stream Phase C), BinOp 12/12 proved.
 - **Bytes type formalization**: Ty.Bytes, Value.bytes, canonical forms, EffectEval rules, refinement bridge.
 - **BigStep v2**: matchOn_fallthrough rule, div_zero/mod_zero rules (27 total rules).
 - **SafetyLemmas**: 5 verified pattern matching lemmas (wildcard, lit_int, bool_full, unit, bool_first_arm).
 - **Effect boundary document**: docs/project/effect-boundary.md v1.0 (G4 decision gate closed).
 - **CI bug hunter**: .github/workflows/bug-hunter.yml (nightly + push/PR + manual trigger).
-- **Formatter idempotency**: 26/26 tests pass (crates/neve-fmt/tests/idempotency.rs).
+- **Formatter idempotency**: 37/37 tests pass (crates/neve-fmt/tests/idempotency.rs).
+- **Pipeline**: |> syntax (AST=HIR=typeck parity).
+- **Example scripts**: examples/test-runner.neve, examples/ci-bootstrap.neve.
 - **CHANGELOG.md**: Added at repository root.
+- **Phase 5 items**: Ecosystem design doc, stability tiers (Tier 1/2/3), flake/lock/store, registry CLI (17 commands).
 
 ### Changed / 变更
 - **EnvMatches**: Refactored to predicate-parameterized EnvMatches(P) in Values.lean.
 - **Type safety v18**: env_preservation lemma extracted; app/pipe non-lam cases documented.
-- **EffectEval**: awaitTaskTimeout rule upgraded from placeholder to dual-path (success/timeout).
+- **EffectEval**: v4.3 (34 rules): +5 stream Phase C, +cancel/awaitAny, +retry/ensure, +awaitTasks/timeout.
 - **Retry/Ensure**: EffectEval rules added (retry_success, retry_failure, ensure_success, ensure_timeout).
 - **kill_process**: Moved to neve-common as single source of truth (M-2 unified kill mechanism).
+- **G5 (Bash Replacement)**: Decision gate closed ✅.
+- **Clippy**: 0 warnings across workspace.
 
 ### Tests / 测试
-- **E2E**: 200 → 220 (+10 BinOp/match/Bytes, +10 Command/Pipeline/Task/Redirect).
-- **Formatter**: 26 idempotency tests added.
+- **E2E**: 400 (+180 from 220): Stream Phase C (7), Job control (2), TTY (2), plus prior Stream/Task/pipe/redirect expansion; Phase 5 ecosystem (77 from 323→400).
+- **Formatter**: 37 idempotency tests (37/37 pass).
 - **Ecosystem**: builder(6), store(40), fetch all passing.
 
 ## [3.7.0] - 2026-05-09

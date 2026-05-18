@@ -96,9 +96,52 @@ fn search_store(store_dir: &PathBuf, query: &str) -> Result<Vec<(String, PathBuf
     Ok(matches)
 }
 
+/// Fetch the package index from a remote URL.
+/// 从远程 URL 获取软件包索引。
+fn fetch_remote_index(url: &str, query: &str) -> Result<Vec<(String, String)>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("failed to create HTTP client: {e}"))?;
+
+    let response = client
+        .get(url)
+        .send()
+        .map_err(|e| format!("failed to fetch index: {e}"))?;
+
+    let content = response
+        .text()
+        .map_err(|e| format!("failed to read response: {e}"))?;
+
+    let parsed = parse_index(&content)?;
+    let query_lower = query.to_lowercase();
+    let mut matches: Vec<(String, String)> = parsed
+        .into_iter()
+        .filter(|(name, desc)| {
+            name.to_lowercase().contains(&query_lower) || desc.to_lowercase().contains(&query_lower)
+        })
+        .collect();
+    matches.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(matches)
+}
+
 /// Search the package index.
 /// 搜索软件包索引。
 fn search_index(query: &str) -> Result<Vec<(String, String)>, String> {
+    // First try remote registry via $NEVE_REGISTRY
+    // 首先尝试通过 $NEVE_REGISTRY 访问远程注册表
+    if let Ok(registry_url) = std::env::var("NEVE_REGISTRY") {
+        match fetch_remote_index(&registry_url, query) {
+            Ok(matches) if !matches.is_empty() => return Ok(matches),
+            Ok(_) => {} // empty results, fall through to local
+            Err(e) => {
+                output::warning(&format!("Remote registry unavailable: {e}"));
+            }
+        }
+    }
+
+    // Fall back to local index
+    // 回退到本地索引
     let Some(index_path) = get_index_path() else {
         return Ok(Vec::new());
     };
@@ -125,7 +168,7 @@ fn search_index(query: &str) -> Result<Vec<(String, String)>, String> {
 
 /// Package index location.
 /// 软件包索引位置。
-fn get_index_path() -> Option<PathBuf> {
+pub(crate) fn get_index_path() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("NEVE_PACKAGE_INDEX") {
         return Some(PathBuf::from(path));
     }
@@ -144,7 +187,7 @@ struct IndexEntry {
 
 /// Parse supported package index JSON formats.
 /// 解析支持的软件包索引 JSON 格式。
-fn parse_index(content: &str) -> Result<Vec<(String, String)>, String> {
+pub(crate) fn parse_index(content: &str) -> Result<Vec<(String, String)>, String> {
     // Format 1: [{"name":"foo","description":"..."}]
     if let Ok(entries) = serde_json::from_str::<Vec<IndexEntry>>(content) {
         return Ok(entries

@@ -1,0 +1,21 @@
+#!/usr/bin/env neve
+-- File watcher: polls a directory and reports changes
+-- 文件监控器：轮询目录并报告变化
+import std.io as io;
+
+let dir = match io.args() {
+    (args, _) -> match args {
+        [d, ..] -> d,
+        [] -> "."
+    }
+};
+
+io.println("Watching " + dir + " for changes...");
+io.println("Press Ctrl+C to stop.");
+
+-- Poll once to verify the concept and report file count
+-- Note: io.glob returns a List of Path values in the current directory
+let files = io.glob(dir + "/*");
+let count = len(files);
+io.println("[" + toString(count) + "] files at now");
+0

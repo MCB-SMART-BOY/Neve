@@ -1,0 +1,71 @@
+#!/usr/bin/env neve
+-- System configuration flake for Neve
+-- 系统配置 flake
+--
+-- Usage:
+--   neve config build    — build the system configuration
+--   neve config switch   — activate the configuration
+--   neve config list     — list configuration generations
+
+-- Flake inputs (declared in flake.neve):
+-- inputs = #{
+--   nevepkgs = #{ url = "github:neve-lang/nevepkgs" }
+-- };
+
+-- System configuration outputs
+-- In a real flake, `inputs` is resolved from the lock file.
+-- 在实际 flake 中，`inputs` 从锁定文件中解析。
+let outputs = fn(inputs) {
+    -- `inputs.nevepkgs` provides packages at resolution time.
+    -- 在解析时，`inputs.nevepkgs` 提供软件包。
+    -- e.g., packages = [inputs.nevepkgs.git, inputs.nevepkgs.curl]
+
+    let system = #{
+        -- Host configuration
+        hostname = "neve-server",
+        timezone = "Asia/Shanghai",
+        locale = "en_US.UTF-8",
+
+        -- Packages to install (resolved at build time)
+        packages = [
+            "nevepkgs.git",
+            "nevepkgs.curl",
+            "nevepkgs.neve",
+        ],
+
+        -- Services
+        services = #{
+            sshd = #{ enable = true },
+            nginx = #{
+                enable = true,
+                virtualHosts = #{
+                    example_com = #{
+                        root = "/var/www/example.com",
+                    },
+                },
+            },
+        },
+
+        -- Users
+        users = #{
+            admin = #{
+                isAdmin = true,
+                home = "/home/admin",
+                shell = "/bin/bash",
+            },
+        },
+
+        -- Firewall
+        firewall = #{
+            enable = true,
+            allowedTCPPorts = [22, 80, 443],
+        },
+    };
+
+    #{
+        system = system,
+        checks = #{
+            minimal = fn() { true },
+        },
+    }
+};

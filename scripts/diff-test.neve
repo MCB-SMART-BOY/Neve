@@ -1,0 +1,42 @@
+#!/usr/bin/env neve run
+-- Differential test: compare basic expressions
+-- 差分测试：比较基础表达式
+-- Usage: neve run scripts/diff-test.neve
+import std.io as io;
+
+let runTest = fn(expr, expected) {
+    io.print("  " ++ expr ++ " = " ++ expected ++ " ... ");
+
+    -- Evaluate with neve
+    let neve_cmd = io.command("neve", ["eval", expr]);
+    let neve_result = io.execCommand(neve_cmd);
+    let actual = io.processStdout(neve_result);
+
+    if actual == expected then {
+        io.println("PASS");
+        true
+    } else {
+        io.println("FAIL (got=" ++ actual ++ ")");
+        false
+    }
+};
+
+io.println("=== Differential Test: Neve Evaluator ===");
+
+-- Arithmetic
+let r1 = runTest("1 + 2", "3");
+let r2 = runTest("(3 + 4) * 2", "14");
+
+-- Boolean
+let r3 = runTest("1 == 1", "true");
+let r4 = runTest("1 == 2", "false");
+
+-- Count results (convert bools to ints and sum)
+let toInt = fn(b) { if b then 1 else 0 };
+let passed = toInt(r1) + toInt(r2) + toInt(r3) + toInt(r4);
+let failed = 4 - passed;
+
+io.println("");
+io.println("Results: " ++ toString(passed) ++ " passed, " ++ toString(failed) ++ " failed");
+
+if failed > 0 then 1 else 0

@@ -1,12 +1,15 @@
 /-
-  Effectful evaluation v3 — extends BigStep with complete I/O semantics.
+  Effectful evaluation v4.3 — extends BigStep with complete I/O semantics.
 
   Blocking:   execCommand, execPipeline
   Deferred:   spawn, awaitTask, awaitTaskTimeout
   Streaming:  execCommandStreaming, execPipelineStreaming,
               execCommandStreamingWithTimeout, execPipelineStreamingWithTimeout,
               readFileLines
-  File I/O:   readFile, writeFile
+  File I/O:   readFile, writeFile, readFileBytes, writeFileBytes
+  Stream<T>:  14 rules (construct + transform + consume + pipe) (Phase 4)
+  Task ctl:   cancel, awaitAny (Phase 4)
+  Temporal:   retry, ensure
 -/
 import Neve.Spec.Syntax
 import Neve.Spec.Eval
@@ -359,5 +362,130 @@ inductive EffectEval : Env → IOState → Expr → Value → IOState → Prop w
         (Expr.builtin "io.ensure" [check_arg, timeout_arg, interval_arg])
         (Value.bool false)
         σ
+
+  -- ================================================================
+  -- Stream operations (Phase 4 Stream<T>)
+  -- ================================================================
+
+  -- === io.streamCollect ===
+  /--
+    Collect a lazy stream into a list. This triggers the underlying
+    I/O (file reads or process execution) if the stream is backed by
+    a file or command source.
+  -/
+  | streamCollect (env : Env) (σ σ' : IOState) (stream_arg : Expr) (items : List Value) :
+      BigStep env stream_arg (Value.stream items) →
+      -- Items accumulated from stream via repeated next() calls
+      EffectEval env σ
+        (Expr.builtin "io.streamCollect" [stream_arg])
+        (list items)
+        σ'
+
+  -- === io.streamCollect (error path) ===
+  | streamCollectError (env : Env) (σ : IOState) (stream_arg : Expr) (msg : String) :
+      BigStep env stream_arg (Value.stream []) →
+      -- Error during stream consumption
+      EffectEval env σ
+        (Expr.builtin "io.streamCollect" [stream_arg])
+        (Value.string msg)  -- error propagates as string
+        σ
+
+  -- === io.streamLines (constructor, pure) ===
+  | streamLines (env : Env) (σ : IOState) (path_arg : Expr) (path : String) :
+      BigStep env path_arg (string path) →
+      -- Creates a lazy stream; no I/O triggered yet
+      EffectEval env σ
+        (Expr.builtin "io.streamLines" [path_arg])
+        (Value.stream [])
+        σ
+
+  -- === io.streamCommand (constructor, pure) ===
+  | streamCommand (env : Env) (σ : IOState) (cmd_arg : Expr) :
+      -- Creates a lazy stream from a command; no I/O triggered yet
+      EffectEval env σ
+        (Expr.builtin "io.streamCommand" [cmd_arg])
+        (Value.stream [])
+        σ
+
+  -- === io.streamBytes (constructor, pure) ===
+  | streamBytes (env : Env) (σ : IOState) (path_arg : Expr) (path : String) :
+      BigStep env path_arg (string path) →
+      EffectEval env σ
+        (Expr.builtin "io.streamBytes" [path_arg])
+        (Value.stream [])
+        σ
+
+  -- ================================================================
+  -- Task cancel / awaitAny (Phase 4 shell capability)
+  -- ================================================================
+
+  -- === io.cancel ===
+  /--
+    Cancel a spawned task by ID. Always succeeds (no-op if ID doesn't exist).
+    Returns unit.
+  -/
+  | cancel (env : Env) (σ : IOState) (id_arg : Expr) (id : Int) :
+      BigStep env id_arg (Value.int id) →
+      EffectEval env σ
+        (Expr.builtin "io.cancel" [id_arg])
+        Value.unit
+        σ
+
+  -- === io.awaitAny (first success) ===
+  /--
+    Spawn all tasks in a list and return the result of the first one
+    that completes. The remaining tasks are cancelled.
+  -/
+  | awaitAny (env : Env) (σ σ' : IOState) (tasks_arg : Expr) (tasks : List Value) (v : Value) :
+      BigStep env tasks_arg (list tasks) →
+      -- One of the tasks completes with value v
+      EffectEval env σ
+        (Expr.builtin "io.awaitAny" [tasks_arg])
+        v
+        σ'
+
+  -- ================================================================
+  -- Stream Phase C: transforms + pipe
+  -- ================================================================
+
+  -- === io.streamTake (pure constructor) ===
+  | streamTake (env : Env) (σ : IOState) (stream_arg : Expr) (n_arg : Expr) (n : Int) :
+      BigStep env n_arg (Value.int n) →
+      EffectEval env σ
+        (Expr.builtin "io.streamTake" [stream_arg, n_arg])
+        (Value.stream [])
+        σ
+
+  -- === io.streamDrop (pure constructor) ===
+  | streamDrop (env : Env) (σ : IOState) (stream_arg : Expr) (n_arg : Expr) (n : Int) :
+      BigStep env n_arg (Value.int n) →
+      EffectEval env σ
+        (Expr.builtin "io.streamDrop" [stream_arg, n_arg])
+        (Value.stream [])
+        σ
+
+  -- === io.streamMap (pure constructor) ===
+  | streamMap (env : Env) (σ : IOState) (stream_arg : Expr) (func_arg : Expr) :
+      EffectEval env σ
+        (Expr.builtin "io.streamMap" [stream_arg, func_arg])
+        (Value.stream [])
+        σ
+
+  -- === io.streamFilter (pure constructor) ===
+  | streamFilter (env : Env) (σ : IOState) (stream_arg : Expr) (pred_arg : Expr) :
+      EffectEval env σ
+        (Expr.builtin "io.streamFilter" [stream_arg, pred_arg])
+        (Value.stream [])
+        σ
+
+  -- === io.streamPipe (effectful: consumes stream into command) ===
+  | streamPipe (env : Env) (σ σ' : IOState) (stream_arg : Expr) (cmd_arg : Expr) (output : ProcessOutput)
+      (hout_len : output.stdout.length ≤ MAX_OUTPUT_BYTES)
+      (herr_len : output.stderr.length ≤ MAX_OUTPUT_BYTES) :
+      EffectEval env σ
+        (Expr.builtin "io.streamPipe" [stream_arg, cmd_arg])
+        (processResult output.code output.stdout output.stderr)
+        { σ with stdout := σ.stdout ++ output.stdout
+                 stderr := σ.stderr ++ output.stderr }
 
 end Neve

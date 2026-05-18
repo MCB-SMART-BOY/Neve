@@ -1,0 +1,86 @@
+-- ============================================================
+-- 01_basics.neve — Neve 基础语法示例
+-- Basic syntax: variables, functions, types, and expressions
+-- ============================================================
+
+-- 类型别名 / Type alias
+type UserId = Int;
+
+-- 结构体 / Struct
+struct Point {
+    x: Float,
+    y: Float,
+};
+
+-- 枚举 / Enum
+enum Color {
+    Red,
+    Green,
+    Blue,
+    RGB(Int, Int, Int),
+};
+
+-- 纯函数 / Pure function
+fn add(x: Int, y: Int) -> Int = x + y;
+
+-- 带类型推导的函数 / Function with type inference
+fn double(x) = x * 2;
+
+-- 用代码块的函数 / Function with block body
+fn greet(name: String) -> String = {
+    let greeting = `Hello, {name}!`;
+    greeting
+};
+
+-- 闭包 / Closures
+let multiply = fn(x, y) x * y;
+
+-- 基本值绑定 / Basic bindings
+let answer = 42;
+let pi: Float = 3.14159;
+let message = "Neve is fun!";
+let flag = true;
+let unit = ();
+
+-- 字符串插值 / String interpolation
+let name = "World";
+let welcome = `Hi {name}, the answer is {add(40, 2)}`;
+
+-- 条件表达式 / Conditional expressions
+let status = if answer > 0 then "positive" else "non-positive";
+
+-- 管道 / Pipe
+let piped = 10 |> double |> double;  -- 40
+
+-- 列表 / Lists
+let numbers = [1, 2, 3, 4, 5];
+let empty_list: List<Int> = [];
+let combined = [1, 2] ++ [3, 4];  -- [1, 2, 3, 4]
+
+-- 列表推导式 / List comprehension
+let evens = [x | x <- numbers, x % 2 == 0];       -- [2, 4]
+let doubled = [x * 2 | x <- numbers];               -- [2, 4, 6, 8, 10]
+
+-- 记录 / Records
+let point = #{ x = 10.0, y = 20.0 };
+let origin = #{ x = 0.0, y = 0.0 };
+
+-- 记录简写 / Record shorthand
+let x_val = 5.0;
+let y_val = 7.0;
+let quick = #{ x = x_val, y = y_val };
+
+-- 记录更新（创建新记录） / Record update (creates new record)
+let moved = point // #{ x = 15.0 };
+
+-- 记录访问 / Record field access
+let point_x = point.x;
+
+-- 结果 / Final result
+let result = #{
+    answer = answer,
+    doubled = doubled,
+    evens = evens,
+    point = moved,
+    piped = piped,
+};

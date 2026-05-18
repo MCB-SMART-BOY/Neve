@@ -1,0 +1,58 @@
+#!/usr/bin/env neve run
+-- Bug hunter: security regression tests / 安全回归测试
+-- Usage: neve run scripts/bug-hunt.neve
+import std.io as io;
+
+let check = fn(name, expected) {
+    io.print("  [" ++ name ++ "] ... ");
+
+    let result = match name {
+        "stdin-ok" -> {
+            let cmd = io.commandWith(#{
+                program = "cat",
+                args = [],
+                stdin = "hi",
+                env = #{}
+            });
+            io.processStdout(io.execCommand(cmd))
+        },
+        "capture-stdout" -> {
+            let cmd = io.command("echo", ["hello world"]);
+            io.processStdout(io.execCommand(cmd))
+        },
+        "capture-stderr" -> {
+            let cmd = io.command("sh", ["-c", "echo err>&2"]);
+            io.processStderr(io.execCommand(cmd))
+        },
+        "exit-code-0" -> {
+            let cmd = io.command("true", []);
+            toString(io.processSuccess(io.execCommand(cmd)))
+        },
+        _ -> "unknown"
+    };
+
+    if result == expected then {
+        io.println("PASS");
+        true
+    } else {
+        io.println("FAIL (expected=" ++ expected ++ ", got=" ++ result ++ ")");
+        false
+    }
+};
+
+io.println("=== Bug Hunt: Security Regression Tests ===");
+
+let r1 = check("stdin-ok", "hi");
+let r2 = check("capture-stdout", "hello world");
+let r3 = check("capture-stderr", "err");
+let r4 = check("exit-code-0", "true");
+
+-- Count results (convert bools to ints and sum)
+let toInt = fn(b) { if b then 1 else 0 };
+let passed = toInt(r1) + toInt(r2) + toInt(r3) + toInt(r4);
+let failed = 4 - passed;
+
+io.println("");
+io.println("Results: " ++ toString(passed) ++ " passed, " ++ toString(failed) ++ " failed");
+
+if failed > 0 then 1 else 0

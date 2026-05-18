@@ -61,7 +61,11 @@ pub fn is_effectful_builtin(name: &str) -> bool {
                 "eventMap" | "eventFilter" |
                 "reactive" | "liveCurrent" | "liveCancel" |
                 "watchFile" | "every" |
-                "hashString" | "currentSystem"
+                "hashString" | "currentSystem" |
+                // Stream constructors and transforms (pure, no I/O)
+                "streamLines" | "streamCommand" | "streamList" | "streamBytes" |
+                "streamMap" | "streamFilter" | "streamTake" | "streamDrop" |
+                "streamWithTimeout"
             ),
             "fetch" => true,
             _ => false,

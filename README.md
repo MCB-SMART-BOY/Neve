@@ -125,6 +125,17 @@ io.execCommandStreamingWithTimeout(
     },
     timeoutMs = 5000,
 );
+
+-- Stream<T> 变换管道
+let lines = io.streamLines(./log.txt)
+    |> io.streamMap(fn(l) l.toUpper())
+    |> io.streamFilter(fn(l) l.contains("ERROR"))
+    |> io.streamTake(10);
+let results = io.streamCollect(lines);
+
+-- Stream<T> 管道到命令
+io.streamList(["line1", "line2"])
+    |> io.streamPipe(io.command("grep", ["line"]));
 ```
 
 **原子写**。先写临时文件再 rename，不会写出写到一半断电损坏的文件：
@@ -198,15 +209,35 @@ neve check foo.neve   # 类型检查
 neve fmt file         # 代码格式化
 neve doc spec         # 内置文档
 neve lsp              # Language Server
+neve search <query>   # 搜索包索引
+neve package install <pkg>  # 安装包
+neve package remove <pkg>   # 卸载包
+neve package list     # 列出已安装包
+neve build <pkg>      # 构建包
+neve update           # 更新依赖
+neve config build     # 构建系统配置
+neve config switch    # 切换系统配置
+neve store gc         # 垃圾回收
+neve registry-update  # 更新 registry 索引
+neve registry-serve   # 启动 registry 服务
+neve registry-publish # 发布包到 registry
 ```
 
 ---
 
 ## 形式化验证
 
-不是说"我们觉得没问题"。`formal/` 目录里有 19 个 Lean 4 模块，核心语义做了机器检查的证明：21 条 EffectEval 规则覆盖了全部 I/O 路径，全部二元运算符有类型安全证明（含除零规则），管道安全、环境注入防护、缓冲区大小限制共 5 项安全审计全部机器验证。`cd formal && lake build` 一把过。
+不是说"我们觉得没问题"。`formal/` 目录里有 19 个 Lean 4 模块，核心语义做了机器检查的证明：34 条 EffectEval 规则（v4.3）覆盖了全部 I/O 路径（含 Stream<T> Phase C 5 条规则），全部二元运算符有类型安全证明（含除零规则），管道安全、环境注入防护、缓冲区大小限制共 5 项安全审计全部机器验证。`cd formal && lake build` 一把过。
 
 [语言规范](docs/reference/spec.md) · [功能矩阵](docs/project/feature-matrix.md) · [路线图](docs/project/language-roadmap.md) · [更新日志](docs/project/changelog.md) · [贡献指南](docs/contributor/contributing.md)
+
+---
+
+**Phase 4 (Shell 能力替代) 已完成** ✅ — Stream<T> 14 APIs、E2E 400 测试、Formatter 幂等性 37/37、Clippy 0 warnings。
+
+**Phase 5 (生态补完) 进行中** 🔄 — flake/lock 系统、content-addressed store、registry CLI（17 个命令）、稳定性分级（Tier 1/2/3）。
+
+示例脚本：`examples/test-runner.neve`（测试运行器）、`examples/ci-bootstrap.neve`（CI 启动脚本）、`examples/file-watcher.neve`（文件监控）、`examples/system-config.neve`（系统配置）。
 
 ---
 

@@ -1,0 +1,25 @@
+#!/usr/bin/env neve
+-- Simple test runner: lists .neve test files in a directory and reports them
+-- 简单测试运行器：列出目录中的 .neve 测试文件并报告
+import std.io as io;
+import std.string as str;
+
+let dir = match io.args() {
+    (args, _) -> match args {
+        [d, ..] -> d,
+        [] -> "tests"
+    }
+};
+let files = io.glob(str.concat(dir, "/*.neve"));
+
+io.println(str.concat("Test files in ", dir, ":"));
+let _ = io.streamForEach(
+    io.streamList(files),
+    fn(f) {
+        io.println(str.concat("  ", f));
+        ()
+    }
+);
+
+io.println(str.concat("\nFound ", toString(len(files)), " test file(s)"));
+0

@@ -349,6 +349,31 @@ io.hashFile(path: String) -> String
 io.hashFilePath(path: Path) -> String
 io.hashString(content: String) -> String
 io.currentSystem() -> String
+io.spawn(task: Task[T]) -> Int
+io.poll(spawnId: Int) -> Option<T>
+io.cancel(spawnId: Int) -> Unit
+io.awaitAny(tasks: List<Task[T]]) -> T
+io.awaitTaskWithTimeout(task: Task[T], ms: Int) -> T
+io.setRawMode(fd: Int) -> Unit
+io.resetTerminal(fd: Int) -> Unit
+io.jobs() -> List<Int>
+io.waitAnyJob() -> Int
+
+-- Stream<T> APIs (Phase 4, 14 APIs)
+io.streamList(list: List<T>) -> Stream<T>
+io.streamLines(path: Path) -> Stream<String>
+io.streamCommand(cmd: Command) -> Stream<String>
+io.streamBytes(path: Path) -> Stream<Bytes>
+io.streamMap(s: Stream<A>, f: A -> B) -> Stream<B>
+io.streamFilter(s: Stream<T>, f: T -> Bool) -> Stream<T>
+io.streamTake(s: Stream<T>, n: Int) -> Stream<T>
+io.streamDrop(s: Stream<T>, n: Int) -> Stream<T>
+io.streamCollect(s: Stream<T>) -> List<T>
+io.streamPipe(s: Stream<String>, cmd: Command) -> ProcessResult
+io.streamWrite(s: Stream<String>, path: Path) -> Unit
+io.streamForEach(s: Stream<T>, f: T -> Unit) -> Unit
+io.streamFold(s: Stream<T>, init: A, f: A -> T -> A) -> A
+io.streamWithTimeout(s: Stream<T>, ms: Int) -> Stream<Option<T>>
 ```
 
 
@@ -410,6 +435,31 @@ io.hashFile(path: String) -> String
 io.hashFilePath(path: Path) -> String
 io.hashString(content: String) -> String
 io.currentSystem() -> String
+io.spawn(task: Task[T]) -> Int
+io.poll(spawnId: Int) -> Option<T>
+io.cancel(spawnId: Int) -> Unit
+io.awaitAny(tasks: List<Task[T]]) -> T
+io.awaitTaskWithTimeout(task: Task[T], ms: Int) -> T
+io.setRawMode(fd: Int) -> Unit
+io.resetTerminal(fd: Int) -> Unit
+io.jobs() -> List<Int>
+io.waitAnyJob() -> Int
+
+-- Stream<T> API（Phase 4, 14 APIs）
+io.streamList(list: List<T>) -> Stream<T>
+io.streamLines(path: Path) -> Stream<String>
+io.streamCommand(cmd: Command) -> Stream<String>
+io.streamBytes(path: Path) -> Stream<Bytes>
+io.streamMap(s: Stream<A>, f: A -> B) -> Stream<B>
+io.streamFilter(s: Stream<T>, f: T -> Bool) -> Stream<T>
+io.streamTake(s: Stream<T>, n: Int) -> Stream<T>
+io.streamDrop(s: Stream<T>, n: Int) -> Stream<T>
+io.streamCollect(s: Stream<T>) -> List<T>
+io.streamPipe(s: Stream<String>, cmd: Command) -> ProcessResult
+io.streamWrite(s: Stream<String>, path: Path) -> Unit
+io.streamForEach(s: Stream<T>, f: T -> Unit) -> Unit
+io.streamFold(s: Stream<T>, init: A, f: A -> T -> A) -> A
+io.streamWithTimeout(s: Stream<T>, ms: Int) -> Stream<Option<T>>
 ```
 
 

@@ -25,10 +25,11 @@ mod unify;
 pub use builtin_types::{
     BYTES_TYPE_ID, COMMAND_TYPE_ID, EVENT_TYPE_ID, LIST_TYPE_ID, LIVE_TYPE_ID, MAP_TYPE_ID,
     OPTION_TYPE_ID, PATH_TYPE_ID, PIPELINE_TYPE_ID, PROCESS_RESULT_TYPE_ID, REDIRECT_TYPE_ID,
-    RESULT_TYPE_ID, SET_TYPE_ID, TASK_TYPE_ID, builtin_bytes, builtin_command, builtin_event,
-    builtin_list, builtin_live, builtin_map, builtin_option, builtin_path, builtin_pipeline,
-    builtin_process_result, builtin_redirect, builtin_result, builtin_set, builtin_task,
-    builtin_type_name, format_builtin_named_type, is_builtin_option_type, is_builtin_result_type,
+    RESULT_TYPE_ID, SET_TYPE_ID, STREAM_TYPE_ID, TASK_TYPE_ID, builtin_bytes, builtin_command,
+    builtin_event, builtin_list, builtin_live, builtin_map, builtin_option, builtin_path,
+    builtin_pipeline, builtin_process_result, builtin_redirect, builtin_result, builtin_set,
+    builtin_stream, builtin_task, builtin_type_name, format_builtin_named_type,
+    is_builtin_option_type, is_builtin_result_type,
 };
 pub use check::TypeChecker;
 pub use errors::format_type;
