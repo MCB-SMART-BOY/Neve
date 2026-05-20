@@ -16,7 +16,7 @@
 
 </div>
 
-**当前状态**: Phase 4 (Shell 能力替代) 已完成 ✅ — v3.10.0, E2E 400 测试, Formatter 幂等性 37/37, Stream<T> 14 APIs。Phase 5 (生态补完) 进行中 🔄。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
+**当前状态**: Phase 4 (Shell 能力替代) 已完成 ✅ — v3.11.0, E2E 400 测试, Formatter 幂等性 37/37, Stream<T> 14 APIs。Phase 5 (生态补完) 进行中 🔄。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
 
 Welcome to the Neve documentation hub. Start from your current goal instead of reading everything top to bottom.
 欢迎来到 Neve 文档中心。按你当前的目标进入，不需要从头一路读到底。
