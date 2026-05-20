@@ -71,6 +71,7 @@ inductive ValueTyping : Value → Ty → Prop where
       ValueTyping (processResult code stdout stderr) Ty.ProcessResult
   | someVal (v : Value) (τ : Ty) : ValueTyping v τ → ValueTyping (Value.someVal v) (Ty.Option τ)
   | noneVal (τ : Ty) : ValueTyping Value.noneVal (Ty.Option τ)
+  | stream (items : List Value) (τ : Ty) : ValueTyping (Value.stream items) (Ty.Stream τ)
 
 -- ============================================================
 -- Canonical Forms Lemma
@@ -110,6 +111,17 @@ theorem canonical_forms_list (v : Value) (τ : Ty) (h : ValueTyping v (Ty.List �
   cases h with
   | list_nil _ => exact ⟨[], rfl⟩
   | list_cons _ vs _ _ _ => exact ⟨_ :: vs, rfl⟩
+
+/--
+  Canonical forms for Stream types.
+  If v : Stream τ, then v must be a stream value (either empty or with items).
+  Since streams are opaque at the value level, any stream value satisfies the type.
+-/
+theorem canonical_forms_stream (v : Value) (τ : Ty) (h : ValueTyping v (Ty.Stream τ)) :
+    ∃ (items : List Value), v = Value.stream items := by
+  cases h with
+  | stream vs _ =>
+    exact ⟨vs, rfl⟩
 
 -- ============================================================
 -- Substitution Lemma (框架)

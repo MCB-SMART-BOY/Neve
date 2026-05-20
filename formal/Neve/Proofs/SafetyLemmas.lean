@@ -182,6 +182,141 @@ theorem matchOn_bool_full (Γ : Ctx) (env : Env) (scrutinee : Expr)
         tyvres⟩
 
 -- ============================================================
+-- matchOn_lit_string_first
+-- ============================================================
+
+/--
+  Match on string where the scrutinee is known to evaluate to s,
+  and the first arm is `lit_string s => eMatch`.
+-/
+theorem matchOn_lit_string_first (Γ : Ctx) (env : Env) (scrutinee : Expr)
+    (s : String) (eMatch : Expr) (rest : List (Pattern × Expr)) (τ : Ty)
+    (hs : HasType Γ scrutinee Ty.String)
+    (hMatch : HasType Γ eMatch τ)
+    (henv : EnvMatches ValueTyping Γ env)
+    (heval_scrut : BigStep env scrutinee (Value.string s)) :
+    ∃ v : Value, BigStep env
+      (Expr.matchOn scrutinee ((Pattern.lit_string s, eMatch) :: rest)) v
+    ∧ ValueTyping v τ := by
+  have ihbody := progress_preservation Γ env eMatch τ hMatch henv
+  rcases ihbody with ⟨vres, evalbody, tyvres⟩
+  exact ⟨vres,
+    BigStep.matchOn env scrutinee ((Pattern.lit_string s, eMatch) :: rest)
+      (Value.string s) vres (Pattern.lit_string s) eMatch rest []
+      heval_scrut rfl (Matches.lit_string s s rfl) evalbody,
+    tyvres⟩
+
+-- ============================================================
+-- matchOn_list_nil_first
+-- ============================================================
+
+/--
+  Match on an empty list where the first arm is `[] => eMatch`.
+-/
+theorem matchOn_list_nil_first (Γ : Ctx) (env : Env) (scrutinee : Expr)
+    (τelem : Ty) (eMatch : Expr) (rest : List (Pattern × Expr)) (τ : Ty)
+    (hs : HasType Γ scrutinee (Ty.List τelem))
+    (hMatch : HasType Γ eMatch τ)
+    (henv : EnvMatches ValueTyping Γ env)
+    (heval_scrut : BigStep env scrutinee (Value.list [])) :
+    ∃ v : Value, BigStep env
+      (Expr.matchOn scrutinee ((Pattern.list [] false, eMatch) :: rest)) v
+    ∧ ValueTyping v τ := by
+  have ihbody := progress_preservation Γ env eMatch τ hMatch henv
+  rcases ihbody with ⟨vres, evalbody, tyvres⟩
+  exact ⟨vres,
+    BigStep.matchOn env scrutinee ((Pattern.list [] false, eMatch) :: rest)
+      (Value.list []) vres (Pattern.list [] false) eMatch rest []
+      heval_scrut rfl (Matches.list_nil τelem) evalbody,
+    tyvres⟩
+
+-- ============================================================
+-- matchOn_wildcard_not_first_arm: wildcard as second arm
+-- ============================================================
+
+/--
+  Match where the first arm does NOT match, but the second arm
+  is a wildcard. Uses matchOn_fallthrough to skip the non-matching
+  first arm, then matchOn_wildcard_first for the remaining arms.
+  
+  Example: `match x { 42 -> "answer", _ -> "other" }` where x ≠ 42
+-/
+theorem matchOn_wildcard_not_first_arm (Γ : Ctx) (env : Env) (scrutinee : Expr)
+    (p : Pattern) (eNoMatch : Expr) (eWild : Expr) (rest : List (Pattern × Expr))
+    (τs τ : Ty) (vscrut : Value)
+    (hs : HasType Γ scrutinee τs) (hNoMatch : HasType Γ eNoMatch τ) (hWild : HasType Γ eWild τ)
+    (hrest : AllArmsMatch Γ rest τs τ)
+    (henv : EnvMatches ValueTyping Γ env)
+    (heval_scrut : BigStep env scrutinee vscrut)
+    (h_no_match : ∀ binds, ¬ Matches p vscrut binds) :
+    ∃ v : Value, BigStep env
+      (Expr.matchOn scrutinee ((p, eNoMatch) :: (Pattern.wildcard, eWild) :: rest)) v
+    ∧ ValueTyping v τ := by
+  -- The wildcard arm always matches when it becomes the first arm
+  have h_wild := matchOn_wildcard_first Γ env scrutinee eWild rest τs τ hs hWild hrest henv
+  rcases h_wild with ⟨vres, h_wild_eval, tyvres⟩
+  exact ⟨vres,
+    BigStep.matchOn_fallthrough env scrutinee
+      ((p, eNoMatch) :: (Pattern.wildcard, eWild) :: rest)
+      p eNoMatch ((Pattern.wildcard, eWild) :: rest)
+      vscrut vres
+      heval_scrut rfl h_no_match h_wild_eval,
+    tyvres⟩
+
+-- ============================================================
+-- matchOn_wildcard_third_arm: wildcard as third arm
+-- ============================================================
+
+/--
+  Match with THREE arms where the first two don't match and
+  the third is a wildcard. Uses matchOn_fallthrough TWICE:
+  once to skip the first non-matching arm, then
+  matchOn_wildcard_not_first_arm to handle the remaining two arms.
+  
+  Example: `match x { 0 -> "zero", 1 -> "one", _ -> "other" }`
+  where x is neither 0 nor 1.
+-/
+theorem matchOn_wildcard_third_arm (Γ : Ctx) (env : Env) (scrutinee : Expr)
+    (e0 e1 eWild : Expr) (n0 n1 m : Int) (τ : Ty)
+    (hs : HasType Γ scrutinee Ty.Int)
+    (h0 : HasType Γ e0 τ) (h1 : HasType Γ e1 τ) (hWild : HasType Γ eWild τ)
+    (henv : EnvMatches ValueTyping Γ env)
+    (h_scrut_val : BigStep env scrutinee (Value.int m))
+    (h_neq0 : n0 ≠ m) (h_neq1 : n1 ≠ m) :
+    ∃ v : Value, BigStep env
+      (Expr.matchOn scrutinee
+        [(Pattern.lit_int n0, e0), (Pattern.lit_int n1, e1), (Pattern.wildcard, eWild)]) v
+    ∧ ValueTyping v τ := by
+  -- First arm (lit_int n0) doesn't match scrutinee (Value.int m)
+  have h_no_match0 : ∀ (binds : Env), ¬ Matches (Pattern.lit_int n0) (Value.int m) binds := by
+    intro binds h_match
+    cases h_match with
+    | lit_int n' m' heq =>
+      apply h_neq0
+      exact heq
+  -- Second arm (lit_int n1) also doesn't match
+  have h_no_match1 : ∀ (binds : Env), ¬ Matches (Pattern.lit_int n1) (Value.int m) binds := by
+    intro binds h_match
+    cases h_match with
+    | lit_int n' m' heq =>
+      apply h_neq1
+      exact heq
+  -- The remaining two arms are handled by matchOn_wildcard_not_first_arm
+  have h_rest := matchOn_wildcard_not_first_arm Γ env scrutinee
+    (Pattern.lit_int n1) e1 eWild [] Ty.Int τ (Value.int m)
+    hs h1 hWild (AllArmsMatch.nil Γ Ty.Int τ) henv
+    h_scrut_val h_no_match1
+  rcases h_rest with ⟨vres, h_rest_eval, tyvres⟩
+  -- Fallthrough from the first non-matching arm to the rest
+  exact ⟨vres,
+    BigStep.matchOn_fallthrough env scrutinee
+      [(Pattern.lit_int n0, e0), (Pattern.lit_int n1, e1), (Pattern.wildcard, eWild)]
+      (Pattern.lit_int n0) e0 [(Pattern.lit_int n1, e1), (Pattern.wildcard, eWild)]
+      (Value.int m) vres
+      h_scrut_val rfl h_no_match0 h_rest_eval,
+    tyvres⟩
+
+-- ============================================================
 -- Summary
 -- ============================================================
 
@@ -189,22 +324,25 @@ theorem matchOn_bool_full (Γ : Ctx) (env : Env) (scrutinee : Expr)
   Pattern matching coverage status:
 
   Machine-checked (no axiom needed):
-    1. matchOn_wildcard_first  — wildcard as first arm (any type)
-    2. matchOn_lit_int_first   — integer literal as first arm
-    3. matchOn_unit_wildcard   — unit value with wildcard
-    4. matchOn_bool_first_arm  — boolean literal as first arm (when value matches)
-    5. matchOn_bool_full       — full two-arm boolean match (uses fallthrough rule)
+    1. matchOn_wildcard_first        — wildcard as first arm (any type)
+    2. matchOn_lit_int_first         — integer literal as first arm
+    3. matchOn_unit_wildcard         — unit value with wildcard
+    4. matchOn_bool_first_arm        — boolean literal as first arm (when value matches)
+    5. matchOn_bool_full             — full two-arm boolean match (uses fallthrough rule)
+    6. matchOn_lit_string_first      — string literal as first arm
+    7. matchOn_list_nil_first        — empty list as first arm
+    8. matchOn_wildcard_not_first_arm — wildcard matches even when not first arm
+    9. matchOn_wildcard_third_arm    — wildcard as third arm after two non-matching
+    
 
   Requires axiom (progress_match):
-    - Multi-arm boolean matches where false is the scrutinee
-      (requires arm skipping — BigStep.matchOn semantic extension needed)
     - Enum constructor patterns (Some/None, Ok/Err)
-    - Record patterns, tuple patterns, list rest patterns
+    - Record patterns, list rest patterns
     - Binding patterns (name @ pat), or patterns (a | b)
-    - General N-arm matches with fallthrough
+    - General N-arm matches with fallthrough (pattern generalized from lemmas 8-9)
 
   Future work:
-    1. Add BigStep.matchOn_fallthrough rule to Eval.lean for arm skipping
+    1. Generalize matchOn_wildcard_third_arm to N-arm fallthrough
     2. Prove pattern exhaustiveness for finite types (Bool, Unit)
     3. Extend to constructor patterns via canonical forms enumeration
 -/

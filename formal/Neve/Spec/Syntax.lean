@@ -15,6 +15,7 @@ inductive Effect : Type where
 inductive Ty : Type where
   | Int | Float | Bool | Char | String | Unit
   | List (elem : Ty)
+  | Stream (τ : Ty)
   | Tuple (elems : List Ty)
   | Record (fields : List (String × Ty))
   | Fn (param : Ty) (ret : Ty) (effect : Effect := Effect.Pure)
@@ -59,6 +60,7 @@ inductive Expr : Type where
   | binop (op : BinOp) (l : Expr) (r : Expr)
   | matchOn (scrutinee : Expr) (arms : List (Pattern × Expr))
   | builtin (name : String) (args : List Expr)
+  | list (elems : List Expr)
   deriving BEq, Repr, Inhabited
 
 -- === 运行时值 / Runtime Values ===

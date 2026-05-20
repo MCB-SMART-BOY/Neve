@@ -86,6 +86,10 @@ enum Commands {
         action: FmtAction,
     },
 
+    /// Start the Language Server Protocol server.
+    /// 启动语言服务器协议服务。
+    Lsp,
+
     /// Start an interactive REPL. / 启动交互式 REPL。
     Repl,
 
@@ -329,6 +333,7 @@ fn main() {
             FmtAction::Check { file } => commands::fmt::check(&file),
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
+        Commands::Lsp => commands::lsp::run(),
         Commands::Repl => commands::repl::run(),
         Commands::Doc { topic, list } => {
             if list || topic.is_none() {
