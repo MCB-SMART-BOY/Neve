@@ -1,0 +1,39 @@
+%YAML 1.2
+---
+# Neve syntax highlighting for Sublime Text / VS Code / Helix
+name: Neve
+scope: source.neve
+file_extensions: [neve]
+
+contexts:
+  main:
+    - match: '--.*'
+      scope: comment.line.neve
+
+    - match: \b(let|fn|if|then|else|match|import|as|type|struct|enum|trait|impl|pub|effect|lazy)\b
+      scope: keyword.control.neve
+
+    - match: \b(true|false)\b
+      scope: constant.language.neve
+
+    - match: \b(Int|Float|Bool|String|Char|Unit|List|Record|Option|Result|Path|Bytes|Command|Pipeline|ProcessResult|Stream|Task)\b
+      scope: storage.type.neve
+
+    - match: \b[0-9]+(\.[0-9]+)?\b
+      scope: constant.numeric.neve
+
+    - match: '"'
+      push: string
+
+    - match: '`'
+      push: interpolation
+
+  string:
+    - meta_scope: string.quoted.double.neve
+    - match: '"'
+      pop: true
+
+  interpolation:
+    - meta_scope: string.interpolated.neve
+    - match: '`'
+      pop: true
