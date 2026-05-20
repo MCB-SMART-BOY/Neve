@@ -342,12 +342,10 @@ fn main() {
             FmtAction::Check { file } => commands::fmt::check(&file),
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
-        Commands::Setup { editor } => {
-            match editor.as_str() {
-                "helix" => commands::setup_helix::run(),
-                _ => Err(format!("unknown editor: {editor}. Supported: helix")),
-            }
-        }
+        Commands::Setup { editor } => match editor.as_str() {
+            "helix" => commands::setup_helix::run(),
+            _ => Err(format!("unknown editor: {editor}. Supported: helix")),
+        },
         Commands::Lsp => commands::lsp::run(),
         Commands::Repl => commands::repl::run(),
         Commands::Doc { topic, list } => {
