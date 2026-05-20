@@ -33,8 +33,8 @@ pub mod registry_serve;
 pub mod remove;
 #[cfg(unix)]
 pub mod search;
+pub mod setup_helix;
 #[cfg(unix)]
 pub mod store;
 #[cfg(unix)]
 pub mod update;
-pub mod setup_helix;

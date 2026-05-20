@@ -96,8 +96,7 @@ args = ["lsp"]
         } else {
             format!("{existing}\n{config}")
         };
-        fs::write(&helix_config, new_content)
-            .map_err(|e| format!("write config: {e}"))?;
+        fs::write(&helix_config, new_content).map_err(|e| format!("write config: {e}"))?;
         println!("  ✓ languages.toml updated");
     } else {
         println!("  • languages.toml already configured");
@@ -144,7 +143,13 @@ fn find_tree_sitter_dir() -> Result<PathBuf, String> {
             return Err("clone failed".into());
         }
         Command::new("git")
-            .args(["-C", tmp.to_str().unwrap(), "sparse-checkout", "set", "tree-sitter-neve"])
+            .args([
+                "-C",
+                tmp.to_str().unwrap(),
+                "sparse-checkout",
+                "set",
+                "tree-sitter-neve",
+            ])
             .status()
             .ok();
     }
