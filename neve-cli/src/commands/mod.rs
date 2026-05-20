@@ -37,3 +37,4 @@ pub mod search;
 pub mod store;
 #[cfg(unix)]
 pub mod update;
+pub mod setup_helix;

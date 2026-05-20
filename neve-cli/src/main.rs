@@ -86,6 +86,15 @@ enum Commands {
         action: FmtAction,
     },
 
+    /// Setup editor integration (Helix, VS Code, etc).
+    /// 设置编辑器集成（Helix、VS Code 等）。
+    Setup {
+        /// Editor to setup for.
+        /// 要设置的编辑器。
+        #[arg(default_value = "helix")]
+        editor: String,
+    },
+
     /// Start the Language Server Protocol server.
     /// 启动语言服务器协议服务。
     Lsp,
@@ -333,6 +342,12 @@ fn main() {
             FmtAction::Check { file } => commands::fmt::check(&file),
             FmtAction::Dir { dir, write } => commands::fmt::format_dir(&dir, write),
         },
+        Commands::Setup { editor } => {
+            match editor.as_str() {
+                "helix" => commands::setup_helix::run(),
+                _ => Err(format!("unknown editor: {editor}. Supported: helix")),
+            }
+        }
         Commands::Lsp => commands::lsp::run(),
         Commands::Repl => commands::repl::run(),
         Commands::Doc { topic, list } => {
