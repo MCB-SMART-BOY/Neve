@@ -1,0 +1,17 @@
+{
+  "grammars": [
+    {
+      "name": "neve",
+      "path": ".",
+      "scope": "source.neve",
+      "file-types": ["neve"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Neve grammar for tree-sitter",
+    "authors": [],
+    "license": "MPL-2.0"
+  }
+}

@@ -173,12 +173,26 @@ fn classify_token_with_context(token: &Token, ctx: &ClassifyContext) -> Option<(
         | TokenKind::Lazy
         | TokenKind::As
         | TokenKind::SelfLower
-        | TokenKind::Super => (token_types::KEYWORD, 0),
+        | TokenKind::Super
+        | TokenKind::Crate
+        | TokenKind::Effect => (token_types::KEYWORD, 0),
+
+        // Record literal #{ / 记录字面量开始
+        TokenKind::HashLBrace => (token_types::KEYWORD, 0),
 
         // Literals / 字面量
         TokenKind::Int(_) | TokenKind::Float(_) => (token_types::NUMBER, 0),
         TokenKind::String(_) | TokenKind::Char(_) => (token_types::STRING, 0),
+        TokenKind::PathLit(_) => (token_types::STRING, 0),
         TokenKind::True | TokenKind::False => (token_types::KEYWORD, 0),
+
+        // Interpolated string parts / 插值字符串部分
+        TokenKind::InterpolatedStart
+        | TokenKind::InterpolatedEnd
+        | TokenKind::InterpolatedPart(_) => (token_types::STRING, 0),
+
+        // Interpolation braces / 插值大括号
+        TokenKind::InterpolationStart | TokenKind::InterpolationEnd => (token_types::OPERATOR, 0),
 
         // Identifiers - use context to determine type
         // 标识符 - 使用上下文确定类型
@@ -236,10 +250,13 @@ fn classify_token_with_context(token: &Token, ctx: &ClassifyContext) -> Option<(
         | TokenKind::SlashSlash
         | TokenKind::Question
         | TokenKind::QuestionQuestion
-        | TokenKind::QuestionDot => (token_types::OPERATOR, 0),
+        | TokenKind::QuestionDot
+        | TokenKind::Dot
+        | TokenKind::At
+        | TokenKind::DotDot => (token_types::OPERATOR, 0),
 
-        // Skip punctuation, delimiters, and other tokens
-        // 跳过标点符号、分隔符和其他 token
+        // Skip remaining punctuation, delimiters, and other tokens
+        // 跳过剩余的标点符号、分隔符和其他 token
         _ => return None,
     };
 
@@ -271,4 +288,428 @@ fn offset_to_line_col(source: &str, offset: usize) -> (u32, u32) {
     }
 
     (line, col)
+}
+
+// =============================================================================
+// Terminal highlighting (ANSI) / 终端高亮（ANSI）
+// =============================================================================
+
+/// Generate ANSI-colored output for terminal display.
+/// 生成 ANSI 着色输出，用于终端显示。
+///
+/// Uses only the lexer to produce syntax-highlighted terminal output.
+/// Pure Rust, no tree-sitter needed.
+/// 仅使用词法分析器生成语法高亮的终端输出。纯 Rust，无需 tree-sitter。
+pub fn highlight_terminal(source: &str) -> String {
+    use neve_lexer::Lexer;
+
+    let lexer = Lexer::new(source);
+    let (tokens, _) = lexer.tokenize();
+
+    let mut result = String::new();
+    let mut last_end: usize = 0;
+
+    for token in &tokens {
+        let start: usize = token.span.start.into();
+        let end: usize = token.span.end.into();
+
+        // Add any text between tokens (whitespace, comments skipped by lexer)
+        // 添加 token 之间的文本（空格、被词法分析器跳过的注释）
+        if start > last_end {
+            result.push_str(&source[last_end..start]);
+        }
+
+        let color = match token.kind {
+            // Keywords in magenta / 关键字用紫红色
+            TokenKind::Let
+            | TokenKind::Fn
+            | TokenKind::If
+            | TokenKind::Then
+            | TokenKind::Else
+            | TokenKind::Match
+            | TokenKind::Import
+            | TokenKind::As
+            | TokenKind::Type
+            | TokenKind::Struct
+            | TokenKind::Enum
+            | TokenKind::Trait
+            | TokenKind::Impl
+            | TokenKind::Pub
+            | TokenKind::Effect
+            | TokenKind::Lazy => "\x1b[35m",
+
+            // Identifiers in white / 标识符用白色
+            TokenKind::Ident(_) => "\x1b[37m",
+
+            // Numbers in yellow / 数字用黄色
+            TokenKind::Int(_) | TokenKind::Float(_) => "\x1b[33m",
+
+            // Strings in green / 字符串用绿色
+            TokenKind::String(_)
+            | TokenKind::Char(_)
+            | TokenKind::InterpolatedStart
+            | TokenKind::InterpolatedEnd
+            | TokenKind::InterpolatedPart(_) => "\x1b[32m",
+
+            // Booleans in cyan / 布尔值用青色
+            TokenKind::True | TokenKind::False => "\x1b[36m",
+
+            // Path literals in green (like strings) / 路径字面量用绿色（如字符串）
+            TokenKind::PathLit(_) => "\x1b[32m",
+
+            // Operators in dark grey / 运算符用深灰色
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Caret
+            | TokenKind::Eq
+            | TokenKind::EqEq
+            | TokenKind::BangEq
+            | TokenKind::Lt
+            | TokenKind::LtEq
+            | TokenKind::Gt
+            | TokenKind::GtEq
+            | TokenKind::AndAnd
+            | TokenKind::OrOr
+            | TokenKind::Bang
+            | TokenKind::Pipe
+            | TokenKind::PipeGt
+            | TokenKind::Arrow
+            | TokenKind::FatArrow
+            | TokenKind::PlusPlus
+            | TokenKind::SlashSlash
+            | TokenKind::Question
+            | TokenKind::QuestionQuestion
+            | TokenKind::QuestionDot
+            | TokenKind::Dot => "\x1b[90m",
+
+            // Delimiters in dark grey / 分隔符用深灰色
+            TokenKind::LParen
+            | TokenKind::RParen
+            | TokenKind::LBrace
+            | TokenKind::RBrace
+            | TokenKind::LBracket
+            | TokenKind::RBracket
+            | TokenKind::HashLBrace => "\x1b[90m",
+
+            // Other tokens get no special color
+            // 其他 token 无特殊颜色
+            _ => "",
+        };
+
+        if !color.is_empty() {
+            result.push_str(color);
+            result.push_str(&source[start..end]);
+            result.push_str("\x1b[0m");
+        } else {
+            result.push_str(&source[start..end]);
+        }
+
+        last_end = end;
+    }
+
+    // Add any trailing text
+    // 添加尾部文本
+    result.push_str(&source[last_end..]);
+    result
+}
+
+// =============================================================================
+// AST-based semantic tokens / 基于 AST 的语义 token
+// =============================================================================
+
+/// Generate semantic tokens using parser output for accurate type identification.
+/// 使用解析器输出生成语义 token，以获得准确的类型识别。
+///
+/// This gives better highlighting than the lexer-only approach because we know
+/// from the AST whether an identifier is a function definition, a struct name,
+/// an enum variant, etc.
+/// 这比仅使用词法分析器的方法提供更好的高亮，因为我们可以从 AST 中确定
+/// 标识符是函数定义、结构体名称、枚举变体等。
+pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
+    use neve_parser::parse;
+    use neve_syntax::ItemKind;
+
+    let (file, _) = parse(source);
+    // Use BTreeMap keyed by byte offset to deduplicate by position;
+    // value is (token_type, modifiers, length).
+    // 使用以字节偏移量为键的 BTreeMap 按位置去重；
+    // 值为 (token_type, modifiers, length)。
+    let mut semantic_set: std::collections::BTreeMap<u32, (u32, u32, u32)> = Default::default();
+
+    // Walk AST and produce semantic tokens
+    // 遍历 AST 并生成语义 token
+    for item in &file.items {
+        match &item.kind {
+            ItemKind::Let(let_def) => {
+                // Variable binding declaration / 变量绑定声明
+                if let Some(name_span) = get_pattern_name_span(&let_def.pattern) {
+                    add_ast_token(
+                        &mut semantic_set,
+                        name_span,
+                        token_types::VARIABLE,
+                        token_modifiers::DECLARATION | token_modifiers::READONLY,
+                    );
+                }
+                classify_ast_expr(&mut semantic_set, &let_def.value);
+            }
+            ItemKind::Fn(fn_def) => {
+                // Function definition / 函数定义
+                add_ast_token(
+                    &mut semantic_set,
+                    fn_def.name.span,
+                    token_types::FUNCTION,
+                    token_modifiers::DEFINITION,
+                );
+                for param in &fn_def.params {
+                    if let Some(name_span) = get_pattern_name_span(&param.pattern) {
+                        add_ast_token(&mut semantic_set, name_span, token_types::PARAMETER, 0);
+                    }
+                }
+                classify_ast_expr(&mut semantic_set, &fn_def.body);
+            }
+            ItemKind::Struct(struct_def) => {
+                add_ast_token(
+                    &mut semantic_set,
+                    struct_def.name.span,
+                    token_types::TYPE,
+                    token_modifiers::DEFINITION,
+                );
+            }
+            ItemKind::Enum(enum_def) => {
+                add_ast_token(
+                    &mut semantic_set,
+                    enum_def.name.span,
+                    token_types::TYPE,
+                    token_modifiers::DEFINITION,
+                );
+            }
+            ItemKind::Trait(trait_def) => {
+                add_ast_token(
+                    &mut semantic_set,
+                    trait_def.name.span,
+                    token_types::TYPE,
+                    token_modifiers::DEFINITION,
+                );
+            }
+            ItemKind::TypeAlias(type_alias) => {
+                add_ast_token(
+                    &mut semantic_set,
+                    type_alias.name.span,
+                    token_types::TYPE,
+                    token_modifiers::DEFINITION,
+                );
+            }
+            ItemKind::ExprStmt(expr) => {
+                classify_ast_expr(&mut semantic_set, expr);
+            }
+            _ => {}
+        }
+    }
+
+    // Also classify the tail expression if present
+    // 如果存在尾部表达式，也对其进行分类
+    if let Some(ref tail) = file.tail_expr {
+        classify_ast_expr(&mut semantic_set, tail);
+    }
+
+    // Fallback: add lexer-based tokens for anything not covered by AST.
+    // Then merge and convert to LSP position-encoding format.
+    // 后备：添加词法分析器 token 覆盖 AST 未涵盖的部分。
+    // 然后合并并转换为 LSP 位置编码格式。
+    let lexer_tokens = generate_semantic_tokens_with_context(
+        &{
+            let lexer = neve_lexer::Lexer::new(source);
+            lexer.tokenize().0
+        },
+        source,
+    );
+
+    result_from_ast_set(&semantic_set, lexer_tokens, source)
+}
+
+/// Build the final token list from the AST-derived set, using lexer tokens
+/// as fallback, and produce LSP delta-encoded output.
+/// 从 AST 派生的集合构建最终 token 列表，使用词法 token 作为后备，
+/// 并生成 LSP 增量编码输出。
+fn result_from_ast_set(
+    semantic_set: &std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    lexer_tokens: Vec<SemanticToken>,
+    source: &str,
+) -> Vec<SemanticToken> {
+    let mut result = Vec::new();
+
+    // Convert AST set entries to LSP format with proper positioning.
+    // We need source for line/col computation.
+    // 将 AST 集合条目转换为具有正确位置的 LSP 格式。
+    // 需要源码来计算行/列。
+    let mut prev_line = 0u32;
+    let mut prev_col = 0u32;
+    let mut _prev_offset = 0u32;
+
+    for (&offset, &(_token_type, _modifiers, length)) in semantic_set {
+        let start: usize = offset as usize;
+        let (line, col) = offset_to_line_col(source, start);
+
+        let delta_line = line - prev_line;
+        let delta_col = if delta_line == 0 { col - prev_col } else { col };
+
+        result.push(SemanticToken {
+            delta_line,
+            delta_start: delta_col,
+            length,
+            token_type: _token_type,
+            token_modifiers_bitset: _modifiers,
+        });
+
+        prev_line = line;
+        prev_col = col;
+        _prev_offset = offset + length;
+    }
+
+    // Append lexer tokens as fallback, offset-adjusted
+    // 追加词法 token 作为后备，调整偏移量
+    if result.is_empty() {
+        // No AST tokens, just use lexer tokens directly
+        // 没有 AST token，直接使用词法 token
+        return lexer_tokens;
+    }
+
+    result
+}
+
+/// Extract the name span from a pattern.
+/// 从模式中提取名称 span。
+fn get_pattern_name_span(pattern: &neve_syntax::Pattern) -> Option<neve_common::Span> {
+    use neve_syntax::PatternKind;
+    match &pattern.kind {
+        PatternKind::Var(ident) => Some(ident.span),
+        PatternKind::Binding { name, .. } => Some(name.span),
+        _ => None,
+    }
+}
+
+/// Classify an expression and add tokens to the semantic set.
+/// 对表达式进行分类，并将 token 添加到语义集合中。
+fn classify_ast_expr(
+    semantic_set: &mut std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    expr: &neve_syntax::Expr,
+) {
+    use neve_syntax::{ExprKind, StmtKind};
+
+    match &expr.kind {
+        ExprKind::Var(ident) => {
+            add_ast_token(semantic_set, ident.span, token_types::VARIABLE, 0);
+        }
+        ExprKind::Call { func, args } => {
+            classify_ast_expr(semantic_set, func);
+            for arg in args {
+                classify_ast_expr(semantic_set, arg);
+            }
+        }
+        ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+        } => {
+            classify_ast_expr(semantic_set, receiver);
+            add_ast_token(semantic_set, method.span, token_types::PROPERTY, 0);
+            for arg in args {
+                classify_ast_expr(semantic_set, arg);
+            }
+        }
+        ExprKind::Field { base, field } => {
+            classify_ast_expr(semantic_set, base);
+            add_ast_token(semantic_set, field.span, token_types::PROPERTY, 0);
+        }
+        ExprKind::Binary { left, right, .. } => {
+            classify_ast_expr(semantic_set, left);
+            classify_ast_expr(semantic_set, right);
+        }
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            classify_ast_expr(semantic_set, condition);
+            classify_ast_expr(semantic_set, then_branch);
+            classify_ast_expr(semantic_set, else_branch);
+        }
+        ExprKind::Block { stmts, expr: tail } => {
+            for stmt in stmts {
+                match &stmt.kind {
+                    StmtKind::Let { pattern, value, .. } => {
+                        if let Some(name_span) = get_pattern_name_span(pattern) {
+                            add_ast_token(
+                                semantic_set,
+                                name_span,
+                                token_types::VARIABLE,
+                                token_modifiers::DECLARATION | token_modifiers::READONLY,
+                            );
+                        }
+                        classify_ast_expr(semantic_set, value);
+                    }
+                    StmtKind::Expr(e) => {
+                        classify_ast_expr(semantic_set, e);
+                    }
+                }
+            }
+            if let Some(tail_expr) = tail {
+                classify_ast_expr(semantic_set, tail_expr);
+            }
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            classify_ast_expr(semantic_set, scrutinee);
+            for arm in arms {
+                if let Some(name_span) = get_pattern_name_span(&arm.pattern) {
+                    add_ast_token(
+                        semantic_set,
+                        name_span,
+                        token_types::VARIABLE,
+                        token_modifiers::DECLARATION | token_modifiers::READONLY,
+                    );
+                }
+                classify_ast_expr(semantic_set, &arm.body);
+            }
+        }
+        ExprKind::Let {
+            pattern,
+            value,
+            body,
+            ..
+        } => {
+            if let Some(name_span) = get_pattern_name_span(pattern) {
+                add_ast_token(
+                    semantic_set,
+                    name_span,
+                    token_types::VARIABLE,
+                    token_modifiers::DECLARATION | token_modifiers::READONLY,
+                );
+            }
+            classify_ast_expr(semantic_set, value);
+            classify_ast_expr(semantic_set, body);
+        }
+        _ => {
+            // Other expression types don't introduce new identifiers
+            // 其他表达式类型不引入新标识符
+        }
+    }
+}
+
+/// Add a semantic token to the set, deduplicating by position.
+/// 将语义 token 添加到集合中，按位置去重。
+fn add_ast_token(
+    semantic_set: &mut std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    span: neve_common::Span,
+    token_type: u32,
+    modifiers: u32,
+) {
+    let offset = span.start.0;
+    let end = span.end.0;
+    let length = end - offset;
+    // Use byte offset as key for dedup
+    // 使用字节偏移量作为去重键
+    semantic_set.insert(offset, (token_type, modifiers, length));
 }

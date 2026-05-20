@@ -23,8 +23,9 @@ pub use backend::Backend;
 pub use document::Document;
 pub use neve_diagnostic::{Diagnostic, Severity as DiagnosticSeverity};
 pub use semantic_tokens::{
-    comment_token_type, generate_semantic_tokens, generate_semantic_tokens_with_context,
-    parameter_token_type, token_modifiers, token_types,
+    comment_token_type, generate_semantic_tokens, generate_semantic_tokens_from_ast,
+    generate_semantic_tokens_with_context, highlight_terminal, parameter_token_type,
+    token_modifiers, token_types,
 };
 pub use symbol_index::{Symbol, SymbolIndex, SymbolKind, SymbolRef};
 

@@ -1,0 +1,28 @@
+{
+  "name": "tree-sitter-neve",
+  "version": "1.0.0",
+  "description": "Neve grammar for tree-sitter",
+  "main": "bindings/node",
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "build": "tree-sitter generate && node-gyp build",
+    "parse": "tree-sitter parse"
+  },
+  "author": "",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "nan": "^2.18.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.0"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.neve",
+      "file-types": ["neve"],
+      "injection-regex": "neve",
+      "highlights": "queries/highlights.scm"
+    }
+  ]
+}
