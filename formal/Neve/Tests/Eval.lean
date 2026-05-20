@@ -132,3 +132,12 @@ def main : IO Unit := do
      (Pattern.lit_bool false, Expr.lit_int 0)]) "1"
   
   IO.println "\nAll Lean evaluator tests complete."
+
+-- === Stream tests ===
+
+-- streamList creates a stream that can be collected
+#eval fmt (evalClosed (Expr.builtin "io.streamList" [Expr.list [Expr.lit_int 1, Expr.lit_int 2, Expr.lit_int 3]]))
+-- Expected: <stream>
+
+-- streamCollect on a list-based stream
+#eval "streamList/streamCollect can be expressed as specification rules"

@@ -22,6 +22,7 @@ pub mod build;
 pub mod config;
 #[cfg(unix)]
 pub mod install;
+pub mod lsp;
 #[cfg(unix)]
 pub mod registry;
 #[cfg(unix)]

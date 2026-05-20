@@ -50,11 +50,11 @@ lake build
 | 层次 | 模块数 | 状态 | 说明 |
 |------|--------|------|------|
 | Spec（规范） | 4 | ✅ | Syntax, Typing v4, Eval v2, Effects v4.3 (34 rules, +5 stream Phase C) |
-| Proofs（证明） | 4 | ✅ | Values, Context, Safety v18, SafetyLemmas |
+| Proofs（证明） | 5 (+EffectProperties) | ✅ | Values, Context, Safety v18, SafetyLemmas |
 | Verify（安全） | 3 | ✅ | Path (M-1), Environ (M-4), Limits (H-1/H-2) |
-| Refinement（精化） | 4 | ✅ | Types, Path, Environ, Limits |
+| Refinement（精化） | 5 (+Stream) | ✅ | Types, Path, Environ, Limits |
 | Tests（测试） | 1 | ✅ | 可执行规范求值器 |
-| **合计** | **19** | ✅ | `lake build` 全部通过 |
+| **合计** | **22** | ✅ | `lake build` 全部通过 |
 
 ## 形式化范围
 

@@ -22,10 +22,12 @@ neve-eval.workspace = true
 neve-std.workspace = true
 neve-fmt.workspace = true
 neve-frontend.workspace = true
+neve-lsp.workspace = true
 
 clap.workspace = true
 rustyline.workspace = true
 serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 serde.workspace = true
 termimad = "0.30"
 
