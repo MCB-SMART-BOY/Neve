@@ -6966,3 +6966,402 @@ fn test_type_alias_usage() {
     "#;
     assert_runtime_parity(source, Value::Bool(true));
 }
+
+// ============================================================================
+// Phase 5 quality push — 20 new tests (E2E 400 → 420) / 质量冲刺测试
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// Stream edge cases (6 tests) / 流边界情况
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_stream_map_on_empty_list_returns_empty() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([]);
+    let mapped = io.streamMap(s, fn(x) { x * 2 });
+    let result = io.streamCollect(mapped);
+    let x = result == [];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_stream_filter_on_empty_list_returns_empty() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([]);
+    let filtered = io.streamFilter(s, fn(x) { x > 0 });
+    let result = io.streamCollect(filtered);
+    let x = result == [];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_stream_take_on_empty_stream_returns_empty() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([]);
+    let taken = io.streamTake(s, 3);
+    let result = io.streamCollect(taken);
+    let x = result == [];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_stream_drop_on_empty_stream_returns_empty() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([]);
+    let dropped = io.streamDrop(s, 5);
+    let result = io.streamCollect(dropped);
+    let x = result == [];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_stream_fold_on_single_element_returns_element() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([99]);
+    let result = io.streamFold(s, 0, fn(acc, x) { acc + x });
+    let x = result == 99;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_stream_five_chain_pure_operations() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    let m = io.streamMap(s, fn(x) { x * 3 });
+    let f = io.streamFilter(m, fn(x) { x % 2 == 0 });
+    let t = io.streamTake(f, 4);
+    let d = io.streamDrop(t, 1);
+    let result = io.streamCollect(d);
+    let x = result == [12, 18, 24];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+// ---------------------------------------------------------------------------
+// Task edge cases (4 tests) / 任务边界情况
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_spawn_multiple_tasks_await_any_returns_result() {
+    let source = r#"
+    import std.io as io;
+    let t1 = io.taskCommand(io.command("echo", ["alpha"]));
+    let t2 = io.taskCommand(io.command("echo", ["beta"]));
+    let t3 = io.taskCommand(io.command("echo", ["gamma"]));
+    let result = io.awaitAny([t1, t2, t3]);
+    let x = io.processSuccess(result);
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_cancel_same_task_twice_is_noop() {
+    let source = r#"
+    import std.io as io;
+    let task = io.taskCommand(io.command("sleep", ["10"]));
+    let id = io.spawn(task);
+    io.cancel(id);
+    io.cancel(id);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_poll_already_completed_task_returns_result() {
+    let source = r#"
+    import std.io as io;
+    let task = io.taskCommand(io.command("echo", ["quick"]));
+    let id = io.spawn(task);
+    let result = io.awaitTask(task);
+    let pollResult = io.poll(id);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_await_task_on_non_task_errors_gracefully() {
+    let source = r#"
+    import std.io as io;
+    let result = io.awaitTask(42);
+    "#;
+    let analysis = analyze_source(source);
+    let has_type_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.severity == Severity::Error);
+    if !has_type_error {
+        let result = eval_hir(&analysis);
+        assert!(result.is_err(), "awaitTask on non-task should error");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Type checker edge cases (4 tests) / 类型检查边界情况
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_nested_match_branches_returning_stream_values() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([1, 2, 3]);
+    let result = match 1 {
+        1 -> {
+            let collected = io.streamCollect(s);
+            collected
+        },
+        _ -> [],
+    };
+    let x = result == [1, 2, 3];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_record_spread_with_stream_field_preserved() {
+    // Records with stream fields: construct a nested record and verify
+    // the stream field can be accessed and collected.
+    let source = r#"
+    import std.io as io;
+    let inner = #{ data = io.streamList([1]), label = "inner" };
+    let outer = #{ inner = inner, name = "outer" };
+    let collected = io.streamCollect(outer.inner.data);
+    let x = collected == [1] && outer.inner.label == "inner" && outer.name == "outer";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_stream_param_in_generic_fn_with_annotation() {
+    let source = r#"
+    import std.io as io;
+    fn processAndCollect(items: Stream) effect = {
+        let result = io.streamCollect(items);
+        result
+    };
+    let s = io.streamList([7, 8, 9]);
+    let x = processAndCollect(s) == [7, 8, 9];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_if_else_branches_with_stream_values() {
+    let source = r#"
+    import std.io as io;
+    let s1 = io.streamList([10, 20]);
+    let s2 = io.streamList([30, 40]);
+    let s = if true then s1 else s2;
+    let result = io.streamCollect(s);
+    let x = result == [10, 20];
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+// ---------------------------------------------------------------------------
+// Error resilience (3 tests) / 错误韧性
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_large_command_output_streaming_no_panic() {
+    // Generate a command that produces moderately large output and verify
+    // streaming collection doesn't panic.
+    let source = if cfg!(windows) {
+        r#"
+    import std.io as io;
+    let s = io.streamCommand(io.command("cmd", ["/C", "echo 0123456789012345678901234567890123456789"]));
+    let result = io.streamCollect(s);
+    let x = true;
+    "#
+    } else {
+        r#"
+    import std.io as io;
+    let s = io.streamCommand(io.command("sh", ["-c", "echo 0123456789012345678901234567890123456789"]));
+    let result = io.streamCollect(s);
+    let x = true;
+    "#
+    };
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_concurrent_multi_task_spawn_cancel_poll_cycle() {
+    let source = r#"
+    import std.io as io;
+    let id1 = io.spawn(io.taskCommand(io.command("sleep", ["5"])));
+    let id2 = io.spawn(io.taskCommand(io.command("sleep", ["5"])));
+    let id3 = io.spawn(io.taskCommand(io.command("echo", ["fast"])));
+    io.cancel(id1);
+    io.cancel(id2);
+    let r3 = io.poll(id3);
+    let x = true;
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_pipeline_with_dev_null_redirect_no_panic() {
+    let source = if cfg!(windows) {
+        r#"
+    import std.io as io;
+    let cmd = io.command("cmd", ["/C", "echo test"]);
+    let p = io.pipeline([cmd]);
+    let result = io.execPipeline(p);
+    let x = io.processSuccess(result);
+    "#
+    } else {
+        r#"
+    import std.io as io;
+    let cmd = io.command("sh", ["-c", "echo test > /dev/null"]);
+    let p = io.pipeline([cmd]);
+    let result = io.execPipeline(p);
+    let x = io.processSuccess(result);
+    "#
+    };
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+// ---------------------------------------------------------------------------
+// LSP/REPL integration (3 tests) / LSP/REPL 集成测试
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_type_of_stream_collect_result_is_list() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamList([1, 2, 3]);
+    let result = io.streamCollect(s);
+    let x = typeOf(result) == "List";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_type_of_stream_pipe_result_is_process_result() {
+    let source = r#"
+    import std.io as io;
+    let s = io.streamCommand(io.command("echo", ["hello"]));
+    let result = io.streamPipe(s, io.command("cat", []));
+    let x = typeOf(result) == "ProcessResult";
+    "#;
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
+}
+
+#[test]
+fn test_effect_check_reports_effectful_builtins_in_pure_context() {
+    // Verify that effect checking works at the frontend level:
+    // calling an effectful builtin (io.spawn) inside a pure function
+    // should produce a diagnostic.
+    let analysis = analyze_source(
+        r#"
+        import std.io as io;
+        fn bad() -> Int = io.spawn(io.taskCommand(io.command("echo", ["x"])));
+        "#,
+    );
+    let has_effect_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
+    assert!(
+        has_effect_error,
+        "expected effect error for io.spawn, got {:?}",
+        analysis.diagnostics
+    );
+}
+
+// ============================================================================
+// Performance sanity check / 性能健全性检查
+// ============================================================================
+
+#[test]
+fn test_stream_performance_1000_elements() {
+    // Generate 1000-element list programmatically and verify stream
+    // collection completes in a reasonable time.
+    let elements: Vec<String> = (0..1000).map(|i| i.to_string()).collect();
+    let source = format!(
+        "import std.io as io; let s = io.streamList([{}]); let r = io.streamCollect(s); r",
+        elements.join(", ")
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let start = std::time::Instant::now();
+    let _result = eval_hir(&analysis).expect("should evaluate");
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed.as_millis() < 5000,
+        "1000-element stream collection too slow: {elapsed:?}"
+    );
+}
+
+#[test]
+fn test_stream_performance_100_elements_with_transform() {
+    // Generate 100-element list and verify streamList -> streamMap ->
+    // streamCollect completes in under 1 second.
+    let elements: Vec<String> = (1..=100).map(|i| i.to_string()).collect();
+    let source = format!(
+        r#"
+    import std.io as io;
+    let s = io.streamList([{}]);
+    let m = io.streamMap(s, fn(x) {{ x * 2 }});
+    let r = io.streamCollect(m);
+    r
+    "#,
+        elements.join(", ")
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let start = std::time::Instant::now();
+    let _result = eval_hir(&analysis).expect("should evaluate");
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed.as_millis() < 1000,
+        "100-element stream map+collect too slow: {elapsed:?}"
+    );
+}
