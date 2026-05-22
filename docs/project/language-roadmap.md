@@ -740,7 +740,7 @@ Non-goals / 非目标:
 |------|---------|
 | Priority | High |
 | Work packages | `WP-5A`, `WP-5B`, `WP-5C`, `WP-5D`, `WP-5E` |
-| Status | **Complete** ✅ — Stream<T> 14 APIs; 400 E2E tests; Formatter 37/37; Clippy 0 warnings |
+| Status | **Complete** ✅ — Stream<T> 14 APIs; 440 E2E tests; Formatter 37/37; Clippy 0 warnings |
 | Entry criteria | Phase 3 complete |
 | Main output | Typed scripting runtime that covers common shell workloads |
 | Why this phase exists | `exec` builtins alone do not replace Bash |
@@ -763,7 +763,7 @@ Detailed scope / 详细范围:
 - Signal handlers (5 signals: INT/TERM/HUP/USR1/USR2) ✅
 - Glob pattern matching ✅
 - Shebang + io.args() structured parsing ✅
-- E2E tests: 400 ✅
+- E2E tests: 440 ✅
 - Formatter idempotency: 37/37 ✅
 - Stream<T> Phase A-C: 14 APIs (construct + transform + consume + pipe) ✅
 - EffectEval v4.3 (34 rules: +5 stream Phase C) ✅
@@ -912,7 +912,7 @@ Updated 2026-05-12. WP-0 through WP-4 are complete. Phase 5 is next. Current pri
 
 1. TTY raw mode 完整集成
 2. Phase 5 ecosystem 规划 (确定性 lockfile、registry 元数据)
-3. 进一步 E2E 测试扩展 400 → 450+
+3. 进一步 E2E 测试扩展 400 → 440 → 450+
 4. LSP 功能扩展 (references/rename/code actions)
 5. REPL 跨项目根目录切换优化
 
@@ -926,7 +926,7 @@ Updated 2026-05-12. Phase 4 is complete. The current frontier is Phase 5 (Ecosys
 |----------|------|-------|--------|
 | 1 | TTY raw mode 完整集成 | `crates/neve-std/src/io.rs`, `neve-cli/` | Pending |
 | 2 | Phase 5 启动: 确定性 lockfile + registry 元数据 | `crates/neve-builder/`, `crates/neve-store/` | Pending |
-| 3 | E2E 测试扩展 400 → 450+ | `tests/end_to_end.rs` | Ongoing |
+| 3 | E2E 测试扩展 400 → 440 → 450+ | `tests/end_to_end.rs` | In Progress |
 | 4 | LSP 功能扩展 (references/rename/code actions) | `crates/neve-lsp/` | Pending |
 | 5 | REPL 跨项目根目录切换优化 | `crates/neve-frontend/` | Pending |
 
