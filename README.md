@@ -233,7 +233,7 @@ neve registry-publish # 发布包到 registry
 
 ---
 
-**Phase 4 (Shell 能力替代) 已完成** ✅ — Stream<T> 14 APIs、E2E 400 测试、Formatter 幂等性 37/37、Clippy 0 warnings。
+**Phase 4 (Shell 能力替代) 已完成** ✅ — Stream<T> 14 APIs、E2E 440 测试、Formatter 幂等性 37/37、Clippy 0 warnings。
 
 **Phase 5 (生态补完) 进行中** 🔄 — flake/lock 系统、content-addressed store、registry CLI（17 个命令）、稳定性分级（Tier 1/2/3）。
 
