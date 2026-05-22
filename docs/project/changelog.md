@@ -21,6 +21,35 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [3.15.0] - 2026-05-22
+
+### Added
+- **LSP overhaul**: 19 LSP methods implemented -- hover, completion (type-aware), signatureHelp, definition, references, documentHighlight, rename, formatting, documentSymbol, semanticTokens (AST-based), inlayHint, foldingRange, codeAction, completionItem/resolve.
+- **Type-aware completion**: Methods filtered by receiver type (List:32, String:16, Option:11, Result:9, Record:3). Uses DefId resolution via ModuleSemantics.global_names.
+- **Signature help**: 80 builtin function signatures + user-defined functions via AST inspection.
+- **Completion documentation**: 77 functions with docs via completionItem/resolve.
+- **AST-based semantic tokens**: 8 node kinds (fn, struct/enum/trait/impl items, fields, variants, params, imports).
+- **Helix integration**: 6 query files (22 highlight scopes), `neve setup helix` one-shot install.
+- **VS Code extension**: TextMate grammar, LSP client, `neve setup vscode`.
+- **CLI**: `neve lsp --check` (10-point health check), `neve lsp --version`.
+- **Scripts**: build-grammar.sh (cross-platform), dev-setup.sh (one-shot).
+- **Docs**: docs/reference/lsp.md.
+
+### Changed
+- **Highlights.scm**: 6 generic scopes -> 22 fine-grained Helix-compatible scopes.
+- **Semantic tokens**: Lexer-only -> AST-based with lexer fallback.
+- **languages.toml**: Removed broken formatter command; rely on LSP formatting.
+- **Completion ordering**: Local symbols first, then stdlib, types, keywords.
+- **AGENTS.md**: Updated LSP status (~98%) and priority items.
+
+### Fixed
+- **DefId resolution**: type_to_name now resolves Named types through ModuleSemantics.global_names.
+- **setup_helix.rs**: Uses include_str!() for all 6 query files (was hardcoded stale strings).
+
+### Tests
+- **LSP**: 164 tests (151 integration + 13 unit).
+- **E2E**: 8 new end-to-end tests (lsp_e2e.rs).
+
 ## [3.8.0] - 2026-05-12
 
 ### Added / 新增
