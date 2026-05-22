@@ -132,6 +132,14 @@ jobs:
           body: |
             ## Neve ${{ github.ref_name }}
 
+            ### LSP Overhaul — 19 Methods, Type-Aware Completion
+
+            - **19 LSP methods**: hover, completion (type-aware), signatureHelp, definition, references, documentHighlight, rename, formatting, documentSymbol, semanticTokens (AST-based), inlayHint, foldingRange, codeAction, completionItem/resolve
+            - **Type-aware dot-completion**: methods filtered by receiver type (List, String, Option, Result, Record)
+            - **Editor integration**: `neve setup helix` (6 query files, 22 highlight scopes), `neve setup vscode`
+            - **CLI**: `neve lsp --check` (10-point health check), `neve lsp --version`
+            - **Tests**: 164 LSP tests (151 integration + 13 unit)
+
             ### Installation
 
             Download the appropriate binary for your platform:
