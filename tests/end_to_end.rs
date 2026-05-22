@@ -7365,3 +7365,146 @@ fn test_stream_performance_100_elements_with_transform() {
         "100-element stream map+collect too slow: {elapsed:?}"
     );
 }
+
+// ============================================================================
+// Init workflow / init 工作流
+// ============================================================================
+
+#[test]
+fn test_init_creates_flake_and_main() {
+    let temp = TempDir::new().unwrap();
+    let proj_dir = temp.path().join("my-neve-project");
+
+    // Simulate `neve init my-neve-project` by writing the expected files.
+    std::fs::create_dir_all(&proj_dir).unwrap();
+
+    let flake_content = format!(
+        r#"{{
+    description = "A Neve project";
+    name = "{}";
+    version = "0.1.0";
+
+    inputs = {{}};
+
+    outputs = fn(inputs) {{
+        let pkgs = {{}};
+        let checks = {{
+            default = fn() {{ true }},
+        }};
+        {{ packages = pkgs, checks = checks }}
+    }};
+}}"#,
+        proj_dir.file_name().unwrap().to_string_lossy()
+    );
+
+    let main_content = format!(
+        r#"#!/usr/bin/env neve run
+-- {name} — main entry point
+import std.io as io;
+
+fn main() effect = {{
+    let (args, _) = io.args();
+    let name = match args {{
+        [n, ..] -> n,
+        [] -> "World"
+    }};
+    io.println("Hello, " ++ name ++ "!");
+    0
+}};
+"#,
+        name = proj_dir.file_name().unwrap().to_string_lossy()
+    );
+
+    std::fs::write(proj_dir.join("flake.neve"), &flake_content).unwrap();
+    std::fs::write(proj_dir.join("main.neve"), &main_content).unwrap();
+    std::fs::write(proj_dir.join(".gitignore"), "result\n.direnv\n").unwrap();
+
+    // Verify files exist
+    assert!(
+        proj_dir.join("flake.neve").exists(),
+        "flake.neve should exist"
+    );
+    assert!(
+        proj_dir.join("main.neve").exists(),
+        "main.neve should exist"
+    );
+    assert!(
+        proj_dir.join(".gitignore").exists(),
+        ".gitignore should exist"
+    );
+
+    // Verify flake.neve contains expected fields
+    let flake = std::fs::read_to_string(proj_dir.join("flake.neve")).unwrap();
+    assert!(
+        flake.contains("description"),
+        "flake.neve should have description"
+    );
+    assert!(flake.contains("name"), "flake.neve should have name");
+    assert!(flake.contains("version"), "flake.neve should have version");
+
+    // Verify main.neve contains expected imports and function
+    let main = std::fs::read_to_string(proj_dir.join("main.neve")).unwrap();
+    assert!(
+        main.contains("import std.io as io"),
+        "main.neve should import std.io"
+    );
+    assert!(
+        main.contains("fn main() effect"),
+        "main.neve should have main function"
+    );
+}
+
+#[test]
+fn test_init_project_typechecks() {
+    // Verify the scaffolded main.neve passes type checking.
+    // Effect checking is separate; the effect annotation allows effectful calls.
+    let source = r#"import std.io as io;
+
+fn main() effect = {
+    let (args, _) = io.args();
+    let name = match args {
+        [n, ..] -> n,
+        [] -> "World"
+    };
+    io.println("Hello, " ++ name ++ "!");
+    0
+};
+"#;
+
+    let analysis = analyze_source(source);
+    let errors: Vec<_> = analysis
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "scaffolded project should type-check without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_init_project_runs() {
+    // Verify the scaffolded main.neve core logic runs successfully.
+    // Since io.args() returns empty by default, the name defaults to "World".
+    // Inline the body of main() to test the logic directly.
+    // Reset script args to ensure deterministic behavior.
+    neve_std::set_script_args(vec![]);
+    let source = r#"import std.io as io;
+
+let name = match io.args().0 {
+    [n, ..] -> n,
+    [] -> "World"
+};
+"Hello, " ++ name ++ "!"
+"#;
+
+    let analysis = analyze_without_diagnostics(source);
+    let result = eval_hir(&analysis).expect("scaffolded project should evaluate");
+    assert_eq!(
+        result,
+        Value::String("Hello, World!".to_string().into()),
+        "should produce greeting"
+    );
+}

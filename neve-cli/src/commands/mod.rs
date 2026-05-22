@@ -9,6 +9,7 @@ pub mod doc;
 pub mod eval;
 pub mod fmt;
 pub mod info;
+pub mod init;
 pub mod module_graph;
 pub mod repl;
 pub mod run;
