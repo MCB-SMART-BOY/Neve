@@ -35,6 +35,7 @@ pub mod remove;
 #[cfg(unix)]
 pub mod search;
 pub mod setup_helix;
+pub mod setup_vscode;
 #[cfg(unix)]
 pub mod store;
 #[cfg(unix)]

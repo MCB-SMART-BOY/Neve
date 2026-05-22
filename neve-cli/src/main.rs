@@ -97,7 +97,17 @@ enum Commands {
 
     /// Start the Language Server Protocol server.
     /// 启动语言服务器协议服务。
-    Lsp,
+    Lsp {
+        /// Run a health check instead of starting the server.
+        /// 运行健康检查而不是启动服务器。
+        #[arg(long)]
+        check: bool,
+
+        /// Print LSP version and capabilities.
+        /// 打印 LSP 版本和能力。
+        #[arg(long)]
+        version: bool,
+    },
 
     /// Start an interactive REPL. / 启动交互式 REPL。
     Repl,
@@ -354,9 +364,20 @@ fn main() {
         },
         Commands::Setup { editor } => match editor.as_str() {
             "helix" => commands::setup_helix::run(),
-            _ => Err(format!("unknown editor: {editor}. Supported: helix")),
+            "vscode" | "code" | "vs" => commands::setup_vscode::run(),
+            _ => Err(format!(
+                "unknown editor: {editor}. Supported: helix, vscode"
+            )),
         },
-        Commands::Lsp => commands::lsp::run(),
+        Commands::Lsp { check, version } => {
+            if check {
+                commands::lsp::check()
+            } else if version {
+                commands::lsp::version()
+            } else {
+                commands::lsp::run()
+            }
+        }
         Commands::Repl => commands::repl::run(),
         Commands::Doc { topic, list } => {
             if list || topic.is_none() {

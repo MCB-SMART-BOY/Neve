@@ -1,5 +1,6 @@
 # Neve language support for Helix Editor
 # Copy to: ~/.config/helix/languages.toml
+# Or use: neve setup helix
 
 [[language]]
 name = "neve"
@@ -8,7 +9,6 @@ file-types = ["neve"]
 comment-token = "--"
 indent = { tab-width = 4, unit = "    " }
 language-servers = ["neve-lsp"]
-formatter = { command = "neve", args = ["fmt", "file", "--write"] }
 auto-format = true
 
 [language-server.neve-lsp]
