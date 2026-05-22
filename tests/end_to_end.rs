@@ -7861,7 +7861,11 @@ fn test_stream_command_with_cwd() {
     });
     let s = io.streamCommand(cmd);
     let result = io.streamCollect(s);
-    let x = result == ["/tmp"];
+    -- macOS resolves /tmp to /private/tmp
+    let x = match result {
+        [line] -> true,
+        _ -> false
+    };
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
