@@ -113,6 +113,16 @@ enum Commands {
         list: bool,
     },
 
+    /// Initialize a new Neve project in the given directory.
+    /// 在给定目录中初始化新的 Neve 项目。
+    Init {
+        /// Directory to create the project in. / 要创建项目的目录。
+        dir: String,
+    },
+
+    /// Print version information. / 打印版本信息。
+    Version,
+
     /// Build a package (Unix only). / 构建软件包（仅限 Unix）。
     #[cfg(unix)]
     Build {
@@ -354,6 +364,12 @@ fn main() {
             } else {
                 commands::doc::view(topic.as_deref().unwrap())
             }
+        }
+        Commands::Init { dir } => commands::init::run(&dir),
+        Commands::Version => {
+            println!("neve {}", env!("CARGO_PKG_VERSION"));
+            println!("https://github.com/MCB-SMART-BOY/Neve");
+            Ok(())
         }
         Commands::Info { package, platform } => {
             if platform || package.is_none() {
