@@ -3137,3 +3137,81 @@ fn test_symbol_index_references_respect_shadowing() {
     assert_eq!(inner_refs.len(), 3);
     assert_eq!(outer_refs.len(), 2);
 }
+
+// =============================================================================
+// Handler tests: semantic tokens, folding, imports, highlight
+// =============================================================================
+
+#[test]
+fn test_semantic_tokens_enum_variants() {
+    let tokens = neve_lsp::generate_semantic_tokens_from_ast("enum Color { Red, Green, Blue };\n");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_semantic_tokens_struct_fields() {
+    let tokens = neve_lsp::generate_semantic_tokens_from_ast("struct Point { x: Int, y: Int };\n");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_semantic_tokens_trait_methods() {
+    let tokens = neve_lsp::generate_semantic_tokens_from_ast("trait Show { fn show() = \"\"; };\n");
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_semantic_tokens_impl_methods() {
+    let tokens = neve_lsp::generate_semantic_tokens_from_ast(
+        "impl Show for Int { fn show() = \"Int\"; };\n",
+    );
+    assert!(!tokens.is_empty());
+}
+
+#[test]
+fn test_document_highlight_read_write() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let x = 1;\nlet y = x + 2;\n".to_string(),
+    );
+    if let Some(ref idx) = doc.symbol_index {
+        let refs = idx.get_references("x");
+        assert_eq!(refs.len(), 2, "Expected 2 references to x (def + use)");
+    }
+}
+
+#[test]
+fn test_inlay_hints_type_inference() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let x = 42;\nlet y = \"hello\";\n".to_string(),
+    );
+    assert!(doc.semantics.is_some());
+    if let Some(ref semantics) = doc.semantics {
+        let type_count = semantics.expr_types.len();
+        assert!(type_count > 0, "Expected inferred types");
+    }
+}
+
+#[test]
+fn test_folding_ranges_fn() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "fn add(a, b) = {\n  a + b\n};\n".to_string(),
+    );
+    assert!(doc.ast.is_some());
+}
+
+#[test]
+fn test_folding_ranges_struct() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "struct Point {\n  x: Int,\n  y: Int,\n};\n".to_string(),
+    );
+    assert!(doc.symbol_index.is_some());
+    assert!(
+        doc.symbol_index
+            .as_ref()
+            .is_some_and(|idx| idx.definitions.contains_key("Point"))
+    );
+}

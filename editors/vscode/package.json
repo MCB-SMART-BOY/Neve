@@ -1,0 +1,53 @@
+{
+  "name": "neve",
+  "displayName": "Neve Language Support",
+  "description": "Syntax highlighting, auto-completion, diagnostics, and formatting for the Neve language.",
+  "version": "0.1.0",
+  "publisher": "neve-lang",
+  "license": "MPL-2.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:neve"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "neve",
+        "aliases": ["Neve", "neve"],
+        "extensions": [".neve"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "neve",
+        "scopeName": "source.neve",
+        "path": "./syntaxes/neve.tmLanguage.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[neve]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  }
+}

@@ -106,6 +106,21 @@ mod tests {
         assert!(labels.contains(&"io.streamForEach"));
         assert!(labels.contains(&"io.streamFold"));
         assert!(labels.contains(&"io.streamWithTimeout"));
+        // Task cancel / await APIs
+        assert!(labels.contains(&"io.cancel"));
+        assert!(labels.contains(&"io.awaitAny"));
+        assert!(labels.contains(&"io.awaitTaskWithTimeout"));
+        // TTY APIs
+        assert!(labels.contains(&"io.isTTY"));
+        assert!(labels.contains(&"io.terminalSize"));
+        assert!(labels.contains(&"io.setRawMode"));
+        assert!(labels.contains(&"io.resetTerminal"));
+        // Job control APIs
+        assert!(labels.contains(&"io.jobs"));
+        assert!(labels.contains(&"io.waitAnyJob"));
+        // Other I/O
+        assert!(labels.contains(&"io.kill"));
+        assert!(labels.contains(&"io.args"));
     }
 
     #[test]

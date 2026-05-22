@@ -433,18 +433,11 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
     use neve_syntax::ItemKind;
 
     let (file, _) = parse(source);
-    // Use BTreeMap keyed by byte offset to deduplicate by position;
-    // value is (token_type, modifiers, length).
-    // 使用以字节偏移量为键的 BTreeMap 按位置去重；
-    // 值为 (token_type, modifiers, length)。
     let mut semantic_set: std::collections::BTreeMap<u32, (u32, u32, u32)> = Default::default();
 
-    // Walk AST and produce semantic tokens
-    // 遍历 AST 并生成语义 token
     for item in &file.items {
         match &item.kind {
             ItemKind::Let(let_def) => {
-                // Variable binding declaration / 变量绑定声明
                 if let Some(name_span) = get_pattern_name_span(&let_def.pattern) {
                     add_ast_token(
                         &mut semantic_set,
@@ -456,7 +449,6 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                 classify_ast_expr(&mut semantic_set, &let_def.value);
             }
             ItemKind::Fn(fn_def) => {
-                // Function definition / 函数定义
                 add_ast_token(
                     &mut semantic_set,
                     fn_def.name.span,
@@ -477,6 +469,15 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                     token_types::TYPE,
                     token_modifiers::DEFINITION,
                 );
+                // Classify struct fields / 分类结构体字段
+                for field in &struct_def.fields {
+                    add_ast_token(
+                        &mut semantic_set,
+                        field.name.span,
+                        token_types::PROPERTY,
+                        token_modifiers::DECLARATION,
+                    );
+                }
             }
             ItemKind::Enum(enum_def) => {
                 add_ast_token(
@@ -485,6 +486,15 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                     token_types::TYPE,
                     token_modifiers::DEFINITION,
                 );
+                // Classify enum variants / 分类枚举变体
+                for variant in &enum_def.variants {
+                    add_ast_token(
+                        &mut semantic_set,
+                        variant.name.span,
+                        token_types::TYPE,
+                        token_modifiers::DEFINITION,
+                    );
+                }
             }
             ItemKind::Trait(trait_def) => {
                 add_ast_token(
@@ -493,6 +503,15 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                     token_types::TYPE,
                     token_modifiers::DEFINITION,
                 );
+                // Classify trait methods / 分类 trait 方法
+                for method in &trait_def.items {
+                    add_ast_token(
+                        &mut semantic_set,
+                        method.name.span,
+                        token_types::FUNCTION,
+                        token_modifiers::DECLARATION,
+                    );
+                }
             }
             ItemKind::TypeAlias(type_alias) => {
                 add_ast_token(
@@ -502,23 +521,44 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                     token_modifiers::DEFINITION,
                 );
             }
+            ItemKind::Impl(impl_def) => {
+                // Classify impl methods / 分类 impl 方法
+                for method in &impl_def.items {
+                    add_ast_token(
+                        &mut semantic_set,
+                        method.name.span,
+                        token_types::FUNCTION,
+                        token_modifiers::DEFINITION,
+                    );
+                    for param in &method.params {
+                        if let Some(name_span) = get_pattern_name_span(&param.pattern) {
+                            add_ast_token(&mut semantic_set, name_span, token_types::PARAMETER, 0);
+                        }
+                    }
+                    classify_ast_expr(&mut semantic_set, &method.body);
+                }
+            }
+            ItemKind::Import(import) => {
+                // Classify import alias / 分类导入别名
+                if let Some(alias) = &import.alias {
+                    add_ast_token(
+                        &mut semantic_set,
+                        alias.span,
+                        token_types::VARIABLE,
+                        token_modifiers::DECLARATION,
+                    );
+                }
+            }
             ItemKind::ExprStmt(expr) => {
                 classify_ast_expr(&mut semantic_set, expr);
             }
-            _ => {}
         }
     }
 
-    // Also classify the tail expression if present
-    // 如果存在尾部表达式，也对其进行分类
     if let Some(ref tail) = file.tail_expr {
         classify_ast_expr(&mut semantic_set, tail);
     }
 
-    // Fallback: add lexer-based tokens for anything not covered by AST.
-    // Then merge and convert to LSP position-encoding format.
-    // 后备：添加词法分析器 token 覆盖 AST 未涵盖的部分。
-    // 然后合并并转换为 LSP 位置编码格式。
     let lexer_tokens = generate_semantic_tokens_with_context(
         &{
             let lexer = neve_lexer::Lexer::new(source);

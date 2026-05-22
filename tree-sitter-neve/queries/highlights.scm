@@ -1,60 +1,101 @@
-; Highlights for Neve
+; Highlights for Neve — optimized for Helix themes
+; See https://docs.helix-editor.com/themes.html for scope reference
 
-; Keywords
+; ---- Keywords ----
+; Control flow
+[
+  "if"
+  "then"
+  "else"
+  "match"
+] @keyword.control
+
+; Storage / declarations
 [
   "let"
   "fn"
-  "import"
-  "as"
   "type"
   "struct"
   "enum"
   "trait"
   "impl"
-  "pub"
-  "if"
-  "then"
-  "else"
-  "match"
-  "lazy"
-  "effect"
-] @keyword
+] @keyword.storage
 
-; Boolean literals
+; Imports
+[
+  "import"
+  "as"
+] @keyword.control.import
+
+; Modifiers
+[
+  "pub"
+  "effect"
+  "lazy"
+] @keyword.directive
+
+; ---- Literals ----
+; Boolean constants
 [
   "true"
   "false"
-] @boolean
+] @constant.builtin
 
-; Identifiers
-(ident) @variable
+; Numbers
+(number) @number
 
+; Strings
+(string) @string
+(char) @string
+
+; Interpolated strings (special highlight)
+(interpolated) @string.special
+
+; Path literals (like filesystem paths)
+(path_literal) @string.special.path
+
+; ---- Functions ----
 ; Function definitions
 (fn_def name: (ident) @function)
 
+; Method calls (e.g., x.foo())
+(method_call method: (ident) @function.method)
+
+; Function calls — highlight the callee name
+(call (path) @function.call)
+
+; ---- Types ----
 ; Type definitions
 (struct_def name: (ident) @type)
 (enum_def name: (ident) @type)
 (trait_def name: (ident) @type)
 (type_alias name: (ident) @type)
 
-; Parameters
+; Enum variants (constructors)
+(variant (ident) @constructor)
+
+; ---- Variables & Parameters ----
+; Parameters in function definitions
 (param (pattern (ident) @parameter))
 
-; Method calls
-(method_call method: (ident) @method)
+; Binding patterns (name @ pattern)
+(binding_pattern (ident) @variable)
 
-; Field access
+; ---- Properties & Fields ----
+; Field access (x.field)
 (field_access field: (ident) @property)
 
-; Literals
-(number) @number
-(string) @string
-(char) @string
-(interpolated) @string
-(path_literal) @string
+; Record fields in definitions
+(field_def (ident) @property)
 
-; Operators
+; ---- Identifiers ----
+; Catch-all for other identifiers (will be overridden by more specific rules above)
+(ident) @variable
+
+; Module paths — first segment is namespace
+(path (ident) @namespace)
+
+; ---- Operators ----
 [
   "+" "-" "*" "/" "%" "^"
   "==" "!=" "<" ">" "<=" ">="
@@ -67,18 +108,21 @@
   "!"
 ] @operator
 
-; Delimiters
+; ---- Delimiters ----
 [
   "(" ")"
   "[" "]"
-  "{" "}"
+  "{"
   "#{"
-] @punctuation.delimiter
+] @punctuation.bracket
+
+; Closing brace (separate from opening for matching)
+"}" @punctuation.bracket
 
 ; Punctuation
 [
   "." "," ":" ";" "@"
-] @punctuation
+] @punctuation.delimiter
 
-; Comments
+; ---- Comments ----
 (comment) @comment

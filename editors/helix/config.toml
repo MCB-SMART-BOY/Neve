@@ -1,16 +1,9 @@
 # Neve LSP configuration for Helix
-# Add this to ~/.config/helix/config.toml or append to existing
+# Append to ~/.config/helix/config.toml
 
 [editor]
-# Enable LSP
 lsp = { enable = true }
 
 [editor.lsp]
 display-messages = true
 display-inlay-hints = true
-
-# Neve file type association
-[[language]]
-name = "neve"
-file-types = ["neve"]
-language-servers = ["neve-lsp"]

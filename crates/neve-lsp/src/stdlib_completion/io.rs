@@ -375,5 +375,75 @@ pub(super) fn specs() -> Vec<CompletionSpec> {
             "io.streamWithTimeout(${1:stream}, ${2:timeout_ms})",
             "Stream<Option<T>>",
         ),
+        // === Task cancel / await APIs ===
+        (
+            "io.cancel",
+            "Cancel a running task",
+            "io.cancel(${1:task})",
+            "Unit",
+        ),
+        (
+            "io.awaitAny",
+            "Await the first task to complete",
+            "io.awaitAny(${1:tasks})",
+            "ProcessResult",
+        ),
+        (
+            "io.awaitTaskWithTimeout",
+            "Await task with a timeout",
+            "io.awaitTaskWithTimeout(${1:task}, ${2:timeout_ms})",
+            "Option<ProcessResult>",
+        ),
+        // === TTY / terminal APIs ===
+        (
+            "io.isTTY",
+            "Check if stdin is a terminal",
+            "io.isTTY()",
+            "Bool",
+        ),
+        (
+            "io.terminalSize",
+            "Get terminal size (rows, cols)",
+            "io.terminalSize()",
+            "Option<(Int, Int)>",
+        ),
+        (
+            "io.setRawMode",
+            "Set terminal to raw mode",
+            "io.setRawMode()",
+            "Unit",
+        ),
+        (
+            "io.resetTerminal",
+            "Reset terminal to normal mode",
+            "io.resetTerminal()",
+            "Unit",
+        ),
+        // === Job control APIs ===
+        (
+            "io.jobs",
+            "List running background jobs",
+            "io.jobs()",
+            "List<Job>",
+        ),
+        (
+            "io.waitAnyJob",
+            "Wait for any background job",
+            "io.waitAnyJob()",
+            "ProcessResult",
+        ),
+        // === Other I/O ===
+        (
+            "io.kill",
+            "Kill a process by PID",
+            "io.kill(${1:pid}, ${2:signal})",
+            "Unit",
+        ),
+        (
+            "io.args",
+            "Get script arguments",
+            "io.args()",
+            "List<String>",
+        ),
     ]
 }

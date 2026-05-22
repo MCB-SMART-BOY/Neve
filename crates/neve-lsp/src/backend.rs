@@ -14,7 +14,7 @@ use neve_syntax::{ImplDef, Type, TypeKind};
 
 use crate::Document;
 use crate::capabilities::server_capabilities;
-use crate::semantic_tokens::generate_semantic_tokens_with_context;
+use crate::semantic_tokens::generate_semantic_tokens_from_ast;
 use crate::stdlib_completion::completion_items as stdlib_completion_items;
 use crate::symbol_index::SymbolKind as IndexSymbolKind;
 use neve_common::Span;
@@ -277,7 +277,7 @@ impl LanguageServer for Backend {
                     symbol.name.clone()
                 };
 
-                let hover_text =
+                let mut hover_text =
                     if let Some(type_info) = doc.definition_hovers.get(&symbol.def_span) {
                         format!(
                             "**{}** `{}`\n\nType: `{}`\n\n```neve\n{}\n```",
@@ -289,6 +289,21 @@ impl LanguageServer for Backend {
                             kind_str, symbol.name, definition_text
                         )
                     };
+
+                // Append builtin docs if available / 如果有内置文档则追加
+                let full_name = if let Some(prefix) = doc
+                    .symbol_index
+                    .as_ref()
+                    .and_then(|idx| idx.find_name_at(offset))
+                {
+                    prefix
+                } else {
+                    symbol.name.clone()
+                };
+                if let Some(docs) = builtin_hover_docs(&full_name) {
+                    hover_text.push_str("\n\n---\n");
+                    hover_text.push_str(docs);
+                }
 
                 let start: usize = symbol.def_span.start.into();
                 let end: usize = symbol.def_span.end.into();
@@ -361,6 +376,35 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
+        let pos = params.text_document_position_params.position;
+
+        if let Some(doc) = self.documents.get(&uri) {
+            let offset = doc.offset_at(pos.line, pos.character);
+
+            // Find the call expression at the cursor position.
+            // 查找光标位置处的调用表达式。
+            if let Some(signatures) = find_call_signatures(&doc, offset) {
+                // Determine active parameter based on comma count before cursor.
+                // 根据光标前的逗号数量确定当前参数索引。
+                let active_parameter = count_commas_before(&doc.content, offset);
+
+                return Ok(Some(SignatureHelp {
+                    signatures,
+                    active_signature: Some(0),
+                    active_parameter: Some(active_parameter),
+                }));
+            }
+        }
+
+        Ok(None)
+    }
+
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri.to_string();
         let pos = params.text_document_position.position;
@@ -377,11 +421,25 @@ impl LanguageServer for Backend {
         let is_dot_completion = trigger_char == Some(".");
 
         if is_dot_completion {
-            // Method completion based on type / 基于类型的方法补全
-            items.extend(self.get_method_completions());
+            // Type-aware method completion / 类型感知的方法补全
+            let receiver_type = if let Some(doc) = self.documents.get(&uri) {
+                let dot_offset = doc.offset_at(pos.line, pos.character);
+                find_receiver_type_name(&doc, dot_offset)
+            } else {
+                None
+            };
+            items.extend(self.get_method_completions(receiver_type.as_deref()));
         } else {
-            // Keywords / 关键字
-            items.extend(self.get_keyword_completions());
+            // Most relevant first: document symbols from current file
+            // 最相关的优先：当前文件的文档符号
+            if let Some(doc) = self.documents.get(&uri) {
+                items.extend(self.get_document_completions(&doc, pos));
+
+                // Import path completions / 导入路径补全
+                if let Some(import_paths) = get_import_completions(&doc, pos) {
+                    items.extend(import_paths);
+                }
+            }
 
             // Standard library functions / 标准库函数
             items.extend(self.get_stdlib_completions());
@@ -389,14 +447,26 @@ impl LanguageServer for Backend {
             // Types / 类型
             items.extend(self.get_type_completions());
 
-            // Document symbols (variables, functions from current file)
-            // 文档符号（当前文件中的变量、函数）
-            if let Some(doc) = self.documents.get(&uri) {
-                items.extend(self.get_document_completions(&doc, pos));
-            }
+            // Keywords / 关键字
+            items.extend(self.get_keyword_completions());
         }
 
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn completion_resolve(&self, mut item: CompletionItem) -> Result<CompletionItem> {
+        // Enrich completion items with documentation on resolve.
+        // 在解析时丰富补全项的文档信息。
+        if item.documentation.is_none() {
+            let docs = completion_documentation(&item.label, item.kind);
+            if let Some(doc) = docs {
+                item.documentation = Some(Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc,
+                }));
+            }
+        }
+        Ok(item)
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
@@ -429,9 +499,11 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri.to_string();
 
         if let Some(doc) = self.documents.get(&uri) {
-            let lexer = Lexer::new(&doc.content);
-            let (tokens, _) = lexer.tokenize();
-            let semantic_tokens = generate_semantic_tokens_with_context(&tokens, &doc.content);
+            // Use AST-based semantic tokens for accurate type/definition classification.
+            // Falls back to lexer-based tokens for anything not covered by the AST.
+            // 使用基于 AST 的语义 token 进行准确的类型/定义分类。
+            // 对于 AST 未覆盖的部分，回退到基于词法分析器的 token。
+            let semantic_tokens = generate_semantic_tokens_from_ast(&doc.content);
 
             return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
                 result_id: None,
@@ -713,6 +785,55 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
+        let pos = params.text_document_position_params.position;
+
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref index) = doc.symbol_index
+        {
+            let offset = doc.offset_at(pos.line, pos.character);
+            let refs = index.find_references_at(offset, true);
+
+            if !refs.is_empty() {
+                let highlights: Vec<DocumentHighlight> = refs
+                    .iter()
+                    .map(|r| {
+                        let start: usize = r.span.start.into();
+                        let end: usize = r.span.end.into();
+                        let (start_line, start_col) = doc.position_at(start);
+                        let (end_line, end_col) = doc.position_at(end);
+
+                        let kind = if r.is_write {
+                            DocumentHighlightKind::WRITE
+                        } else {
+                            DocumentHighlightKind::READ
+                        };
+
+                        DocumentHighlight {
+                            range: Range {
+                                start: Position::new(start_line, start_col),
+                                end: Position::new(end_line, end_col),
+                            },
+                            kind: Some(kind),
+                        }
+                    })
+                    .collect();
+
+                return Ok(Some(highlights));
+            }
+        }
+
+        Ok(None)
+    }
+
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
         let uri = params.text_document_position.text_document.uri.to_string();
         let pos = params.text_document_position.position;
@@ -843,6 +964,53 @@ impl LanguageServer for Backend {
             Ok(Some(symbols))
         }
     }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri.to_string();
+        if let Some(doc) = self.documents.get(&uri) {
+            let hints = build_inlay_hints(&doc);
+            return Ok(Some(hints));
+        }
+        Ok(None)
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = params.text_document.uri.to_string();
+        if let Some(doc) = self.documents.get(&uri) {
+            let ranges = build_folding_ranges(&doc);
+            return Ok(Some(ranges));
+        }
+        Ok(None)
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let actions: Vec<CodeActionOrCommand> = params
+            .context
+            .diagnostics
+            .iter()
+            .filter_map(|d| {
+                if d.message.contains("parse") || d.message.contains("type") {
+                    Some(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: "Neve: Show problem details".to_string(),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        diagnostics: Some(vec![d.clone()]),
+                        edit: None,
+                        command: None,
+                        is_preferred: None,
+                        disabled: None,
+                        data: None,
+                    }))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
+    }
 }
 
 impl Backend {
@@ -945,119 +1113,299 @@ impl Backend {
             .collect()
     }
 
-    /// Get method completions for dot-triggered completion.
-    /// 获取点触发补全的方法补全。
-    fn get_method_completions(&self) -> Vec<CompletionItem> {
-        let methods = vec![
+    /// Get method completions for dot-triggered completion, optionally filtered by receiver type.
+    /// 获取点触发补全的方法补全，可按接收者类型过滤。
+    fn get_method_completions(&self, receiver_type: Option<&str>) -> Vec<CompletionItem> {
+        // Each entry: (label, detail, snippet, return_type, applicable_to)
+        // applicable_to is a space-separated string of type names this method works on.
+        // applicable_to 是该方法适用的类型名称（空格分隔）。
+        let methods: Vec<(&str, &str, &str, &str, &str)> = vec![
             // List methods / 列表方法
             (
                 "map",
                 "Map function over elements",
                 "map(${1:fn(x) x})",
                 "List<U>",
+                "List Option Result",
             ),
             (
                 "filter",
                 "Filter elements",
                 "filter(${1:fn(x) true})",
                 "List<T>",
+                "List Option",
             ),
             (
                 "fold",
                 "Fold with accumulator",
                 "fold(${1:init}, ${2:fn(acc, x) acc})",
                 "U",
+                "List",
             ),
-            ("len", "Get length", "len()", "Int"),
-            ("first", "Get first element", "first()", "Option<T>"),
-            ("last", "Get last element", "last()", "Option<T>"),
+            (
+                "foldRight",
+                "Right-fold",
+                "foldRight(${1:init}, ${2:fn(x, acc) acc})",
+                "U",
+                "List",
+            ),
+            ("len", "Get length", "len()", "Int", "List String"),
+            (
+                "isEmpty",
+                "Check if empty",
+                "isEmpty()",
+                "Bool",
+                "List String",
+            ),
+            ("head", "Get first element", "head()", "Option<T>", "List"),
+            ("first", "Get first element", "first()", "Option<T>", "List"),
+            ("tail", "Get all but first", "tail()", "List<T>", "List"),
+            ("last", "Get last element", "last()", "Option<T>", "List"),
+            ("init", "Get all but last", "init()", "List<T>", "List"),
             (
                 "get",
                 "Get element at index",
                 "get(${1:index})",
                 "Option<T>",
+                "List",
             ),
-            ("reverse", "Reverse elements", "reverse()", "List<T>"),
-            ("sum", "Sum of elements", "sum()", "Number"),
-            ("all", "Check if all match", "all(${1:fn(x) true})", "Bool"),
+            (
+                "elem",
+                "Get element at index",
+                "elem(${1:index})",
+                "Option<T>",
+                "List",
+            ),
+            (
+                "reverse",
+                "Reverse elements",
+                "reverse()",
+                "List<T>",
+                "List",
+            ),
+            ("sort", "Sort elements", "sort()", "List<T>", "List"),
+            ("sum", "Sum of elements", "sum()", "Number", "List"),
+            (
+                "product",
+                "Product of elements",
+                "product()",
+                "Number",
+                "List",
+            ),
+            ("max", "Maximum element", "max()", "Option<T>", "List"),
+            ("min", "Minimum element", "min()", "Option<T>", "List"),
+            (
+                "all",
+                "All match predicate",
+                "all(${1:fn(x) true})",
+                "Bool",
+                "List",
+            ),
             (
                 "any",
-                "Check if any matches",
+                "Any matches predicate",
                 "any(${1:fn(x) false})",
                 "Bool",
+                "List",
             ),
             (
                 "zip",
-                "Zip with another list",
+                "Zip with another",
                 "zip(${1:other})",
-                "List<(T, U)>",
+                "List<(T,U)>",
+                "List",
             ),
-            ("take", "Take first n elements", "take(${1:n})", "List<T>"),
-            ("drop", "Drop first n elements", "drop(${1:n})", "List<T>"),
-            ("join", "Join with separator", "join(${1:sep})", "String"),
+            (
+                "unzip",
+                "Unzip into two",
+                "unzip()",
+                "(List<T>,List<U>)",
+                "List",
+            ),
+            ("take", "Take first n", "take(${1:n})", "List<T>", "List"),
+            ("drop", "Drop first n", "drop(${1:n})", "List<T>", "List"),
+            (
+                "join",
+                "Join with separator",
+                "join(${1:sep})",
+                "String",
+                "List",
+            ),
+            ("cons", "Prepend element", "cons(${1:x})", "List<T>", "List"),
+            (
+                "replicate",
+                "Create by replicating",
+                "replicate(${1:n}, ${2:v})",
+                "List<T>",
+                "List",
+            ),
+            (
+                "contains",
+                "Check if contains",
+                "contains(${1:x})",
+                "Bool",
+                "List String",
+            ),
+            (
+                "indexOf",
+                "Find index",
+                "indexOf(${1:x})",
+                "Option<Int>",
+                "List",
+            ),
             // String methods / 字符串方法
+            ("len", "Get length", "len()", "Int", "String"),
+            ("isEmpty", "Check if empty", "isEmpty()", "Bool", "String"),
             (
                 "split",
                 "Split by separator",
                 "split(${1:sep})",
                 "List<String>",
+                "String",
             ),
-            ("trim", "Trim whitespace", "trim()", "String"),
-            ("upper", "To uppercase", "upper()", "String"),
-            ("lower", "To lowercase", "lower()", "String"),
+            ("trim", "Trim whitespace", "trim()", "String", "String"),
+            ("upper", "To uppercase", "upper()", "String", "String"),
+            ("lower", "To lowercase", "lower()", "String", "String"),
             (
                 "contains",
                 "Check if contains",
                 "contains(${1:sub})",
                 "Bool",
+                "String",
             ),
             (
                 "startsWith",
                 "Check prefix",
-                "startsWith(${1:prefix})",
+                "startsWith(${1:p})",
                 "Bool",
+                "String",
             ),
-            ("endsWith", "Check suffix", "endsWith(${1:suffix})", "Bool"),
+            (
+                "endsWith",
+                "Check suffix",
+                "endsWith(${1:s})",
+                "Bool",
+                "String",
+            ),
             (
                 "replace",
                 "Replace substring",
                 "replace(${1:from}, ${2:to})",
                 "String",
+                "String",
             ),
-            ("chars", "Get characters", "chars()", "List<Char>"),
-            // Option/Result methods / Option/Result 方法
-            ("unwrap", "Unwrap value", "unwrap()", "T"),
+            (
+                "substring",
+                "Get substring",
+                "substring(${1:s}, ${2:e})",
+                "String",
+                "String",
+            ),
+            (
+                "lines",
+                "Split into lines",
+                "lines()",
+                "List<String>",
+                "String",
+            ),
+            ("chars", "Get characters", "chars()", "List<Char>", "String"),
+            (
+                "repeat",
+                "Repeat n times",
+                "repeat(${1:n})",
+                "String",
+                "String",
+            ),
+            ("toInt", "Parse as Int", "toInt()", "Option<Int>", "String"),
+            (
+                "toFloat",
+                "Parse as Float",
+                "toFloat()",
+                "Option<Float>",
+                "String",
+            ),
+            // Option/Result methods
+            ("unwrap", "Unwrap value", "unwrap()", "T", "Option Result"),
             (
                 "unwrapOr",
                 "Unwrap or default",
-                "unwrapOr(${1:default})",
+                "unwrapOr(${1:d})",
                 "T",
+                "Option Result",
             ),
-            ("isSome", "Check if Some", "isSome()", "Bool"),
-            ("isNone", "Check if None", "isNone()", "Bool"),
-            ("isOk", "Check if Ok", "isOk()", "Bool"),
-            ("isErr", "Check if Err", "isErr()", "Bool"),
+            ("isSome", "Check if Some", "isSome()", "Bool", "Option"),
+            ("isNone", "Check if None", "isNone()", "Bool", "Option"),
+            ("isOk", "Check if Ok", "isOk()", "Bool", "Result"),
+            ("isErr", "Check if Err", "isErr()", "Bool", "Result"),
+            (
+                "map",
+                "Map inner value",
+                "map(${1:fn(x) x})",
+                "Option<U>",
+                "Option Result",
+            ),
+            (
+                "andThen",
+                "Chain operations",
+                "andThen(${1:fn(x) S(x)})",
+                "Option<U>",
+                "Option Result",
+            ),
+            (
+                "orElse",
+                "Fallback value",
+                "orElse(${1:fn() S(x)})",
+                "Option<T>",
+                "Option Result",
+            ),
+            (
+                "filter",
+                "Filter optional",
+                "filter(${1:pred})",
+                "Option<T>",
+                "Option",
+            ),
             // Record methods / 记录方法
-            ("keys", "Get record keys", "keys()", "List<String>"),
-            ("values", "Get record values", "values()", "List<T>"),
+            (
+                "keys",
+                "Get record keys",
+                "keys()",
+                "List<String>",
+                "Record",
+            ),
+            (
+                "values",
+                "Get record values",
+                "values()",
+                "List<T>",
+                "Record",
+            ),
             (
                 "hasField",
                 "Check if has field",
                 "hasField(${1:name})",
                 "Bool",
+                "Record",
             ),
         ];
 
         methods
             .into_iter()
-            .map(|(label, detail, snippet, ret_type)| CompletionItem {
-                label: label.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some(format!("{} -> {}", detail, ret_type)),
-                insert_text: Some(snippet.to_string()),
-                insert_text_format: Some(InsertTextFormat::SNIPPET),
-                ..Default::default()
+            .filter(|(_, _, _, _, applies)| {
+                // If no receiver type known, show all methods.
+                // 如果不知道接收者类型，则显示所有方法。
+                receiver_type.is_none_or(|rt| applies.split_whitespace().any(|t| t == rt))
             })
+            .map(
+                |(label, detail, snippet, ret_type, _applies)| CompletionItem {
+                    label: label.to_string(),
+                    kind: Some(CompletionItemKind::METHOD),
+                    detail: Some(format!("{} -> {}", detail, ret_type)),
+                    insert_text: Some(snippet.to_string()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                },
+            )
             .collect()
     }
 
@@ -1170,5 +1518,1047 @@ fn format_type_name(ty: &Type) -> String {
         }
         TypeKind::Unit => "()".to_string(),
         TypeKind::Infer => "_".to_string(),
+    }
+}
+
+// =============================================================================
+// Signature help helpers
+// =============================================================================
+
+/// Find call signatures at the given offset.
+fn find_call_signatures(doc: &Document, offset: usize) -> Option<Vec<SignatureInformation>> {
+    let content = &doc.content;
+    let (fn_name, _open_paren) = find_callee_at_offset(content, offset)?;
+
+    if let Some(params) = lookup_fn_params(doc, &fn_name) {
+        let label = if params.is_empty() {
+            format!("{fn_name}()")
+        } else {
+            format!("{fn_name}({params})")
+        };
+        let parameters: Vec<ParameterInformation> = params
+            .split(',')
+            .map(|p| ParameterInformation {
+                label: ParameterLabel::Simple(p.trim().to_string()),
+                documentation: None,
+            })
+            .collect();
+        return Some(vec![SignatureInformation {
+            label,
+            documentation: None,
+            parameters: Some(parameters),
+            active_parameter: None,
+        }]);
+    }
+
+    if let Some(label) = builtin_signature(&fn_name) {
+        return Some(vec![SignatureInformation {
+            label,
+            documentation: None,
+            parameters: None,
+            active_parameter: None,
+        }]);
+    }
+
+    None
+}
+
+fn find_callee_at_offset(source: &str, offset: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let offset = offset.min(bytes.len());
+
+    let mut depth = 0u32;
+    let mut paren_pos = None;
+    for i in (0..offset).rev() {
+        match bytes[i] {
+            b')' | b']' | b'}' => depth += 1,
+            b'(' | b'[' | b'{' => {
+                if depth == 0 {
+                    if bytes[i] == b'(' {
+                        paren_pos = Some(i);
+                        break;
+                    }
+                } else {
+                    depth -= 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    let open_paren = paren_pos?;
+
+    let before = &source[..open_paren];
+    let name_end = before.trim_end().len();
+    let before_trimmed = &before[..name_end];
+    let fn_name = before_trimmed
+        .rsplit(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+        .next()?
+        .trim()
+        .to_string();
+
+    if fn_name.is_empty() {
+        return None;
+    }
+    Some((fn_name, open_paren))
+}
+
+fn lookup_fn_params(doc: &Document, name: &str) -> Option<String> {
+    let index = doc.symbol_index.as_ref()?;
+    let symbols = index.definitions.get(name)?;
+    let symbol = symbols
+        .iter()
+        .find(|s| s.kind == IndexSymbolKind::Function)?;
+    let def_start: usize = symbol.full_span.start.into();
+    let def_end: usize = symbol.full_span.end.into();
+    let def_text = &doc.content[def_start..def_end.min(doc.content.len())];
+    let open = def_text.find('(')?;
+    let close = def_text[open..].find(')')?;
+    let params = def_text[open + 1..open + close].trim();
+    if params.is_empty() || params == ")" {
+        Some(String::new())
+    } else {
+        Some(params.to_string())
+    }
+}
+
+fn builtin_signature(name: &str) -> Option<String> {
+    // 60+ builtin function signatures for signature help.
+    match name {
+        // IO - file operations (16)
+        "io.readFile" => Some("io.readFile(path: String) -> String".to_string()),
+        "io.readFilePath" => Some("io.readFilePath(path: Path) -> String".to_string()),
+        "io.readFileBytesPath" => Some("io.readFileBytesPath(path: Path) -> Bytes".to_string()),
+        "io.writeFile" => Some("io.writeFile(path: String, content: String) -> ()".to_string()),
+        "io.writeFilePath" => {
+            Some("io.writeFilePath(path: Path, content: String) -> ()".to_string())
+        }
+        "io.writeFileBytesPath" => {
+            Some("io.writeFileBytesPath(path: Path, bytes: Bytes) -> ()".to_string())
+        }
+        "io.appendFile" => Some("io.appendFile(path: String, content: String) -> ()".to_string()),
+        "io.appendFilePath" => {
+            Some("io.appendFilePath(path: Path, content: String) -> ()".to_string())
+        }
+        "io.readDir" => Some("io.readDir(path: String) -> List<String>".to_string()),
+        "io.createDirAll" => Some("io.createDirAll(path: String) -> ()".to_string()),
+        "io.removeDirAll" => Some("io.removeDirAll(path: String) -> ()".to_string()),
+        "io.pathExists" => Some("io.pathExists(path: String) -> Bool".to_string()),
+        "io.isDir" => Some("io.isDir(path: String) -> Bool".to_string()),
+        "io.isFile" => Some("io.isFile(path: String) -> Bool".to_string()),
+        "io.hashFile" => Some("io.hashFile(path: String) -> String".to_string()),
+        "io.hashString" => Some("io.hashString(s: String) -> String".to_string()),
+        // IO - env / dir (4)
+        "io.getEnv" => Some("io.getEnv(name: String) -> Option<String>".to_string()),
+        "io.currentDir" => Some("io.currentDir() -> String".to_string()),
+        "io.homeDir" => Some("io.homeDir() -> Option<String>".to_string()),
+        "io.currentSystem" => Some("io.currentSystem() -> String".to_string()),
+        // IO - command / process (8)
+        "io.command" => {
+            Some("io.command(program: String, args: List<String>) -> Command".to_string())
+        }
+        "io.commandWith" => Some("io.commandWith(opts: Record) -> Command".to_string()),
+        "io.commandWithRedirects" => Some(
+            "io.commandWithRedirects(cmd: Command, redirs: List<Redirect>) -> Command".to_string(),
+        ),
+        "io.execCommand" => Some("io.execCommand(cmd: Command) -> ProcessResult".to_string()),
+        "io.pipeline" => Some("io.pipeline(commands: List<Command>) -> Pipeline".to_string()),
+        "io.pipelineWithRedirects" => Some(
+            "io.pipelineWithRedirects(p: Pipeline, redirs: List<Redirect>) -> Pipeline".to_string(),
+        ),
+        "io.execPipeline" => Some("io.execPipeline(p: Pipeline) -> ProcessResult".to_string()),
+        "io.processSuccess" => Some("io.processSuccess(r: ProcessResult) -> Bool".to_string()),
+        "io.processStdout" => Some("io.processStdout(r: ProcessResult) -> String".to_string()),
+        "io.processStderr" => Some("io.processStderr(r: ProcessResult) -> String".to_string()),
+        "io.processCode" => Some("io.processCode(r: ProcessResult) -> Int".to_string()),
+        // IO - Stream (14)
+        "io.streamList" => Some("io.streamList(xs: List<T>) -> Stream<T>".to_string()),
+        "io.streamLines" => Some("io.streamLines(path: String) -> Stream<String>".to_string()),
+        "io.streamCommand" => Some("io.streamCommand(cmd: Command) -> Stream<String>".to_string()),
+        "io.streamBytes" => Some("io.streamBytes(path: String) -> Stream<Bytes>".to_string()),
+        "io.streamMap" => {
+            Some("io.streamMap(s: Stream<A>, f: fn(A) -> B) -> Stream<B>".to_string())
+        }
+        "io.streamFilter" => {
+            Some("io.streamFilter(s: Stream<T>, pred: fn(T) -> Bool) -> Stream<T>".to_string())
+        }
+        "io.streamTake" => Some("io.streamTake(s: Stream<T>, n: Int) -> Stream<T>".to_string()),
+        "io.streamDrop" => Some("io.streamDrop(s: Stream<T>, n: Int) -> Stream<T>".to_string()),
+        "io.streamCollect" => Some("io.streamCollect(s: Stream<T>) -> List<T>".to_string()),
+        "io.streamPipe" => {
+            Some("io.streamPipe(s: Stream<T>, cmd: Command) -> ProcessResult".to_string())
+        }
+        "io.streamForEach" => {
+            Some("io.streamForEach(s: Stream<T>, cb: fn(T) -> ()) -> ()".to_string())
+        }
+        "io.streamFold" => {
+            Some("io.streamFold(s: Stream<T>, init: A, f: fn(A, T) -> A) -> A".to_string())
+        }
+        "io.streamWithTimeout" => {
+            Some("io.streamWithTimeout(s: Stream<T>, ms: Int) -> Stream<Option<T>>".to_string())
+        }
+        // IO - Task (7)
+        "io.taskCommand" => Some("io.taskCommand(cmd: Command) -> Task<ProcessResult>".to_string()),
+        "io.taskPipeline" => {
+            Some("io.taskPipeline(p: Pipeline) -> Task<ProcessResult>".to_string())
+        }
+        "io.awaitTask" => Some("io.awaitTask(task: Task<T>) -> T".to_string()),
+        "io.awaitTasks" => Some("io.awaitTasks(tasks: List<Task<T>>) -> List<T>".to_string()),
+        "io.awaitAny" => Some("io.awaitAny(tasks: List<Task<T>>) -> T".to_string()),
+        "io.awaitTaskWithTimeout" => {
+            Some("io.awaitTaskWithTimeout(task: Task<T>, ms: Int) -> Option<T>".to_string())
+        }
+        "io.cancel" => Some("io.cancel(task: Task<T>) -> ()".to_string()),
+        // IO - TTY / Job / Misc (8)
+        "io.isTTY" => Some("io.isTTY() -> Bool".to_string()),
+        "io.terminalSize" => Some("io.terminalSize() -> Option<(Int, Int)>".to_string()),
+        "io.setRawMode" => Some("io.setRawMode() -> ()".to_string()),
+        "io.resetTerminal" => Some("io.resetTerminal() -> ()".to_string()),
+        "io.jobs" => Some("io.jobs() -> List<Job>".to_string()),
+        "io.waitAnyJob" => Some("io.waitAnyJob() -> ProcessResult".to_string()),
+        "io.kill" => Some("io.kill(pid: Int, signal: Int) -> ()".to_string()),
+        "io.args" => Some("io.args() -> List<String>".to_string()),
+        // List functions (12)
+        "list.map" => Some("list.map(xs: List<A>, f: fn(A) -> B) -> List<B>".to_string()),
+        "list.filter" => {
+            Some("list.filter(xs: List<T>, pred: fn(T) -> Bool) -> List<T>".to_string())
+        }
+        "list.fold" => Some("list.fold(xs: List<T>, init: A, f: fn(A, T) -> A) -> A".to_string()),
+        "list.foldRight" => {
+            Some("list.foldRight(xs: List<T>, init: A, f: fn(T, A) -> A) -> A".to_string())
+        }
+        "list.zip" => Some("list.zip(xs: List<A>, ys: List<B>) -> List<(A, B)>".to_string()),
+        "list.take" => Some("list.take(xs: List<T>, n: Int) -> List<T>".to_string()),
+        "list.drop" => Some("list.drop(xs: List<T>, n: Int) -> List<T>".to_string()),
+        "list.head" => Some("list.head(xs: List<T>) -> Option<T>".to_string()),
+        "list.tail" => Some("list.tail(xs: List<T>) -> List<T>".to_string()),
+        "list.reverse" => Some("list.reverse(xs: List<T>) -> List<T>".to_string()),
+        "list.sort" => Some("list.sort(xs: List<T>) -> List<T>".to_string()),
+        "list.sum" => Some("list.sum(xs: List<Number>) -> Number".to_string()),
+        // String functions (8)
+        "string.split" => Some("string.split(s: String, sep: String) -> List<String>".to_string()),
+        "string.join" => Some("string.join(xs: List<String>, sep: String) -> String".to_string()),
+        "string.trim" => Some("string.trim(s: String) -> String".to_string()),
+        "string.upper" => Some("string.upper(s: String) -> String".to_string()),
+        "string.lower" => Some("string.lower(s: String) -> String".to_string()),
+        "string.contains" => Some("string.contains(s: String, sub: String) -> Bool".to_string()),
+        "string.replace" => {
+            Some("string.replace(s: String, from: String, to: String) -> String".to_string())
+        }
+        "string.len" => Some("string.len(s: String) -> Int".to_string()),
+        _ => None,
+    }
+}
+fn count_commas_before(source: &str, offset: usize) -> u32 {
+    let bytes = source.as_bytes();
+    let offset = offset.min(bytes.len());
+    let mut depth = 0u32;
+    let mut paren_start = 0usize;
+    for i in (0..offset).rev() {
+        match bytes[i] {
+            b')' => depth += 1,
+            b'(' => {
+                if depth == 0 {
+                    paren_start = i + 1;
+                    break;
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    let slice = &source[paren_start..offset];
+    slice.bytes().filter(|&b| b == b',').count() as u32
+}
+
+// =============================================================================
+// Completion documentation / 补全文档
+// =============================================================================
+
+/// Get documentation for a completion item.
+fn completion_documentation(label: &str, _kind: Option<CompletionItemKind>) -> Option<String> {
+    match label {
+        // IO - file
+        "io.readFile" => {
+            Some("Reads entire file contents as a String.\n\n**Effect:** I/O".to_string())
+        }
+        "io.readFilePath" => Some("Reads file from a typed Path.\n\n**Effect:** I/O".to_string()),
+        "io.readFileBytesPath" => {
+            Some("Reads raw bytes from a typed Path.\n\n**Effect:** I/O".to_string())
+        }
+        "io.writeFile" => {
+            Some("Writes content to a file. Creates if missing.\n\n**Effect:** I/O".to_string())
+        }
+        "io.writeFilePath" => {
+            Some("Writes content to a typed Path.\n\n**Effect:** I/O".to_string())
+        }
+        "io.appendFile" => Some("Appends content to a file.\n\n**Effect:** I/O".to_string()),
+        "io.readDir" => Some("Lists directory contents.\n\n**Effect:** I/O".to_string()),
+        "io.createDirAll" => {
+            Some("Creates directories recursively.\n\n**Effect:** I/O".to_string())
+        }
+        "io.removeDirAll" => {
+            Some("Removes directories recursively.\n\n**Effect:** I/O".to_string())
+        }
+        "io.pathExists" => {
+            Some("Returns `true` if path exists on filesystem.\n\n**Effect:** I/O".to_string())
+        }
+        "io.isDir" => Some("Returns `true` if path is a directory.\n\n**Effect:** I/O".to_string()),
+        "io.isFile" => Some("Returns `true` if path is a file.\n\n**Effect:** I/O".to_string()),
+        "io.hashFile" => {
+            Some("Returns SHA-256 hash of file contents.\n\n**Effect:** I/O".to_string())
+        }
+        "io.hashString" => {
+            Some("Returns SHA-256 hash of a string.\n\n**Effect:** Pure".to_string())
+        }
+        // IO - env
+        "io.getEnv" => {
+            Some("Gets environment variable value, or `None`.\n\n**Effect:** I/O".to_string())
+        }
+        "io.currentDir" => {
+            Some("Returns current working directory.\n\n**Effect:** I/O".to_string())
+        }
+        "io.homeDir" => Some("Returns home directory, or `None`.\n\n**Effect:** I/O".to_string()),
+        // IO - command
+        "io.command" => Some(
+            "Constructs a `Command` from program + args. Pure constructor.\n\n**Effect:** Pure"
+                .to_string(),
+        ),
+        "io.commandWith" => {
+            Some("Constructs a `Command` with options record.\n\n**Effect:** Pure".to_string())
+        }
+        "io.execCommand" => {
+            Some("Executes a command, returns `ProcessResult`.\n\n**Effect:** Process".to_string())
+        }
+        "io.pipeline" => Some(
+            "Constructs a `Pipeline` from commands. Pure constructor.\n\n**Effect:** Pure"
+                .to_string(),
+        ),
+        "io.execPipeline" => {
+            Some("Executes a pipeline, returns `ProcessResult`.\n\n**Effect:** Process".to_string())
+        }
+        "io.processSuccess" => {
+            Some("Returns `true` if process exited with code 0.\n\n**Effect:** Pure".to_string())
+        }
+        "io.processStdout" => {
+            Some("Returns stdout of a `ProcessResult`.\n\n**Effect:** Pure".to_string())
+        }
+        "io.processStderr" => {
+            Some("Returns stderr of a `ProcessResult`.\n\n**Effect:** Pure".to_string())
+        }
+        "io.processCode" => {
+            Some("Returns exit code of a `ProcessResult`.\n\n**Effect:** Pure".to_string())
+        }
+        // IO - Stream
+        "io.streamList" => {
+            Some("Creates a `Stream<T>` from a `List<T>`.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamLines" => Some(
+            "Streams lines from a file as `Stream<String>`.\n\n**Effect:** Stream + I/O"
+                .to_string(),
+        ),
+        "io.streamCommand" => {
+            Some("Streams stdout lines from a command.\n\n**Effect:** Stream + Process".to_string())
+        }
+        "io.streamBytes" => {
+            Some("Streams byte chunks from a file.\n\n**Effect:** Stream + I/O".to_string())
+        }
+        "io.streamMap" => Some(
+            "Transforms each element of a stream via closure.\n\n**Effect:** Stream".to_string(),
+        ),
+        "io.streamFilter" => {
+            Some("Filters stream elements by predicate.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamTake" => {
+            Some("Takes first N elements from a stream.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamDrop" => {
+            Some("Drops first N elements from a stream.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamCollect" => {
+            Some("Collects all stream elements into a `List<T>`.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamPipe" => {
+            Some("Pipes stream contents to a command.\n\n**Effect:** Stream + Process".to_string())
+        }
+        "io.streamForEach" => {
+            Some("Runs callback for each stream element.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamFold" => {
+            Some("Folds a stream with accumulator function.\n\n**Effect:** Stream".to_string())
+        }
+        "io.streamWithTimeout" => {
+            Some("Adds timeout to stream (wraps in `Option`).\n\n**Effect:** Stream".to_string())
+        }
+        // IO - Task
+        "io.taskCommand" => Some(
+            "Creates a `Task` from a command for async execution.\n\n**Effect:** Task".to_string(),
+        ),
+        "io.awaitTask" => {
+            Some("Awaits a single task result (blocking).\n\n**Effect:** Task".to_string())
+        }
+        "io.awaitTasks" => {
+            Some("Awaits multiple tasks, returns list of results.\n\n**Effect:** Task".to_string())
+        }
+        "io.awaitAny" => Some("Awaits first task to complete.\n\n**Effect:** Task".to_string()),
+        "io.awaitTaskWithTimeout" => {
+            Some("Awaits task with timeout, returns `Option<T>`.\n\n**Effect:** Task".to_string())
+        }
+        "io.cancel" => Some("Cancels a running task.\n\n**Effect:** Task".to_string()),
+        // IO - TTY / Job
+        "io.isTTY" => Some("Returns `true` if stdin is a terminal.\n\n**Effect:** I/O".to_string()),
+        "io.terminalSize" => Some(
+            "Returns terminal dimensions as `Option<(rows, cols)>`.\n\n**Effect:** I/O".to_string(),
+        ),
+        "io.setRawMode" => {
+            Some("Sets terminal to raw mode (no line buffering).\n\n**Effect:** I/O".to_string())
+        }
+        "io.resetTerminal" => {
+            Some("Resets terminal to normal mode.\n\n**Effect:** I/O".to_string())
+        }
+        "io.jobs" => Some("Lists running background jobs.\n\n**Effect:** I/O".to_string()),
+        "io.waitAnyJob" => {
+            Some("Waits for any background job to complete.\n\n**Effect:** Process".to_string())
+        }
+        "io.kill" => Some("Kills a process by PID with signal.\n\n**Effect:** Process".to_string()),
+        "io.args" => {
+            Some("Returns command-line arguments passed to script.\n\n**Effect:** Pure".to_string())
+        }
+        // List
+        "list.map" => {
+            Some("Applies function to each element. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "list.filter" => {
+            Some("Returns elements satisfying predicate. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "list.fold" => Some(
+            "Reduces list from left with binary function. O(n).\n\n**Effect:** Pure".to_string(),
+        ),
+        "list.foldRight" => Some(
+            "Reduces list from right with binary function. O(n).\n\n**Effect:** Pure".to_string(),
+        ),
+        "list.zip" => {
+            Some("Combines two lists into pairs. O(min(n,m)).\n\n**Effect:** Pure".to_string())
+        }
+        "list.take" => Some("Returns first N elements. O(n).\n\n**Effect:** Pure".to_string()),
+        "list.drop" => Some("Drops first N elements. O(n).\n\n**Effect:** Pure".to_string()),
+        "list.head" => {
+            Some("Returns first element, or `None`. O(1).\n\n**Effect:** Pure".to_string())
+        }
+        "list.tail" => Some("Returns all but first element. O(1).\n\n**Effect:** Pure".to_string()),
+        "list.reverse" => Some("Reverses element order. O(n).\n\n**Effect:** Pure".to_string()),
+        "list.sort" => Some("Sorts elements (stable). O(n log n).\n\n**Effect:** Pure".to_string()),
+        "list.sum" => Some("Sums numeric elements. O(n).\n\n**Effect:** Pure".to_string()),
+        // String
+        "string.split" => {
+            Some("Splits string by separator into list. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "string.join" => {
+            Some("Joins list of strings with separator. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "string.trim" => {
+            Some("Removes leading/trailing whitespace. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "string.upper" => Some("Converts to uppercase. O(n).\n\n**Effect:** Pure".to_string()),
+        "string.lower" => Some("Converts to lowercase. O(n).\n\n**Effect:** Pure".to_string()),
+        "string.contains" => {
+            Some("Returns `true` if contains substring. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "string.replace" => {
+            Some("Replaces all occurrences of substring. O(n).\n\n**Effect:** Pure".to_string())
+        }
+        "string.len" => Some("Returns string length. O(1).\n\n**Effect:** Pure".to_string()),
+        "string.chars" => Some("Returns list of characters. O(n).\n\n**Effect:** Pure".to_string()),
+        "string.lines" => Some("Splits into lines. O(n).\n\n**Effect:** Pure".to_string()),
+        _ => None,
+    }
+}
+
+// =============================================================================
+// Type-aware completion helpers
+// =============================================================================
+
+/// Find the type name of the receiver expression before the dot at `offset`.
+///
+/// Walks the parsed AST to find the expression whose span ends at or near
+/// the dot position, then looks up its type in the semantics table.
+fn find_receiver_type_name(doc: &Document, dot_offset: usize) -> Option<String> {
+    let ast = doc.ast.as_ref()?;
+    let semantics = doc.semantics.as_ref()?;
+
+    // Walk the AST to find the expression that ends right before the dot.
+    // 遍历 AST 找到在点之前结束的表达式。
+    let receiver_span = find_receiver_expr_span(ast, dot_offset)?;
+
+    // Look up the expression's type.
+    // 查找表达式的类型。
+    let ty = semantics.expr_type(receiver_span)?;
+
+    // Convert Ty to a user-friendly type name.
+    // 将 Ty 转换为用户友好的类型名称。
+    Some(type_to_name(ty, semantics))
+}
+
+/// Walk the AST to find the expression whose span ends just before the dot offset.
+fn find_receiver_expr_span(ast: &neve_syntax::SourceFile, dot_offset: usize) -> Option<Span> {
+    for item in &ast.items {
+        if let Some(span) = find_expr_ending_at(item, dot_offset) {
+            return Some(span);
+        }
+    }
+    None
+}
+
+fn find_expr_ending_at(item: &neve_syntax::Item, dot_offset: usize) -> Option<Span> {
+    use neve_syntax::ItemKind;
+
+    match &item.kind {
+        ItemKind::Let(def) => expr_ending_at(&def.value, dot_offset),
+        ItemKind::Fn(def) => expr_ending_at(&def.body, dot_offset),
+        ItemKind::ExprStmt(expr) => expr_ending_at(expr, dot_offset),
+        _ => None,
+    }
+}
+
+fn expr_ending_at(expr: &neve_syntax::Expr, dot_offset: usize) -> Option<Span> {
+    use neve_syntax::ExprKind;
+
+    let expr_end: usize = expr.span.end.into();
+    let expr_start: usize = expr.span.start.into();
+
+    // If the dot position is within this expression or just after it (before the dot),
+    // this could be the receiver.
+    // 如果点位置在这个表达式内或紧接其后（在点之前），这可能是接收者。
+    if expr_start < dot_offset && dot_offset <= expr_end + 1 {
+        // Check children first (since we want the innermost expression).
+        // 先检查子表达式（因为我们想要最内层的表达式）。
+        match &expr.kind {
+            ExprKind::Call { func, args } => {
+                if let Some(s) = expr_ending_at(func, dot_offset) {
+                    return Some(s);
+                }
+                for arg in args {
+                    if let Some(s) = expr_ending_at(arg, dot_offset) {
+                        return Some(s);
+                    }
+                }
+            }
+            ExprKind::MethodCall { receiver, args, .. } => {
+                if let Some(s) = expr_ending_at(receiver, dot_offset) {
+                    return Some(s);
+                }
+                for arg in args {
+                    if let Some(s) = expr_ending_at(arg, dot_offset) {
+                        return Some(s);
+                    }
+                }
+            }
+            ExprKind::Field { base, .. } => {
+                if let Some(s) = expr_ending_at(base, dot_offset) {
+                    return Some(s);
+                }
+            }
+            ExprKind::Binary { left, right, .. } => {
+                if let Some(s) = expr_ending_at(left, dot_offset) {
+                    return Some(s);
+                }
+                if let Some(s) = expr_ending_at(right, dot_offset) {
+                    return Some(s);
+                }
+            }
+            ExprKind::Block { stmts, expr: tail } => {
+                for stmt in stmts {
+                    if let neve_syntax::StmtKind::Let { value, .. } = &stmt.kind
+                        && let Some(s) = expr_ending_at(value, dot_offset)
+                    {
+                        return Some(s);
+                    }
+                }
+                if let Some(tail_expr) = tail
+                    && let Some(s) = expr_ending_at(tail_expr, dot_offset)
+                {
+                    return Some(s);
+                }
+            }
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if let Some(s) = expr_ending_at(condition, dot_offset) {
+                    return Some(s);
+                }
+                if let Some(s) = expr_ending_at(then_branch, dot_offset) {
+                    return Some(s);
+                }
+                if let Some(s) = expr_ending_at(else_branch, dot_offset) {
+                    return Some(s);
+                }
+            }
+            ExprKind::Match { scrutinee, arms } => {
+                if let Some(s) = expr_ending_at(scrutinee, dot_offset) {
+                    return Some(s);
+                }
+                for arm in arms {
+                    if let Some(s) = expr_ending_at(&arm.body, dot_offset) {
+                        return Some(s);
+                    }
+                }
+            }
+            ExprKind::Let { value, body, .. } => {
+                if let Some(s) = expr_ending_at(value, dot_offset) {
+                    return Some(s);
+                }
+                if let Some(s) = expr_ending_at(body, dot_offset) {
+                    return Some(s);
+                }
+            }
+            ExprKind::Var(_)
+            | ExprKind::List(_)
+            | ExprKind::Record(_)
+            | ExprKind::Lambda { .. }
+            | ExprKind::String(_)
+            | ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Char(_)
+            | ExprKind::PathLit(_) => {
+                // Leaf expressions: return their span as the receiver.
+                // 叶子表达式：返回它们的 span 作为接收者。
+            }
+            _ => {}
+        }
+
+        // Return this expression's span if the dot is after it.
+        // 如果点在它之后，返回该表达式的 span。
+        if dot_offset == expr_end || dot_offset == expr_end + 1 {
+            return Some(expr.span);
+        }
+    }
+
+    None
+}
+
+/// Convert a Ty to a human-readable type name for method filtering.
+fn type_to_name(ty: &neve_hir::Ty, semantics: &neve_frontend::ModuleSemantics) -> String {
+    use neve_hir::TyKind;
+
+    match &ty.kind {
+        TyKind::String => "String".to_string(),
+        TyKind::Int => "Int".to_string(),
+        TyKind::Float => "Float".to_string(),
+        TyKind::Bool => "Bool".to_string(),
+        TyKind::Char => "Char".to_string(),
+        TyKind::Unit => "Unit".to_string(),
+        TyKind::Named(def_id, _args) => def_id_to_name(*def_id, semantics),
+        TyKind::Record(_) | TyKind::DynamicRecord(_) | TyKind::SafeRecordBase(_) => {
+            "Record".to_string()
+        }
+        TyKind::Fn(..) => "Fn".to_string(),
+        TyKind::Tuple(_) => "Tuple".to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Resolve a DefId to a human-readable name using the module semantics.
+fn def_id_to_name(def_id: neve_hir::DefId, semantics: &neve_frontend::ModuleSemantics) -> String {
+    semantics
+        .global_names
+        .get(&def_id)
+        .cloned()
+        .unwrap_or_default()
+}
+
+// =============================================================================
+// Inlay hints / 内联提示
+// =============================================================================
+
+/// Build inlay hints showing inferred types for let bindings and functions.
+fn build_inlay_hints(doc: &Document) -> Vec<InlayHint> {
+    let mut hints = Vec::new();
+    let ast = match doc.ast.as_ref() {
+        Some(ast) => ast,
+        None => return hints,
+    };
+    let semantics = match doc.semantics.as_ref() {
+        Some(s) => s,
+        None => return hints,
+    };
+
+    use neve_syntax::ItemKind;
+
+    for item in &ast.items {
+        match &item.kind {
+            ItemKind::Let(def) => {
+                // Show type hint for let bindings: `let x: <Type> = ...`
+                // 为 let 绑定显示类型提示：`let x: <Type> = ...`
+                if let Some(ty) = semantics.expr_type(def.value.span) {
+                    let type_str = format_type_hint(ty);
+                    if !type_str.is_empty() && type_str != "()" {
+                        let end: usize = def.value.span.start.into();
+                        let (line, col) = doc.position_at(end);
+                        hints.push(InlayHint {
+                            position: Position::new(line, col),
+                            label: InlayHintLabel::String(format!(": {}", type_str)),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: Some(true),
+                            padding_right: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            ItemKind::Fn(def) => {
+                // Show return type hint: `fn name(...): <ReturnType>`
+                // 显示返回类型提示：`fn name(...): <ReturnType>`
+                if let Some(ty) = semantics.expr_type(def.body.span) {
+                    let type_str = format_type_hint(ty);
+                    if !type_str.is_empty() && type_str != "()" {
+                        // Place hint at end of the parameter list
+                        // 将提示放在参数列表的末尾
+                        let hint_pos = if let Some(last_param) = def.params.last() {
+                            let end: usize = last_param.span.end.into();
+                            let (line, col) = doc.position_at(end + 1);
+                            Position::new(line, col)
+                        } else {
+                            let end: usize = def.name.span.end.into();
+                            let (line, col) = doc.position_at(end + 2); // after "fn name"
+                            Position::new(line, col)
+                        };
+                        hints.push(InlayHint {
+                            position: hint_pos,
+                            label: InlayHintLabel::String(format!("-> {}", type_str)),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: Some(true),
+                            padding_right: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            ItemKind::ExprStmt(expr) => {
+                collect_expr_inlay_hints(expr, doc, semantics, &mut hints);
+            }
+            _ => {}
+        }
+    }
+
+    hints
+}
+
+fn collect_expr_inlay_hints(
+    expr: &neve_syntax::Expr,
+    doc: &Document,
+    semantics: &neve_frontend::ModuleSemantics,
+    hints: &mut Vec<InlayHint>,
+) {
+    use neve_syntax::{ExprKind, StmtKind};
+
+    match &expr.kind {
+        ExprKind::Let { value, body, .. } => {
+            if let Some(ty) = semantics.expr_type(value.span) {
+                let type_str = format_type_hint(ty);
+                if !type_str.is_empty() && type_str != "()" {
+                    let end: usize = value.span.start.into();
+                    let (line, col) = doc.position_at(end);
+                    hints.push(InlayHint {
+                        position: Position::new(line, col),
+                        label: InlayHintLabel::String(format!(": {}", type_str)),
+                        kind: Some(InlayHintKind::TYPE),
+                        text_edits: None,
+                        tooltip: None,
+                        padding_left: Some(true),
+                        padding_right: None,
+                        data: None,
+                    });
+                }
+            }
+            collect_expr_inlay_hints(value, doc, semantics, hints);
+            collect_expr_inlay_hints(body, doc, semantics, hints);
+        }
+        ExprKind::Block { stmts, expr: tail } => {
+            for stmt in stmts {
+                if let StmtKind::Let { value, .. } = &stmt.kind {
+                    collect_expr_inlay_hints(value, doc, semantics, hints);
+                }
+            }
+            if let Some(tail) = tail {
+                collect_expr_inlay_hints(tail, doc, semantics, hints);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Format a type for inlay hint display.
+fn format_type_hint(ty: &neve_hir::Ty) -> String {
+    use neve_hir::TyKind;
+    match &ty.kind {
+        TyKind::String => "String".to_string(),
+        TyKind::Int => "Int".to_string(),
+        TyKind::Float => "Float".to_string(),
+        TyKind::Bool => "Bool".to_string(),
+        TyKind::Char => "Char".to_string(),
+        TyKind::Unit => "()".to_string(),
+        TyKind::Named(_, args) => {
+            // For now, just use the TypeKind::Named representation
+            // 目前只使用 TyKind::Named 的表示形式
+            if args.is_empty() {
+                def_id_to_name_hint(ty)
+            } else {
+                let args_str: Vec<String> = args.iter().map(format_type_hint).collect();
+                format!("{}<{}>", def_id_to_name_hint(ty), args_str.join(", "))
+            }
+        }
+        TyKind::Fn(params, ret) => {
+            let params_str: Vec<String> = params.iter().map(format_type_hint).collect();
+            format!("fn({}) -> {}", params_str.join(", "), format_type_hint(ret))
+        }
+        TyKind::Tuple(types) => {
+            let types_str: Vec<String> = types.iter().map(format_type_hint).collect();
+            format!("({})", types_str.join(", "))
+        }
+        TyKind::Record(fields) | TyKind::DynamicRecord(fields) => {
+            let fields_str: Vec<String> = fields
+                .iter()
+                .map(|(name, ty)| format!("{}: {}", name, format_type_hint(ty)))
+                .collect();
+            format!("#{{ {} }}", fields_str.join(", "))
+        }
+        _ => String::new(),
+    }
+}
+
+fn def_id_to_name_hint(_ty: &neve_hir::Ty) -> String {
+    // Simplified: just return a placeholder for named types.
+    // In a full implementation, use the module registry to resolve DefIds.
+    "T".to_string()
+}
+
+// =============================================================================
+// Import path completion / 导入路径补全
+// =============================================================================
+
+/// Get import path completions if the cursor is in an import statement.
+fn get_import_completions(doc: &Document, pos: Position) -> Option<Vec<CompletionItem>> {
+    // Check if we're in an import statement context.
+    // 检查是否在导入语句上下文中。
+    let line_offset = doc.offset_at(pos.line, 0);
+    let line_text = &doc.content[line_offset..doc.content.len().min(line_offset + 200)];
+    let trimmed = line_text.trim();
+
+    if !trimmed.starts_with("import ") {
+        return None;
+    }
+
+    // Extract the current import path being typed.
+    // 提取当前正在输入的导入路径。
+    let after_import = &trimmed[7..]; // after "import "
+    let prefix = after_import.trim_end_matches(';');
+
+    // Find .neve files in the workspace relative to the current file.
+    // 查找工作区中相对于当前文件的 .neve 文件。
+    let current_dir = std::path::Path::new(&doc.uri)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+
+    let mut items = Vec::new();
+    // Collect entries so we can iterate twice.
+    // 收集条目以便可以迭代两次。
+    let all_entries: Vec<_> = match std::fs::read_dir(&current_dir) {
+        Ok(entries) => entries.flatten().collect(),
+        Err(_) => return None,
+    };
+
+    for entry in &all_entries {
+        let path = entry.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        // Match .neve files, excluding current file.
+        // 匹配 .neve 文件，排除当前文件。
+        if name.ends_with(".neve") && !doc.uri.ends_with(name) {
+            let module_name = name.trim_end_matches(".neve");
+            if prefix.is_empty() || module_name.starts_with(prefix) {
+                items.push(CompletionItem {
+                    label: module_name.to_string(),
+                    kind: Some(CompletionItemKind::MODULE),
+                    detail: Some(format!("Import module ./{}", name)),
+                    insert_text: Some(module_name.to_string()),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    // Also suggest subdirectories as module prefixes.
+    // 同时建议子目录作为模块前缀。
+    for entry in &all_entries {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !name.starts_with('.') && (prefix.is_empty() || name.starts_with(prefix)) {
+                items.push(CompletionItem {
+                    label: format!("{}/", name),
+                    kind: Some(CompletionItemKind::MODULE),
+                    detail: Some(format!("Module directory ./{}", name)),
+                    insert_text: Some(format!("{}/", name)),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
+    if items.is_empty() { None } else { Some(items) }
+}
+
+// =============================================================================
+// Enhanced hover documentation / 增强悬停文档
+// =============================================================================
+
+/// Get documentation text for a builtin symbol name.
+pub(crate) fn builtin_hover_docs(name: &str) -> Option<&'static str> {
+    match name {
+        "io.readFile" => Some(
+            "Reads the entire contents of a file as a String.\n\n**Signature:** `io.readFile(path: String) -> String`\n**Effect:** Yes (I/O)",
+        ),
+        "io.readFilePath" => Some(
+            "Reads file contents from a typed Path.\n\n**Signature:** `io.readFilePath(path: Path) -> String`\n**Effect:** Yes (I/O)",
+        ),
+        "io.writeFile" => Some(
+            "Writes content to a file, creating it if necessary.\n\n**Signature:** `io.writeFile(path: String, content: String) -> ()`\n**Effect:** Yes (I/O)",
+        ),
+        "io.writeFilePath" => Some(
+            "Writes content to a typed Path.\n\n**Signature:** `io.writeFilePath(path: Path, content: String) -> ()`\n**Effect:** Yes (I/O)",
+        ),
+        "io.pathExists" => Some(
+            "Returns `true` if the path exists on the filesystem.\n\n**Signature:** `io.pathExists(path: String) -> Bool`\n**Effect:** Yes (I/O)",
+        ),
+        "io.getEnv" => Some(
+            "Returns the value of an environment variable, or `None`.\n\n**Signature:** `io.getEnv(name: String) -> Option<String>`\n**Effect:** Yes (I/O)",
+        ),
+        "io.command" => Some(
+            "Constructs a `Command` value from a program and arguments.\n\n**Signature:** `io.command(program: String, args: List<String>) -> Command`\n**Effect:** No (pure constructor)",
+        ),
+        "io.execCommand" => Some(
+            "Executes a command and returns `ProcessResult`.\n\n**Signature:** `io.execCommand(cmd: Command) -> ProcessResult`\n**Effect:** Yes (process)",
+        ),
+        "io.pipeline" => Some(
+            "Constructs a `Pipeline` from a list of commands (pipe chain).\n\n**Signature:** `io.pipeline(cmds: List<Command>) -> Pipeline`\n**Effect:** No (pure constructor)",
+        ),
+        "io.execPipeline" => Some(
+            "Executes a pipeline and returns `ProcessResult`.\n\n**Signature:** `io.execPipeline(p: Pipeline) -> ProcessResult`\n**Effect:** Yes (process)",
+        ),
+        "io.streamList" => Some(
+            "Creates a Stream from a List for lazy processing.\n\n**Signature:** `io.streamList(xs: List<T>) -> Stream<T>`\n**Effect:** Yes (stream)",
+        ),
+        "io.streamMap" => Some(
+            "Transforms each element of a Stream using a closure.\n\n**Signature:** `io.streamMap(s: Stream<A>, f: fn(A) -> B) -> Stream<B>`\n**Effect:** Yes (stream)",
+        ),
+        "io.streamFilter" => Some(
+            "Filters elements from a Stream using a predicate.\n\n**Signature:** `io.streamFilter(s: Stream<T>, pred: fn(T) -> Bool) -> Stream<T>`\n**Effect:** Yes (stream)",
+        ),
+        "io.streamCollect" => Some(
+            "Collects all elements from a Stream into a List.\n\n**Signature:** `io.streamCollect(s: Stream<T>) -> List<T>`\n**Effect:** Yes (stream)",
+        ),
+        "io.streamFold" => Some(
+            "Folds a Stream with an accumulator function.\n\n**Signature:** `io.streamFold(s: Stream<T>, init: A, f: fn(A, T) -> A) -> A`\n**Effect:** Yes (stream)",
+        ),
+        "io.cancel" => Some(
+            "Cancels a running task.\n\n**Signature:** `io.cancel(task: Task<T>) -> ()`\n**Effect:** Yes (task)",
+        ),
+        "io.args" => Some(
+            "Returns the list of command-line arguments.\n\n**Signature:** `io.args() -> List<String>`\n**Effect:** No (pure)",
+        ),
+        "list.map" => Some(
+            "Applies a function to each element, returning a new list.\n\n**Signature:** `list.map(xs: List<A>, f: fn(A) -> B) -> List<B>`\n**Complexity:** O(n)",
+        ),
+        "list.filter" => Some(
+            "Returns elements that satisfy the predicate.\n\n**Signature:** `list.filter(xs: List<T>, pred: fn(T) -> Bool) -> List<T>`\n**Complexity:** O(n)",
+        ),
+        "list.fold" => Some(
+            "Reduces a list from the left with a binary function.\n\n**Signature:** `list.fold(xs: List<T>, init: A, f: fn(A, T) -> A) -> A`\n**Complexity:** O(n)",
+        ),
+        "string.split" => Some(
+            "Splits a string by separator into a list of substrings.\n\n**Signature:** `string.split(s: String, sep: String) -> List<String>`\n**Complexity:** O(n)",
+        ),
+        "string.join" => Some(
+            "Joins a list of strings with a separator.\n\n**Signature:** `string.join(xs: List<String>, sep: String) -> String`\n**Complexity:** O(n)",
+        ),
+        _ => None,
+    }
+}
+
+// =============================================================================
+// Folding ranges / 折叠区域
+// =============================================================================
+
+/// Build folding ranges from the AST.
+fn build_folding_ranges(doc: &Document) -> Vec<FoldingRange> {
+    let mut ranges = Vec::new();
+    let ast = match doc.ast.as_ref() {
+        Some(ast) => ast,
+        None => return ranges,
+    };
+
+    use neve_syntax::ItemKind;
+
+    for item in &ast.items {
+        match &item.kind {
+            ItemKind::Fn(def) => {
+                let (sl, _) = doc.position_at(def.body.span.start.into());
+                let (el, _) = doc.position_at(def.body.span.end.into());
+                if el > sl {
+                    ranges.push(FoldingRange {
+                        start_line: sl,
+                        start_character: None,
+                        end_line: el,
+                        end_character: None,
+                        kind: Some(FoldingRangeKind::Region),
+                        collapsed_text: None,
+                    });
+                }
+            }
+            ItemKind::Struct(_) | ItemKind::Enum(_) | ItemKind::Trait(_) | ItemKind::Impl(_) => {
+                let (sl, _) = doc.position_at(item.span.start.into());
+                let (el, _) = doc.position_at(item.span.end.into());
+                if el > sl {
+                    ranges.push(FoldingRange {
+                        start_line: sl,
+                        start_character: None,
+                        end_line: el,
+                        end_character: None,
+                        kind: Some(FoldingRangeKind::Region),
+                        collapsed_text: None,
+                    });
+                }
+            }
+            ItemKind::ExprStmt(expr) => {
+                collect_folds(expr.span, doc, &mut ranges);
+            }
+            ItemKind::Let(def) => {
+                collect_folds(def.value.span, doc, &mut ranges);
+            }
+            _ => {}
+        }
+    }
+    ranges.sort_by_key(|r| r.start_line);
+    ranges
+}
+
+fn collect_folds(span: Span, doc: &Document, ranges: &mut Vec<FoldingRange>) {
+    // Add range if spans multiple lines.
+    let (sl, _) = doc.position_at(span.start.into());
+    let (el, _) = doc.position_at(span.end.into());
+    if el > sl {
+        ranges.push(FoldingRange {
+            start_line: sl,
+            start_character: None,
+            end_line: el,
+            end_character: None,
+            kind: Some(FoldingRangeKind::Region),
+            collapsed_text: None,
+        });
     }
 }

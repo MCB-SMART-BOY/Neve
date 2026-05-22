@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Neve",
+  "scopeName": "source.neve",
+  "fileTypes": ["neve"],
+  "patterns": [
+    {
+      "name": "comment.line.neve",
+      "match": "--.*"
+    },
+    {
+      "name": "keyword.control.neve",
+      "match": "\\b(let|fn|if|then|else|match|import|as|type|struct|enum|trait|impl|pub|effect|lazy)\\b"
+    },
+    {
+      "name": "constant.language.neve",
+      "match": "\\b(true|false)\\b"
+    },
+    {
+      "name": "storage.type.neve",
+      "match": "\\b(Int|Float|Bool|String|Char|Unit|List|Record|Option|Result|Path|Bytes|Command|Pipeline|ProcessResult|Stream|Task|Job)\\b"
+    },
+    {
+      "name": "constant.numeric.neve",
+      "match": "\\b[0-9][0-9_]*(\\.[0-9]+)?\\b"
+    },
+    {
+      "name": "keyword.operator.neve",
+      "match": "(\\+|\\-|\\*|\\/|\\%|\\^|==|!=|<=|>=|<|>|&&|\\|\\||\\+\\+|\\/\\/|\\?\\?|\\?\\.|\\|>|->|=>|\\!|=)"
+    },
+    {
+      "name": "punctuation.neve",
+      "match": "[(){}\\[\\],;:\\.@]"
+    },
+    {
+      "name": "punctuation.section.neve",
+      "match": "#\\{"
+    },
+    {
+      "name": "string.quoted.double.neve",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.neve",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.neve",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.neve",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.interpolated.neve",
+      "begin": "`",
+      "end": "`",
+      "patterns": [
+        {
+          "name": "meta.embedded.neve",
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "string.unquoted.neve",
+      "match": "(\\.\\/|\\.\\.\\/|\\/)[a-zA-Z0-9_\\-\\.\\/]+"
+    }
+  ]
+}

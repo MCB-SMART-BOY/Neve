@@ -1,39 +1,84 @@
 %YAML 1.2
 ---
 # Neve syntax highlighting for Sublime Text / VS Code / Helix
+# Kept in sync with tree-sitter-neve/grammar.js and tree-sitter-neve/queries/highlights.scm
 name: Neve
 scope: source.neve
 file_extensions: [neve]
 
 contexts:
   main:
+    # Comments
     - match: '--.*'
       scope: comment.line.neve
 
+    # Keywords
     - match: \b(let|fn|if|then|else|match|import|as|type|struct|enum|trait|impl|pub|effect|lazy)\b
       scope: keyword.control.neve
 
+    # Boolean literals
     - match: \b(true|false)\b
       scope: constant.language.neve
 
-    - match: \b(Int|Float|Bool|String|Char|Unit|List|Record|Option|Result|Path|Bytes|Command|Pipeline|ProcessResult|Stream|Task)\b
+    # Builtin types
+    - match: \b(Int|Float|Bool|String|Char|Unit|List|Record|Option|Result|Path|Bytes|Command|Pipeline|ProcessResult|Stream|Task|Job)\b
       scope: storage.type.neve
 
-    - match: \b[0-9]+(\.[0-9]+)?\b
+    # Numbers
+    - match: \b[0-9][0-9_]*(\.[0-9]+)?\b
       scope: constant.numeric.neve
 
+    # Operators
+    - match: '(\+|\-|\*|\/|\%|\^|==|!=|<=|>=|<|>|&&|\|\||\+\+|\/\/|\?\?|\?\.|\|>|->|=>|\!|=)'
+      scope: keyword.operator.neve
+
+    # Punctuation / delimiters
+    - match: '[(){}\[\],;:\.@]'
+      scope: punctuation.neve
+
+    # Record literal
+    - match: '#\{'
+      scope: punctuation.section.neve
+
+    # Strings
     - match: '"'
       push: string
 
+    # Characters
+    - match: "'"
+      push: char
+
+    # Interpolated strings
     - match: '`'
       push: interpolation
 
+    # Path literals
+    - match: '(\.\/|\.\.\/|\/)[a-zA-Z0-9_\-\.\/]+'
+      scope: string.unquoted.neve
+
   string:
     - meta_scope: string.quoted.double.neve
+    - match: '\\.'
+      scope: constant.character.escape.neve
     - match: '"'
+      pop: true
+
+  char:
+    - meta_scope: string.quoted.single.neve
+    - match: '\\.'
+      scope: constant.character.escape.neve
+    - match: "'"
       pop: true
 
   interpolation:
     - meta_scope: string.interpolated.neve
+    - match: '\{'
+      push: interpolation_expr
     - match: '`'
       pop: true
+
+  interpolation_expr:
+    - meta_scope: string.interpolated.neve
+    - match: '\}'
+      pop: true
+    - include: main

@@ -29,20 +29,27 @@ pub fn server_capabilities() -> ServerCapabilities {
         // Completion / 补全
         completion_provider: Some(CompletionOptions {
             trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
-            resolve_provider: Some(false),
+            resolve_provider: Some(true),
             work_done_progress_options: WorkDoneProgressOptions::default(),
             all_commit_characters: None,
             completion_item: None,
         }),
 
-        // Signature help / 签名帮助 (TODO: not yet implemented)
-        signature_help_provider: None,
+        // Signature help / 签名帮助
+        signature_help_provider: Some(SignatureHelpOptions {
+            trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
+            retrigger_characters: Some(vec![",".to_string()]),
+            work_done_progress_options: WorkDoneProgressOptions::default(),
+        }),
 
         // Go to definition / 跳转到定义
         definition_provider: Some(OneOf::Left(true)),
 
         // Find references / 查找引用
         references_provider: Some(OneOf::Left(true)),
+
+        // Document highlight / 文档高亮
+        document_highlight_provider: Some(OneOf::Left(true)),
 
         // Rename / 重命名
         rename_provider: Some(OneOf::Right(RenameOptions {
@@ -86,6 +93,15 @@ pub fn server_capabilities() -> ServerCapabilities {
                 full: Some(SemanticTokensFullOptions::Bool(true)),
             },
         )),
+
+        // Inlay hints
+        inlay_hint_provider: Some(OneOf::Left(true)),
+
+        // Code actions
+        code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+
+        // Folding range
+        folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
 
         ..Default::default()
     }
