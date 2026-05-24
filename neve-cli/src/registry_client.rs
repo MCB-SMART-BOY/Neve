@@ -75,45 +75,76 @@ impl RegistryClient {
 
     /// Get the package index (all packages with latest versions).
     /// 获取包索引（所有包及其最新版本）。
+    #[cfg(unix)]
     pub fn get_index(&self) -> Result<Vec<RegistryIndexEntry>, String> {
         let url = format!("{}/v1/index.json", self.base_url);
         let body = self.get(&url)?;
         serde_json::from_str(&body).map_err(|e| format!("parse index: {e}"))
     }
 
+    #[cfg(not(unix))]
+    pub fn get_index(&self) -> Result<Vec<RegistryIndexEntry>, String> {
+        Err("registry client not available on this platform".to_string())
+    }
+
     /// Search for packages by name.
     /// 按名称搜索包。
+    #[cfg(unix)]
     pub fn search(&self, query: &str) -> Result<RegistrySearchResponse, String> {
         let url = format!("{}/v1/search?q={}", self.base_url, query);
         let body = self.get(&url)?;
         serde_json::from_str(&body).map_err(|e| format!("parse search: {e}"))
     }
 
+    #[cfg(not(unix))]
+    pub fn search(&self, _query: &str) -> Result<RegistrySearchResponse, String> {
+        Err("registry client not available on this platform".to_string())
+    }
+
     /// Get all versions of a package.
     /// 获取包的所有版本。
+    #[cfg(unix)]
     pub fn get_package(&self, name: &str) -> Result<RegistryPackage, String> {
         let url = format!("{}/v1/packages/{name}", self.base_url);
         let body = self.get(&url)?;
         serde_json::from_str(&body).map_err(|e| format!("parse package: {e}"))
     }
 
+    #[cfg(not(unix))]
+    pub fn get_package(&self, _name: &str) -> Result<RegistryPackage, String> {
+        Err("registry client not available on this platform".to_string())
+    }
+
     /// Get metadata for a specific package version.
     /// 获取特定包版本的元数据。
+    #[cfg(unix)]
     pub fn get_version(&self, name: &str, version: &str) -> Result<RegistryVersion, String> {
         let url = format!("{}/v1/packages/{name}/{version}", self.base_url);
         let body = self.get(&url)?;
         serde_json::from_str(&body).map_err(|e| format!("parse version: {e}"))
     }
 
+    #[cfg(not(unix))]
+    pub fn get_version(&self, _name: &str, _version: &str) -> Result<RegistryVersion, String> {
+        Err("registry client not available on this platform".to_string())
+    }
+
     /// Check if the registry is reachable.
     /// 检查注册表是否可达。
+    #[cfg(unix)]
     pub fn ping(&self) -> Result<(), String> {
         let url = format!("{}/health", self.base_url);
         self.get(&url)?;
         Ok(())
     }
 
+    #[cfg(not(unix))]
+    pub fn ping(&self) -> Result<(), String> {
+        Err("registry client not available on this platform".to_string())
+    }
+
     /// Perform an HTTP GET request.
+    #[cfg(unix)]
     fn get(&self, url: &str) -> Result<String, String> {
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
