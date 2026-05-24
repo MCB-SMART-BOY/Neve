@@ -1,6 +1,7 @@
 //! Module path modeling and file resolution.
 //! 模块路径建模与文件解析。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Represents a module path in the source code.
@@ -121,6 +122,9 @@ impl std::fmt::Display for ModulePath {
 pub(crate) struct ModulePathResolver {
     root_dir: PathBuf,
     std_path: Option<PathBuf>,
+    /// Flake input name → materialized source root directory.
+    /// Flake 输入名称 → 物化后的源码根目录。
+    flake_input_roots: HashMap<String, PathBuf>,
 }
 
 impl ModulePathResolver {
@@ -130,6 +134,7 @@ impl ModulePathResolver {
         Self {
             root_dir: root_dir.as_ref().to_path_buf(),
             std_path: None,
+            flake_input_roots: HashMap::new(),
         }
     }
 
@@ -137,6 +142,12 @@ impl ModulePathResolver {
     /// 设置标准库查找根路径。
     pub(crate) fn set_std_path(&mut self, path: impl AsRef<Path>) {
         self.std_path = Some(path.as_ref().to_path_buf());
+    }
+
+    /// Set flake input roots for dependency module resolution.
+    /// 设置 flake 输入根目录以解析依赖模块。
+    pub(crate) fn set_flake_inputs(&mut self, inputs: HashMap<String, PathBuf>) {
+        self.flake_input_roots = inputs;
     }
 
     /// Get the project root directory.
@@ -207,6 +218,41 @@ impl ModulePathResolver {
             .with_extension("neve");
         if src_path.exists() {
             return Some(src_path);
+        }
+
+        // Search flake input roots: if the first segment matches a flake input name,
+        // resolve the remaining path against that input's source root.
+        if let Some((first, rest)) = module_path.split_first()
+            && let Some(input_root) = self.flake_input_roots.get(first)
+        {
+            if rest.is_empty() {
+                // Import of the flake input root itself: look for lib.neve or mod.neve
+                let lib_path = input_root.join("lib.neve");
+                if lib_path.exists() {
+                    return Some(lib_path);
+                }
+                let mod_path = input_root.join("mod.neve");
+                if mod_path.exists() {
+                    return Some(mod_path);
+                }
+                return None;
+            }
+            let flake_relative: PathBuf = rest.iter().collect();
+            let flake_file = input_root.join(&flake_relative).with_extension("neve");
+            if flake_file.exists() {
+                return Some(flake_file);
+            }
+            let flake_mod = input_root.join(&flake_relative).join("mod.neve");
+            if flake_mod.exists() {
+                return Some(flake_mod);
+            }
+            let flake_src = input_root
+                .join("src")
+                .join(&flake_relative)
+                .with_extension("neve");
+            if flake_src.exists() {
+                return Some(flake_src);
+            }
         }
 
         None
@@ -295,5 +341,94 @@ mod tests {
             Some(&["parent".into(), "child".into(), "file".into()]),
         );
         assert_eq!(result, Some(vec!["parent".into(), "common".into()]));
+    }
+
+    #[test]
+    fn test_find_module_file_in_flake_input() {
+        let tmp = std::env::temp_dir().join(format!("neve_flake_test_{}", std::process::id()));
+        let input_root = tmp.join("dep");
+        std::fs::create_dir_all(input_root.join("src")).expect("create src dir");
+        std::fs::write(input_root.join("lib.neve"), "// dep lib").expect("write lib.neve");
+        std::fs::write(input_root.join("utils.neve"), "// dep utils").expect("write utils.neve");
+        std::fs::write(
+            input_root.join("src").join("helpers.neve"),
+            "// dep helpers",
+        )
+        .expect("write helpers.neve");
+
+        let mut resolver = ModulePathResolver::new("/nonexistent");
+        let mut flake_roots = HashMap::new();
+        flake_roots.insert("mydep".to_string(), input_root.clone());
+        resolver.set_flake_inputs(flake_roots);
+
+        // Should find lib.neve via flake input root (empty rest → looks for lib.neve)
+        let found = resolver.find_module_file(&["mydep".into()]);
+        assert!(found.is_some(), "should find mydep via flake input");
+        assert!(
+            found.unwrap().ends_with("lib.neve"),
+            "should resolve to lib.neve"
+        );
+
+        // Should find utils.neve via flake input root
+        let found = resolver.find_module_file(&["mydep".into(), "utils".into()]);
+        assert!(found.is_some(), "should find mydep.utils via flake input");
+
+        // Should find src/helpers.neve via flake input root
+        let found = resolver.find_module_file(&["mydep".into(), "helpers".into()]);
+        assert!(
+            found.is_some(),
+            "should find mydep.helpers via flake input/src"
+        );
+
+        // Non-existent module should not be found
+        let found = resolver.find_module_file(&["mydep".into(), "nonexistent".into()]);
+        assert!(found.is_none(), "should not find nonexistent module");
+
+        // Unknown flake input name should not match
+        let found = resolver.find_module_file(&["unknown_dep".into(), "lib".into()]);
+        assert!(found.is_none(), "should not find unknown flake input");
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_find_module_file_flake_nested_path() {
+        let tmp = std::env::temp_dir().join(format!("neve_flake_nested_{}", std::process::id()));
+        let input_root = tmp.join("mylib");
+        std::fs::create_dir_all(input_root.join("deep").join("nested"))
+            .expect("create nested dirs");
+        std::fs::create_dir_all(input_root.join("src").join("deep").join("nested"))
+            .expect("create src nested dirs");
+        std::fs::write(
+            input_root.join("deep").join("nested").join("target.neve"),
+            "// nested",
+        )
+        .expect("write target.neve");
+        std::fs::write(
+            input_root
+                .join("src")
+                .join("deep")
+                .join("nested")
+                .join("target.neve"),
+            "// src nested",
+        )
+        .expect("write src nested");
+
+        let mut resolver = ModulePathResolver::new("/nonexistent");
+        let mut flake_roots = HashMap::new();
+        flake_roots.insert("mylib".to_string(), input_root.clone());
+        resolver.set_flake_inputs(flake_roots);
+
+        // Find deeply nested module via flake input
+        let found = resolver.find_module_file(&[
+            "mylib".into(),
+            "deep".into(),
+            "nested".into(),
+            "target".into(),
+        ]);
+        assert!(found.is_some(), "should find mylib.deep.nested.target");
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

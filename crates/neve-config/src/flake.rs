@@ -572,6 +572,26 @@ impl Flake {
         self.lock.save(&lock_file)
     }
 
+    /// Collect materialized source roots for all flake inputs.
+    /// Returns a map from input name to local source directory.
+    /// 收集所有 flake 输入的物化源码根目录。
+    /// 返回从输入名称到本地源码目录的映射。
+    pub fn collect_input_roots(&mut self) -> Result<HashMap<String, PathBuf>, ConfigError> {
+        let mut roots = HashMap::new();
+        for (name, input) in &self.inputs {
+            // Skip follows (they point to another input)
+            if input.follows.is_some() {
+                continue;
+            }
+            if let Some(root) =
+                self.resolve_input_source_root(&input.url, input.rev.as_deref(), None)?
+            {
+                roots.insert(name.clone(), root);
+            }
+        }
+        Ok(roots)
+    }
+
     /// Update a single input in the lock file.
     /// 更新锁定文件中的单个输入。
     pub fn update_input(&mut self, name: &str) -> Result<(), ConfigError> {

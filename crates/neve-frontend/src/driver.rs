@@ -402,6 +402,7 @@ impl std::error::Error for FrontendError {}
 pub struct FrontendDriver {
     root_dir: PathBuf,
     std_path: Option<PathBuf>,
+    flake_input_roots: HashMap<String, PathBuf>,
 }
 
 impl FrontendDriver {
@@ -411,6 +412,7 @@ impl FrontendDriver {
         Self {
             root_dir: root_dir.as_ref().to_path_buf(),
             std_path: None,
+            flake_input_roots: HashMap::new(),
         }
     }
 
@@ -418,6 +420,13 @@ impl FrontendDriver {
     /// 为模块解析配置显式的 std 源码根路径。
     pub fn with_std_path(mut self, std_path: impl AsRef<Path>) -> Self {
         self.std_path = Some(std_path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Configure flake input roots for dependency module resolution.
+    /// 为依赖模块解析配置 flake 输入根目录。
+    pub fn with_flake_inputs(mut self, inputs: HashMap<String, PathBuf>) -> Self {
+        self.flake_input_roots = inputs;
         self
     }
 
@@ -430,6 +439,9 @@ impl FrontendDriver {
         let mut loader = ModuleLoader::new(&self.root_dir);
         if let Some(std_path) = &self.std_path {
             loader = loader.with_std_path(std_path);
+        }
+        if !self.flake_input_roots.is_empty() {
+            loader = loader.with_flake_inputs(self.flake_input_roots.clone());
         }
 
         let root_id = loader

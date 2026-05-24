@@ -99,6 +99,72 @@ let y = x + 1;
         assert!(!errors.is_empty(), "Type errors should produce diagnostics");
     }
 
+    /// Test that CodeLens reference counts are correct.
+    #[test]
+    fn test_e2e_codelens_reference_counts() {
+        let source = r#"
+fn greet() = 42;
+let a = greet();
+let b = greet();
+let c = greet();
+
+struct Point { x: Int, y: Int };
+let p = Point { x = 1, y = 2 };
+"#;
+
+        let doc = Document::new("file:///codelens.neve".to_string(), source.to_string());
+        let index = doc.symbol_index.as_ref().expect("symbol index");
+
+        // greet() is called 3 times
+        let greet_refs = index.get_references("greet");
+        let greet_uses: Vec<_> = greet_refs.iter().filter(|r| !r.is_write).collect();
+        assert_eq!(greet_uses.len(), 3, "greet() should have 3 call sites");
+
+        // Point struct is referenced once (construction)
+        let point_refs = index.get_references("Point");
+        assert!(!point_refs.is_empty(), "Point should have references");
+
+        // Verify function definition exists
+        let greet_defs = index.get_definitions("greet").expect("greet definition");
+        assert!(
+            greet_defs
+                .iter()
+                .any(|s| matches!(s.kind, neve_lsp::symbol_index::SymbolKind::Function)),
+            "greet should be a Function"
+        );
+    }
+
+    /// Test completion scoring order (exact > prefix > contains).
+    #[test]
+    fn test_e2e_completion_scoring_order() {
+        // Simulate the scoring logic used by the LSP backend
+        fn score(label: &str, prefix: &str) -> u32 {
+            if prefix.is_empty() {
+                return 500;
+            }
+            let l = label.to_lowercase();
+            let p = prefix.to_lowercase();
+            if l == p {
+                1000
+            } else if l.starts_with(&p) {
+                900 + prefix.len().min(99) as u32
+            } else if l.contains(&p) {
+                500
+            } else {
+                0
+            }
+        }
+
+        // Exact match should score highest
+        assert!(score("print", "print") > score("println", "print"));
+        // Prefix match should beat contains match
+        assert!(score("io.readFile", "io.read") > score("io.readFilePath", "File"));
+        // Contains match should beat no match
+        assert!(score("io.readFilePath", "Path") > score("len", "xyz"));
+        // Empty prefix gives neutral score
+        assert_eq!(score("anything", ""), 500);
+    }
+
     /// Test semantic tokens for all major constructs.
     #[test]
     fn test_e2e_semantic_tokens_comprehensive() {

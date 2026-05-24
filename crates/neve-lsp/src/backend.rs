@@ -411,6 +411,14 @@ impl LanguageServer for Backend {
 
         let mut items = Vec::new();
 
+        // Extract the current word prefix for relevance scoring.
+        // 提取当前单词前缀以进行相关度评分。
+        let prefix = self
+            .documents
+            .get(&uri)
+            .map(|doc| word_prefix_at_position(&doc.content, &doc, pos))
+            .unwrap_or_default();
+
         // Get context for smarter completion / 获取上下文以实现更智能的补全
         let trigger_char = params
             .context
@@ -428,27 +436,50 @@ impl LanguageServer for Backend {
             } else {
                 None
             };
-            items.extend(self.get_method_completions(receiver_type.as_deref()));
+            let mut method_items = self.get_method_completions(receiver_type.as_deref());
+            for item in &mut method_items {
+                item.sort_text = Some(score_sort_text(&item.label, &prefix));
+            }
+            items.extend(method_items);
         } else {
             // Most relevant first: document symbols from current file
             // 最相关的优先：当前文件的文档符号
             if let Some(doc) = self.documents.get(&uri) {
-                items.extend(self.get_document_completions(&doc, pos));
+                let mut doc_items = self.get_document_completions(&doc, pos);
+                for item in &mut doc_items {
+                    item.sort_text = Some(score_sort_text(&item.label, &prefix));
+                }
+                items.extend(doc_items);
 
                 // Import path completions / 导入路径补全
-                if let Some(import_paths) = get_import_completions(&doc, pos) {
+                if let Some(mut import_paths) = get_import_completions(&doc, pos) {
+                    for item in &mut import_paths {
+                        item.sort_text = Some(score_sort_text(&item.label, &prefix));
+                    }
                     items.extend(import_paths);
                 }
             }
 
             // Standard library functions / 标准库函数
-            items.extend(self.get_stdlib_completions());
+            let mut stdlib_items = self.get_stdlib_completions();
+            for item in &mut stdlib_items {
+                item.sort_text = Some(score_sort_text(&item.label, &prefix));
+            }
+            items.extend(stdlib_items);
 
             // Types / 类型
-            items.extend(self.get_type_completions());
+            let mut type_items = self.get_type_completions();
+            for item in &mut type_items {
+                item.sort_text = Some(score_sort_text(&item.label, &prefix));
+            }
+            items.extend(type_items);
 
             // Keywords / 关键字
-            items.extend(self.get_keyword_completions());
+            let mut keyword_items = self.get_keyword_completions();
+            for item in &mut keyword_items {
+                item.sort_text = Some(score_sort_text(&item.label, &prefix));
+            }
+            items.extend(keyword_items);
         }
 
         Ok(Some(CompletionResponse::Array(items)))
@@ -983,6 +1014,59 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri.to_string();
+        if let Some(doc) = self.documents.get(&uri)
+            && let Some(ref index) = doc.symbol_index
+        {
+            let mut lenses = Vec::new();
+            for (name, syms) in &index.definitions {
+                for sym in syms {
+                    // Only show reference counts on functions and types
+                    if !matches!(
+                        sym.kind,
+                        IndexSymbolKind::Function
+                            | IndexSymbolKind::Struct
+                            | IndexSymbolKind::Trait
+                    ) {
+                        continue;
+                    }
+                    let refs = index.get_references(name);
+                    let usage_count = refs.iter().filter(|r| !r.is_write).count();
+
+                    let start: usize = sym.def_span.start.into();
+                    let end: usize = sym.def_span.end.into();
+                    let (sl, sc) = doc.position_at(start);
+                    let (el, ec) = doc.position_at(end);
+
+                    let title = if usage_count == 1 {
+                        "1 reference".to_string()
+                    } else {
+                        format!("{usage_count} references")
+                    };
+
+                    lenses.push(CodeLens {
+                        range: Range {
+                            start: Position::new(sl, sc),
+                            end: Position::new(el, ec),
+                        },
+                        command: Some(Command {
+                            title,
+                            command: "neve.peekReferences".to_string(),
+                            arguments: Some(vec![serde_json::json!({
+                                "uri": uri,
+                                "position": { "line": sl, "character": sc },
+                            })]),
+                        }),
+                        data: None,
+                    });
+                }
+            }
+            return Ok(Some(lenses));
+        }
+        Ok(None)
+    }
+
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let actions: Vec<CodeActionOrCommand> = params
             .context
@@ -1010,6 +1094,48 @@ impl LanguageServer for Backend {
         } else {
             Ok(Some(actions))
         }
+    }
+}
+
+// =============================================================================
+// Completion scoring helpers / 补全评分辅助
+// =============================================================================
+
+/// Extract the word prefix at the cursor position.
+/// 提取光标位置处的单词前缀。
+fn word_prefix_at_position(content: &str, doc: &Document, pos: Position) -> String {
+    let offset = doc.offset_at(pos.line, pos.character);
+    let bytes = content.as_bytes();
+    let start = (0..offset)
+        .rev()
+        .take_while(|&i| {
+            let b = bytes[i];
+            b.is_ascii_alphanumeric() || b == b'_' || b == b'.'
+        })
+        .last()
+        .map(|i| i + 1)
+        .unwrap_or(offset);
+    content[start..offset].to_string()
+}
+
+/// Compute a sort text for completion relevance scoring.
+/// Score: exact=1000, prefix=900+len, contains=500, default=0.
+/// 计算补全相关度评分的排序文本。
+fn score_sort_text(label: &str, prefix: &str) -> String {
+    if prefix.is_empty() {
+        return format!("0500:{label}");
+    }
+    let label_lower = label.to_lowercase();
+    let prefix_lower = prefix.to_lowercase();
+    if label_lower == prefix_lower {
+        format!("1000:{label}")
+    } else if label_lower.starts_with(&prefix_lower) {
+        let score = 900 + prefix.len().min(99) as u32;
+        format!("{score:04}:{label}")
+    } else if label_lower.contains(&prefix_lower) {
+        format!("0500:{label}")
+    } else {
+        format!("0000:{label}")
     }
 }
 
@@ -1709,10 +1835,11 @@ fn builtin_signature(name: &str) -> Option<String> {
         }
         "io.cancel" => Some("io.cancel(task: Task<T>) -> ()".to_string()),
         // IO - TTY / Job / Misc (8)
-        "io.isTTY" => Some("io.isTTY() -> Bool".to_string()),
+        "io.isTTY" => Some("io.isTTY(fd: Int) -> Bool".to_string()),
         "io.terminalSize" => Some("io.terminalSize() -> Option<(Int, Int)>".to_string()),
-        "io.setRawMode" => Some("io.setRawMode() -> ()".to_string()),
-        "io.resetTerminal" => Some("io.resetTerminal() -> ()".to_string()),
+        "io.setRawMode" => Some("io.setRawMode(fd: Int, enable: Bool) -> ()".to_string()),
+        "io.resetTerminal" => Some("io.resetTerminal(fd: Int) -> ()".to_string()),
+        "io.readKey" => Some("io.readKey(fd: Int) -> Int".to_string()),
         "io.jobs" => Some("io.jobs() -> List<Job>".to_string()),
         "io.waitAnyJob" => Some("io.waitAnyJob() -> ProcessResult".to_string()),
         "io.kill" => Some("io.kill(pid: Int, signal: Int) -> ()".to_string()),
@@ -1905,15 +2032,19 @@ fn completion_documentation(label: &str, _kind: Option<CompletionItemKind>) -> O
         }
         "io.cancel" => Some("Cancels a running task.\n\n**Effect:** Task".to_string()),
         // IO - TTY / Job
-        "io.isTTY" => Some("Returns `true` if stdin is a terminal.\n\n**Effect:** I/O".to_string()),
+        "io.isTTY" => Some("Returns `true` if fd is a terminal.\n\n**Effect:** Pure".to_string()),
         "io.terminalSize" => Some(
-            "Returns terminal dimensions as `Option<(rows, cols)>`.\n\n**Effect:** I/O".to_string(),
+            "Returns terminal dimensions as `Option<(rows, cols)>`.\n\n**Effect:** Pure"
+                .to_string(),
         ),
         "io.setRawMode" => {
             Some("Sets terminal to raw mode (no line buffering).\n\n**Effect:** I/O".to_string())
         }
         "io.resetTerminal" => {
             Some("Resets terminal to normal mode.\n\n**Effect:** I/O".to_string())
+        }
+        "io.readKey" => {
+            Some("Reads a single byte from fd (requires raw mode).\n\n**Effect:** I/O".to_string())
         }
         "io.jobs" => Some("Lists running background jobs.\n\n**Effect:** I/O".to_string()),
         "io.waitAnyJob" => {
@@ -2560,5 +2691,79 @@ fn collect_folds(span: Span, doc: &Document, ranges: &mut Vec<FoldingRange>) {
             kind: Some(FoldingRangeKind::Region),
             collapsed_text: None,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_completion_scoring_exact_match() {
+        let sort = score_sort_text("println", "print");
+        assert!(
+            sort.starts_with("09"),
+            "prefix match should score ~900: {sort}"
+        );
+
+        let sort = score_sort_text("print", "print");
+        assert!(
+            sort.starts_with("1000"),
+            "exact match should score 1000: {sort}"
+        );
+    }
+
+    #[test]
+    fn test_completion_scoring_prefix() {
+        let sort = score_sort_text("io.readFile", "io.read");
+        assert!(sort.starts_with("09"), "prefix match: {sort}");
+
+        let sort = score_sort_text("len", "l");
+        assert!(sort.starts_with("0901"), "short prefix: {sort}");
+    }
+
+    #[test]
+    fn test_completion_scoring_contains() {
+        let sort = score_sort_text("io.readFilePath", "Path");
+        assert!(sort.starts_with("0500"), "contains match: {sort}");
+    }
+
+    #[test]
+    fn test_completion_scoring_no_match() {
+        let sort = score_sort_text("len", "xyz");
+        assert!(sort.starts_with("0000"), "no match: {sort}");
+    }
+
+    #[test]
+    fn test_completion_scoring_empty_prefix() {
+        let sort = score_sort_text("anything", "");
+        assert!(sort.starts_with("0500"), "empty prefix: {sort}");
+    }
+
+    #[test]
+    fn test_completion_scoring_case_insensitive() {
+        let sort = score_sort_text("PrintLn", "print");
+        assert!(sort.starts_with("09"), "case-insensitive prefix: {sort}");
+    }
+
+    #[test]
+    fn test_code_lens_reference_counts() {
+        let source = "fn greet() = 42; let x = greet(); let y = greet();";
+        let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+        if let Some(ref index) = doc.symbol_index {
+            let refs = index.get_references("greet");
+            let usage_count = refs.iter().filter(|r| !r.is_write).count();
+            assert_eq!(usage_count, 2, "greet() should have 2 call sites");
+
+            // Verify the definition exists
+            let defs = index.get_definitions("greet");
+            assert!(defs.is_some(), "greet should have a definition");
+            let defs = defs.unwrap();
+            assert!(
+                defs.iter()
+                    .any(|s| matches!(s.kind, IndexSymbolKind::Function)),
+                "greet should be a function"
+            );
+        }
     }
 }

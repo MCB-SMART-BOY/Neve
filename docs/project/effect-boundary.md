@@ -188,6 +188,7 @@ pub fn is_effectful_builtin(name: &str) -> bool {
 |---------|------|------|----------------|------|
 | `io.setRawMode` | 直接 | ✅ | `setRawMode` | 设置终端 raw mode |
 | `io.resetTerminal` | 直接 | ✅ | `resetTerminal` | 恢复终端默认模式 |
+| `io.readKey` | 直接 | ✅ | `readKey` | 从 fd 读取单字节 |
 
 #### I. Job 控制（有副作用：查询/等待后台作业）
 
@@ -421,7 +422,6 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 | 流式处理没有 cancel/poll 模型 | 无法取消长时间运行的流 | 低 |
 | 管道的流式句柄 | 只能阻塞式消费管道输出 | 中 |
 | `cmd1 |> cmd2` 管道语法 | 目前只能用 `io.pipeline([...])` 构造 | 低 |
-| TTY raw mode | 无法做终端控制 | 低 |
 | 后台调度 / 非阻塞 task runtime | Task 只能阻塞式等待 | 低 |
 
 ### 8.3 形式化缺口

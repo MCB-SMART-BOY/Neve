@@ -118,6 +118,13 @@ impl ModuleLoader {
         self
     }
 
+    /// Set flake input roots for dependency module resolution.
+    /// 设置 flake 输入根目录以解析依赖模块。
+    pub fn with_flake_inputs(mut self, inputs: HashMap<String, PathBuf>) -> Self {
+        self.path_resolver.set_flake_inputs(inputs);
+        self
+    }
+
     /// Get the root directory.
     /// 获取根目录。
     pub fn root_dir(&self) -> &Path {

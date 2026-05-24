@@ -103,6 +103,11 @@ pub fn server_capabilities() -> ServerCapabilities {
         // Folding range
         folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
 
+        // Code lens (reference counts above definitions)
+        code_lens_provider: Some(CodeLensOptions {
+            resolve_provider: Some(false),
+        }),
+
         ..Default::default()
     }
 }

@@ -4,6 +4,7 @@
 mod commands;
 mod output;
 mod platform;
+mod registry_client;
 
 use clap::{Parser, Subcommand};
 
