@@ -125,12 +125,40 @@ fn fetch_remote_index(url: &str, query: &str) -> Result<Vec<(String, String)>, S
     Ok(matches)
 }
 
+/// Search the remote registry v1 API.
+/// 搜索远程注册表 v1 API。
+fn search_remote_v1(registry_url: &str, query: &str) -> Result<Vec<(String, String)>, String> {
+    let client = crate::registry_client::RegistryClient::new(registry_url.to_string());
+    let resp = client.search(query)?;
+    let matches: Vec<(String, String)> = resp
+        .results
+        .into_iter()
+        .map(|r| {
+            let desc = if r.description.is_empty() {
+                r.versions.join(", ")
+            } else {
+                format!("{} [{}]", r.description, r.versions.join(", "))
+            };
+            (r.name, desc)
+        })
+        .collect();
+    Ok(matches)
+}
+
 /// Search the package index.
 /// 搜索软件包索引。
 fn search_index(query: &str) -> Result<Vec<(String, String)>, String> {
-    // First try remote registry via $NEVE_REGISTRY
-    // 首先尝试通过 $NEVE_REGISTRY 访问远程注册表
+    // Try remote registry v1 API first
     if let Ok(registry_url) = std::env::var("NEVE_REGISTRY") {
+        match search_remote_v1(&registry_url, query) {
+            Ok(matches) if !matches.is_empty() => return Ok(matches),
+            Ok(_) => {} // empty results from v1, try legacy
+            Err(e) => {
+                // v1 failed, fall through to legacy endpoint
+                output::warning(&format!("v1 search unavailable: {e}"));
+            }
+        }
+        // Fall back to legacy flat index endpoint
         match fetch_remote_index(&registry_url, query) {
             Ok(matches) if !matches.is_empty() => return Ok(matches),
             Ok(_) => {} // empty results, fall through to local

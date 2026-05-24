@@ -6,7 +6,31 @@ use neve_diagnostic::{DiagnosticKind, emit};
 use neve_frontend::FrontendDriver;
 use neve_hir::{ExprKind, ItemKind, StmtKind};
 use neve_std::is_effectful_builtin;
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+/// Discover flake inputs (Unix only).
+#[cfg(unix)]
+fn discover_flake_input_roots(start_dir: &Path) -> HashMap<String, PathBuf> {
+    let mut current = start_dir.to_path_buf();
+    while current.parent().is_some() {
+        let flake_path = current.join("flake.neve");
+        if flake_path.exists() {
+            if let Ok(mut flake) = neve_config::flake::Flake::load(&current) {
+                let _ = flake.lock_inputs();
+                return flake.collect_input_roots().unwrap_or_default();
+            }
+            break;
+        }
+        current = current.parent().unwrap().to_path_buf();
+    }
+    HashMap::new()
+}
+
+#[cfg(not(unix))]
+fn discover_flake_input_roots(_start_dir: &Path) -> HashMap<String, PathBuf> {
+    HashMap::new()
+}
 
 /// Run type checking on a Neve file.
 /// 对 Neve 文件运行类型检查。
@@ -14,7 +38,12 @@ pub fn run(file: &str, verbose: bool, allow_effects: bool) -> Result<(), String>
     let path = Path::new(file);
     let (root_dir, module_path) = module_graph::resolve_module_path(path)?;
 
-    let analysis = FrontendDriver::new(&root_dir)
+    let flake_inputs = discover_flake_input_roots(&root_dir);
+    let mut driver = FrontendDriver::new(&root_dir);
+    if !flake_inputs.is_empty() {
+        driver = driver.with_flake_inputs(flake_inputs);
+    }
+    let analysis = driver
         .analyze_module_path(&module_path)
         .map_err(|e| format!("frontend error: {e}"))?;
 

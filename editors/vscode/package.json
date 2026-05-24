@@ -1,10 +1,21 @@
 {
   "name": "neve",
   "displayName": "Neve Language Support",
-  "description": "Syntax highlighting, auto-completion, diagnostics, and formatting for the Neve language.",
+  "description": "Syntax highlighting, auto-completion, diagnostics, formatting, and code navigation for Neve.",
   "version": "0.1.0",
   "publisher": "neve-lang",
   "license": "MPL-2.0",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neve-lang/neve"
+  },
+  "homepage": "https://github.com/neve-lang/neve/tree/main/editors/vscode",
+  "keywords": [
+    "neve",
+    "language",
+    "programming"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -34,7 +45,8 @@
     "configurationDefaults": {
       "[neve]": {
         "editor.tabSize": 4,
-        "editor.insertSpaces": true
+        "editor.insertSpaces": true,
+        "editor.codeLens": true
       }
     }
   },

@@ -1360,6 +1360,24 @@ impl TypeChecker {
                 ),
                 span,
             ),
+            "io.setRawMode" => builtin_fn(
+                vec![
+                    builtin_ty(TyKind::Int, span),
+                    builtin_ty(TyKind::Bool, span),
+                ],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.resetTerminal" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Unit, span),
+                span,
+            ),
+            "io.readKey" => builtin_fn(
+                vec![builtin_ty(TyKind::Int, span)],
+                builtin_ty(TyKind::Int, span),
+                span,
+            ),
             "io.spawnWithTimeout" => builtin_fn(
                 vec![
                     builtin_task(builtin_process_result(span), span),

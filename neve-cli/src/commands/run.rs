@@ -19,6 +19,41 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+/// Discover flake inputs from the project root and collect their source roots.
+/// On Unix, walks up from `start_dir` to find `flake.neve`, loads it, and resolves inputs.
+/// On non-Unix, returns an empty map.
+#[cfg(unix)]
+fn discover_flake_input_roots(start_dir: &Path) -> HashMap<String, PathBuf> {
+    let mut current = start_dir.to_path_buf();
+    while current.parent().is_some() {
+        let flake_path = current.join("flake.neve");
+        if flake_path.exists() {
+            match neve_config::flake::Flake::load(&current) {
+                Ok(mut flake) => {
+                    if let Err(e) = flake.lock_inputs() {
+                        output::warning(&format!("failed to lock flake inputs: {e}"));
+                    }
+                    return flake.collect_input_roots().unwrap_or_default();
+                }
+                Err(e) => {
+                    output::warning(&format!(
+                        "failed to load flake.neve at {}: {e}",
+                        current.display()
+                    ));
+                }
+            }
+            break;
+        }
+        current = current.parent().unwrap().to_path_buf();
+    }
+    HashMap::new()
+}
+
+#[cfg(not(unix))]
+fn discover_flake_input_roots(_start_dir: &Path) -> HashMap<String, PathBuf> {
+    HashMap::new()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RunBackend {
     FrontendHir,
@@ -192,7 +227,12 @@ fn plan_run_execution(
     module_path: &[String],
     compat_ast: bool,
 ) -> Result<RunExecutionPlan, String> {
-    let analysis = match FrontendDriver::new(root_dir).analyze_module_path(module_path) {
+    let flake_inputs = discover_flake_input_roots(root_dir);
+    let mut driver = FrontendDriver::new(root_dir);
+    if !flake_inputs.is_empty() {
+        driver = driver.with_flake_inputs(flake_inputs);
+    }
+    let analysis = match driver.analyze_module_path(module_path) {
         Ok(analysis) => analysis,
         Err(FrontendError::ModuleLoad(ModuleLoadError::NotFound(missing)))
             if is_std_module_path(&missing) =>

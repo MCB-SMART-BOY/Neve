@@ -62,6 +62,16 @@ This document defines the stability guarantees for the Neve standard library (st
 | `path.fromString` | `(s: String) -> Path` | Parse string to Path |
 | `path.joinPath` | `(a: Path, b: Path) -> Path` | Join two paths |
 
+### TTY / Terminal
+
+| API | Signature | Description |
+|-----|-----------|-------------|
+| `io.isTTY` | `(fd: Int) -> Bool` | Check if fd is a terminal |
+| `io.terminalSize` | `() -> Option<{rows: Int, cols: Int}>` | Get terminal dimensions |
+| `io.setRawMode` | `(fd: Int, enable: Bool) -> Unit` | Set terminal raw mode |
+| `io.resetTerminal` | `(fd: Int) -> Unit` | Reset terminal to normal mode |
+| `io.readKey` | `(fd: Int) -> Int` | Read a single byte from fd |
+
 ### String Operations
 
 | API | Signature | Description |

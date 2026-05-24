@@ -53,6 +53,8 @@ pub fn is_effectful_builtin(name: &str) -> bool {
                 parts[1],
                 // Pure inspectors
                 "processSuccess" | "processStdout" | "processCode" | "processStderr" |
+                // Pure TTY inspectors (no host mutation)
+                "isTTY" | "terminalSize" |
                 // Pure constructors (no I/O)
                 "command" | "commandWith" | "commandWithRedirects" |
                 "pipeline" | "pipelineWithRedirects" |

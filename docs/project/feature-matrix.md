@@ -53,8 +53,10 @@
 1. **语法表面比语义闭环走得更快。**
 2. **AST 路径历史上补过更多缺口，但主 CLI 路径已经开始优先收敛到 HIR。**
 3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) 已完成。**
-4. **端到端测试已覆盖 440 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control）。**
+4. **端到端测试已覆盖 450 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
 5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete)。**
+6. **LSP 20 methods implemented (新增 CodeLens)，补全评分排序，模块↔flake 集成。**
+7. **Registry v1 API 完整 (8 endpoints)，RegistryClient 已接入 install/search。**
 
 ## 语言高风险特性矩阵 / High-Risk Language Features
 
@@ -90,8 +92,8 @@
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR，跨模块命名类型在 diagnostics 中的显示也已更可读；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
-| LSP | ⚠️ 持续收敛中 | 前端管线已接入，hover 现在既能显示定义点类型，也能在局部变量引用、全局函数引用、方法名和一般表达式位置显示真实语义类型；函数参数、lambda 参数和块级 `let` 的 pattern 绑定也已闭环。`goto definition` / `references` / `rename` 对局部遮蔽场景已开始按实际绑定解析。跨模块命名类型显示与更多 IDE 语义功能仍在补 |
-| End-to-end tests | ⚠️ 可信 smoke baseline（440 个测试） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery；覆盖深度仍需继续扩展 |
+| LSP | ⚠️ 持续收敛中 (20 methods) | 前端管线已接入，hover 支持定义点类型和语义类型。`goto definition` / `references` / `rename` 对局部遮蔽场景已按实际绑定解析。补全评分排序 (exact/prefix/contains)。CodeLens 引用计数。20 methods: hover, completion (type-aware + scored), completionItem/resolve, signatureHelp, definition, references, documentHighlight, rename, prepareRename, formatting, documentSymbol, workspace/symbol, semanticTokens/full, inlayHint, foldingRange, codeAction, codeLens, didOpen, didChange, didSave, didClose |
+| End-to-end tests | ⚠️ 可信 smoke baseline（450 个测试） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
@@ -126,10 +128,10 @@
 | 一等 `ProcessResult` 类型 | ⚠️ | `std.io.execCommand` / `std.io.execPipeline` 已能公开返回 `ProcessResult`，且 `std.io.processSuccess` / `std.io.processStdout` / `std.io.processCode` / `std.io.processStderr` 已提供首批 pure inspector bridge；当前剩余问题不再是结果对象缺失，而是更丰富的 effect model 仍未完成 |
 | 一等管道 | ✅ 语法+构造+执行+Stream；✅ Stream<T> Phase A-C 完成 | `cmd1 |> cmd2 |> cmd3` 管道语法已实现（HIR evaluator）；`io.pipeline([...])` / `io.pipelineWithRedirects` 构造时拒绝无效 pipeline；`io.execPipeline` / `io.execPipelineStreaming` / `io.execPipelineStreamingWithTimeout` 提供阻塞+流式+超时执行；`io.streamPipe` 实现流到命令的标准输入管道；boundary-level redirect 已收敛到对象携带主线；流式句柄和更广的进程编排模型仍需后续 |
 | 一等重定向 | ⚠️ | 内部已落 runtime identity，且 `std.io.redirectStdoutPath` / `std.io.redirectStderrPath` / `std.io.redirectStdinPath` 已提供最小公开构造桥；边界级 `stdout -> Path` / `stderr -> Path` / `stdin <- Path` 组合现在通过 `io.commandWithRedirects` / `io.pipelineWithRedirects` 收进一等对象，再走 `io.execCommand` / `io.execPipeline` 的 canonical 执行主线；同时对 boundary/stage-local 重复 redirect、non-final `stdout` 截流、以及 non-first stage 的 `stdin` 配置冲突继续做显式拒绝；但还没有更广的流模型或 stage-local redirect 语法 |
-| 一等 `Task<T>` | ⚠️ | 内部已落 runtime identity，且 `std.io.taskCommand` / `std.io.taskPipeline` / `std.io.awaitTask` / `std.io.awaitTasks` 已提供最小公开构造/消费桥，让 `Command` 或 `Pipeline` 都能进入 `Task[ProcessResult] -> ProcessResult` 与 `List<Task[ProcessResult]> -> List<ProcessResult>` 的 blocking canonical path；但还没有 poll/cancel、超时控制、后台调度或任何非阻塞 task runtime |
+| 一等 `Task<T>` | ✅ | `std.io.taskCommand` / `std.io.taskPipeline` 构造 Task；`std.io.awaitTask` / `std.io.awaitTasks` / `std.io.awaitAny` / `std.io.awaitTaskWithTimeout` 消费 Task；`std.io.cancel` 取消 Task；`std.io.spawn` / `std.io.spawnWithTimeout` / `std.io.poll` 非阻塞管理 |
 | 流式处理 | ✅ | `io.execCommandStreaming` / `io.execPipelineStreaming` / `io.readFileLines` / `io.readFileLinesPath` (逐行回调)；超时变体 `io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持总时限 + 进程终止 |
 | timeout / cancel | ✅ | `io.awaitTaskWithTimeout` 支持 Command/Pipeline 超时（阻塞式）；`io.execCommandStreamingWithTimeout` / `io.execPipelineStreamingWithTimeout` 支持流式超时；统一 kill 机制（M-2）已落地 `neve-common::kill_process`；`io.cancel` / `io.awaitAny` 已实现 |
-| signal / TTY | ✅ signals；⚠️ raw mode | `io.isTTY(fd)` / `io.terminalSize()` / `io.setRawMode(fd)` / `io.resetTerminal(fd)` 已实现；`io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派 |
+| signal / TTY | ✅ | `io.isTTY(fd)` / `io.terminalSize()` / `io.setRawMode(fd, enable)` / `io.resetTerminal(fd)` / `io.readKey(fd)` 已实现；`io.onSignal` 支持 INT/TERM/HUP/USR1/USR2 注册回调；求值器在安全点轮询原子标志并分派 |
 | shebang / argv / 脚本入口 | ✅ | shebang + argv：`io.args()` 返回 `(List<String>, Record)` 结构化元组；`-flag` 解析为 Record 字段，负数自动识别为位置参数；支持紧凑格式 `-j8` 和 `--` 分隔 |
 | glob / 文件查询组合子 | ✅ | `io.glob(pattern)` 返回 `List<Path>`，可与 `list.filter`/`list.map` 组合 |
 | 一等 Stream<T> | ✅ | Phase A-C complete (14 APIs)：构造 (streamList/streamLines/streamCommand/streamBytes)、变换 (streamMap/streamFilter/streamTake/streamDrop)、消费 (streamCollect/streamPipe/streamForEach/streamFold)、包装 (streamWithTimeout)；Channel-based + Iterator-based 双路径实现；EffectEval v4.3 (34 rules) |

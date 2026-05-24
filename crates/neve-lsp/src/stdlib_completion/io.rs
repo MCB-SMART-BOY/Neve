@@ -397,8 +397,8 @@ pub(super) fn specs() -> Vec<CompletionSpec> {
         // === TTY / terminal APIs ===
         (
             "io.isTTY",
-            "Check if stdin is a terminal",
-            "io.isTTY()",
+            "Check if fd is a terminal",
+            "io.isTTY(fd: Int)",
             "Bool",
         ),
         (
@@ -410,14 +410,20 @@ pub(super) fn specs() -> Vec<CompletionSpec> {
         (
             "io.setRawMode",
             "Set terminal to raw mode",
-            "io.setRawMode()",
+            "io.setRawMode(fd: Int, enable: Bool)",
             "Unit",
         ),
         (
             "io.resetTerminal",
             "Reset terminal to normal mode",
-            "io.resetTerminal()",
+            "io.resetTerminal(fd: Int)",
             "Unit",
+        ),
+        (
+            "io.readKey",
+            "Read a single byte from fd (raw mode)",
+            "io.readKey(fd: Int)",
+            "Int",
         ),
         // === Job control APIs ===
         (

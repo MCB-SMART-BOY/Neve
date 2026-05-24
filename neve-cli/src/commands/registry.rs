@@ -8,23 +8,15 @@ use super::search;
 use crate::output;
 use std::fs;
 
-/// Update the local package index from a remote registry.
-/// 从远程注册表更新本地软件包索引。
-pub fn update(registry_url: Option<&str>) -> Result<(), String> {
-    let url = registry_url
-        .map(|s| s.to_string())
-        .or_else(|| std::env::var("NEVE_REGISTRY").ok())
-        .unwrap_or_else(|| "https://registry.neve.dev/packages.json".to_string());
-
-    let status = output::Status::new(&format!("Fetching package index from {url}"));
-
+/// Fetch a URL and return its body as a string.
+fn fetch_url(url: &str) -> Result<String, String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("failed to create HTTP client: {e}"))?;
 
     let response = client
-        .get(&url)
+        .get(url)
         .send()
         .map_err(|e| format!("failed to fetch: {e}"))?;
 
@@ -32,16 +24,37 @@ pub fn update(registry_url: Option<&str>) -> Result<(), String> {
         return Err(format!("registry returned HTTP {}", response.status()));
     }
 
-    let content = response
+    response
         .text()
-        .map_err(|e| format!("failed to read response: {e}"))?;
+        .map_err(|e| format!("failed to read response: {e}"))
+}
+
+/// Update the local package index from a remote registry.
+/// 从远程注册表更新本地软件包索引。
+pub fn update(registry_url: Option<&str>) -> Result<(), String> {
+    let base_url = registry_url
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("NEVE_REGISTRY").ok())
+        .unwrap_or_else(|| "https://registry.neve.dev".to_string());
+
+    // Try v1 index first, fall back to legacy flat file
+    let v1_url = format!("{base_url}/v1/index.json");
+    let legacy_url = format!("{base_url}/packages.json");
+
+    let content = match fetch_url(&v1_url) {
+        Ok(content) => content,
+        Err(_) => {
+            output::warning("v1 index unavailable, trying legacy format");
+            fetch_url(&legacy_url)?
+        }
+    };
+
+    let status = output::Status::new("Fetching package index");
 
     // Validate it's valid JSON by parsing it
-    // 通过解析来验证它是有效的 JSON
     search::parse_index(&content)?;
 
     // Save to local index
-    // 保存到本地索引
     let index_path =
         search::get_index_path().ok_or_else(|| "cannot determine index path".to_string())?;
 

@@ -124,24 +124,22 @@ fn get_profile_dir() -> PathBuf {
     PathBuf::from(home).join(".neve").join("profile")
 }
 
-/// Find a package in the store.
-/// 在存储中查找软件包。
+/// Find a package in the store, with registry fallback.
+/// 在存储中查找软件包，带注册表回退。
 fn find_package(store_dir: &PathBuf, package: &str) -> Result<PathBuf, String> {
     // Direct path
-    // 直接路径
     let direct = store_dir.join(package);
     if direct.exists() {
         return Ok(direct);
     }
 
     // Search for matching packages
-    // 搜索匹配的软件包
     if store_dir.exists() {
         let mut exact_matches = Vec::new();
         let mut fuzzy_matches = Vec::new();
 
-        for entry in fs::read_dir(store_dir).map_err(|e| format!("Failed to read store: {}", e))? {
-            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        for entry in fs::read_dir(store_dir).map_err(|e| format!("Failed to read store: {e}"))? {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
             let logical_name = logical_store_name(&name_str);
@@ -151,8 +149,6 @@ fn find_package(store_dir: &PathBuf, package: &str) -> Result<PathBuf, String> {
                 continue;
             }
 
-            // Match package prefix boundary (e.g., hello -> hello-1.0)
-            // 匹配包名前缀边界（例如 hello -> hello-1.0）
             if logical_name
                 .strip_prefix(package)
                 .is_some_and(|rest| rest.starts_with('-'))
@@ -192,7 +188,35 @@ fn find_package(store_dir: &PathBuf, package: &str) -> Result<PathBuf, String> {
         }
     }
 
-    Err(format!("Package '{}' not found in store", package))
+    // Query remote registry for available versions
+    if let Some(client) = crate::registry_client::RegistryClient::from_env() {
+        match client.get_package(package) {
+            Ok(pkg) => {
+                let versions: Vec<String> =
+                    pkg.versions.iter().map(|v| v.version.clone()).collect();
+                if versions.is_empty() {
+                    return Err(format!(
+                        "Package '{package}' not found in store or registry"
+                    ));
+                }
+                return Err(format!(
+                    "Package '{package}' not found in local store.\n\
+                     Available versions from registry: {}\n\
+                     To install: fetch and add to local store first.",
+                    versions.join(", ")
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Package '{package}' not found in store (registry query failed: {e})"
+                ));
+            }
+        }
+    }
+
+    Err(format!(
+        "Package '{package}' not found in store. Set NEVE_REGISTRY to query a remote registry."
+    ))
 }
 
 /// Extract logical store name from a store entry (strip leading hash prefix when present).

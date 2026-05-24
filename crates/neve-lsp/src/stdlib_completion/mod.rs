@@ -115,6 +115,7 @@ mod tests {
         assert!(labels.contains(&"io.terminalSize"));
         assert!(labels.contains(&"io.setRawMode"));
         assert!(labels.contains(&"io.resetTerminal"));
+        assert!(labels.contains(&"io.readKey"));
         // Job control APIs
         assert!(labels.contains(&"io.jobs"));
         assert!(labels.contains(&"io.waitAnyJob"));

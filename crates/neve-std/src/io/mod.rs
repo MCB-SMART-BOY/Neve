@@ -462,6 +462,40 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // === TTY key input (raw mode) ===
+        (
+            "io.readKey",
+            Value::Builtin(BuiltinFn {
+                name: "io.readKey",
+                arity: 1,
+                func: |args| {
+                    let fd: i32 = match &args[0] {
+                        Value::Int(n) => n
+                            .clone()
+                            .try_into()
+                            .map_err(|_| "io.readKey: fd must be a valid integer".to_string())?,
+                        _ => return Err("io.readKey expects an Int (fd)".to_string()),
+                    };
+                    #[cfg(unix)]
+                    {
+                        let mut buf = [0u8; 1];
+                        let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, 1) };
+                        if n == 1 {
+                            Ok(Value::Int((buf[0] as i64).into()))
+                        } else if n == 0 {
+                            Err(format!("io.readKey: EOF on fd {fd}"))
+                        } else {
+                            Err(format!("io.readKey: read failed on fd {fd}"))
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = fd;
+                        Err("io.readKey: not supported on this platform".to_string())
+                    }
+                },
+            }),
+        ),
         // === Non-blocking task spawn/poll/cancel ===
         (
             "io.spawnWithTimeout",
