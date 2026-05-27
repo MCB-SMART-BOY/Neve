@@ -992,6 +992,18 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: ok (v3.0)
+        (
+            "ok",
+            Value::Builtin(BuiltinFn {
+                name: "ok",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => Ok(Value::Bool(result.is_success())),
+                    _ => Err("ok expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
         (
             "io.processStdout",
             Value::Builtin(BuiltinFn {
@@ -1005,6 +1017,20 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: stdout (v3.0)
+        (
+            "stdout",
+            Value::Builtin(BuiltinFn {
+                name: "stdout",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => {
+                        Ok(Value::String(Rc::new(result.stdout().to_string())))
+                    }
+                    _ => Err("stdout expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
         (
             "io.processCode",
             Value::Builtin(BuiltinFn {
@@ -1013,6 +1039,18 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |args| match &args[0] {
                     Value::ProcessResult(result) => Ok(Value::Int(result.code().into())),
                     _ => Err("io.processCode expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
+        // Short alias: code (v3.0)
+        (
+            "code",
+            Value::Builtin(BuiltinFn {
+                name: "code",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => Ok(Value::Int(result.code().into())),
+                    _ => Err("code expects a ProcessResult".to_string()),
                 },
             }),
         ),
