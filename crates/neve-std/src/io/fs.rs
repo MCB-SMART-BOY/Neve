@@ -425,6 +425,21 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: env (v3.0)
+        (
+            "env",
+            Value::Builtin(BuiltinFn {
+                name: "env",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(name) => match std::env::var(name.as_str()) {
+                        Ok(val) => Ok(Value::Some(Box::new(Value::String(Rc::new(val))))),
+                        Err(_) => Ok(Value::None),
+                    },
+                    _ => Err("env expects a string".to_string()),
+                },
+            }),
+        ),
         (
             "io.setEnv",
             Value::Builtin(BuiltinFn {
@@ -645,6 +660,24 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: cmd (v3.0)
+        (
+            "cmd",
+            Value::Builtin(BuiltinFn {
+                name: "cmd",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(program), Value::List(argv)) => {
+                        let argv = super::list_to_string_vec(argv, "cmd args")?;
+                        Ok(Value::Command(Rc::new(CommandValue::new(
+                            program.as_str(),
+                            argv,
+                        ))))
+                    }
+                    _ => Err("cmd expects (String, List<String>)".to_string()),
+                },
+            }),
+        ),
         (
             "io.commandWith",
             Value::Builtin(BuiltinFn {
@@ -691,6 +724,18 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |args| match &args[0] {
                     Value::Command(command) => super::execute_command_value(command),
                     _ => Err("io.execCommand expects a Command".to_string()),
+                },
+            }),
+        ),
+        // Short alias: exec (v3.0)
+        (
+            "exec",
+            Value::Builtin(BuiltinFn {
+                name: "exec",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::Command(command) => super::execute_command_value(command),
+                    _ => Err("exec expects a Command".to_string()),
                 },
             }),
         ),
