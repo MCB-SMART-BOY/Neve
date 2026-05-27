@@ -145,11 +145,7 @@ pub fn parse_module_file(
     let raw_source = std::fs::read_to_string(&file_path)?;
     // Strip shebang line if present (#!/usr/bin/env neve ...)
     let source = if raw_source.starts_with("#!") {
-        raw_source
-            .lines()
-            .skip(1)
-            .collect::<Vec<_>>()
-            .join("\n")
+        raw_source.lines().skip(1).collect::<Vec<_>>().join("\n")
     } else {
         raw_source
     };

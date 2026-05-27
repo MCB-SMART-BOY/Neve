@@ -165,7 +165,9 @@ jobs:
           lake build
 
       - name: Run differential tests
-        run: cargo run -p neve --release -- run scripts/diff-test.neve -- -n 100 -d 4
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          cargo run -p neve --release -- run scripts/diff-test.neve -- -n 100 -d 4
 
   # 轻量级 Bug Hunt：每次 push/PR 运行安全边界攻击测试
   # Lightweight Bug Hunt: security boundary attacks on every push/PR
@@ -189,7 +191,9 @@ jobs:
         run: cargo build -p neve --release
 
       - name: Run bug hunt (security boundary attacks)
-        run: cargo run -p neve --release -- run scripts/bug-hunt.neve
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          cargo run -p neve --release -- run scripts/bug-hunt.neve
 
       - name: Report
         run: |
