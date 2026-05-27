@@ -25,64 +25,64 @@
 All bindings are immutable:
 
 ```neve
-let x = 42;
-let name = "Alice";
-let valid = true;
+x = 42
+name = "Alice"
+valid = true
 ```
 
 ### Functions
 
 ```neve
 -- Named function
-fn add(x: Int, y: Int) -> Int = x + y;
+add(x: Int, y: Int) -> Int = x + y
 
 -- Lambda
-let multiply = fn(x, y) x * y;
+multiply = |x, y| x * y
 
 -- With string interpolation
-fn greet(name) = `Hello, {name}!`;
+greet(name) = `Hello, {name}!`
 ```
 
 ### Records
 
 ```neve
-let user = #{
+user = {
     name = "Bob",
     age = 30,
-};
+}
 
 -- Access
-let n = user.name;
+n = user.name
 
 -- Update (creates new record)
-let older = user // #{ age = 31 };
+older = user & { age = 31 }
 
 -- Shorthand
-let name = "Alice";
-let u = #{ name, age = 25 };  -- same as #{ name = name, age = 25 }
+name = "Alice"
+u = { name, age = 25 }  -- same as { name = name, age = 25 }
 ```
 
 ### Lists
 
 ```neve
-let nums = [1, 2, 3, 4, 5];
+nums = [1, 2, 3, 4, 5]
 
 -- Concatenate
-let combined = [1, 2] ++ [3, 4];
+combined = [1, 2] ++ [3, 4]
 
 -- Comprehension
-let doubled = [x * 2 | x <- nums];
-let filtered = [x | x <- nums, x > 2];
+doubled = [x * 2 | x <- nums]
+filtered = [x | x <- nums, x > 2]
 ```
 
 ### Blocks
 
 ```neve
-let result = {
-    let a = 10;
-    let b = 20;
+result = {
+    a = 10
+    b = 20
     a + b   -- last expression is returned
-};
+}
 ```
 
 ---
@@ -93,64 +93,64 @@ let result = {
 所有绑定都是不可变的：
 
 ```neve
-let x = 42;
-let name = "Alice";
-let valid = true;
+x = 42
+name = "Alice"
+valid = true
 ```
 
 ### 函数
 
 ```neve
 -- 命名函数
-fn add(x: Int, y: Int) -> Int = x + y;
+add(x: Int, y: Int) -> Int = x + y
 
 -- Lambda
-let multiply = fn(x, y) x * y;
+multiply = |x, y| x * y
 
 -- 带字符串插值
-fn greet(name) = `你好，{name}！`;
+greet(name) = `你好，{name}！`
 ```
 
 ### 记录
 
 ```neve
-let user = #{
+user = {
     name = "小明",
     age = 30,
-};
+}
 
 -- 访问字段
-let n = user.name;
+n = user.name
 
 -- 更新（创建新记录）
-let older = user // #{ age = 31 };
+older = user & { age = 31 }
 
 -- 简写
-let name = "小红";
-let u = #{ name, age = 25 };  -- 等价于 #{ name = name, age = 25 }
+name = "小红"
+u = { name, age = 25 }  -- 等价于 { name = name, age = 25 }
 ```
 
 ### 列表
 
 ```neve
-let nums = [1, 2, 3, 4, 5];
+nums = [1, 2, 3, 4, 5]
 
 -- 拼接
-let combined = [1, 2] ++ [3, 4];
+combined = [1, 2] ++ [3, 4]
 
 -- 推导
-let doubled = [x * 2 | x <- nums];
-let filtered = [x | x <- nums, x > 2];
+doubled = [x * 2 | x <- nums]
+filtered = [x | x <- nums, x > 2]
 ```
 
 ### 代码块
 
 ```neve
-let result = {
-    let a = 10;
-    let b = 20;
+result = {
+    a = 10
+    b = 20
     a + b   -- 最后一个表达式作为返回值
-};
+}
 ```
 
 ---
@@ -169,24 +169,24 @@ Int, Float, Bool, Char, String, Unit
 
 ```neve
 -- Tuple
-type Point = (Int, Int);
+type Point = (Int, Int)
 
 -- List
-type Numbers = List<Int>;
+type Numbers = List<Int>
 
 -- Record type
-type User = #{ name: String, age: Int };
+type User = { name: String, age: Int }
 ```
 
 ### Generics
 
 ```neve
-fn first<T>(xs: List<T>) -> Option<T> = match xs {
+first<T>(xs: List<T>) -> Option<T> = match xs {
     [] -> None,
     [h, ..] -> Some(h),
-};
+}
 
-fn identity<T>(x: T) -> T = x;
+identity<T>(x: T) -> T = x
 ```
 
 ### Type Inference
@@ -194,8 +194,8 @@ fn identity<T>(x: T) -> T = x;
 Neve uses Hindley-Milner:
 
 ```neve
-let double = fn(x) x * 2;     -- inferred: Int -> Int
-let id = fn(x) x;             -- inferred: forall a. a -> a
+double = |x| x * 2     -- inferred: Int -> Int
+id = |x| x             -- inferred: forall a. a -> a
 ```
 
 ---
@@ -211,24 +211,24 @@ Int, Float, Bool, Char, String, Unit
 
 ```neve
 -- 元组
-type Point = (Int, Int);
+type Point = (Int, Int)
 
 -- 列表
-type Numbers = List<Int>;
+type Numbers = List<Int>
 
 -- 记录类型
-type User = #{ name: String, age: Int };
+type User = { name: String, age: Int }
 ```
 
 ### 泛型
 
 ```neve
-fn first<T>(xs: List<T>) -> Option<T> = match xs {
+first<T>(xs: List<T>) -> Option<T> = match xs {
     [] -> None,
     [h, ..] -> Some(h),
-};
+}
 
-fn identity<T>(x: T) -> T = x;
+identity<T>(x: T) -> T = x
 ```
 
 ### 类型推导
@@ -236,8 +236,8 @@ fn identity<T>(x: T) -> T = x;
 Neve 用的是 Hindley-Milner 算法：
 
 ```neve
-let double = fn(x) x * 2;     -- 推导出：Int -> Int
-let id = fn(x) x;             -- 推导出：forall a. a -> a
+double = |x| x * 2     -- 推导出：Int -> Int
+id = |x| x             -- 推导出：forall a. a -> a
 ```
 
 ---
@@ -249,42 +249,42 @@ let id = fn(x) x;             -- 推导出：forall a. a -> a
 ### Basics
 
 ```neve
-fn describe(x) = match x {
+describe(x) = match x {
     0 -> "zero",
     1 -> "one",
     n -> `other: {n}`,
-};
+}
 ```
 
 ### Lists
 
 ```neve
-fn sum(xs) = match xs {
+sum(xs) = match xs {
     [] -> 0,
     [h, ..t] -> h + sum(t),
-};
+}
 ```
 
 ### Records
 
 ```neve
-fn getName(user) = match user {
-    #{ name, .. } -> name,
-};
+getName(user) = match user {
+    { name, .. } -> name,
+}
 
-fn isAdult(user) = match user {
-    #{ age } if age >= 18 -> true,
+isAdult(user) = match user {
+    { age } if age >= 18 -> true,
     _ -> false,
-};
+}
 ```
 
 ### Option and Result
 
 ```neve
-fn divide(a, b) = {
+divide(a, b) = {
     if b == 0 then Err("div by zero")
     else Ok(a / b)
-};
+}
 
 match divide(10, 2) {
     Ok(n) -> `Got: {n}`,
@@ -298,42 +298,42 @@ match divide(10, 2) {
 ### 基础
 
 ```neve
-fn describe(x) = match x {
+describe(x) = match x {
     0 -> "零",
     1 -> "一",
     n -> `其他：{n}`,
-};
+}
 ```
 
 ### 列表匹配
 
 ```neve
-fn sum(xs) = match xs {
+sum(xs) = match xs {
     [] -> 0,
     [h, ..t] -> h + sum(t),
-};
+}
 ```
 
 ### 记录匹配
 
 ```neve
-fn getName(user) = match user {
-    #{ name, .. } -> name,
-};
+getName(user) = match user {
+    { name, .. } -> name,
+}
 
-fn isAdult(user) = match user {
-    #{ age } if age >= 18 -> true,
+isAdult(user) = match user {
+    { age } if age >= 18 -> true,
     _ -> false,
-};
+}
 ```
 
 ### Option 和 Result
 
 ```neve
-fn divide(a, b) = {
+divide(a, b) = {
     if b == 0 then Err("除以零了")
     else Ok(a / b)
-};
+}
 
 match divide(10, 2) {
     Ok(n) -> `结果：{n}`,
@@ -351,34 +351,34 @@ match divide(10, 2) {
 
 ```neve
 trait Show {
-    fn show(self) -> String;
-};
+    show(self) -> String
+}
 
 trait Eq {
-    fn eq(self, other: Self) -> Bool;
-};
+    eq(self, other: Self) -> Bool
+}
 ```
 
 ### Implement
 
 ```neve
-struct Point { x: Int, y: Int };
+type Point = { x: Int, y: Int }
 
 impl Show for Point {
-    fn show(self) = `Point({self.x}, {self.y})`;
-};
+    show(self) = `Point({self.x}, {self.y})`
+}
 
 impl Eq for Point {
-    fn eq(self, other) = self.x == other.x && self.y == other.y;
-};
+    eq(self, other) = self.x == other.x && self.y == other.y
+}
 ```
 
 ### Bounds
 
 ```neve
-fn print_all<T: Show>(items: List<T>) = {
+print_all<T: Show>(items: List<T>) = {
     -- T must implement Show
-};
+}
 ```
 
 ---
@@ -388,34 +388,34 @@ fn print_all<T: Show>(items: List<T>) = {
 
 ```neve
 trait Show {
-    fn show(self) -> String;
-};
+    show(self) -> String
+}
 
 trait Eq {
-    fn eq(self, other: Self) -> Bool;
-};
+    eq(self, other: Self) -> Bool
+}
 ```
 
 ### 实现
 
 ```neve
-struct Point { x: Int, y: Int };
+type Point = { x: Int, y: Int }
 
 impl Show for Point {
-    fn show(self) = `Point({self.x}, {self.y})`;
-};
+    show(self) = `Point({self.x}, {self.y})`
+}
 
 impl Eq for Point {
-    fn eq(self, other) = self.x == other.x && self.y == other.y;
-};
+    eq(self, other) = self.x == other.x && self.y == other.y
+}
 ```
 
 ### 约束
 
 ```neve
-fn print_all<T: Show>(items: List<T>) = {
+print_all<T: Show>(items: List<T>) = {
     -- T 必须实现 Show
-};
+}
 ```
 
 ---
@@ -428,19 +428,19 @@ fn print_all<T: Show>(items: List<T>) = {
 
 ```neve
 -- utils.neve
-pub fn add(x, y) = x + y;
-fn helper() = 42;  -- private
+pub add(x, y) = x + y
+helper() = 42  -- private
 ```
 
 ### Import
 
 ```neve
-import utils;
-let r = utils.add(1, 2);
+use utils
+r = utils.add(1, 2)
 
 -- Or selective
-import utils (add);
-let r = add(1, 2);
+use utils (add)
+r = add(1, 2)
 ```
 
 ---
@@ -450,19 +450,19 @@ let r = add(1, 2);
 
 ```neve
 -- utils.neve
-pub fn add(x, y) = x + y;
-fn helper() = 42;  -- 私有的
+pub add(x, y) = x + y
+helper() = 42  -- 私有的
 ```
 
 ### 导入
 
 ```neve
-import utils;
-let r = utils.add(1, 2);
+use utils
+r = utils.add(1, 2)
 
 -- 或者只导入需要的
-import utils (add);
-let r = add(1, 2);
+use utils (add)
+r = add(1, 2)
 ```
 
 ---
@@ -478,13 +478,13 @@ let r = add(1, 2);
 5. **Match exhaustively** — handle all cases
 
 ```neve
-import std.list (filter, map, fold);
+use std.list (filter, map, fold)
 
 -- Good: clear data flow
-let result = data
+result = data
     |> filter(valid)
     |> map(transform)
-    |> fold(0, add);
+    |> fold(0, add)
 ```
 
 ---
@@ -497,13 +497,13 @@ let result = data
 5. **匹配要穷尽**，别漏情况
 
 ```neve
-import std.list (filter, map, fold);
+use std.list (filter, map, fold)
 
 -- 这样写清楚
-let result = data
+result = data
     |> filter(valid)
     |> map(transform)
-    |> fold(0, add);
+    |> fold(0, add)
 ```
 
 ---

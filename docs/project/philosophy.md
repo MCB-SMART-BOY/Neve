@@ -36,9 +36,9 @@ Every syntax has one meaning. No guessing.
 每种语法只有一个意思，不用猜。
 
 ```neve
-#{ x = 1 }       -- ALWAYS a record
-{ let x = 1; x } -- ALWAYS a block
-fn(x) x + 1      -- ALWAYS a lambda
+{ x = 1 }       -- ALWAYS a record (container delimited by { })
+{ x = 1; x }    -- ALWAYS a block
+|x| x + 1       -- ALWAYS a lambda
 ```
 
 ### 2. Syntax Unity / 语法统一
@@ -49,8 +49,8 @@ Similar concepts, similar syntax.
 
 | Concept / 概念 | Syntax / 语法 |
 |---------------|---------------|
-| Named function / 命名函数 | `fn add(x, y) = x + y;` |
-| Lambda / Lambda | `fn(x, y) x + y` |
+| Named function / 命名函数 | `add(x, y) = x + y` |
+| Lambda / Lambda | `|x, y| x + y` |
 | Function type / 函数类型 | `Int -> Int` |
 | Match arm / 匹配分支 | `pattern -> result` |
 
@@ -72,13 +72,13 @@ No side effects. No mutable state. Same input → same output. Always.
 
 ### 5. Simplicity / 简洁
 
-20 keywords total.
+A minimal set of keywords (v3.0 reduced from 21 to 9 structural keywords).
 
-一共就 20 个关键字。
+精简的关键字集合（v3.0 从 21 个缩减到 9 个结构化关键字）。
 
 ```
-fn  let  if  then  else  match  import  as  self  super  crate  type
-trait  impl  pub  true  false  struct  enum  lazy
+if  then  else  match  use  as  type  trait  impl  pub
+true  false  lazy  effect  self  super  crate
 ```
 
 ### 6. Unix Philosophy / Unix 哲学
@@ -91,10 +91,10 @@ Do one thing well. Compose. Text is universal.
 
 | Pain Point / 槽点 | Nix | Neve |
 |------------------|-----|------|
-| Record or function? / 记录还是函数？ | `{ x = 1; }` vs `{ x }: x` | `#{ x = 1 }` vs `fn(x) x` |
+| Record or function? / 记录还是函数？ | `{ x = 1; }` vs `{ x }: x` | `{ x = 1 }` vs `|x| x` |
 | Type safety / 类型安全 | None / 没有 | Hindley-Milner / HM 类型推导 |
 | Recursion / 递归 | `rec { }` | Automatic / 自动处理 |
-| Inherit / 继承字段 | `inherit x y z;` | `#{ x, y, z }` |
+| Inherit / 继承字段 | `inherit x y z;` | `{ x, y, z }` |
 | Error timing / 报错时机 | Runtime / 运行时 | Compile-time / 编译时 |
 
 ## Current Status / 开发进度

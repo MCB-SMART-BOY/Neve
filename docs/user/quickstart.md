@@ -39,12 +39,12 @@ cargo build --release
 $ neve repl
 neve> 1 + 2 * 3
 7
-neve> let double = fn(x) x * 2
+neve> double = |x| x * 2
 neve> double(21)
 42
-neve> #{ name = "hacker", power = 9001 }
-#{power = 9001, name = "hacker"}
-neve> { let a = 10; let b = 20; a + b }
+neve> { name = "hacker", power = 9001 }
+{power = 9001, name = "hacker"}
+neve> { a = 10; b = 20; a + b }
 30
 neve> :quit
 ```
@@ -57,14 +57,14 @@ Create `hello.neve`:
 创建 `hello.neve`：
 
 ```neve
-fn greet(name) = `Hello, {name}!`;
+greet(name) = `Hello, {name}!`
 
-fn factorial(n) = {
+factorial(n) = {
     if n <= 1 then 1
     else n * factorial(n - 1)
-};
+}
 
-#{
+{
     greeting = greet("World"),
     magic = factorial(5),
 }
@@ -75,7 +75,7 @@ Run it:
 
 ```bash
 $ neve run hello.neve
-#{magic = 120, greeting = "Hello, World!"}
+{magic = 120, greeting = "Hello, World!"}
 
 $ neve check hello.neve   # Type check (no output = OK)
 ```
@@ -84,14 +84,14 @@ $ neve check hello.neve   # Type check (no output = OK)
 
 ```neve
 -- Inferred
-let x = 42;                -- x: Int
-let f = fn(n) n * 2;       -- f: Int -> Int
+x = 42                -- x: Int
+f = |n| n * 2       -- f: Int -> Int
 
 -- Explicit
-fn add(a: Int, b: Int) -> Int = a + b;
+add(a: Int, b: Int) -> Int = a + b
 
 -- Generics
-fn identity<T>(x: T) -> T = x;
+identity<T>(x: T) -> T = x
 ```
 
 ## Step 5: Pattern Matching (1 min) / 第五步：模式匹配（1 分钟）
@@ -112,10 +112,10 @@ fn sum(list) = match list {
 
 | What / 项目 | Neve |
 |------------|------|
-| Record | `#{ x = 1 }` |
-| Lambda | `fn(x) x + 1` |
-| Function | `fn add(a, b) = a + b;` |
-| Block | `{ let x = 1; x }` |
+| Record | `{ x = 1 }` |
+| Lambda | `\|x\| x + 1` |
+| Function | `add(a, b) = a + b` |
+| Block | `{ x = 1; x }` |
 | List | `[1, 2, 3]` |
 | Pipe | `x \|> f \|> g` |
 | Interpolation | `` `Hello {name}` `` |

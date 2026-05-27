@@ -6,6 +6,8 @@
 
 <p><em>真实功能支持矩阵（v0）</em></p>
 
+> **📢 2026-05: Syntax v3.0 overhaul complete.** `let`/`fn`/`;` now optional, `import` → `use`, `struct`/`enum` → `type`, `fn(x)` → `|x|`, `#{ }` → `{ }`, `//` → `&`. The lexer still accepts legacy keywords for backward compatibility. This matrix reflects semantic support, not syntax surface alone.
+
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
   <strong><a href="../README.md">Docs</a></strong> ·
@@ -62,7 +64,7 @@
 
 | Feature / 特性 | Parser | HIR Lowering | Type Check | AST Runtime | HIR Runtime | Tooling | 当前判断 |
 |----------------|--------|--------------|------------|-------------|-------------|---------|----------|
-| 基础字面量、算术、记录、列表、元组 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 核心表达式基本可用，但端到端与工具链统一性还不足 |
+| 基础字面量、算术、记录、列表、元组 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Syntax v3.0 收敛；管道/记录/列表/元组在 Parser→HIR→Typeck→HIR Runtime 全链路闭环 |
 | 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，主 CLI 路径在常见本地导入与 `std` 导入场景下已优先走 HIR，但边缘场景仍会回退 |
 | 列表推导 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 语言层基本可用，工具链覆盖不足 |
 | 安全字段访问 `?.` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / record / option-record；类型拒绝非 record 非 option 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |

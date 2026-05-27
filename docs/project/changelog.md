@@ -21,6 +21,35 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [3.18.0] - 2026-05-27
+
+### Added
+- **Short I/O aliases**: 14 short I/O aliases — `read`, `write`, `exec`, `cmd`, `env`, `run`, `sh`, `ls`, `exists`, `ok`, `stdout`, `stderr`, `code`, `pwd`, `home`.
+- **Shebang stripping**: Shebang lines (`#!neve`) are now automatically stripped in `frontend` and `fmt` commands.
+
+### Fixed
+- **CI fixes**: Corrected script paths in CI workflows, added `PATH` configuration for `diff-test` and `bug-hunt` jobs, and fixed `rustfmt` formatting issues.
+
+## [3.17.0] - 2026-05-24
+
+### Added
+- **Delimiter-driven `{ }` container theory**: Unified container syntax based on `{ }` delimiters.
+- **Lambda syntax**: `|params| expr` — Rust-style closures replace `fn(x) body`.
+- **Path `/` operator**: `/` operator for path joining (e.g. `base / "file.neve"`).
+- **Pipeline combinator builtins**: `map`, `filter`, `fold`, `flatMap`, `take`, `drop`, `collect`.
+- **Keyword reduction: 21 → 9**: `type`, `trait`, `impl`, `if`, `then`, `else`, `match`, `use`, `pub`, `as`, `lazy`.
+- **Unified type declaration**: `struct`/`enum` → `type`, with `|` separator and optional leading `|`.
+- **Selective import**: `import` → `use` with `.{}` selective import syntax.
+- **Record values without `#` prefix**: `#{ }` → `{ }`.
+- **Effect auto-inference**: `effect` is now automatically inferred from I/O calls.
+
+### Changed
+- **Optional top-level keywords**: `let`/`fn`/`;` are now optional at the top level.
+- **Record merge syntax**: `//` → `&`.
+
+### Tests
+- **900+ tests**, 0 failures, backward compatible.
+
 ## [3.15.0] - 2026-05-22
 
 ### Added
