@@ -39,20 +39,20 @@ for i in 1 2 3; do
 done
 ```
 
-这是 Neve：
+这是 Neve（v3.0）：
 
 ```neve
 #!/usr/bin/env neve run
-import std.io as io;
+use std.io as io
 
-let config = io.readFilePath(./config.toml);
-let port = config.port or 8080;
+config = io.readFilePath(./config.toml)
+port = config.port ?? 8080
 
 io.retry(
-    fn() = io.read(./health-check),
+    || io.read(./health-check),
     maxAttempts = 3,
     backoffMs = 2000,
-);
+)
 ```
 
 类型系统在编译期告诉你 `config.port` 对不对、`or` 的默认值类型匹不匹配。不需要等到半夜告警响了才发现变量名拼错了。
@@ -65,41 +65,41 @@ io.retry(
 
 ```neve
 -- 代数数据类型。编译期检查穷尽性——漏分支直接报错
-enum Health { Alive, Dead(exitCode: Int, stderr: String) }
+type Health { Alive, Dead(exitCode: Int, stderr: String) }
 
-fn summarize(h: Health) -> String = match h {
+summarize(h: Health) -> String = match h {
     Alive -> "ok",
     Dead(code, stderr) -> "退出码 {code}：{stderr}",
-};
+}
 
 -- 错误传播。? 碰到 None 或 Err 就短路返回
-fn loadAndParse(path: Path) -> Result<Config, String> = {
-    let raw = io.readFilePath(path)?;
+loadAndParse(path: Path) -> Result<Config, String> = {
+    raw = io.readFilePath(path)?
     parseConfig(raw)?
-};
+}
 
 -- 安全字段访问。?. 碰到 None 就返回 None
-let port = server?.config?.port or 8080;
+port = server?.config?.port or 8080
 
 -- 惰性求值。只在第一次 force 的时候计算
-let expensive = lazy { loadAllFromDisk() };
+expensive = lazy { loadAllFromDisk() }
 -- ……中间可能根本不用 ……
-let value = force(expensive);
+value = force(expensive)
 
 -- trait 和泛型
 trait HealthCheck {
-    fn check(self) -> Health;
+    check(self) -> Health
 }
 
 impl HealthCheck for Server {
-    fn check(self) -> Health = {
-        let status = io.read(./health-check);
+    check(self) -> Health = {
+        status = io.read(./health-check)
         if status == "ok" { Alive } else { Dead(1, "不健康") }
-    };
+    }
 }
 ```
 
-`print` 和 `println` 全局可用，不需要 import。字符串插值 `"你好 {name}"`。路径字面量 `./foo` 直接就是 `Path` 类型，不是字符串。支持记录更新 `#{ old | field = newValue }`。
+`print` 和 `println` 全局可用，不需要 import。字符串插值 `` `你好 {name}` ``。路径字面量 `./foo` 直接就是 `Path` 类型，不是字符串。支持记录更新 `{ old | field = newValue }`。
 
 ---
 
@@ -108,9 +108,9 @@ impl HealthCheck for Server {
 **一等管道**。命令之间用 `|>` 串联：
 
 ```neve
-let pipeline = io.command("ls", ["-la"]) |> io.command("grep", ["neve"]);
-let result = io.execPipeline(pipeline);
-let output = io.processStdout(result);
+pipeline = io.command("ls", ["-la"]) |> io.command("grep", ["neve"])
+result = io.execPipeline(pipeline)
+output = io.processStdout(result)
 ```
 
 **流式处理**。逐行处理命令输出，带超时自动杀进程：
@@ -118,67 +118,67 @@ let output = io.processStdout(result);
 ```neve
 io.execCommandStreamingWithTimeout(
     io.command("journalctl", ["-f"]),
-    fn(line) {
+    |line| {
         if line.contains("error") {
-            io.appendFilePath(./errors.log, line);
+            io.appendFilePath(./errors.log, line)
         }
     },
     timeoutMs = 5000,
-);
+)
 
 -- Stream<T> 变换管道
-let lines = io.streamLines(./log.txt)
-    |> io.streamMap(fn(l) l.toUpper())
-    |> io.streamFilter(fn(l) l.contains("ERROR"))
-    |> io.streamTake(10);
-let results = io.streamCollect(lines);
+lines = io.streamLines(./log.txt)
+    |> io.streamMap(|l| l.toUpper())
+    |> io.streamFilter(|l| l.contains("ERROR"))
+    |> io.streamTake(10)
+results = io.streamCollect(lines)
 
 -- Stream<T> 管道到命令
 io.streamList(["line1", "line2"])
-    |> io.streamPipe(io.command("grep", ["line"]));
+    |> io.streamPipe(io.command("grep", ["line"]))
 ```
 
 **原子写**。先写临时文件再 rename，不会写出写到一半断电损坏的文件：
 
 ```neve
-io.atomicWrite(./critical.json, newConfig);
+io.atomicWrite(./critical.json, newConfig)
 ```
 
 **信号处理**。注册操作系统信号回调：
 
 ```neve
-io.onSignal(SIGTERM, fn() { io.writeFilePath(./shutdown.log, "正常关闭") });
-io.onSignal(SIGINT, fn() { println("收到中断信号") });
+io.onSignal(SIGTERM, || { io.writeFilePath(./shutdown.log, "正常关闭") })
+io.onSignal(SIGINT, || { println("收到中断信号") })
 ```
 
 **重试和条件等待**：
 
 ```neve
-io.retry(fn() = io.read(./health-check), maxAttempts = 5, backoffMs = 1000);
-io.ensure(fn() = io.pathExistsPath(./ready), timeoutMs = 30000, intervalMs = 500);
+io.retry(|| = io.read(./health-check), maxAttempts = 5, backoffMs = 1000)
+io.ensure(|| = io.pathExistsPath(./ready), timeoutMs = 30000, intervalMs = 500)
 ```
 
 **二进制数据**。`Bytes` 是一等类型：
 
 ```neve
-let data = io.readFileBytesPath(./binary.bin);
-io.writeFileBytesPath(./copy.bin, data);
+data = io.readFileBytesPath(./binary.bin)
+io.writeFileBytesPath(./copy.bin, data)
 ```
 
 **文件操作**。增删改查、遍历、权限、符号链接 —— 全有 typed-path 变体：
 
 ```neve
-io.writeFilePath(./a.txt, "内容");
-let content = io.readFilePath(./a.txt);
-io.appendFilePath(./a.txt, "追加");
-io.copyPath(./a.txt, ./b.txt);
-io.movePath(./b.txt, ./c.txt);
-io.createDirAllPath(./dir/sub);
-io.removeDirAllPath(./dir);
-io.walk(./dir, fn(p) { println(p) });
-io.chmod(./script, 0o755);
-io.symlink(./target, ./link);
-io.tempDir(fn(dir) { io.writeFilePath(./temp.txt, "y"); 42 });
+io.writeFilePath(./a.txt, "内容")
+content = io.readFilePath(./a.txt)
+io.appendFilePath(./a.txt, "追加")
+io.copyPath(./a.txt, ./b.txt)
+io.movePath(./b.txt, ./c.txt)
+io.createDirAllPath(./dir/sub)
+io.removeDirAllPath(./dir)
+io.walk(./dir, |p| { println(p) })
+io.chmod(./script, 0o755)
+io.symlink(./target, ./link)
+io.tempDir(|dir| { io.writeFilePath(./temp.txt, "y"); 42 })
 ```
 
 ---
@@ -187,10 +187,10 @@ io.tempDir(fn(dir) { io.writeFilePath(./temp.txt, "y"); 42 });
 
 ```neve
 -- 纯函数。不能调 IO，编译器强制检查
-fn add(x: Int, y: Int) -> Int = x + y;
+add(x: Int, y: Int) -> Int = x + y
 
 -- 标了 effect 才能做 IO
-fn save(path: Path, data: String) effect = io.writeFilePath(path, data);
+save(path: Path, data: String) effect = io.writeFilePath(path, data)
 
 -- neve check 默认拒绝 IO
 -- neve check --pure 连标了 effect 的函数都不让调
