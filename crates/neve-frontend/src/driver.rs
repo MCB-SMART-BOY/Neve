@@ -142,7 +142,17 @@ pub fn parse_module_file(
     module_path: &[String],
 ) -> std::io::Result<ModuleParseResult> {
     let file_path = file_path.as_ref().to_path_buf();
-    let source = std::fs::read_to_string(&file_path)?;
+    let raw_source = std::fs::read_to_string(&file_path)?;
+    // Strip shebang line if present (#!/usr/bin/env neve ...)
+    let source = if raw_source.starts_with("#!") {
+        raw_source
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        raw_source
+    };
     let (ast, diagnostics) = parse(&source);
 
     Ok(ModuleParseResult {
