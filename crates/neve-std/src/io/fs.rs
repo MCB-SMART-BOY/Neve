@@ -54,6 +54,23 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: read (v3.0)
+        (
+            "read",
+            Value::Builtin(BuiltinFn {
+                name: "read",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => std::fs::read_to_string(path.as_str())
+                        .map(|s| Value::String(Rc::new(s)))
+                        .map_err(|e| format!("read: {e}")),
+                    Value::Path(path) => std::fs::read_to_string(path.as_path())
+                        .map(|s| Value::String(Rc::new(s)))
+                        .map_err(|e| format!("read: {e}")),
+                    _ => Err("read expects a String or Path".to_string()),
+                },
+            }),
+        ),
         (
             "io.readFilePath",
             Value::Builtin(BuiltinFn {
@@ -163,6 +180,27 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             .map_err(|e| format!("io.writeFile: {e}"))
                     }
                     _ => Err("io.writeFile expects (String, String)".to_string()),
+                },
+            }),
+        ),
+        // Short alias: write (v3.0)
+        (
+            "write",
+            Value::Builtin(BuiltinFn {
+                name: "write",
+                arity: 2,
+                func: |args| match (&args[0], &args[1]) {
+                    (Value::String(path), Value::String(content)) => {
+                        std::fs::write(path.as_str(), content.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("write: {e}"))
+                    }
+                    (Value::Path(path), Value::String(content)) => {
+                        std::fs::write(path.as_path(), content.as_bytes())
+                            .map(|_| Value::Unit)
+                            .map_err(|e| format!("write: {e}"))
+                    }
+                    _ => Err("write expects (String|Path, String)".to_string()),
                 },
             }),
         ),
