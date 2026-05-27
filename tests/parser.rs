@@ -502,9 +502,13 @@ fn test_tuple_type() {
 
 #[test]
 fn test_recovery_missing_semicolon() {
+    // In v3.0, semicolons are optional at item level,
+    // so `let x = 42 let y = 10;` parses as two items without errors.
+    // 在 v3.0 中，项级别的分号是可选的，
+    // 因此 `let x = 42 let y = 10;` 被解析为两个项，没有错误。
     let (file, diags) = parse("let x = 42 let y = 10;");
-    assert!(!diags.is_empty());
-    assert!(!file.items.is_empty());
+    assert!(diags.is_empty(), "semicolons are optional in v3.0");
+    assert_eq!(file.items.len(), 2);
 }
 
 #[test]

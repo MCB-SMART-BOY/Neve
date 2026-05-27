@@ -966,6 +966,14 @@ impl Evaluator {
                     }
                 }
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
+                (Value::Path(a), Value::String(b)) => {
+                    let joined = a.join(b.as_str());
+                    Ok(Value::Path(Rc::new(joined)))
+                }
+                (Value::String(a), Value::String(b)) => {
+                    let joined = PathBuf::from(a.as_str()).join(b.as_str());
+                    Ok(Value::Path(Rc::new(joined)))
+                }
                 _ => Err(EvalError::TypeError(format!(
                     "cannot divide {:?} by {:?}",
                     left, right
@@ -1222,6 +1230,30 @@ impl Evaluator {
                     return Err(EvalError::WrongArity);
                 }
                 Ok(Some(self.builtin_filter(&args[0], &args[1])?))
+            }
+            "fold" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_fold(&args[0], &args[1], &args[2])?))
+            }
+            "list.fold" => {
+                if args.len() != 3 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_fold(&args[0], &args[1], &args[2])?))
+            }
+            "flatMap" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_flat_map(&args[0], &args[1])?))
+            }
+            "list.flatMap" => {
+                if args.len() != 2 {
+                    return Err(EvalError::WrongArity);
+                }
+                Ok(Some(self.builtin_flat_map(&args[0], &args[1])?))
             }
             "io.execCommandStreaming" => {
                 if args.len() != 2 {
@@ -1483,6 +1515,43 @@ impl Evaluator {
         for item in items.iter() {
             if let Value::Bool(true) = self.apply(pred.clone(), vec![item.clone()])? {
                 results.push(item.clone());
+            }
+        }
+        Ok(Value::List(Rc::new(results)))
+    }
+
+    fn builtin_fold(
+        &mut self,
+        init: &Value,
+        list: &Value,
+        func: &Value,
+    ) -> Result<Value, EvalError> {
+        let items = match list {
+            Value::List(items) => items,
+            _ => return Err(EvalError::TypeError("fold expects a list".to_string())),
+        };
+        let mut acc = init.clone();
+        for item in items.iter() {
+            acc = self.apply(func.clone(), vec![acc, item.clone()])?;
+        }
+        Ok(acc)
+    }
+
+    fn builtin_flat_map(&mut self, func: &Value, list: &Value) -> Result<Value, EvalError> {
+        let items = match list {
+            Value::List(items) => items,
+            _ => return Err(EvalError::TypeError("flatMap expects a list".to_string())),
+        };
+        let mut results = Vec::new();
+        for item in items.iter() {
+            let mapped = self.apply(func.clone(), vec![item.clone()])?;
+            match mapped {
+                Value::List(inner) => results.extend(inner.iter().cloned()),
+                _ => {
+                    return Err(EvalError::TypeError(
+                        "flatMap function must return a list".to_string(),
+                    ));
+                }
             }
         }
         Ok(Value::List(Rc::new(results)))

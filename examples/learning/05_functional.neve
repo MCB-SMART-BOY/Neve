@@ -1,16 +1,23 @@
-import std.list as list;
+use std.list as list
 
-fn factorial(n: Int) -> Int = {
-    if n <= 1 then 1
-    else n * factorial(n - 1)
-};
+factorial(n: Int) -> Int = {
+  if n <= 1 then 1 else n * factorial(n - 1)
+}
 
-fn double(x: Int) -> Int = x * 2;
-fn increment(x: Int) -> Int = x + 1;
+double(x: Int) -> Int = x * 2
 
-let doubled = list.map(double, [1, 2, 3]);
-let filtered = list.filter(fn(x) { x > 5 }, [3, 6, 9]);
-let folded = list.fold(0, fn(acc, x) { acc + x }, [1, 2, 3]);
+increment(x: Int) -> Int = x + 1
 
-let fact5 = factorial(5);
-let piped = 10 |> double |> increment;
+doubled = list.map(double, [1, 2, 3])
+
+filtered = list.filter(|x| {
+  x > 5
+}, [3, 6, 9])
+
+folded = list.fold(0, |acc, x| {
+  acc + x
+}, [1, 2, 3])
+
+fact5 = factorial(5)
+
+piped = 10 |> double |> increment

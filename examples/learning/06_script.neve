@@ -1,15 +1,15 @@
 #!/usr/bin/env neve run
-import std.io as io;
+import std.io as io
 
-fn main() effect = {
-    let (args, _) = io.args();
-    let name = match args {
-        [n, ..] -> n,
-        [] -> "World"
-    };
-    io.println("Hello, " ++ name ++ "!");
-    let files = io.glob("*.neve");
-    let count = len(files);
-    io.println("Found " ++ toString(count) ++ " .neve files");
-    0
-};
+main() = {
+  (args, _) = io.args()
+  name = match args {
+    | [n, ..] -> n
+    | [] -> "World"
+  }
+  io.println("Hello, " ++ name ++ "!")
+  files = io.glob("*.neve")
+  count = len(files)
+  io.println("Found " ++ toString(count) ++ " .neve files")
+  0
+}

@@ -1,22 +1,21 @@
--- Pipe operator / 管道操作符
--- The `|>` operator passes the left value as argument to the right function.
--- `x |> f` is equivalent to `f(x)`.
+println(41 |> |x| {
+  x + 1
+});
 
--- Basic pipe
-println(41 |> fn(x) { x + 1 });  -- 42
+println(5 |> |x| {
+  x * 2
+} |> |x| {
+  x + 3
+} |> |x| {
+  x * 4
+});
 
--- Chaining pipes: read left-to-right
-println(
-    5
-    |> fn(x) { x * 2 }     -- 10
-    |> fn(x) { x + 3 }     -- 13
-    |> fn(x) { x * 4 }     -- 52
-);
+double = |x| {
+  x * 2
+}
 
--- Pipe with named functions
-let double = fn(x) { x * 2 };
-let addOne = fn(x) { x + 1 };
-println(20 |> double |> addOne); -- 41
+addOne = |x| {
+  x + 1
+}
 
--- Without pipe (equivalent, but harder to read)
-println(addOne(double(20)));     -- 41
+println(20 |> double |> addOne);

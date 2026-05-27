@@ -1,16 +1,14 @@
-import std.list as list;
+use std.list as list
 
-fn complete(t) = #{ title = t.title, done = true };
-fn is_done(t) = t.done;
+complete(t: _) = { title = t.title, done = true }
 
-fn summarize(tasks) = {
-    let done_count = len(list.filter(is_done, tasks));
-    "Tasks: " ++ toString(done_count) ++ "/" ++ toString(len(tasks)) ++ " done"
-};
+is_done(t: _) = t.done
 
-let tasks = [
-    #{ title = "Learn Neve", done = true },
-    #{ title = "Build project", done = false },
-];
+summarize(tasks: _) = {
+  let done_count = len(list.filter(is_done, tasks));
+  "Tasks: " ++ toString(done_count) ++ "/" ++ toString(len(tasks)) ++ " done"
+}
 
-let r = summarize(tasks);
+tasks = [{ title = "Learn Neve", done = true }, { title = "Build project", done = false }]
+
+r = summarize(tasks)

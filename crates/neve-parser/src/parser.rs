@@ -125,17 +125,9 @@ impl Parser {
                 self.advance();
                 Some(ItemKind::Fn(self.parse_fn_def(is_pub)))
             }
-            TokenKind::Type => {
+            TokenKind::Type | TokenKind::Struct | TokenKind::Enum => {
                 self.advance();
-                Some(ItemKind::TypeAlias(self.parse_type_alias(is_pub)))
-            }
-            TokenKind::Struct => {
-                self.advance();
-                Some(ItemKind::Struct(self.parse_struct_def(is_pub)))
-            }
-            TokenKind::Enum => {
-                self.advance();
-                Some(ItemKind::Enum(self.parse_enum_def(is_pub)))
+                Some(self.parse_type_decl(is_pub))
             }
             TokenKind::Trait => {
                 self.advance();
@@ -145,15 +137,20 @@ impl Parser {
                 self.advance();
                 Some(ItemKind::Impl(self.parse_impl_def()))
             }
-            TokenKind::Import => {
+            TokenKind::Import | TokenKind::Use => {
                 self.advance();
                 Some(ItemKind::Import(self.parse_import_def(is_pub)))
             }
+            TokenKind::Ident(_) => self.parse_ident_item(is_pub),
             _ => {
                 if is_pub {
                     self.error("expected item after `pub`");
                 }
-                None
+                if self.is_start_of_pattern() {
+                    Some(ItemKind::Let(self.parse_let_def(is_pub)))
+                } else {
+                    None
+                }
             }
         };
 
@@ -168,12 +165,182 @@ impl Parser {
 
     // ========== Item Definitions 项定义 ==========
 
+    /// Check if the current token could start a pattern.
+    /// 检查当前 token 是否可能开始一个模式。
+    fn is_start_of_pattern(&self) -> bool {
+        matches!(
+            self.current_kind(),
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace
+        )
+    }
+
+    /// Parse an identifier-based item (v3.0: keyword-less `fn`/`let`).
+    /// 解析基于标识符的项（v3.0：无关键字 `fn`/`let`）。
+    ///
+    /// Looks ahead to determine if this is a function definition or let binding.
+    /// 向前查看以确定是函数定义还是 let 绑定。
+    fn parse_ident_item(&mut self, is_pub: bool) -> Option<ItemKind> {
+        let saved = self.pos;
+        let name = self.parse_ident();
+        let visibility = if is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        };
+
+        // Check for generics: name<T>
+        if self.eat(TokenKind::Lt) {
+            let generics = self.parse_generics_inline();
+            if self.check(TokenKind::LParen) {
+                // fn def with generics: name<T>(params) = body
+                self.advance(); // consume (
+                let params = self.parse_params();
+                self.expect(TokenKind::RParen);
+                let return_type = if self.eat(TokenKind::Arrow) {
+                    Some(self.parse_type())
+                } else {
+                    None
+                };
+                let effect = self.eat(TokenKind::Effect);
+                if self.eat(TokenKind::Eq) {
+                    let body = self.parse_expr();
+                    self.eat(TokenKind::Semicolon);
+                    return Some(ItemKind::Fn(FnDef {
+                        visibility,
+                        name,
+                        generics,
+                        params,
+                        return_type,
+                        effect,
+                        body,
+                    }));
+                }
+            }
+            // Not a fn def, backtrack
+            self.pos = saved;
+            return None;
+        }
+
+        // Check for params: name(
+        if self.eat(TokenKind::LParen) {
+            let params = self.parse_params();
+            self.expect(TokenKind::RParen);
+            let return_type = if self.eat(TokenKind::Arrow) {
+                Some(self.parse_type())
+            } else {
+                None
+            };
+            let effect = self.eat(TokenKind::Effect);
+            if self.eat(TokenKind::Eq) {
+                let body = self.parse_expr();
+                self.eat(TokenKind::Semicolon);
+                return Some(ItemKind::Fn(FnDef {
+                    visibility,
+                    name,
+                    generics: Vec::new(),
+                    params,
+                    return_type,
+                    effect,
+                    body,
+                }));
+            }
+            // Not a fn def, backtrack
+            self.pos = saved;
+            return None;
+        }
+
+        // Check for let binding: name = value
+        if self.eat(TokenKind::Eq) {
+            let value = self.parse_expr();
+            self.eat(TokenKind::Semicolon);
+            let pattern = Pattern::new(PatternKind::Var(name.clone()), name.span);
+            return Some(ItemKind::Let(LetDef {
+                visibility,
+                pattern,
+                ty: None,
+                value,
+            }));
+        }
+
+        // Check for let binding with type: name: Type = value
+        if self.eat(TokenKind::Colon) {
+            let ty = self.parse_type();
+            if self.eat(TokenKind::Eq) {
+                let value = self.parse_expr();
+                self.eat(TokenKind::Semicolon);
+                let pattern = Pattern::new(PatternKind::Var(name.clone()), name.span);
+                return Some(ItemKind::Let(LetDef {
+                    visibility,
+                    pattern,
+                    ty: Some(ty),
+                    value,
+                }));
+            }
+            // Not a let binding, backtrack
+            self.pos = saved;
+            return None;
+        }
+
+        // Not a recognizable item form
+        self.pos = saved;
+        None
+    }
+
+    /// Parse generic parameters after `<` has already been consumed.
+    /// 在 `<` 已被消耗后解析泛型参数。
+    fn parse_generics_inline(&mut self) -> Vec<GenericParam> {
+        let mut params = Vec::new();
+        loop {
+            let start = self.current_span();
+            let name = self.parse_ident();
+            let bounds = if self.eat(TokenKind::Colon) {
+                let mut bounds = vec![self.parse_type()];
+                while self.eat(TokenKind::Plus) {
+                    bounds.push(self.parse_type());
+                }
+                bounds
+            } else {
+                Vec::new()
+            };
+            let end = self.previous_span();
+            params.push(GenericParam {
+                name,
+                bounds,
+                span: start.merge(end),
+            });
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::Gt);
+        params
+    }
+
+    /// Skip a balanced parenthesized block `( ... )`, tracking nesting.
+    /// 跳过平衡的括号块 `( ... )`，跟踪嵌套。
+    #[allow(dead_code)]
+    fn skip_balanced_paren(&mut self) {
+        self.advance(); // consume (
+        let mut depth = 1;
+        while !self.at_end() && depth > 0 {
+            match self.current_kind() {
+                TokenKind::LParen => depth += 1,
+                TokenKind::RParen => depth -= 1,
+                _ => {}
+            }
+            self.advance();
+        }
+    }
+
+    // ========== Item Definitions 项定义 ==========
+
     /// Parse a let binding definition.
     /// 解析 let 绑定定义。
     ///
-    /// Syntax: `let pattern [: type] = expr;`
-    /// 语法：`let 模式 [: 类型] = 表达式;`
+    /// Syntax: `[let] pattern [: type] = expr[;]`
+    /// 语法：`[let] 模式 [: 类型] = 表达式[;]`
     fn parse_let_def(&mut self, is_pub: bool) -> LetDef {
+        let _ = self.eat(TokenKind::Let);
         let pattern = self.parse_pattern();
         let ty = if self.eat(TokenKind::Colon) {
             Some(self.parse_type())
@@ -182,7 +349,7 @@ impl Parser {
         };
         self.expect(TokenKind::Eq);
         let value = self.parse_expr();
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         LetDef {
             visibility: if is_pub {
@@ -199,9 +366,10 @@ impl Parser {
     /// Parse a function definition.
     /// 解析函数定义。
     ///
-    /// Syntax: `fn name[<generics>](params) [-> return_type] = body;`
-    /// 语法：`fn 名称[<泛型>](参数) [-> 返回类型] = 函数体;`
+    /// Syntax: `[fn] name[<generics>](params) [-> return_type] = body[;]`
+    /// 语法：`[fn] 名称[<泛型>](参数) [-> 返回类型] = 函数体[;]`
     fn parse_fn_def(&mut self, is_pub: bool) -> FnDef {
+        let _ = self.eat(TokenKind::Fn);
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LParen);
@@ -219,7 +387,7 @@ impl Parser {
 
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         FnDef {
             visibility: if is_pub {
@@ -241,12 +409,13 @@ impl Parser {
     ///
     /// Syntax: `type Name[<generics>] = Type;`
     /// 语法：`type 名称[<泛型>] = 类型;`
+    #[allow(dead_code)]
     fn parse_type_alias(&mut self, is_pub: bool) -> TypeAlias {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::Eq);
         let ty = self.parse_type();
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         TypeAlias {
             visibility: if is_pub {
@@ -260,18 +429,151 @@ impl Parser {
         }
     }
 
+    /// Parse a unified type declaration (v3.0).
+    /// 解析统一的类型声明（v3.0）。
+    ///
+    /// Handles type aliases, struct definitions, and enum definitions
+    /// from a single `type` (or `struct`/`enum` for backward compat) keyword.
+    /// 从单个 `type` 关键字（或向后兼容的 `struct`/`enum`）处理类型别名、结构体和枚举定义。
+    fn parse_type_decl(&mut self, is_pub: bool) -> ItemKind {
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        let visibility = if is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        };
+
+        if self.eat(TokenKind::Eq) {
+            if self.eat(TokenKind::LBrace) {
+                // v3.0 syntax: type Foo = { ... }
+                if self.peek_brace_is_enum() {
+                    ItemKind::Enum(self.parse_enum_def_body(name, generics, visibility))
+                } else {
+                    ItemKind::Struct(self.parse_struct_def_body(name, generics, visibility))
+                }
+            } else {
+                // type alias: type Foo = Type
+                let ty = self.parse_type();
+                self.eat(TokenKind::Semicolon);
+                ItemKind::TypeAlias(TypeAlias {
+                    visibility,
+                    name,
+                    generics,
+                    ty,
+                })
+            }
+        } else if self.eat(TokenKind::LBrace) {
+            // legacy syntax: type Foo { ... }
+            if self.peek_brace_is_enum() {
+                ItemKind::Enum(self.parse_enum_def_body(name, generics, visibility))
+            } else {
+                ItemKind::Struct(self.parse_struct_def_body(name, generics, visibility))
+            }
+        } else {
+            // bare type declaration without body
+            let name_span = name.span;
+            self.eat(TokenKind::Semicolon);
+            ItemKind::TypeAlias(TypeAlias {
+                visibility,
+                name,
+                generics,
+                ty: Type {
+                    kind: TypeKind::Infer,
+                    span: name_span,
+                },
+            })
+        }
+    }
+
+    /// Parse a struct body after `{` has been consumed.
+    /// 在 `{` 已被消耗后解析结构体体。
+    fn parse_struct_def_body(
+        &mut self,
+        name: Ident,
+        generics: Vec<GenericParam>,
+        visibility: Visibility,
+    ) -> StructDef {
+        let fields = self.parse_field_defs();
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+        StructDef {
+            visibility,
+            name,
+            generics,
+            fields,
+        }
+    }
+
+    /// Parse an enum body after `{` has been consumed.
+    /// 在 `{` 已被消耗后解析枚举体。
+    fn parse_enum_def_body(
+        &mut self,
+        name: Ident,
+        generics: Vec<GenericParam>,
+        visibility: Visibility,
+    ) -> EnumDef {
+        let variants = self.parse_variants();
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+        EnumDef {
+            visibility,
+            name,
+            generics,
+            variants,
+        }
+    }
+
+    /// Peek inside `{ ... }` to determine if it contains enum variants or struct fields.
+    /// 在 `{ ... }` 内部窥视以确定包含枚举变体还是结构体字段。
+    ///
+    /// Assumes the current position is inside the brace (after `{` was consumed).
+    /// Restores position after peeking.
+    /// 假设当前位置在大括号内（`{` 已被消耗）。窥视后恢复位置。
+    fn peek_brace_is_enum(&mut self) -> bool {
+        let saved = self.pos;
+
+        // Leading `|` indicates v3.0 enum syntax
+        if self.eat(TokenKind::Pipe) {
+            self.pos = saved;
+            return true;
+        }
+
+        // Check first identifier: if followed by `:`, it's a struct field.
+        // If followed by `,`, `|`, `(`, `{`, or `}`, it's an enum variant.
+        if matches!(self.current_kind(), TokenKind::Ident(_)) {
+            self.advance();
+            let is_enum = matches!(
+                self.current_kind(),
+                TokenKind::Comma
+                    | TokenKind::Pipe
+                    | TokenKind::LParen
+                    | TokenKind::LBrace
+                    | TokenKind::HashLBrace
+                    | TokenKind::RBrace
+            );
+            self.pos = saved;
+            return is_enum;
+        }
+
+        // Empty or unexpected — default to struct
+        self.pos = saved;
+        false
+    }
+
     /// Parse a struct definition.
     /// 解析结构体定义。
     ///
     /// Syntax: `struct Name[<generics>] { fields };`
     /// 语法：`struct 名称[<泛型>] { 字段列表 };`
+    #[allow(dead_code)]
     fn parse_struct_def(&mut self, is_pub: bool) -> StructDef {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LBrace);
         let fields = self.parse_field_defs();
         self.expect(TokenKind::RBrace);
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         StructDef {
             visibility: if is_pub {
@@ -290,13 +592,14 @@ impl Parser {
     ///
     /// Syntax: `enum Name[<generics>] { variants };`
     /// 语法：`enum 名称[<泛型>] { 变体列表 };`
+    #[allow(dead_code)]
     fn parse_enum_def(&mut self, is_pub: bool) -> EnumDef {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LBrace);
         let variants = self.parse_variants();
         self.expect(TokenKind::RBrace);
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         EnumDef {
             visibility: if is_pub {
@@ -332,7 +635,7 @@ impl Parser {
         }
 
         self.expect(TokenKind::RBrace);
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         TraitDef {
             visibility: if is_pub {
@@ -378,7 +681,7 @@ impl Parser {
         }
 
         self.expect(TokenKind::RBrace);
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         ImplDef {
             generics,
@@ -454,7 +757,7 @@ impl Parser {
             None
         };
 
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
 
         ImportDef {
             prefix,
@@ -601,11 +904,22 @@ impl Parser {
     /// 解析枚举变体。
     ///
     /// Variants can be: unit, tuple, or record.
-    /// 变体可以是：单元、元组或记录。
+    /// Separators: `,` (legacy) or `|` (v3.0). Optional leading/trailing `|`.
+    /// 变体可以是：单元、元组或记录。分隔符：`,`（旧）或 `|`（v3.0）。可选前导/尾随 `|`。
     fn parse_variants(&mut self) -> Vec<Variant> {
         let mut variants = Vec::new();
+
+        // Optional leading `|` (v3.0 syntax)
+        // 可选的前导 `|`（v3.0 语法）
+        self.eat(TokenKind::Pipe);
+
         while !self.check(TokenKind::RBrace) && !self.at_end() {
             let start = self.current_span();
+
+            // Skip leading `|` separator between variants (v3.0)
+            // 跳过变体之间的前导 `|` 分隔符（v3.0）
+            self.eat(TokenKind::Pipe);
+
             let name = self.parse_ident();
 
             // Parse variant kind: unit, tuple, or record
@@ -643,7 +957,9 @@ impl Parser {
                 span: start.merge(end),
             });
 
-            if !self.eat(TokenKind::Comma) {
+            // Accept `,` (legacy) or `|` (v3.0) as separator
+            // 接受 `,`（旧）或 `|`（v3.0）作为分隔符
+            if !self.eat(TokenKind::Comma) && !self.eat(TokenKind::Pipe) {
                 break;
             }
         }
@@ -654,7 +970,7 @@ impl Parser {
     /// 解析特征项（方法签名）。
     fn parse_trait_item(&mut self) -> TraitItem {
         let start = self.current_span();
-        self.expect(TokenKind::Fn);
+        self.eat(TokenKind::Fn);
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LParen);
@@ -678,7 +994,7 @@ impl Parser {
             None
         };
 
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
         let end = self.previous_span();
 
         TraitItem {
@@ -696,7 +1012,7 @@ impl Parser {
     /// 解析 impl 项（方法实现）。
     fn parse_impl_item(&mut self) -> ImplItem {
         let start = self.current_span();
-        self.expect(TokenKind::Fn);
+        self.eat(TokenKind::Fn);
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LParen);
@@ -714,7 +1030,7 @@ impl Parser {
 
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
         let end = self.previous_span();
 
         ImplItem {
@@ -759,7 +1075,7 @@ impl Parser {
             None
         };
 
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
         let end = self.previous_span();
 
         AssocTypeDef {
@@ -781,7 +1097,7 @@ impl Parser {
         let name = self.parse_ident();
         self.expect(TokenKind::Eq);
         let ty = self.parse_type();
-        self.expect(TokenKind::Semicolon);
+        self.eat(TokenKind::Semicolon);
         let end = self.previous_span();
 
         AssocTypeImpl {
@@ -854,12 +1170,12 @@ impl Parser {
         left
     }
 
-    /// Parse merge expression: expr // expr
-    /// 解析合并表达式：expr // expr
+    /// Parse merge expression: expr // expr  or  expr & expr (v3.0)
+    /// 解析合并表达式：expr // expr 或 expr & expr (v3.0)
     fn parse_merge_expr(&mut self) -> Expr {
         let mut left = self.parse_coalesce_expr();
 
-        while self.eat(TokenKind::SlashSlash) {
+        while self.eat(TokenKind::SlashSlash) || self.eat(TokenKind::Amp) {
             let right = self.parse_coalesce_expr();
             let span = left.span.merge(right.span);
             left = Expr::new(
@@ -1278,18 +1594,21 @@ impl Parser {
             // Record literal
             // 记录字面量
             TokenKind::HashLBrace => self.parse_record(),
-            // Block expression
-            // 块表达式
-            TokenKind::LBrace => self.parse_block(),
+            // Block or record brace expression (v3.0)
+            // 块或记录大括号表达式（v3.0）
+            TokenKind::LBrace => self.parse_brace_expr(),
             // If expression
             // if 表达式
             TokenKind::If => self.parse_if(),
             // Match expression
             // match 表达式
             TokenKind::Match => self.parse_match(),
-            // Lambda expression
-            // Lambda 表达式
-            TokenKind::Fn => self.parse_lambda(),
+            // Lambda expression (fn syntax)
+            // Lambda 表达式（fn 语法）
+            TokenKind::Fn => self.parse_lambda_fn(),
+            // Lambda expression (pipe syntax, v3.0)
+            // Lambda 表达式（管道语法，v3.0）
+            TokenKind::Pipe => self.parse_lambda_pipe(),
             // Lazy expression
             // 惰性表达式
             TokenKind::Lazy => {
@@ -1576,11 +1895,159 @@ impl Parser {
         fields
     }
 
+    /// Parse a brace-delimited expression: record or block (v3.0).
+    /// 解析大括号表达式：记录或块（v3.0）。
+    ///
+    /// In v3.0, `{ ... }` is first tried as a record. If that fails,
+    /// it falls back to block parsing.
+    /// 在 v3.0 中，`{ ... }` 首先尝试作为记录解析。如果失败，回退到块解析。
+    fn parse_brace_expr(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // consume {
+
+        let prev_recovery = self.recovery_mode;
+        self.recovery_mode = RecoveryMode::Delimiter(DelimiterKind::Brace);
+
+        // Empty braces → empty record
+        if self.eat(TokenKind::RBrace) {
+            self.recovery_mode = prev_recovery;
+            return Expr::new(
+                ExprKind::Record(Vec::new()),
+                start.merge(self.previous_span()),
+            );
+        }
+
+        // Look ahead to decide: record or block?
+        // A record needs either `=` (explicit field) or `,` (multi-field).
+        // Single `{ ident }` without `=` or `,` is a block (backward compat).
+        // 向前查看以决定：记录还是块？
+        // 记录需要 `=`（显式字段）或 `,`（多字段）。
+        // 单个 `{ ident }` 无 `=` 或 `,` 是块（向后兼容）。
+        let saved = self.pos;
+        let looks_like_record = match self.current_kind() {
+            TokenKind::Ident(_) => {
+                self.advance();
+                matches!(self.current_kind(), TokenKind::Eq | TokenKind::Comma)
+            }
+            _ => false,
+        };
+        self.pos = saved;
+
+        if looks_like_record {
+            let mut record = self.parse_record_brace();
+            self.expect(TokenKind::RBrace);
+            self.recovery_mode = prev_recovery;
+            record.span = start.merge(self.previous_span());
+            return record;
+        }
+
+        // Parse as block
+        let mut block = self.parse_block_after_brace();
+        self.expect(TokenKind::RBrace);
+        self.recovery_mode = prev_recovery;
+        let span = start.merge(self.previous_span());
+        block.span = span;
+        block
+    }
+
+    /// Parse `{ field = value, ... }` record (brace already consumed).
+    /// 解析 `{ 字段 = 值, ... }` 记录（大括号已消耗）。
+    fn parse_record_brace(&mut self) -> Expr {
+        let start = self.current_span();
+        let first_ident = self.parse_ident();
+
+        let first_value = if self.eat(TokenKind::Eq) {
+            Some(self.parse_expr())
+        } else {
+            // Shorthand: `{ x }` is equivalent to `{ x = x }`
+            None
+        };
+
+        let first_field = RecordField {
+            name: first_ident.clone(),
+            value: first_value,
+            span: first_ident.span,
+        };
+
+        let mut fields = vec![first_field];
+        while self.eat(TokenKind::Comma) {
+            if self.check(TokenKind::RBrace) {
+                break;
+            }
+            let name = self.parse_ident();
+            let value = if self.eat(TokenKind::Eq) {
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+            fields.push(RecordField {
+                span: name.span,
+                name,
+                value,
+            });
+        }
+
+        Expr::new(ExprKind::Record(fields), start)
+    }
+
+    /// Parse block statements after `{` has been consumed.
+    /// 在 `{` 已被消耗后解析块语句。
+    fn parse_block_after_brace(&mut self) -> Expr {
+        let start = self.current_span();
+        let mut stmts = Vec::new();
+        let mut final_expr = None;
+
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            if self.check(TokenKind::Let) {
+                let stmt_start = self.current_span();
+                self.advance();
+                let pattern = self.parse_pattern();
+                let ty = if self.eat(TokenKind::Colon) {
+                    Some(self.parse_type())
+                } else {
+                    None
+                };
+                if !self.expect_recover(TokenKind::Eq, RecoveryMode::Statement) {
+                    let _ = self.recover_stmt();
+                    continue;
+                }
+                let value = self.parse_expr();
+                self.expect_recover(TokenKind::Semicolon, RecoveryMode::Statement);
+                let stmt_end = self.previous_span();
+                stmts.push(Stmt {
+                    kind: StmtKind::Let { pattern, ty, value },
+                    span: stmt_start.merge(stmt_end),
+                });
+            } else {
+                let expr = self.parse_expr();
+                if self.eat(TokenKind::Semicolon) {
+                    let stmt_span = expr.span;
+                    stmts.push(Stmt {
+                        kind: StmtKind::Expr(expr),
+                        span: stmt_span,
+                    });
+                } else {
+                    final_expr = Some(Box::new(expr));
+                    break;
+                }
+            }
+        }
+
+        Expr::new(
+            ExprKind::Block {
+                stmts,
+                expr: final_expr,
+            },
+            start,
+        )
+    }
+
     /// Parse a block expression.
     /// 解析块表达式。
     ///
     /// Syntax: `{ stmt; ... expr }`
     /// 语法：`{ 语句; ... 表达式 }`
+    #[allow(dead_code)]
     fn parse_block(&mut self) -> Expr {
         let start = self.current_span();
         self.advance(); // {
@@ -1732,7 +2199,7 @@ impl Parser {
     ///
     /// Syntax: `fn(params) body`
     /// 语法：`fn(参数) 函数体`
-    fn parse_lambda(&mut self) -> Expr {
+    fn parse_lambda_fn(&mut self) -> Expr {
         let start = self.current_span();
         self.advance(); // fn
 
@@ -1781,6 +2248,63 @@ impl Parser {
             }
         }
 
+        params
+    }
+
+    /// Parse a pipe-style lambda expression (v3.0): `|params| body`
+    /// 解析管道式 lambda 表达式（v3.0）：`|参数| 函数体`
+    fn parse_lambda_pipe(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // consume first |
+
+        let params = self.parse_lambda_params_pipe();
+
+        let body = self.parse_expr();
+        let span = start.merge(body.span);
+
+        Expr::new(
+            ExprKind::Lambda {
+                params,
+                body: Box::new(body),
+            },
+            span,
+        )
+    }
+
+    /// Parse pipe-style lambda parameters: `param1, param2 |`
+    /// 解析管道式 lambda 参数：`参数1, 参数2 |`
+    fn parse_lambda_params_pipe(&mut self) -> Vec<LambdaParam> {
+        let mut params = Vec::new();
+
+        if self.check(TokenKind::Pipe) {
+            return params;
+        }
+
+        loop {
+            let start = self.current_span();
+            // Parse just the name (not full pattern — or-pattern would eat closing |)
+            let name = self.parse_ident();
+            let pattern = Pattern::new(PatternKind::Var(name.clone()), name.span);
+            let ty = if self.eat(TokenKind::Colon) {
+                Some(self.parse_type())
+            } else {
+                None
+            };
+            let end = self.previous_span();
+
+            params.push(LambdaParam {
+                pattern,
+                ty,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        // Expect closing `|`
+        self.expect(TokenKind::Pipe);
         params
     }
 

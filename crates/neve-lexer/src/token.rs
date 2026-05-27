@@ -71,6 +71,7 @@ pub enum TokenKind {
     Impl,      // impl - 实现
     Pub,       // pub - 公开
     Import,    // import - 导入
+    Use,       // use - 导入(v3.0)
     As,        // as - 重命名
     SelfLower, // self - 自身
     Super,     // super - 父模块
@@ -107,6 +108,7 @@ pub enum TokenKind {
     LtEq,             // <= - 小于等于
     Gt,               // > - 大于
     GtEq,             // >= - 大于等于
+    Amp,              // & - 合并(v3.0)
     AndAnd,           // && - 逻辑与
     OrOr,             // || - 逻辑或
     Bang,             // ! - 逻辑非
@@ -150,6 +152,7 @@ impl TokenKind {
                 | TokenKind::Impl
                 | TokenKind::Pub
                 | TokenKind::Import
+                | TokenKind::Use
                 | TokenKind::As
                 | TokenKind::SelfLower
                 | TokenKind::Super
@@ -178,6 +181,7 @@ impl TokenKind {
             "impl" => Some(TokenKind::Impl),
             "pub" => Some(TokenKind::Pub),
             "import" => Some(TokenKind::Import),
+            "use" => Some(TokenKind::Use),
             "as" => Some(TokenKind::As),
             "self" => Some(TokenKind::SelfLower),
             "super" => Some(TokenKind::Super),

@@ -286,15 +286,12 @@ impl<'src> Lexer<'src> {
                 }
             }
 
-            // Ampersand (logical and) - & 符号（逻辑与）
+            // Ampersand (logical and or merge) - & 符号（逻辑与或合并）
             '&' if self.peek_char() == Some('&') => {
                 self.advance();
                 TokenKind::AndAnd
             }
-            '&' => {
-                self.error_unexpected_char(ch, start);
-                TokenKind::Error
-            }
+            '&' => TokenKind::Amp,
 
             // Pipe - 管道符号
             '|' => {

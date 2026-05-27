@@ -51,7 +51,7 @@ fn test_custom_config() {
 fn test_format_simple() {
     let source = "let x=1;";
     let formatted = format(source).unwrap();
-    assert!(formatted.contains("let x = 1"));
+    assert!(formatted.contains("x = 1"));
 }
 
 #[test]
@@ -64,19 +64,19 @@ fn test_check() {
 #[test]
 fn test_format_let() {
     let formatted = format_code("let x = 1;");
-    assert!(formatted.contains("let x = 1;"));
+    assert!(formatted.contains("x = 1"));
 }
 
 #[test]
 fn test_format_function() {
     let formatted = format_code("fn add(a: Int, b: Int) -> Int = a + b;");
-    assert!(formatted.contains("fn add"));
+    assert!(formatted.contains("add(a:"));
 }
 
 #[test]
 fn test_format_record() {
-    let formatted = format_code("let r = #{ a = 1, b = 2 };");
-    assert!(formatted.contains("#{ a = 1, b = 2 }"));
+    let formatted = format_code("r = { a = 1, b = 2, }");
+    assert!(formatted.contains("{ a = 1, b = 2 }"));
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn test_idempotent_block() {
 
 #[test]
 fn test_idempotent_pipe() {
-    assert_idempotent("let x = 1 |> fn(x) { x + 1 };\n");
+    assert_idempotent("x = 1 |> |x| x + 1\n");
 }
 
 #[test]

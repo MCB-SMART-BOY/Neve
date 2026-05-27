@@ -10,12 +10,11 @@ module.exports = grammar({
 
   rules: {
     source_file: $ => repeat(choice(
-      $.let_stmt,
+      $.binding,
       $.fn_def,
+      $.use_stmt,
       $.import_stmt,
-      $.type_alias,
-      $.struct_def,
-      $.enum_def,
+      $.type_decl,
       $.trait_def,
       $.impl_def,
       $.expr_stmt,
@@ -23,21 +22,21 @@ module.exports = grammar({
 
     comment: $ => token(seq('--', /.*/)),
 
-    // ---- Statements ----
+    // ---- Statements (v3.0) ----
 
-    let_stmt: $ => seq(
+    binding: $ => seq(
       optional('pub'),
-      'let',
+      optional('let'),
       $.pattern,
       optional(seq(':', $._type)),
       '=',
       $.expr,
-      ';'
+      optional(';')
     ),
 
     fn_def: $ => seq(
       optional('pub'),
-      'fn',
+      optional('fn'),
       $.ident,
       optional($.generics),
       '(',
@@ -51,7 +50,7 @@ module.exports = grammar({
       optional('effect'),
       '=',
       $.expr,
-      ';'
+      optional(';')
     ),
 
     param: $ => seq(
@@ -68,36 +67,55 @@ module.exports = grammar({
       '>'
     ),
 
+    use_stmt: $ => seq(
+      optional('pub'),
+      'use',
+      $.path,
+      optional(choice(
+        seq('.{', optional(seq($.ident, repeat(seq(',', $.ident)))), '}'),
+        seq('.*'),
+        seq('as', $.ident),
+      )),
+      optional(';')
+    ),
+
     import_stmt: $ => seq(
       optional('pub'),
       'import',
       $.path,
       optional(seq('as', $.ident)),
-      ';'
+      optional(';')
     ),
 
-    type_alias: $ => seq(
+    // Unified type declaration (v3.0)
+    type_decl: $ => seq(
       optional('pub'),
-      'type',
+      choice('type', 'struct', 'enum'),
       $.ident,
       optional($.generics),
-      '=',
-      $._type,
-      ';'
-    ),
-
-    struct_def: $ => seq(
-      optional('pub'),
-      'struct',
-      $.ident,
-      optional($.generics),
-      '{',
-      optional(seq(
-        $.field_def,
-        repeat(seq(',', $.field_def)),
-        optional(',')
-      )),
-      '}'
+      optional('='),
+      choice(
+        // Record type: type Point = { x: Float, y: Float }
+        seq('{',
+          optional(seq(
+            $.field_def,
+            repeat(seq(',', $.field_def)),
+            optional(',')
+          )),
+          '}'),
+        // Enum type: type Color = { | Red | Green | Blue }
+        seq('{',
+          optional('|'),
+          optional(seq(
+            $.variant,
+            repeat(seq(choice('|', ','), $.variant)),
+            optional(choice('|', ','))
+          )),
+          '}'),
+        // Type alias: type Name = String
+        $._type,
+      ),
+      optional(';')
     ),
 
     field_def: $ => seq(
@@ -107,25 +125,11 @@ module.exports = grammar({
       optional(seq('=', $.expr)),
     ),
 
-    enum_def: $ => seq(
-      optional('pub'),
-      'enum',
-      $.ident,
-      optional($.generics),
-      '{',
-      optional(seq(
-        $.variant,
-        repeat(seq(',', $.variant)),
-        optional(',')
-      )),
-      '}'
-    ),
-
     variant: $ => seq(
       $.ident,
       optional(choice(
         seq('(', optional(seq($._type, repeat(seq(',', $._type)))), ')'),
-        seq('#{', optional(seq($.field_def, repeat(seq(',', $.field_def)))), '}'),
+        seq('{', optional(seq($.field_def, repeat(seq(',', $.field_def)))), '}'),
       ))
     ),
 
@@ -140,7 +144,7 @@ module.exports = grammar({
     ),
 
     trait_item: $ => seq(
-      'fn',
+      optional('fn'),
       $.ident,
       optional($.generics),
       '(',
@@ -149,7 +153,7 @@ module.exports = grammar({
       optional(seq('->', $._type)),
       optional('effect'),
       optional(seq('=', $.expr)),
-      ';'
+      optional(';')
     ),
 
     impl_def: $ => seq(
@@ -164,7 +168,7 @@ module.exports = grammar({
     ),
 
     impl_item: $ => seq(
-      'fn',
+      optional('fn'),
       $.ident,
       optional($.generics),
       '(',
@@ -174,10 +178,10 @@ module.exports = grammar({
       optional('effect'),
       '=',
       $.expr,
-      ';'
+      optional(';')
     ),
 
-    expr_stmt: $ => seq($.expr, ';'),
+    expr_stmt: $ => seq($.expr, optional(';')),
 
     // ---- Patterns ----
 
@@ -215,7 +219,7 @@ module.exports = grammar({
     ),
 
     record_pattern: $ => seq(
-      '#{',
+      '{',
       optional(seq(
         $.record_pattern_field,
         repeat(seq(',', $.record_pattern_field)),
@@ -289,7 +293,7 @@ module.exports = grammar({
 
     ident: $ => token(/[a-zA-Z_][a-zA-Z0-9_]*/),
 
-    // ---- Operators with proper precedence ----
+    // ---- Operators ----
 
     call: $ => prec(1, seq(
       $.path,
@@ -337,7 +341,7 @@ module.exports = grammar({
         '+', '-', '*', '/', '%', '^',
         '==', '!=', '<', '>', '<=', '>=',
         '&&', '||',
-        '++', '//',
+        '++', '&',
         '??', '?.',
       ),
       $.expr,
@@ -356,10 +360,11 @@ module.exports = grammar({
       'match',
       $.expr,
       '{',
+      optional('|'),
       optional(seq(
         $.match_arm,
-        repeat(seq(',', $.match_arm)),
-        optional(',')
+        repeat(seq(choice('|', ','), $.match_arm)),
+        optional(choice('|', ','))
       )),
       '}'
     )),
@@ -379,8 +384,9 @@ module.exports = grammar({
     ),
 
     stmt: $ => choice(
-      $.let_stmt,
+      $.binding,
       $.expr_stmt,
+      $.use_stmt,
       $.import_stmt,
     ),
 
@@ -391,12 +397,13 @@ module.exports = grammar({
     ),
 
     record: $ => seq(
-      '#{',
+      '{',
       optional(seq(
         $.ident,
         '=',
         $.expr,
         repeat(seq(',', $.ident, '=', $.expr)),
+        optional(',')
       )),
       '}'
     ),
@@ -407,14 +414,23 @@ module.exports = grammar({
       ')'
     ),
 
-    lambda: $ => seq(
-      'fn',
-      '(',
-      optional(seq($.param, repeat(seq(',', $.param)))),
-      ')',
-      optional(seq('->', $._type)),
-      '=>',
-      $.expr,
+    lambda: $ => choice(
+      // v3.0: |params| body
+      seq(
+        '|',
+        optional(seq($.param, repeat(seq(',', $.param)))),
+        '|',
+        $.expr,
+      ),
+      // Legacy: fn(params) body
+      seq(
+        'fn',
+        '(',
+        optional(seq($.param, repeat(seq(',', $.param)))),
+        ')',
+        optional(seq('->', $._type)),
+        $.expr,
+      ),
     ),
 
     lazy_expr: $ => seq('lazy', $.expr),
@@ -435,7 +451,7 @@ module.exports = grammar({
     )),
 
     fn_type: $ => seq(
-      'fn',
+      optional('fn'),
       '(',
       optional(seq($._type, repeat(seq(',', $._type)))),
       ')',
@@ -449,9 +465,11 @@ module.exports = grammar({
     ),
 
     record_type: $ => seq(
-      '#{',
+      '{',
       optional(seq(
-        $.ident, ':', $._type,
+        $.ident,
+        ':',
+        $._type,
         repeat(seq(',', $.ident, ':', $._type)),
       )),
       '}'

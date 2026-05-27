@@ -1,43 +1,42 @@
--- Pattern Matching / 模式匹配
--- `match` tests a value against patterns and executes the matching branch.
+classify = |n| {
+  match n {
+    0 -> "zero",
+    1 -> "one",
+    _ -> "many",
+  }
+}
 
--- Match on integers
-let classify = fn(n) {
-    match n {
-        0 -> "zero",
-        1 -> "one",
-        _ -> "many"
-    }
-};
-println(classify(0));    -- zero
-println(classify(1));    -- one
-println(classify(42));   -- many
+println(classify(0));
 
--- Match on booleans
-let describe = fn(b) {
-    match b {
-        true -> "yes",
-        false -> "no"
-    }
-};
-println(describe(1 == 1)); -- yes
-println(describe(1 == 2)); -- no
+println(classify(1));
 
--- Match as expression (returns a value)
-let result = match 15 {
-    0 -> "nothing",
-    n -> "got " + toString(n)  -- binding pattern
-};
-println(result);         -- got 15
+println(classify(42));
 
--- Nested match
-let score = fn(grade) {
-    match grade {
-        "A" -> 4,
-        "B" -> 3,
-        "C" -> 2,
-        _ -> 0
-    }
-};
-println(score("A"));     -- 4
-println(score("F"));     -- 0
+describe = |b| {
+  match b {
+    true -> "yes",
+    false -> "no",
+  }
+}
+
+println(describe(1 == 1));
+
+println(describe(1 == 2));
+
+result = match 15 {
+  0 -> "nothing",
+  n -> "got " + toString(n),
+}
+
+println(result);
+
+score = |grade| {
+  match grade {
+    "A" -> 4,
+    "B" -> 3,
+    "C" -> 2,
+    _ -> 0,
+  }
+}
+
+println(score("A"));
