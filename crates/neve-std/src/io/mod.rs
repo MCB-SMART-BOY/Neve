@@ -144,6 +144,53 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: run/sh (v3.0)
+        (
+            "run",
+            Value::Builtin(BuiltinFn {
+                name: "run",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(cmd) => {
+                        let output = std::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(cmd.as_str())
+                            .output()
+                            .map_err(|e| format!("run: {e}"))?;
+                        Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
+                            output.status.code().unwrap_or(-1),
+                            output.status.success(),
+                            String::from_utf8_lossy(&output.stdout).to_string(),
+                            String::from_utf8_lossy(&output.stderr).to_string(),
+                        ))))
+                    }
+                    _ => Err("run expects a String".to_string()),
+                },
+            }),
+        ),
+        (
+            "sh",
+            Value::Builtin(BuiltinFn {
+                name: "sh",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(cmd) => {
+                        let output = std::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(cmd.as_str())
+                            .output()
+                            .map_err(|e| format!("sh: {e}"))?;
+                        Ok(Value::ProcessResult(Rc::new(ProcessResultValue::new(
+                            output.status.code().unwrap_or(-1),
+                            output.status.success(),
+                            String::from_utf8_lossy(&output.stdout).to_string(),
+                            String::from_utf8_lossy(&output.stderr).to_string(),
+                        ))))
+                    }
+                    _ => Err("sh expects a String".to_string()),
+                },
+            }),
+        ),
         // Interactive / 交互输入
         (
             "io.input",
