@@ -43,7 +43,7 @@ pub fn kill_process(pid: u32) {
 /// shared by neve-typeck and neve-std to prevent drift.
 pub fn is_effectful_builtin(name: &str) -> bool {
     // Single-segment effectful builtins (v3.0 short aliases)
-    if matches!(name, "print" | "println" | "read" | "write" | "cmd" | "env" | "exec" | "run" | "sh") {
+    if matches!(name, "print" | "println" | "read" | "write" | "cmd" | "env" | "exec" | "run" | "sh" | "ls" | "exists") {
         return true;
     }
     let parts: Vec<&str> = name.split('.').collect();

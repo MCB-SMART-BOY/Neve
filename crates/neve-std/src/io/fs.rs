@@ -122,6 +122,47 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: ls (v3.0)
+        (
+            "ls",
+            Value::Builtin(BuiltinFn {
+                name: "ls",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => {
+                        let entries: Result<Vec<_>, _> = std::fs::read_dir(path.as_str())
+                            .map_err(|e| format!("ls: {e}"))?
+                            .map(|entry| {
+                                entry
+                                    .map(|e| {
+                                        Value::String(Rc::new(
+                                            e.file_name().to_string_lossy().to_string(),
+                                        ))
+                                    })
+                                    .map_err(|e| format!("ls: {e}"))
+                            })
+                            .collect();
+                        entries.map(|v| Value::List(Rc::new(v)))
+                    }
+                    Value::Path(path) => {
+                        let entries: Result<Vec<_>, _> = std::fs::read_dir(path.as_path())
+                            .map_err(|e| format!("ls: {e}"))?
+                            .map(|entry| {
+                                entry
+                                    .map(|e| {
+                                        Value::String(Rc::new(
+                                            e.file_name().to_string_lossy().to_string(),
+                                        ))
+                                    })
+                                    .map_err(|e| format!("ls: {e}"))
+                            })
+                            .collect();
+                        entries.map(|v| Value::List(Rc::new(v)))
+                    }
+                    _ => Err("ls expects a String or Path".to_string()),
+                },
+            }),
+        ),
         (
             "io.readDirPath",
             Value::Builtin(BuiltinFn {
@@ -348,6 +389,21 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Ok(Value::Bool(std::path::Path::new(path.as_str()).exists()))
                     }
                     _ => Err("io.pathExists expects a string path".to_string()),
+                },
+            }),
+        ),
+        // Short alias: exists (v3.0)
+        (
+            "exists",
+            Value::Builtin(BuiltinFn {
+                name: "exists",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::String(path) => {
+                        Ok(Value::Bool(std::path::Path::new(path.as_str()).exists()))
+                    }
+                    Value::Path(path) => Ok(Value::Bool(path.exists())),
+                    _ => Err("exists expects a String or Path".to_string()),
                 },
             }),
         ),
