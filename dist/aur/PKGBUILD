@@ -2,7 +2,7 @@
 # Contributor: Neve Language Team
 
 pkgname=neve
-pkgver=3.17.0
+pkgver=3.18.0
 pkgrel=1
 pkgdesc="A typed systems automation language — config, build, monitor, script (v3.0 syntax)"
 arch=('x86_64' 'aarch64')
