@@ -1630,18 +1630,11 @@ impl TypeChecker {
         }
     }
 
-    /// Check that a pure function body contains no effectful calls.
-    fn check_effect_purity(&mut self, expr: &neve_hir::Expr) {
+    /// Returns true if the expression body contains effectful calls.
+    fn body_has_effectful_calls(&self, expr: &neve_hir::Expr) -> bool {
         let mut calls = Vec::new();
         self.collect_effectful_calls(expr, &mut calls);
-        for (name, span) in calls {
-            self.error(
-            span,
-            format!(
-                "effectful call '{name}' in pure function; add `effect` to the function signature"
-            ),
-        );
-        }
+        !calls.is_empty()
     }
 
     fn collect_effectful_calls(&self, expr: &neve_hir::Expr, out: &mut Vec<(String, Span)>) {
@@ -2231,14 +2224,12 @@ impl TypeChecker {
         // Check for unused variables before clearing
         self.check_unused_locals();
 
-        // Record effectful functions for inter-procedural checking
-        if fn_def.effectful {
+        // Record effectful functions for inter-procedural checking.
+        // Effect is auto-inferred: a function is effectful if annotated `effect`
+        // or if its body contains effectful calls.
+        let body_is_effectful = self.body_has_effectful_calls(&fn_def.body);
+        if fn_def.effectful || body_is_effectful {
             self.effectful_functions.insert(id);
-        }
-
-        // Effect checking: pure functions cannot call effectful builtins
-        if !fn_def.effectful {
-            self.check_effect_purity(&fn_def.body);
         }
 
         // Clear locals after checking function
@@ -2335,16 +2326,9 @@ impl TypeChecker {
         };
         self.globals.insert(item.id, method_ty);
 
-        // Check impl method body for effectful calls (unless annotated effect)
-        if !self.repl_mode && !item.effectful {
-            let mut calls = Vec::new();
-            self.collect_effectful_calls(&item.body, &mut calls);
-            for (name, span) in calls {
-                self.error(
-                    span,
-                    format!("effectful call {name} in impl method; use `effect` function"),
-                );
-            }
+        // Effect auto-inference for impl methods.
+        if item.effectful || self.body_has_effectful_calls(&item.body) {
+            self.effectful_functions.insert(item.id);
         }
 
         self.check_unused_locals();

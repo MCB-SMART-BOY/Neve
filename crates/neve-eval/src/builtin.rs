@@ -243,6 +243,33 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "fold",
+            Value::Builtin(BuiltinFn {
+                name: "fold",
+                arity: 3,
+                func: |_| Err("fold requires evaluator context".to_string()),
+            }),
+        ),
+        (
+            "collect",
+            Value::Builtin(BuiltinFn {
+                name: "collect",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::List(items) => Ok(Value::List(Rc::clone(items))),
+                    _ => Err("collect expects a List".to_string()),
+                },
+            }),
+        ),
+        (
+            "flatMap",
+            Value::Builtin(BuiltinFn {
+                name: "flatMap",
+                arity: 2,
+                func: |_| Err("flatMap requires evaluator context".to_string()),
+            }),
+        ),
+        (
             "range",
             Value::Builtin(BuiltinFn {
                 name: "range",

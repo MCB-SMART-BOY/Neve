@@ -1,29 +1,23 @@
--- File I/O / 文件读写
--- Neve provides typed file operations through the io module.
-
--- Write a file
 io.writeFile("/tmp/neve-example.txt", "Hello from Neve!\n");
 
--- Read it back
-let content = io.readFile("/tmp/neve-example.txt");
-println(content);        -- Hello from Neve!
+content = io.readFile("/tmp/neve-example.txt")
 
--- Append to a file
+println(content);
+
 io.appendFile("/tmp/neve-example.txt", "Second line\n");
-let lines = io.lines("/tmp/neve-example.txt");
-println(lines);          -- [Hello from Neve!, Second line]
 
--- Check if a file exists
-println(io.pathExists("/tmp/neve-example.txt"));  -- true
-println(io.pathExists("/tmp/does-not-exist"));    -- false
+lines = io.lines("/tmp/neve-example.txt")
 
--- Create a directory
+println(lines);
+
+println(io.pathExists("/tmp/neve-example.txt"));
+
+println(io.pathExists("/tmp/does-not-exist"));
+
 io.createDirAll("/tmp/neve-demo/nested");
+
 io.writeFile("/tmp/neve-demo/nested/data.txt", "nested file");
 
--- Read directory contents
-let entries = io.readDir("/tmp/neve-demo");
-println(entries);        -- [nested]
+entries = io.readDir("/tmp/neve-demo")
 
--- Clean up (remove directory and contents)
-io.removeDirAll("/tmp/neve-demo");
+println(entries);

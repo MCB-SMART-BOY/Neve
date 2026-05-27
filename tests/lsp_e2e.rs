@@ -292,11 +292,10 @@ let result = outer(x);
     /// Test formatter round-trip.
     #[test]
     fn test_e2e_formatter() {
-        let input = "let x=42;\nlet y =x+1;\n";
+        let input = "x=42\ny =x+1\n";
         let formatted = neve_fmt::format(input).expect("Format should succeed");
         assert!(!formatted.is_empty());
-        // Formatter should normalize spacing
-        assert!(formatted.contains("let x = 42"));
+        assert!(formatted.contains("x = 42"));
     }
 
     /// Test that signatures are generated for builtin completion items.

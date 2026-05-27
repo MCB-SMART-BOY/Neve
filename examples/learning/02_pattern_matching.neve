@@ -1,33 +1,43 @@
--- Pattern matching basics
-fn describe(x: Int) -> String = match x {
-    0 -> "zero",
-    1 -> "one",
-    _ -> "other"
-};
+describe(x: Int) -> String = match x {
+  0 -> "zero",
+  1 -> "one",
+  _ -> "other",
+}
 
-fn is_special(x: Int) -> Bool = match x {
-    0 | 1 | 2 -> true,
-    _ -> false
-};
+is_special(x: Int) -> Bool = match x {
+  0 | 1 | 2 -> true,
+  _ -> false,
+}
 
-enum Color { Red, Green, Blue };
-fn color_name(c: Color) -> String = match c {
-    Red -> "red",
-    Green -> "green",
-    Blue -> "blue"
-};
+type Color =  {
+  | Red
+  | Green
+  | Blue
+}
 
-enum Option { Some(Int), None };
-fn unwrap_or(opt: Option, default: Int) -> Int = match opt {
-    Some(v) -> v,
-    None -> default
-};
+color_name(c: Color) -> String = match c {
+  Red -> "red",
+  Green -> "green",
+  Blue -> "blue",
+}
 
-fn list_sum(xs: List<Int>) -> Int = match xs {
-    [] -> 0,
-    [h, ..t] -> h + list_sum(t)
-};
+type Option =  {
+  | Some(Int)
+  | None
+}
 
-let r1 = describe(0);
-let r2 = color_name(Red());
-let r3 = list_sum([1, 2, 3]);
+unwrap_or(opt: Option, default: Int) -> Int = match opt {
+  Some(v) -> v,
+  None -> default,
+}
+
+list_sum(xs: List<Int>) -> Int = match xs {
+  [] -> 0,
+  [h, ..t] -> h + list_sum(t),
+}
+
+r1 = describe(0)
+
+r2 = color_name(Red())
+
+r3 = list_sum([1, 2, 3])

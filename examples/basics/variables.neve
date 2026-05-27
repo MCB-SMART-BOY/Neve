@@ -1,28 +1,29 @@
--- Variables / 变量绑定
--- Use `let` to bind values to names in Neve.
+x = 42
 
--- Simple binding
-let x = 42;
-println(x);              -- 42
+println(x);
 
--- Multiple bindings
-let a = 10;
-let b = 20;
-let c = a + b;
-println(c);              -- 30
+a = 10
 
--- Shadowing: new let shadows previous binding
-let n = 1;
-let n = n + 1;
-println(n);              -- 2
+b = 20
 
--- Compute with bindings
-let w = 5;
-let h = 3;
-let area = w * h;
-println(area);           -- 15
+c = a + b
 
--- Bindings are immutable
-let price = 100;
-let price = 200;         -- OK: new binding shadows old
-println(price);          -- 200
+println(c);
+
+n = 1
+
+n = n + 1
+
+println(n);
+
+w = 5
+
+h = 3
+
+area = w * h
+
+println(area);
+
+price = 100
+
+price = 200

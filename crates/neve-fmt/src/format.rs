@@ -79,7 +79,7 @@ impl Formatter {
         if def.visibility == Visibility::Public {
             p.write("pub ");
         }
-        p.write("let ");
+        // let omitted in v3.0
         self.format_pattern(p, &def.pattern);
 
         if let Some(ref ty) = def.ty {
@@ -89,7 +89,6 @@ impl Formatter {
 
         p.write(" = ");
         self.format_expr(p, &def.value);
-        p.write(";");
         p.newline();
     }
 
@@ -99,7 +98,7 @@ impl Formatter {
         if def.visibility == Visibility::Public {
             p.write("pub ");
         }
-        p.write("fn ");
+        // fn omitted in v3.0
         p.write(&def.name.name);
 
         // Generics / 泛型
@@ -129,7 +128,6 @@ impl Formatter {
         // Body / 函数体
         p.write(" = ");
         self.format_expr(p, &def.body);
-        p.write(";");
         p.newline();
     }
 
@@ -154,9 +152,10 @@ impl Formatter {
         if def.visibility == Visibility::Public {
             p.write("pub ");
         }
-        p.write("struct ");
+        p.write("type ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
+        p.write(" = ");
 
         if def.fields.is_empty() {
             p.write(";");
@@ -182,14 +181,16 @@ impl Formatter {
         if def.visibility == Visibility::Public {
             p.write("pub ");
         }
-        p.write("enum ");
+        p.write("type ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
+        p.write(" = ");
         p.write(" {");
         p.newline();
         p.indent();
 
         for variant in &def.variants {
+            p.write("| ");
             p.write(&variant.name.name);
             match &variant.kind {
                 VariantKind::Unit => {}
@@ -214,13 +215,11 @@ impl Formatter {
                     p.write(" }");
                 }
             }
-            p.write(",");
             p.newline();
         }
 
         p.dedent();
         p.write("}");
-        p.write(";");
         p.newline();
     }
 
@@ -293,7 +292,7 @@ impl Formatter {
     /// Format an import.
     /// 格式化导入。
     fn format_import(&self, p: &mut Printer, def: &ImportDef) {
-        p.write("import ");
+        p.write("use ");
         for (i, part) in def.path.iter().enumerate() {
             if i > 0 {
                 p.write(".");
@@ -304,17 +303,17 @@ impl Formatter {
         match &def.items {
             ImportItems::Module => {}
             ImportItems::Items(items) => {
-                p.write(" (");
+                p.write(".{ ");
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         p.write(", ");
                     }
                     p.write(&item.name);
                 }
-                p.write(")");
+                p.write(" }");
             }
             ImportItems::All => {
-                p.write(" (*)");
+                p.write(".*");
             }
         }
 
@@ -323,7 +322,6 @@ impl Formatter {
             p.write(&alias.name);
         }
 
-        p.write(";");
         p.newline();
     }
 
@@ -506,7 +504,7 @@ impl Formatter {
             // Record / 记录
             ExprKind::Record(fields) => {
                 if fields.is_empty() {
-                    p.write("#{}");
+                    p.write("{}");
                 } else {
                     // Check if we should break to multiple lines
                     // 检查是否应该拆分为多行
@@ -517,7 +515,7 @@ impl Formatter {
 
                     if p.would_exceed_width(estimated_len + 4) && fields.len() > 1 {
                         // Multi-line format / 多行格式
-                        p.writeln("#{");
+                        p.writeln("{");
                         p.indent();
                         for (i, field) in fields.iter().enumerate() {
                             self.format_record_field(p, field);
@@ -530,7 +528,7 @@ impl Formatter {
                         p.write("}");
                     } else {
                         // Single line format / 单行格式
-                        p.write("#{");
+                        p.write("{");
                         p.space();
                         for (i, field) in fields.iter().enumerate() {
                             if i > 0 {
@@ -547,7 +545,7 @@ impl Formatter {
 
             // Record update / 记录更新
             ExprKind::RecordUpdate { base, fields } => {
-                p.write("#{ ");
+                p.write("{ ");
                 self.format_expr(p, base);
                 p.write(" | ");
                 for (i, field) in fields.iter().enumerate() {
@@ -618,14 +616,14 @@ impl Formatter {
 
             // Lambda / Lambda 表达式
             ExprKind::Lambda { params, body } => {
-                p.write("fn(");
+                p.write("|");
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
                         p.write(", ");
                     }
                     self.format_lambda_param(p, param);
                 }
-                p.write(") ");
+                p.write("| ");
                 self.format_expr(p, body);
             }
 
@@ -950,7 +948,7 @@ impl Formatter {
                 p.write("]");
             }
             PatternKind::Record { fields, rest } => {
-                p.write("#{ ");
+                p.write("{ ");
                 for (i, field) in fields.iter().enumerate() {
                     if i > 0 {
                         p.write(", ");
@@ -1078,7 +1076,7 @@ impl Formatter {
                 p.write(")");
             }
             TypeKind::Record(fields) => {
-                p.write("#{ ");
+                p.write("{ ");
                 for (i, field) in fields.iter().enumerate() {
                     if i > 0 {
                         p.write(", ");
@@ -1119,7 +1117,7 @@ impl Formatter {
             BinOp::And => "&&",
             BinOp::Or => "||",
             BinOp::Concat => "++",
-            BinOp::Merge => "//",
+            BinOp::Merge => "&",
             BinOp::Pipe => "|>",
         }
     }
