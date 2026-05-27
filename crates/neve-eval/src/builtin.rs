@@ -269,6 +269,39 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |_| Err("flatMap requires evaluator context".to_string()),
             }),
         ),
+        // Short I/O aliases (v3.0) — delegates to stdlib io.* functions
+        (
+            "cmd",
+            Value::Builtin(BuiltinFn {
+                name: "cmd",
+                arity: 2,
+                func: |_| Err("cmd requires evaluator context".to_string()),
+            }),
+        ),
+        (
+            "env",
+            Value::Builtin(BuiltinFn {
+                name: "env",
+                arity: 1,
+                func: |_| Err("env requires evaluator context".to_string()),
+            }),
+        ),
+        (
+            "exec",
+            Value::Builtin(BuiltinFn {
+                name: "exec",
+                arity: 1,
+                func: |_| Err("exec requires evaluator context".to_string()),
+            }),
+        ),
+        (
+            "run",
+            Value::Builtin(BuiltinFn {
+                name: "run",
+                arity: 1,
+                func: |_| Err("run requires evaluator context".to_string()),
+            }),
+        ),
         (
             "range",
             Value::Builtin(BuiltinFn {
