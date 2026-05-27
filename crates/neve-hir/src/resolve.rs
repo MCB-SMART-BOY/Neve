@@ -996,6 +996,7 @@ impl Resolver {
                     | "drop"
                     | "env"
                     | "exec"
+                    | "exists"
                     | "filter"
                     | "flatMap"
                     | "fold"
