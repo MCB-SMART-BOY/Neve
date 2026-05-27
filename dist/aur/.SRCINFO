@@ -1,6 +1,6 @@
 pkgbase = neve
 	pkgdesc = A strongly-typed systems scripting language with formal verification
-	pkgver = 3.7.0
+	pkgver = 3.17.0
 	pkgrel = 1
 	url = https://github.com/MCB-SMART-BOY/Neve
 	arch = x86_64
