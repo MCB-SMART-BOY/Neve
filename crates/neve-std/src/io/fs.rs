@@ -602,6 +602,19 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: pwd (v3.0)
+        (
+            "pwd",
+            Value::Builtin(BuiltinFn {
+                name: "pwd",
+                arity: 0,
+                func: |_args| {
+                    std::env::current_dir()
+                        .map(|p| Value::String(Rc::new(p.to_string_lossy().to_string())))
+                        .map_err(|e| format!("pwd: {e}"))
+                },
+            }),
+        ),
         (
             "io.currentDirPath",
             Value::Builtin(BuiltinFn {
@@ -1067,10 +1080,37 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // Short alias: stderr (v3.0)
+        (
+            "stderr",
+            Value::Builtin(BuiltinFn {
+                name: "stderr",
+                arity: 1,
+                func: |args| match &args[0] {
+                    Value::ProcessResult(result) => {
+                        Ok(Value::String(Rc::new(result.stderr().to_string())))
+                    }
+                    _ => Err("stderr expects a ProcessResult".to_string()),
+                },
+            }),
+        ),
         (
             "io.homeDir",
             Value::Builtin(BuiltinFn {
                 name: "io.homeDir",
+                arity: 0,
+                func: |_args| {
+                    Ok(std::env::var("HOME")
+                        .map(|p| Value::Some(Box::new(Value::String(Rc::new(p)))))
+                        .unwrap_or(Value::None))
+                },
+            }),
+        ),
+        // Short alias: home (v3.0)
+        (
+            "home",
+            Value::Builtin(BuiltinFn {
+                name: "home",
                 arity: 0,
                 func: |_args| {
                     Ok(std::env::var("HOME")
