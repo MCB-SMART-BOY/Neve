@@ -1201,6 +1201,11 @@ impl Evaluator {
         args: &[Value],
     ) -> Result<Option<Value>, EvalError> {
         match name {
+            // Short I/O aliases (v3.0) — delegate to stdlib
+            "read" | "write" | "cmd" | "env" | "exec" | "run" | "sh" => {
+                return Ok(None); // handled by neve-std extra_builtins
+            }
+            // Pipeline combinators
             "force" => {
                 if args.len() != 1 {
                     return Err(EvalError::WrongArity);
