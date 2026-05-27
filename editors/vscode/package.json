@@ -2,7 +2,7 @@
   "name": "neve",
   "displayName": "Neve Language Support",
   "description": "Syntax highlighting, auto-completion, diagnostics, formatting, and code navigation for Neve.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "neve-lang",
   "license": "MPL-2.0",
   "icon": "icon.png",
