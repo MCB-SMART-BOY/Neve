@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.neve",
-      "match": "\\b(let|fn|if|then|else|match|import|as|type|struct|enum|trait|impl|pub|effect|lazy)\\b"
+      "match": "\\b(if|then|else|match|use|as|type|trait|impl|pub|effect|lazy)\\b"
     },
     {
       "name": "constant.language.neve",
@@ -26,7 +26,7 @@
     },
     {
       "name": "keyword.operator.neve",
-      "match": "(\\+|\\-|\\*|\\/|\\%|\\^|==|!=|<=|>=|<|>|&&|\\|\\||\\+\\+|\\/\\/|\\?\\?|\\?\\.|\\|>|->|=>|\\!|=)"
+      "match": "(\\+|\\-|\\*|\\/|\\%|\\^|==|!=|<=|>=|<|>|&&|\\|\\||\\+\\+|&|\\?\\?|\\?\\.|\\|>|->|=>|\\!|=)"
     },
     {
       "name": "punctuation.neve",

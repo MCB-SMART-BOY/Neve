@@ -1,19 +1,17 @@
 %YAML 1.2
 ---
-# Neve syntax highlighting for Sublime Text / VS Code / Helix
-# Kept in sync with tree-sitter-neve/grammar.js and tree-sitter-neve/queries/highlights.scm
+# Neve v3.0 syntax highlighting for Sublime Text / VS Code / Helix
 name: Neve
 scope: source.neve
 file_extensions: [neve]
 
 contexts:
   main:
-    # Comments
     - match: '--.*'
       scope: comment.line.neve
 
-    # Keywords
-    - match: \b(let|fn|if|then|else|match|import|as|type|struct|enum|trait|impl|pub|effect|lazy)\b
+    # Keywords (v3.0: 9 keywords)
+    - match: \b(if|then|else|match|use|as|type|trait|impl|pub|effect|lazy)\b
       scope: keyword.control.neve
 
     # Boolean literals
@@ -28,17 +26,13 @@ contexts:
     - match: \b[0-9][0-9_]*(\.[0-9]+)?\b
       scope: constant.numeric.neve
 
-    # Operators
-    - match: '(\+|\-|\*|\/|\%|\^|==|!=|<=|>=|<|>|&&|\|\||\+\+|\/\/|\?\?|\?\.|\|>|->|=>|\!|=)'
+    # Operators (v3.0: & replaces //)
+    - match: '(\+|\-|\*|\/|\%|\^|==|!=|<=|>=|<|>|&&|\|\||\+\+|&|\?\?|\?\.|\|>|->|=>|\!|=)'
       scope: keyword.operator.neve
 
     # Punctuation / delimiters
     - match: '[(){}\[\],;:\.@]'
       scope: punctuation.neve
-
-    # Record literal
-    - match: '#\{'
-      scope: punctuation.section.neve
 
     # Strings
     - match: '"'
