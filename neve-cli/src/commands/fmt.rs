@@ -5,6 +5,15 @@ use crate::{commands::diagnostics, output};
 use std::fs;
 use std::path::Path;
 
+/// Strip shebang line if present.
+fn strip_shebang(source: &str) -> &str {
+    if source.starts_with("#!") {
+        source.find('\n').map(|i| &source[i + 1..]).unwrap_or("")
+    } else {
+        source
+    }
+}
+
 /// Format a Neve source file.
 /// 格式化 Neve 源文件。
 pub fn run(file: &str, write: bool) -> Result<(), String> {
@@ -14,14 +23,15 @@ pub fn run(file: &str, write: bool) -> Result<(), String> {
         return Err(format!("File not found: {}", file));
     }
 
-    let source = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let raw = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let source = strip_shebang(&raw);
 
-    let formatted = match neve_fmt::format(&source) {
+    let formatted = match neve_fmt::format(source) {
         Ok(formatted) => formatted,
         Err(err) => {
             if let Some(diags) = err.diagnostics() {
                 let source_name = path.display().to_string();
-                diagnostics::emit_source_diagnostics(&source_name, &source, diags);
+                diagnostics::emit_source_diagnostics(&source_name, source, diags);
                 return Err("format parse error".to_string());
             }
             return Err(format!("Format error: {}", err));
@@ -53,14 +63,15 @@ pub fn check(file: &str) -> Result<(), String> {
         return Err(format!("File not found: {}", file));
     }
 
-    let source = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let raw = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let source = strip_shebang(&raw);
 
-    let is_formatted = match neve_fmt::check(&source) {
+    let is_formatted = match neve_fmt::check(source) {
         Ok(is_formatted) => is_formatted,
         Err(err) => {
             if let Some(diags) = err.diagnostics() {
                 let source_name = path.display().to_string();
-                diagnostics::emit_source_diagnostics(&source_name, &source, diags);
+                diagnostics::emit_source_diagnostics(&source_name, source, diags);
                 return Err("format parse error".to_string());
             }
             return Err(format!("Format error: {}", err));
