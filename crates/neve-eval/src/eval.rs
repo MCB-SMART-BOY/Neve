@@ -1203,7 +1203,7 @@ impl Evaluator {
         match name {
             // Short I/O aliases (v3.0) — delegate to stdlib
             "read" | "write" | "cmd" | "env" | "exec" | "run" | "sh" => {
-                return Ok(None); // handled by neve-std extra_builtins
+                Ok(None) // handled by neve-std extra_builtins
             }
             // Pipeline combinators
             "force" => {
