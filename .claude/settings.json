@@ -1,0 +1,160 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo:*)",
+      "Bash(git:*)",
+      "Bash(cd /home/mcbgaruda/projects/Neve && cargo:*)",
+      "Bash(cd /home/mcbgaruda/projects/Neve && git:*)",
+      "Bash(cd /home/mcbgaruda/projects/Neve/formal && lake:*)",
+      "Bash(gh:*)",
+      "Bash(python3:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(sed:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(sort:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(which:*)",
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)",
+      "Bash(script:*)",
+      "Bash(printf:*)",
+      "Bash(tmux:*)",
+      "Read(**/*)",
+      "Glob(**/*)",
+      "Grep(**/*)",
+      "Edit(**/*.rs)",
+      "Edit(**/*.md)",
+      "Edit(**/*.toml)",
+      "Edit(**/*.lean)",
+      "Edit(**/*.neve)",
+      "Edit(**/*.json)",
+      "Edit(**/*.lock)",
+      "Edit(**/*.yml)",
+      "Edit(**/*.sh)",
+      "Edit(**/*.js)",
+      "Write(**/*.md)",
+      "Write(**/*.rs)",
+      "Write(**/*.toml)",
+      "Write(**/*.json)",
+      "Write(**/*.sh)",
+      "Write(**/*.js)",
+      "Write(**/*.lean)",
+      "Write(**/*.neve)"
+    ],
+    "ask": [
+      "Bash(cargo publish:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(cargo yank:*)",
+      "Edit(.git/**)",
+      "Edit(**/.gitignore)"
+    ]
+  },
+  "hooks": {
+    "pre-commit": {
+      "command": ".claude/hooks/pre-commit.sh",
+      "description": "Run pre-commit checks before git commit"
+    },
+    "post-edit": {
+      "command": ".claude/hooks/verify-skills.sh",
+      "description": "Verify skill claims against actual code after edits"
+    },
+    "post-test": {
+      "command": ".claude/hooks/check-regressions.sh",
+      "description": "Check for test regressions"
+    }
+  },
+  "rules": ".claude/rules.md",
+  "env": {
+    "NEVE_SKILLS_DIR": "${workspaceFolder}/.claude/skills",
+    "NEVE_HOOKS_DIR": "${workspaceFolder}/.claude/hooks",
+    "LEAN_PATH": "${workspaceFolder}/formal"
+  },
+  "model": "opus",
+  "planMode": "auto",
+  "worktree": {
+    "baseRef": "head"
+  },
+  "skills": {
+    "neve-dev": {
+      "description": "Neve project architecture and development workflow",
+      "path": ".claude/skills/neve-dev.md"
+    },
+    "neve-parser": {
+      "description": "Lexer and recursive-descent parser development",
+      "path": ".claude/skills/neve-parser.md"
+    },
+    "neve-typeck": {
+      "description": "Hindley-Milner type inference and trait system",
+      "path": ".claude/skills/neve-typeck.md"
+    },
+    "neve-hir": {
+      "description": "HIR lowering and name resolution",
+      "path": ".claude/skills/neve-hir.md"
+    },
+    "neve-eval": {
+      "description": "Tree-walking interpreter (HIR canonical + AST deprecated)",
+      "path": ".claude/skills/neve-eval.md"
+    },
+    "neve-std": {
+      "description": "Standard library (I/O, Stream<T>, collections)",
+      "path": ".claude/skills/neve-std.md"
+    },
+    "neve-lsp": {
+      "description": "Language Server Protocol (20 methods)",
+      "path": ".claude/skills/neve-lsp.md"
+    },
+    "neve-test": {
+      "description": "Testing strategy with 450 E2E tests",
+      "path": ".claude/skills/neve-test.md"
+    },
+    "neve-effect": {
+      "description": "Effect system (EffectEval v4.3, 34 rules)",
+      "path": ".claude/skills/neve-effect.md"
+    },
+    "neve-lean": {
+      "description": "Formal verification with Lean 4 (19 modules)",
+      "path": ".claude/skills/neve-lean.md"
+    }
+  },
+  "agents": {
+    "neve-parser-dev": {
+      "description": "Specialized agent for parser/lexer/syntax development",
+      "path": ".claude/agents/parser-agent.md"
+    },
+    "neve-typeck-dev": {
+      "description": "Specialized agent for type system development",
+      "path": ".claude/agents/typeck-agent.md"
+    },
+    "neve-reviewer": {
+      "description": "Code review agent for Neve Rust codebase",
+      "path": ".claude/agents/reviewer-agent.md"
+    },
+    "neve-verifier": {
+      "description": "Formal verification agent for Lean proofs",
+      "path": ".claude/agents/verifier-agent.md"
+    }
+  },
+  "workflows": {
+    "full-test": {
+      "description": "Run full test suite with differential and E2E",
+      "path": ".claude/workflows/full-test.js"
+    },
+    "pre-release": {
+      "description": "Pre-release checklist: test + clippy + fmt + changelog",
+      "path": ".claude/workflows/pre-release.js"
+    },
+    "check-migration": {
+      "description": "Check AST→HIR migration status across the codebase",
+      "path": ".claude/workflows/check-migration.js"
+    }
+  }
+}

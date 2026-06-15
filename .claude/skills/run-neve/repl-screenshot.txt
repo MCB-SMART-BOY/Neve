@@ -1,0 +1,9 @@
+脚本启动于 2026-06-16 00:10:16+08:00 [COMMAND="printf '1 + 2 * 3\n42\n:quit\n' | ./target/debug/neve repl 2>&1" <not executed on terminal>]
+[34mℹ[0m Neve REPL v3.17.0
+Type :help for help, :quit to exit
+
+7
+42
+Goodbye!
+
+脚本完成于 2026-06-16 00:10:16+08:00 [COMMAND_EXIT_CODE="0"]

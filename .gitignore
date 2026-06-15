@@ -20,20 +20,6 @@ formal/.lake/
 .DS_Store
 Thumbs.db
 
-# === AI / agent coordination (local-only) ===
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-COPILOT.md
-CURSOR.md
-.claude/
-.cursor/
-.windsurf/
-.roo/
-.codex/
-.aider/
-.agents/
-
 # === Python ===
 __pycache__/
 *.pyc
