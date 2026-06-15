@@ -16,10 +16,14 @@
 
 </div>
 
-**当前状态**: Phase 4 (Shell 能力替代) 已完成 ✅ — v3.13.0, E2E 450 测试, Formatter 幂等性 37/37, Stream<T> 14 APIs ✅。Phase 5 (生态补完) 进行中 🔄 (~95% 完成)。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
+**当前状态**: Phase 6 (Syntax Overhaul v3.0) 已完成 ✅ — v3.18.0, E2E 450 测试, Formatter 幂等性 37/37, Stream<T> 14 APIs ✅, LSP 20 methods ✅。Phase 5 (生态补完) 进行中 🔄 (~95% 完成)。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
 
-Welcome to the Neve documentation hub. Start from your current goal instead of reading everything top to bottom.
-欢迎来到 Neve 文档中心。按你当前的目标进入，不需要从头一路读到底。
+Welcome to the Neve documentation hub. For **developer reference** (per-crate APIs,
+architecture, integration points), see `.claude/skills/` — one skill per crate,
+kept in sync with the actual code.
+
+欢迎来到 Neve 文档中心。**开发者参考**（per-crate API、架构、集成点）请见
+`.claude/skills/` — 每个 crate 一个 skill，与实际代码保持同步。
 
 ---
 
@@ -28,10 +32,9 @@ Welcome to the Neve documentation hub. Start from your current goal instead of r
 - New user / 初次上手: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
 - Language reference / 语言参考: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
 - Contributor / 贡献者: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
-- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/language-roadmap.md](project/language-roadmap.md), [project/semantic-convergence-plan.md](project/semantic-convergence-plan.md), [project/effect-boundary.md](project/effect-boundary.md), [project/changelog.md](project/changelog.md)
-- Design docs / 设计文档: [project/stream-design.md](project/stream-design.md), [project/ecosystem-design.md](project/ecosystem-design.md)
+- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/language-roadmap.md](project/language-roadmap.md), [project/changelog.md](project/changelog.md)
 - Stability / 稳定性: [reference/stability.md](reference/stability.md)
-- Bootstrap examples / bootstrap 示例: [contributor/bootstrap.md](contributor/bootstrap.md), [examples/bootstrap](../examples/bootstrap)
+- **Developer skills** / 开发者技能: [`.claude/skills/`](../.claude/skills/) — per-crate architecture, APIs, key files
 
 ---
 

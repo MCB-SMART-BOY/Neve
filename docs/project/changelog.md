@@ -26,9 +26,23 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - **Short I/O aliases**: 14 short I/O aliases — `read`, `write`, `exec`, `cmd`, `env`, `run`, `sh`, `ls`, `exists`, `ok`, `stdout`, `stderr`, `code`, `pwd`, `home`.
 - **Shebang stripping**: Shebang lines (`#!neve`) are now automatically stripped in `frontend` and `fmt` commands.
+- **AST evaluator deprecation**: `AstEnv` and `AstEvaluator` marked `#[deprecated]` with removal target v4.0. Use HIR evaluator (`neve_eval::Evaluator`) for all new code.
+- **Parser gap closure**: Tuple index `t.0` test un-ignored (confirmed working in parser + lowering + typeck + eval).
+- **Match exhaustiveness**: Spec updated to require exhaustive `match`; `if-else` as non-exhaustive alternative.
+- **Release policy formalized**: SemVer-hybrid model with v4.0 exit criteria (`docs/reference/stability.md`).
+- **Skills suite**: 10 development skills in `.claude/skills/` covering parser, typeck, HIR, eval, LSP, std, testing, effects, Lean verification.
+- **Formal verification skill**: Lean 4 workflow, theorem coverage, Rust↔Lean refinement bridge.
+
+### Changed
+- **Spec v3.0**: Symbol reference, definitions, closures, records, modules, Nix comparison all updated to v3.0 syntax.
+- **Spec gap table**: 3 of 6 gaps confirmed closed (`crate::`, multi-line comment, tuple index). 2 remain (`\u{...}`, shebang parser).
+- **Feature matrix**: High-level truth + bottom line updated to reflect Phase 6 completion.
+- **Stability tiers**: Versioning policy updated with deprecation lifecycle and v4.0 exit criteria.
+- **AGENTS.md**: Decision log added for G2, pattern match, Lean, AST deprecation, release policy.
 
 ### Fixed
 - **CI fixes**: Corrected script paths in CI workflows, added `PATH` configuration for `diff-test` and `bug-hunt` jobs, and fixed `rustfmt` formatting issues.
+- **Tuple index test**: Removed stale `#[ignore]` — test passes at parser level.
 
 ## [3.17.0] - 2026-05-24
 

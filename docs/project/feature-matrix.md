@@ -54,11 +54,12 @@
 
 1. **语法表面比语义闭环走得更快。**
 2. **AST 路径历史上补过更多缺口，但主 CLI 路径已经开始优先收敛到 HIR。**
-3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) 已完成。**
-4. **端到端测试已覆盖 450 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
-5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete)。**
-6. **LSP 20 methods implemented (新增 CodeLens)，补全评分排序，模块↔flake 集成。**
-7. **Registry v1 API 完整 (8 endpoints)，RegistryClient 已接入 install/search。**
+3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) ✅ 已完成。**
+4. **端到端测试已覆盖 537 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
+5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete) ✅。**
+6. **LSP 20 methods implemented ✅ (CodeLens)，补全评分排序，模块↔flake 集成。**
+7. **Registry v1 API 完整 (8 endpoints) ✅，RegistryClient 已接入 install/search。**
+8. **Phase 6 (Syntax Overhaul v3.0) ✅ 已完成 — 21→9 关键字，`let`/`fn`/`;` 可选，`|` lambda，`{}` 记录，`&` 注释。**
 
 ## 语言高风险特性矩阵 / High-Risk Language Features
 
@@ -83,7 +84,7 @@
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
 | 一等 Stream<T> | N/A | N/A | N/A | N/A | N/A | N/A | ✅ Phase A-C complete (14 APIs) |
-| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 已替换为真实 frontend/runtime smoke tests，但覆盖广度还不足以单独代表语言完备度 |
+| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 537 个真实 frontend/runtime smoke tests (525 pass + 12 gap markers)（TupleIndex, block-with-let, 泛型推导, Option match, record match, 安全访问, pipeline stdlib, impl method, v3 enum, list comprehension, match parity） |
 
 ## 工具链一致性矩阵 / Tooling Fidelity Matrix
 
@@ -95,7 +96,7 @@
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 (20 methods) | 前端管线已接入，hover 支持定义点类型和语义类型。`goto definition` / `references` / `rename` 对局部遮蔽场景已按实际绑定解析。补全评分排序 (exact/prefix/contains)。CodeLens 引用计数。20 methods: hover, completion (type-aware + scored), completionItem/resolve, signatureHelp, definition, references, documentHighlight, rename, prepareRename, formatting, documentSymbol, workspace/symbol, semanticTokens/full, inlayHint, foldingRange, codeAction, codeLens, didOpen, didChange, didSave, didClose |
-| End-to-end tests | ⚠️ 可信 smoke baseline（450 个测试） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
+| End-to-end tests | ⚠️ 可信 smoke baseline（537 个测试，525 pass + 12 gap markers） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
@@ -179,7 +180,7 @@
 1. 继续把这份矩阵扩成更完整的 feature inventory。
 2. 先修矩阵里最红的语义项，而不是继续加新语法。
 3. 用这份矩阵反向修正文档里的 `Complete` 表述。
-4. 继续扩展 `tests/end_to_end.rs`（440 个测试，440 target reached ✅），而不是把现有 smoke baseline 误当成完整闭环。
+4. 继续扩展 `tests/end_to_end.rs`（537 个测试，525 pass + 12 gap markers），而不是把现有 smoke baseline 误当成完整闭环。
 
 ## 当前结论 / Bottom Line
 
@@ -188,4 +189,5 @@
 - Neve 已经是一个**语法表面丰富、核心功能可运行**的语言原型。
 - Neve 还不是一个**语义完全收敛的独立完备语言**。
 - Neve 已经开始具备**系统脚本能力**，管道/重定向/进程执行/流式输出/信号/Task/glob/TTY/Job 已就绪。
-- **替代 Bash** 的最后一层差距 **Stream<T> 抽象** 已完成（14 APIs, Phase A-C complete）。Phase 4 (Shell 能力替代) ✅。Phase 5 (生态补完) 进行中：flake/lock/store/registry CLI 已上线。
+- **替代 Bash** 的最后一层差距 **Stream<T> 抽象** 已完成（14 APIs, Phase A-C complete）✅。Phase 4 (Shell 能力替代) ✅。Phase 5 (生态补完) 进行中：flake/lock/store/registry CLI 已上线。
+- **Phase 6 (Syntax Overhaul v3.0) ✅ 已完成** — 21→9 关键字，`let`/`fn`/`;` 可选，`type` 统一 `struct`/`enum`，`|` lambda 语法，`{}` 记录语法，`&` 注释。

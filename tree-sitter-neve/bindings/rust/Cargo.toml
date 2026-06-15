@@ -2,7 +2,7 @@
 name = "tree-sitter-neve"
 description = "Neve grammar for tree-sitter"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 license = "MPL-2.0"
 
 [lib]

@@ -21,14 +21,14 @@
 ## Using the stdlib / 标准库用法
 
 
-标准库用命名空间组织。直接 import 用 `list.map`，取个别名也行。
+标准库用命名空间组织。直接 use 用 `list.map`，取个别名也行。
 
 ```neve
-import std.list;                      -- list.map, list.filter 都能用
-import std.list (map, filter, fold);  -- 只导入这三个
-import std.string as Str;             -- Str.len("hi")
-import std.Map;
-import std.Set;
+use std.list;                      -- list.map, list.filter 都能用
+use std.list (map, filter, fold);  -- 只导入这三个
+use std.string as Str;             -- Str.len("hi")
+use std.Map;
+use std.Set;
 ```
 
 
@@ -374,6 +374,20 @@ io.streamWrite(s: Stream<String>, path: Path) -> Unit
 io.streamForEach(s: Stream<T>, f: T -> Unit) -> Unit
 io.streamFold(s: Stream<T>, init: A, f: A -> T -> A) -> A
 io.streamWithTimeout(s: Stream<T>, ms: Int) -> Stream<Option<T>>
+
+-- Short I/O aliases (v3.18): read, write, exec, cmd, run, sh, env, pwd, home, ok, stdout, stderr, code, ls, exists
+```
+
+## Bytes Module (std.bytes)
+
+```neve
+bytes.len(b: Bytes) -> Int
+bytes.isEmpty(b: Bytes) -> Bool
+bytes.fromString(s: String) -> Bytes
+bytes.fromList(xs: List<Int>) -> Bytes
+bytes.toList(b: Bytes) -> List<Int>
+bytes.toString(b: Bytes) -> String
+bytes.concat(a: Bytes, b: Bytes) -> Bytes
 ```
 
 
@@ -648,17 +662,17 @@ fetch.gitWithHash(url: String, rev: String, hash: String) -> #{ path: String, ha
 
 
 ```neve
-import std.list (filter, map);
-import std.string;
+use std.list (filter, map);
+use std.string;
 
 let users = [
-    #{ name = "Alice", age = 30 },
-    #{ name = "Bob", age = 25 },
+    { name = "Alice", age = 30 },
+    { name = "Bob", age = 25 },
 ];
 
 let names = users
-    |> filter(fn(u) u.age >= 18)
-    |> map(fn(u) u.name);
+    |> filter(|u| u.age >= 18)
+    |> map(|u| u.name);
 
 let joined = string.join(names, ", ");
 
@@ -669,17 +683,17 @@ let joined = string.join(names, ", ");
 
 
 ```neve
-import std.list (filter, map);
-import std.string;
+use std.list (filter, map);
+use std.string;
 
 let users = [
-    #{ name = "小明", age = 30 },
-    #{ name = "小红", age = 25 },
+    { name = "小明", age = 30 },
+    { name = "小红", age = 25 },
 ];
 
 let names = users
-    |> filter(fn(u) u.age >= 18)
-    |> map(fn(u) u.name);
+    |> filter(|u| u.age >= 18)
+    |> map(|u| u.name);
 
 let joined = string.join(names, "、");
 

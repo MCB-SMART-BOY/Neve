@@ -3,7 +3,11 @@
 //!
 //! This module defines all value types that can exist during Neve program execution.
 //! 本模块定义了 Neve 程序执行过程中可能存在的所有值类型。
+//!
+//! Note: AST compat types (AstEnv, AstClosure) are used here as internal
+//! implementation details. External callers should prefer HIR evaluator.
 
+#![allow(deprecated)]
 use crate::Environment;
 use crate::ast_eval::AstEnv;
 use neve_common::{Int, int_to_f64};

@@ -1,5 +1,7 @@
 [package]
 name = "neve-fmt"
+description = "Code formatter for the Neve language"
+repository.workspace = true
 version.workspace = true
 edition.workspace = true
 license.workspace = true

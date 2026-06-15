@@ -1617,7 +1617,6 @@ fn test_parse_char_escape() {
 }
 
 #[test]
-#[ignore]
 fn test_parse_char_unicode() {
     let (file, diags) = parse("let c = '\\u{1F600}';");
     assert!(diags.is_empty());
@@ -1710,8 +1709,6 @@ fn test_parse_index_expression() {
 }
 
 #[test]
-// TODO: tuple index t.0 conflicts with float literal parsing
-#[ignore]
 fn test_parse_tuple_index() {
     let (file, diags) = parse("let x = t.0;");
     assert!(diags.is_empty());

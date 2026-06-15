@@ -1,6 +1,8 @@
-# Neve Standard Library Stability Tiers
+# Neve Stability & Platform Support
 
-This document defines the stability guarantees for the Neve standard library (stdlib). Stability tiers are scoped to the v3.x major version. Breaking changes to stable APIs will only occur with a major version bump.
+## API Stability Tiers
+
+This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Stability tiers are scoped to the v3.x major version. Breaking changes to stable APIs will only occur with a major version bump.
 
 ## Tier 1: Stable ✅
 
@@ -16,8 +18,8 @@ This document defines the stability guarantees for the Neve standard library (st
 | `io.write` | `(msg: String) -> Unit` | Write string to stdout |
 | `io.readFile` | `(path: String) -> String` | Read entire file contents |
 | `io.writeFile` | `(path: String, content: String) -> Unit` | Write string to file |
-| `io.execCommand` | `(cmd: Command) -> Process` | Execute a command synchronously |
-| `io.execPipeline` | `(pipeline: Pipeline) -> List Process` | Execute a pipeline synchronously |
+| `io.execCommand` | `(cmd: Command) -> ProcessResult` | Execute a command synchronously |
+| `io.execPipeline` | `(pipeline: Pipeline) -> ProcessResult` | Execute a pipeline synchronously |
 | `io.command` | `(name: String, args: List String) -> Command` | Construct a Command value |
 | `io.pipeline` | `(cmds: List Command) -> Pipeline` | Construct a Pipeline value |
 | `io.args` | `() -> List String` | Get script arguments |
@@ -29,8 +31,8 @@ This document defines the stability guarantees for the Neve standard library (st
 | API | Signature | Description |
 |-----|-----------|-------------|
 | `toString` | `(value: a) -> String` | Convert any value to string |
-| `toInt` | `(value: String) -> Option Int` | Parse string to int |
-| `toFloat` | `(value: String) -> Option Float` | Parse string to float |
+| `toInt` | `(value: a) -> Int` | Convert to Int (from Int, Float, String, Bool) |
+| `toFloat` | `(value: a) -> Float` | Convert to Float (from Int, Float, String) |
 
 ### List Operations
 
@@ -105,10 +107,10 @@ All these types are stable:
 
 | API | Signature | Description |
 |-----|-----------|-------------|
-| `io.processSuccess` | `(p: Process) -> Bool` | Whether process exited with code 0 |
-| `io.processStdout` | `(p: Process) -> String` | Process stdout |
-| `io.processStderr` | `(p: Process) -> String` | Process stderr |
-| `io.processCode` | `(p: Process) -> Int` | Process exit code |
+| `io.processSuccess` | `(p: ProcessResult) -> Bool` | Whether process exited with code 0 |
+| `io.processStdout` | `(p: ProcessResult) -> String` | Process stdout |
+| `io.processStderr` | `(p: ProcessResult) -> String` | Process stderr |
+| `io.processCode` | `(p: ProcessResult) -> Int` | Process exit code |
 
 ---
 
@@ -179,13 +181,6 @@ All these types are stable:
 |-----|-----------|-------------|
 | `io.onSignal` | `(signal: String, handler: () -> Unit) -> Unit` | Register signal handler |
 
-### Terminal Introspection
-
-| API | Signature | Description |
-|-----|-----------|-------------|
-| `io.isTTY` | `() -> Bool` | Check if stdin is a TTY |
-| `io.terminalSize` | `() -> {cols: Int, rows: Int}` | Terminal dimensions |
-
 ### Bytes Type
 
 | API | Signature | Description |
@@ -198,13 +193,6 @@ All these types are stable:
 ## Tier 3: Experimental 🔬
 
 **Guarantee**: These APIs may change in minor releases. They represent emerging capabilities that need real-world validation before stabilization. Tier 3 APIs will be promoted to Tier 2 after **2 minor releases** of real-world usage without API changes.
-
-### TTY Raw Mode (2 APIs)
-
-| API | Signature | Description |
-|-----|-----------|-------------|
-| `io.setRawMode` | `() -> Unit` | Enable raw terminal mode |
-| `io.resetTerminal` | `() -> Unit` | Restore terminal settings |
 
 ### Job Control (2 APIs)
 
@@ -265,10 +253,81 @@ When a Tier 2 API needs a breaking change, the old API must:
 2. Be documented as deprecated in the API reference.
 3. Remain functional for at least **1 minor release** before removal.
 
-## Versioning
+## Platform Support Tiers
 
-Neve follows **Semantic Versioning** (SemVer):
+| Tier | Platform | Language Core | REPL | LSP | Sandbox | System Config | Package Mgmt |
+|------|----------|:---:|:---:|:---:|:-------:|:------------:|:------------:|
+| **Tier 1** | Linux (x86_64, aarch64) | ✅ | ✅ | ✅ | ✅ Native | ✅ | ✅ |
+| **Tier 2** | macOS (x86_64, aarch64) | ✅ | ✅ | ✅ | ✅ Docker | ❌ | ❌ |
+| **Tier 3** | Windows (x86_64) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 
-- **Major** (v3 → v4): Breaking changes to Tier 1 APIs, language syntax, or runtime behavior.
-- **Minor** (v3.1 → v3.2): New features, Tier 2 API additions, Tier 3 changes.
-- **Patch** (v3.1.0 → v3.1.1): Bug fixes, documentation updates, performance improvements.
+### Tier Definitions
+
+- **Tier 1 (Linux)**: Full support. All features work. All tests run. Release binaries available. This is the primary development target.
+- **Tier 2 (macOS)**: Near-full language support. Sandbox uses Docker backend. System config and package management unavailable (requires Linux namespaces). Core language tests run in CI.
+- **Tier 3 (Windows)**: Language core only (lexer, parser, HIR, typeck, eval, fmt, LSP). Signal handling, TTY, sandbox, system config, package management, and registry are unavailable. Limited CI coverage (5 language crates only).
+
+### What Each Tier Gets
+
+| Capability | Tier 1 | Tier 2 | Tier 3 |
+|-----------|:------:|:------:|:------:|
+| Language compilation and execution | ✅ | ✅ | ✅ |
+| REPL | ✅ | ✅ | ✅ |
+| LSP (language server) | ✅ | ✅ | ✅ |
+| Formatter | ✅ | ✅ | ✅ |
+| Stream<T> (14 APIs) | ✅ | ✅ | ✅ |
+| Task (spawn/poll/cancel) | ✅ | ✅ | ✅ |
+| Signal handling (INT/TERM/HUP) | ✅ | ❌ | ❌ |
+| TTY (raw mode, terminal size) | ✅ | ❌ | ❌ |
+| Native sandbox (Linux namespaces) | ✅ | ❌ | ❌ |
+| Docker sandbox backend | ✅ | ✅ | ❌ |
+| System config (generations) | ✅ | ❌ | ❌ |
+| Package management | ✅ | ❌ | ❌ |
+| Registry client | ✅ | ❌ | ❌ |
+| Full CI test suite | ✅ | ✅ (lang) | ⚠️ (5 crates) |
+| Release binaries | ✅ | ✅ | ✅ |
+
+### Promotion Path
+
+- **Tier 3 → Tier 2**: Requires Docker sandbox backend validation + full CI test matrix.
+- **Tier 2 → Tier 1**: Requires native sandbox (Linux namespaces) or equivalent + full ecosystem feature parity.
+
+## Versioning / 版本策略
+
+Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
+
+| Version | Meaning | Breaking changes |
+|---------|---------|------------------|
+| **Major** (v3 → v4) | Semantic completeness milestone. Represents "the language is mature enough to consider stable." | Allowed, with documented migration paths. |
+| **Minor** (v3.18 → v3.19) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
+| **Patch** (v3.18.0 → v3.18.1) | Bug fix release. No new features. | Not allowed. |
+
+### Deprecation Policy / 废弃策略
+
+All external-facing changes follow this lifecycle:
+
+```
+v3.X: deprecation warning → v3.X+1: continued warning → v3.X+2: removal
+```
+
+Example (AST evaluator removal):
+- **v3.18.0**: `#[deprecated]` on `AstEnv`/`AstEvaluator` (warning emitted)
+- **v4.0.0**: Types removed (breaking change in major)
+
+### v4.0 Exit Criteria
+
+v4.0 marks the transition from "language prototype" to "stable language platform":
+
+1. AST compat path (`neve_eval::compat`) fully removed
+2. All 6 known implementation gaps closed
+3. Lean formal verification: all axioms closed
+4. Release policy formalized and stable for 2+ minor versions
+5. External contribution policy published
+6. Semantic convergence: all features survive lowering without loss
+
+### Why Not Strict SemVer?
+
+- Neve is still in rapid evolution (Phase 5→6→...)
+- Syntax v3.0 was a breaking change within v3.x (hybrid approach)
+- Minor releases are the primary feature-delivery vehicle
+- Major releases represent "quality milestones" rather than "anything that breaks"

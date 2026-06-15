@@ -740,7 +740,7 @@ Non-goals / 非目标:
 |------|---------|
 | Priority | High |
 | Work packages | `WP-5A`, `WP-5B`, `WP-5C`, `WP-5D`, `WP-5E` |
-| Status | **Complete** ✅ — Stream<T> 14 APIs; 440 E2E tests; Formatter 37/37; Clippy 0 warnings |
+| Status | **Complete** ✅ — Stream<T> 14 APIs; 537 E2E tests; Formatter 37/37; Clippy 0 warnings |
 | Entry criteria | Phase 3 complete |
 | Main output | Typed scripting runtime that covers common shell workloads |
 | Why this phase exists | `exec` builtins alone do not replace Bash |
@@ -906,29 +906,29 @@ Each phase should be tracked with concrete metrics, not only narrative progress.
 
 ## Immediate Priority Order / 当前立即优先级
 
-Updated 2026-05-12. WP-0 through WP-4 are complete. Phase 5 is next. Current priorities:
+Updated 2026-06-03. Phase 4-6 are complete. Current priorities align with remaining decision chain (Q8→Q9→Q5→Q4→Q6/Q7):
 
-2026-05-12 更新。WP-0 到 WP-4 已完成。Phase 5 是下一步。当前优先级：
+2026-06-03 更新。Phase 4-6 已完成。当前优先级与剩余决策链对齐：
 
-1. TTY raw mode 完整集成
-2. Phase 5 ecosystem 规划 (确定性 lockfile、registry 元数据)
-3. 进一步 E2E 测试扩展 400 → 440 → 450+
-4. LSP 功能扩展 (references/rename/code actions)
-5. REPL 跨项目根目录切换优化
+1. **Q8: AST evaluator deprecation** — v3.1 目标: 在 `neve_eval::compat` 路径添加 deprecation 警告
+2. **Q9: Parser gap closure** — 补齐 3 个已知 gap (crate:: import, 多行注释, tuple index)
+3. **Q5: 发布策略** — v3.2 目标: 正式化 SemVer 混合策略
+4. **Lean 验证** — 等待 Lean 4.29+ 解除 mutual inductive 限制
+5. **Q4: Windows** — 评估 Tiered support model (Tier 1: Linux, Tier 2: macOS, Tier 3: Windows)
+6. **Q6: Registry** — 内部验证后公开
 
 ## Next Execution Batch / 下一执行批次
 
-Updated 2026-05-12. Phase 4 is complete. The current frontier is Phase 5 (Ecosystem Completion). Stream<T> is fully implemented (14 APIs, Phase A-C). See `docs/project/stream-design.md` for the implementation details.
+Updated 2026-06-03.
 
-2026-05-12 更新。Phase 4 已完成。当前前沿是 Phase 5（生态补完）。Stream<T> 已完整实现（14 APIs, Phase A-C）。实现细节见 `docs/project/stream-design.md`。
-
-| Priority | Task | Files | Status |
+| Priority | Task | Files | Target |
 |----------|------|-------|--------|
-| 1 | TTY raw mode 完整集成 | `crates/neve-std/src/io.rs`, `neve-cli/` | Pending |
-| 2 | Phase 5 启动: 确定性 lockfile + registry 元数据 | `crates/neve-builder/`, `crates/neve-store/` | Pending |
-| 3 | E2E 测试扩展 400 → 440 → 450+ | `tests/end_to_end.rs` | In Progress |
-| 4 | LSP 功能扩展 (references/rename/code actions) | `crates/neve-lsp/` | Pending |
-| 5 | REPL 跨项目根目录切换优化 | `crates/neve-frontend/` | Pending |
+| 1 | AST evaluator deprecation 警告 | `crates/neve-eval/src/compat/` | v3.1 |
+| 2 | Parser gap 补齐 (crate::, 多行注释, tuple index) | `crates/neve-parser/`, `crates/neve-lexer/` | v3.1 |
+| 3 | Release policy 文档化 | `docs/reference/stability.md`, `docs/project/changelog.md` | v3.2 |
+| 4 | Lean 技能套装拉取 + 剩余 axioms 监控 | `formal/` | ongoing |
+| 5 | Windows 支持评估 | `crates/neve-builder/`, `crates/neve-config/`, `.github/workflows/` | v3.x |
+| 6 | Registry 内部验证 + 公开策略 | `crates/neve-fetch/`, `crates/neve-store/`, docs | v3.x |
 
 ## Acceptance Standard / 验收标准
 

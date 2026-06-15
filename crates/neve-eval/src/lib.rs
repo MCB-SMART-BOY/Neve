@@ -31,7 +31,16 @@ mod eval;
 pub mod compat {
     //! Explicit AST compatibility surface.
     //! 显式 AST 兼容层接口。
+    //!
+    //! **Deprecated since v3.18.0**: This compatibility path will be removed
+    //! in v4.0. The canonical pipeline uses the HIR evaluator (`neve_eval::Evaluator`).
+    //! Use `neve_eval::Evaluator` with `neve_frontend` for all new code.
+    //!
+    //! **自 v3.18.0 起已废弃**: 此兼容路径将在 v4.0 中移除。
+    //! 规范管线使用 HIR 求值器 (`neve_eval::Evaluator`)。
+    //! 所有新代码请使用 `neve_eval::Evaluator` 配合 `neve_frontend`。
 
+    #[allow(deprecated)]
     pub use crate::ast_eval::{AstEnv, AstEvaluator};
 }
 pub mod pattern;

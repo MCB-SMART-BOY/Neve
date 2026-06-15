@@ -19,7 +19,7 @@ neve lsp --check
 
 Open any `.neve` file in Helix — syntax highlighting, auto-completion, and diagnostics work out of the box.
 
-## Supported LSP Methods (19 total)
+## Supported LSP Methods (20 total)
 
 ### Text Document Features
 
@@ -43,6 +43,7 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/inlayHint` | ✅ | Type inference hints for let bindings and function returns |
 | `textDocument/foldingRange` | ✅ | Code folding for functions, structs, enums, traits, impls |
 | `textDocument/codeAction` | ✅ | Quick-fix diagnostics |
+| `textDocument/codeLens` | ✅ | Reference counts on functions, structs, and traits |
 
 ### Workspace Features
 
@@ -119,7 +120,7 @@ When typing `expr.`, only methods applicable to the expression's inferred type a
 | Index | Type | AST Sources |
 |-------|------|-------------|
 | 0 | `keyword` | Lexer keywords |
-| 1 | `variable` | Let bindings, import aliases, references |
+| 1 | `variable` | Let bindings, use aliases, references |
 | 2 | `function` | fn_def, trait items, impl items |
 | 3 | `type` | struct, enum, trait, type alias names; enum variants |
 | 4 | `string` | String/char/path literals |

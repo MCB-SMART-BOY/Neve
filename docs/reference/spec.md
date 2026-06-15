@@ -4,7 +4,7 @@
 
 <h1>Neve Language Specification</h1>
 
-<p><em>语言规范 v2.3 — 含形式化语义 (Lean-verified)</em></p>
+<p><em>语言规范 v3.0 — 含形式化语义 (Lean-verified)</em></p>
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -40,34 +40,36 @@
 |--------|---------|---------|
 | `( )` | Grouping, tuples, function args | `(1, 2)`, `f(x)` |
 | `[ ]` | Lists | `[1, 2, 3]` |
-| `#{ }` | Records | `#{ x = 1 }` |
-| `{ }` | Blocks | `{ let x = 1; x }` |
+| `{ }` | Records, blocks | `{ x = 1 }`, `{ let x = 1; x }` |
 | `< >` | Generic parameters | `List<Int>` |
 | `->` | Function types, match arms | `Int -> Int` |
 | `,` | Item separator | `[1, 2, 3]` |
-| `;` | Statement terminator | `let x = 1;` |
+| `;` | Statement terminator (optional at top level) | `let x = 1` |
 | `:` | Type annotation | `x: Int` |
 | `=` | Value binding | `x = 1` |
+| `&` | Record merge, comments | `a & b`, `& comment` |
+| `|>` | Pipe | `x |> f` |
 
 
 | 符号 | 干啥的 | 例子 |
 |------|--------|------|
 | `( )` | 分组、元组、函数参数 | `(1, 2)`, `f(x)` |
 | `[ ]` | 列表 | `[1, 2, 3]` |
-| `#{ }` | 记录 | `#{ x = 1 }` |
-| `{ }` | 代码块 | `{ let x = 1; x }` |
+| `{ }` | 记录、代码块 | `{ x = 1 }`, `{ let x = 1; x }` |
 | `< >` | 泛型参数 | `List<Int>` |
 | `->` | 函数类型、匹配分支 | `Int -> Int` |
 | `,` | 分隔并列项 | `[1, 2, 3]` |
-| `;` | 语句结尾 | `let x = 1;` |
+| `;` | 语句结尾（顶层可选） | `let x = 1` |
 | `:` | 类型声明 | `x: Int` |
 | `=` | 绑定值 | `x = 1` |
+| `&` | 记录合并、注释 | `a & b`, `& comment` |
+| `|>` | 管道 | `x |> f` |
 
 
 ## 3. Lexical Elements / 词法元素
 
 
-### Comments
+### Comments / 注释
 
 ```neve
 -- single line comment --
@@ -76,6 +78,8 @@
    multi-line comment
    -- can be nested --
 --
+
+& line comment (v3.0)
 ```
 
 ### Literals
@@ -167,7 +171,7 @@ Result<Int, String>             -- result with error
 (Int, String)                   -- tuple
 (Int, Int) -> Int               -- function (single tuple param)
 Int -> Int -> Int               -- curried function
-#{ name: String, port: Int }    -- record type
+{ name: String, port: Int }    -- record type
 
 -- Runtime object types
 Command                         -- process command
@@ -201,7 +205,7 @@ Result<Int, String>             -- 带错误的结果
 (Int, String)                   -- 元组
 (Int, Int) -> Int               -- 函数（单参数元组）
 Int -> Int -> Int               -- 柯里化函数
-#{ name: String, port: Int }    -- 记录类型
+{ name: String, port: Int }    -- 记录类型
 
 -- 运行时对象类型
 Command                         -- 进程命令
@@ -215,67 +219,65 @@ Bytes                           -- 二进制数据
 ## 5. Definitions / 定义
 
 
-All top-level definitions end with `;`.
+Top-level `let`/`fn`/`;` are **optional** in v3.0. `struct`/`enum` → `type`.
 
 ```neve
 -- Type alias
-type Port = Int;
+type Port = Int
 
--- Struct
-struct Point { x: Float, y: Float };
-
--- Enum
-enum Option<T> { Some(T), None };
+-- Type (struct/enum unified)
+type Point = { x: Float, y: Float }
+type Option<T> = | Some(T) | None
 
 -- Trait
 trait Show {
-    fn show(self) -> String;
-};
+    show(self) -> String
+}
 
 -- Implementation
 impl Show for Point {
-    fn show(self) -> String = `({self.x}, {self.y})`;
-};
+    show(self) = `({self.x}, {self.y})`
+}
 
--- Function (pure, no side effects)
-fn add(x: Int, y: Int) -> Int = x + y;
+-- Function (let/fn optional)
+add(x: Int, y: Int) -> Int = x + y
 
--- Effectful function (may perform I/O, process execution, etc.)
-fn readConfig(path: String) -> String effect = io.readFile(path);
--- Function
-fn add(x: Int, y: Int) -> Int = x + y;
+-- Or with explicit keywords
+let add = |x: Int, y: Int| x + y;
+
+-- Effectful function (effect auto-inferred)
+readConfig(path: String) -> String = io.readFile(path)
 ```
 
 
-所有顶层定义都以 `;` 结尾。
+顶层 `let`/`fn`/`;` 在 v3.0 中是**可选的**。`struct`/`enum` → `type`。
 
 ```neve
 -- 类型别名
-type Port = Int;
+type Port = Int
 
--- 结构体
-struct Point { x: Float, y: Float };
-
--- 枚举
-enum Option<T> { Some(T), None };
+-- 类型（struct/enum 统一为 type）
+type Point = { x: Float, y: Float }
+type Option<T> = | Some(T) | None
 
 -- Trait
 trait Show {
-    fn show(self) -> String;
-};
+    show(self) -> String
+}
 
 -- 实现
 impl Show for Point {
-    fn show(self) -> String = `({self.x}, {self.y})`;
-};
+    show(self) = `({self.x}, {self.y})`
+}
 
--- 函数（纯函数，无副作用）
-fn add(x: Int, y: Int) -> Int = x + y;
+-- 函数（let/fn 可选）
+add(x: Int, y: Int) -> Int = x + y
 
--- 副作用函数（可执行 I/O、进程操作等）
-fn readConfig(path: String) -> String effect = io.readFile(path);
--- 函数
-fn add(x: Int, y: Int) -> Int = x + y;
+-- 或者用显式关键字
+let add = |x: Int, y: Int| x + y;
+
+-- 副作用函数（effect 自动推导）
+readConfig(path: String) -> String = io.readFile(path)
 ```
 
 
@@ -287,16 +289,16 @@ fn add(x: Int, y: Int) -> Int = x + y;
 ```neve
 let x = 42;
 let (a, b) = (1, 2);
-let #{ x, y } = point;
+let { x, y } = point;
 ```
 
-### Records
+### Records (v3.0)
 
 ```neve
-#{ x = 0, y = 0 }
-#{ name }              -- shorthand
-#{ point | x = 10 }    -- update
-config // override     -- merge
+{ x = 0, y = 0 }
+{ name }              -- shorthand
+{ point | x = 10 }    -- update
+config & override     -- merge
 ```
 
 ### Lists
@@ -307,12 +309,12 @@ config // override     -- merge
 [x * 2 | x <- xs, x > 0]    -- comprehension
 ```
 
-### Closures
+### Closures / Lambdas (v3.0)
 
 ```neve
-fn(x) x + 1
-fn(x, y) x + y
-fn(x: Int) -> Int { x + 1 }
+|x| x + 1
+|x, y| x + y
+|x: Int| -> Int { x + 1 }
 ```
 
 ### Conditionals
@@ -321,14 +323,22 @@ fn(x: Int) -> Int { x + 1 }
 if x > 0 then "positive" else "non-positive"
 ```
 
-### Pattern Matching
+### Pattern Matching (Must Be Exhaustive)
+
+`match` requires exhaustive coverage. For non-exhaustive conditions, use `if-else`.
 
 ```neve
+-- match: exhaustive (compiler enforces)
 match x {
     0 -> "zero",
-    n if n > 0 -> "positive",
-    _ -> "negative",
+    1 -> "one",
+    _ -> "other",
 }
+
+-- if-else: non-exhaustive (no compiler guarantee)
+if x > 0 then "positive"
+else if x < 0 then "negative"
+else "zero"
 ```
 
 ### Error Handling
@@ -359,16 +369,16 @@ Current canonical dispatch order:
 ```neve
 let x = 42;
 let (a, b) = (1, 2);
-let #{ x, y } = point;
+let { x, y } = point;
 ```
 
 ### 记录
 
 ```neve
-#{ x = 0, y = 0 }
-#{ name }              -- 简写
-#{ point | x = 10 }    -- 更新
-config // override     -- 合并
+{ x = 0, y = 0 }
+{ name }              -- 简写
+{ point | x = 10 }    -- 更新
+config & override     -- 合并
 ```
 
 ### 列表
@@ -379,12 +389,12 @@ config // override     -- 合并
 [x * 2 | x <- xs, x > 0]    -- 推导式
 ```
 
-### 闭包
+### 闭包 / Lambdas (v3.0)
 
 ```neve
-fn(x) x + 1
-fn(x, y) x + y
-fn(x: Int) -> Int { x + 1 }
+|x| x + 1
+|x, y| x + y
+|x: Int| -> Int { x + 1 }
 ```
 
 ### 条件
@@ -393,14 +403,22 @@ fn(x: Int) -> Int { x + 1 }
 if x > 0 then "正数" else "非正数"
 ```
 
-### 模式匹配
+### 模式匹配（必须穷尽）
+
+`match` 要求穷尽覆盖。非穷尽场景用 `if-else`。
 
 ```neve
+-- match：穷尽（编译器强制）
 match x {
     0 -> "零",
-    n if n > 0 -> "正数",
-    _ -> "负数",
+    1 -> "一",
+    _ -> "其他",
 }
+
+-- if-else：非穷尽（不强制覆盖所有情况）
+if x > 0 then "正数"
+else if x < 0 then "负数"
+else "零"
 ```
 
 ### 错误处理
@@ -496,26 +514,26 @@ x.foo(y)
 
 
 ```neve
-pub fn add(x: Int, y: Int) -> Int = x + y;
+pub add(x: Int, y: Int) -> Int = x + y
 
-import std.list;
-import std.list (map, filter);
-import std.list as L;
-import self.utils;
-import super.common;
-import crate.utils;
+use std.list
+use std.list (map, filter)
+use std.list as L
+use self.utils
+use super.common
+use crate.utils
 ```
 
 
 ```neve
-pub fn add(x: Int, y: Int) -> Int = x + y;
+pub add(x: Int, y: Int) -> Int = x + y
 
-import std.list;
-import std.list (map, filter);
-import std.list as L;
-import self.utils;
-import super.common;
-import crate.utils;
+use std.list
+use std.list (map, filter)
+use std.list as L
+use self.utils
+use super.common
+use crate.utils
 ```
 
 
@@ -573,7 +591,7 @@ Neve 支持基于 shebang 的脚本编写和命令行参数访问。
 
 ```neve
 #!/usr/bin/env neve
-import std.io as io;
+use std.io as io;
 
 -- Access script arguments / 访问脚本参数
 let args = io.args();
@@ -603,12 +621,12 @@ in the current parser or runtime. Tracked as `#[ignore]` golden tests in
 
 | Gap | Status | Issue |
 |-----|--------|-------|
-| Unicode `\u{...}` in char literals | ❌ Parser | Not yet supported by lexer |
+| Unicode `\u{...}` in char literals | ✅ Done | Resolved (v3.18), lexer supports `\u{XXXXXX}` |
 | `effect` on impl methods | ⚠️ Syntax | Syntax clarification needed |
-| `crate::` import prefix | ❌ Parser | Not yet implemented |
-| Multi-line `-- ... --` comments | ❌ Lexer | Only single-line `--` supported |
+| `crate::` import prefix | ✅ Done | Resolved (v3.5), parser supports `crate.path` |
+| Multi-line `-- ... --` comments | ✅ Done | Resolved (v3.5), lexer supports `-- -- open -- -- close` |
 | Shebang stripping | ⚠️ CLI | Handled by CLI, not parser |
-| Tuple index `t.0` | ❌ Parser | Conflicts with float literal |
+| Tuple index `t.0` | ✅ Done | Resolved (v3.18), parser + lowering + typeck + eval support |
 
 ---
 
@@ -616,54 +634,42 @@ in the current parser or runtime. Tracked as `#[ignore]` golden tests in
 
 
 ```
-let fn type struct enum trait impl
-pub import as self super crate
-if then else match
+let fn type trait impl
+pub use as self super crate
+if else match
 lazy true false effect
 ```
 
-**21 keywords total**
+**17 keywords** (v3.0 canonical; 21 total with legacy aliases)
+
+> Legacy keywords (`struct`, `enum`, `import`, `then`) still accepted by the
+> lexer for backward compatibility but are not canonical v3.0 syntax.
 
 
 ```
-let fn type struct enum trait impl
-pub import as self super crate
-if then else match
+let fn type trait impl
+pub use as self super crate
+if else match
 lazy true false effect
 ```
 
-**一共 21 个关键字**
+**17 个规范关键字** (v3.0; 含向后兼容别名共 21 个)
 
 
 ## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照
 
 
-| Nix | Neve |
-|-----|------|
-| `{ a = 1; }` | `#{ a = 1 }` |
+| Nix | Neve v3.0 |
+|-----|-----------|
+| `{ a = 1; }` | `{ a = 1 }` |
 | `[ 1 2 3 ]` | `[1, 2, 3]` |
-| `x: x + 1` | `fn(x) x + 1` |
-| `a // b` | `a // b` |
+| `x: x + 1` | `\|x\| x + 1` |
+| `a // b` | `a & b` |
 | `"${x}"` | `` `{x}` `` |
-| `inherit x;` | `#{ x }` |
+| `inherit x;` | `{ x }` |
 | `rec { }` | Automatic recursion |
 
----
-
-
-| Nix | Neve |
-|-----|------|
-| `{ a = 1; }` | `#{ a = 1 }` |
-| `[ 1 2 3 ]` | `[1, 2, 3]` |
-| `x: x + 1` | `fn(x) x + 1` |
-| `a // b` | `a // b` |
-| `"${x}"` | `` `{x}` `` |
-| `inherit x;` | `#{ x }` |
-| `rec { }` | 自动递归 |
-
----
-
-<div align="center">
+---<div align="center">
 
 ```
 ═══════════════════════════════════════════════════════════════════════════════

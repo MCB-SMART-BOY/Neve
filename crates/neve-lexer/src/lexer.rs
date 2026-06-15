@@ -500,6 +500,7 @@ impl<'src> Lexer<'src> {
             Some((_, '\'')) => Some('\''), // single quote - 单引号
             Some((_, '{')) => Some('{'),   // left brace - 左花括号
             Some((_, '}')) => Some('}'),   // right brace - 右花括号
+            Some((_, 'u')) => self.unicode_escape(), // unicode escape - Unicode 转义
             Some((pos, ch)) => {
                 let span = Span::from_usize(pos, self.pos);
                 self.diagnostics.push(
@@ -514,6 +515,70 @@ impl<'src> Lexer<'src> {
             }
             None => None,
         }
+    }
+
+    /// Parse a Unicode escape sequence: \u{XXXXXX}
+    /// 解析 Unicode 转义序列：\u{XXXXXX}
+    fn unicode_escape(&mut self) -> Option<char> {
+        // Expect opening brace
+        match self.advance() {
+            Some((_, '{')) => {}
+            _ => return None,
+        }
+
+        let mut codepoint = 0u32;
+        let mut digits = 0;
+        loop {
+            match self.advance() {
+                Some((_, '}')) => break,
+                Some((_, ch)) if ch.is_ascii_hexdigit() => {
+                    codepoint = codepoint * 16 + ch.to_digit(16).unwrap_or(0);
+                    digits += 1;
+                    if digits > 6 {
+                        let span = Span::from_usize(self.pos - 1, self.pos);
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                DiagnosticKind::Lexer,
+                                span,
+                                "unicode escape too long (max 6 hex digits)",
+                            )
+                            .with_code(ErrorCode::InvalidEscape),
+                        );
+                        return None;
+                    }
+                }
+                Some((pos, ch)) => {
+                    let span = Span::from_usize(pos, self.pos);
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            DiagnosticKind::Lexer,
+                            span,
+                            format!("invalid character in unicode escape: '{}'", ch),
+                        )
+                        .with_code(ErrorCode::InvalidEscape),
+                    );
+                    return None;
+                }
+                None => {
+                    let span = Span::from_usize(self.pos - 1, self.pos);
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            DiagnosticKind::Lexer,
+                            span,
+                            "unterminated unicode escape",
+                        )
+                        .with_code(ErrorCode::UnterminatedString),
+                    );
+                    return None;
+                }
+            }
+        }
+
+        if digits == 0 {
+            return None;
+        }
+
+        char::from_u32(codepoint)
     }
 
     /// Start parsing an interpolated string (backtick).
