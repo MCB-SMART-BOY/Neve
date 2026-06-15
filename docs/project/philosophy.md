@@ -72,13 +72,14 @@ No side effects. No mutable state. Same input → same output. Always.
 
 ### 5. Simplicity / 简洁
 
-A minimal set of keywords (v3.0 reduced from 21 to 9 structural keywords).
+A minimal set of keywords (v4.0: 12 canonical keywords, down from 17 in v3.0).
 
-精简的关键字集合（v3.0 从 21 个缩减到 9 个结构化关键字）。
+精简的关键字集合（v4.0: 12 个规范关键字，v3.0 时为 17 个）。
 
 ```
-if  then  else  match  use  as  type  trait  impl  pub
-true  false  lazy  effect  self  super  crate
+let  fn   type  trait  impl  use
+self if   else  match
+true false
 ```
 
 ### 6. Unix Philosophy / Unix 哲学

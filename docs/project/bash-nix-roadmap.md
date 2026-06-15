@@ -28,7 +28,7 @@ Neve v3.5.0 已经具备系统脚本和构建系统的基础能力：
 
 - [ ] `Effect` 类型加入函数类型：`Fn(Vec<Ty>, Box<Ty>, Effect)`
 - [ ] Effect 多态：`fn map<A, B>(f: fn(A) -> B, xs: List<A>) -> List<B>` 自动传播 effect
-- [ ] Effect 推断：pure 函数不写 `effect` 也自动检测
+- [x] Effect 推断：pure 函数不写 `effect` 也自动检测（v4.0 已实现）
 - [ ] `neve check` 默认启用（不再需要 `--pure` flag）
 - [ ] Effect 诊断改进：显示 effect 传播链（谁调了谁导致 effect）
 

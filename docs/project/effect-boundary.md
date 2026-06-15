@@ -248,7 +248,7 @@ IOState (效果状态，在 EffectEval 中传递)
 
 **D-009: Effects are explicit and runtime-mediated**
 - 效果不是隐式的（不像 Haskell 的 IO monad）
-- 效果通过 `effect` 关键字在类型层面标注
+- 效果通过类型系统自动推断（`effect` 关键字在 v4.0 中已可选）
 - 纯函数不能调用有效果的 builtin（`neve check --pure` 强制检查）
 
 **D-012: Process control is modeled, not inferred**

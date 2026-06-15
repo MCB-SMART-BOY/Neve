@@ -33,19 +33,23 @@ Source Code (.neve)
 └────────────────────────────────────────────────────┘
 ```
 
-## Syntax v3.0 Transformations
+## Syntax Transformations (v3.0 → v4.0)
 
-| Old Form | v3.0 Form | Rationale |
-|----------|-----------|-----------|
-| `struct Foo {}` / `enum Bar {}` | `type Foo = {}` / `type Bar = \| ...` | Unified type declaration |
-| `import std.list` | `use std.list` | Shorter, Rust-aligned |
-| `fn(x) x + 1` | `|x| x + 1` | Rust-style lambda |
-| `#{ x = 1 }` | `{ x = 1 }` | Delimiter-driven container theory |
-| `// comment` | `& comment` | `//` freed for path operator |
-| `a // b` (merge) | `a & b` | Consistent with `&` comment |
-| `let`/`fn`/`;` required | Optional at top level | Less ceremony |
+| Old Form | v3.0 Form | v4.0 Form | Rationale |
+|----------|-----------|-----------|-----------|
+| `struct Foo {}` / `enum Bar {}` | `type Foo = {}` / `type Bar = \| ...` | same | Unified type declaration |
+| `import std.list` | `use std.list` | same | Shorter, Rust-aligned |
+| `import std.io as io` | same | `use std.io = io` | `=` matches binding syntax |
+| `fn(x) x + 1` | `\|x\| x + 1` | same | Rust-style lambda |
+| `#{ x = 1 }` | `{ x = 1 }` | same | Delimiter-driven container theory |
+| `// comment` | `& comment` | same | `//` freed for path operator |
+| `a // b` (merge) | `a & b` | same | Consistent with `&` comment |
+| `if cond then a else b` | same | `if cond -> a else b` | Arrow unifies with match |
+| `lazy expr` | same | `~expr` | Lightweight prefix |
+| `fn foo() effect = ...` | same | `fn foo() = ...` | Auto-inferred |
+| `pub fn` | same | `fn` | All public by default |
 
-**Backward compatibility**: The lexer still accepts legacy keywords. The parser's `parse_item()` accepts both old and new syntax forms.
+**Backward compatibility**: The lexer still accepts all legacy keywords (`then`, `as`, `lazy`, `effect`, `pub`, `struct`, `enum`, `import`). 12 canonical keywords, 6 legacy aliases.
 
 ## Lexer Design (neve-lexer)
 

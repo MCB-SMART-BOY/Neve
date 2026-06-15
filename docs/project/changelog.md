@@ -21,6 +21,17 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [3.19.0] - 2026-06-16
+
+### Changed
+- **Keyword simplification: 17 → 12**: `then` replaced by `->` arrow, `as` replaced by `=` in imports, `lazy` replaced by `~` prefix, `effect` made optional (auto-inferred), `pub` removed (all public by default). Legacy keywords still accepted for backward compatibility.
+- **Phase B gap closure: 11/12**: 11 of 12 E2E gap tests now pass. Remaining: B9 (impl method dispatch).
+- **Generic identity inference**: Functions without explicit generics (`id = |x| x`) now get polymorphic types via `generalize` + `instantiate` fix.
+
+### Fixed
+- **Parser**: v3.0 bare enum pipe syntax (`type Foo = | Red | Green | Blue`) now supported.
+- **Typeck**: Multi-call-site polymorphism via `instantiate` fix for `generalize`-generated `Forall` types.
+
 ## [3.18.0] - 2026-05-27
 
 ### Added

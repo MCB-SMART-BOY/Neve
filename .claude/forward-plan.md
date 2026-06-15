@@ -3,9 +3,9 @@
 ## Current State
 
 ```
-v3.18.0  |  541 E2E tests (538 pass + 2 fail + 1 gap)  |  20 LSP methods
+v3.18.0+  |  541 E2E tests (538 pass + 2 fail + 1 gap)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
-Audit: 22/30 fixed (73%)  |  Docs: v3.0 syntax synced  |  Phase B: 10/12 gaps closed
+Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: 11/12 gaps closed
 ```
 
 ## v4.0 Exit Criteria

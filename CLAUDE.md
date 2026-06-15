@@ -36,9 +36,11 @@ crates/neve-lsp/       Language Server (20 methods)
 crates/neve-fmt/       formatter
 ```
 
-## Syntax v3.0
+## Syntax v4.0
 
-`let`/`fn`/`;` optional at top level. `use` not `import`. `|x|` not `fn(x)`. `{ }` records (no `#` prefix). `&` record merge and line comments. `type Foo = | A | B` for enums. 17 canonical keywords (21 with legacy aliases accepted by lexer).
+`let`/`fn`/`;` optional at top level. `use` not `import`. `|x|` not `fn(x)`. `{ }` records (no `#` prefix). `&` record merge and line comments. `type Foo = | A | B` for enums. 12 canonical keywords (+6 legacy aliases accepted by lexer).
+
+v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `as`), `~expr` (was `lazy`), `effect` auto-inferred, `pub` removed (all public).
 
 ## Key Rules
 

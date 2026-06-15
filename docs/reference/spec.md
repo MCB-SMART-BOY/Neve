@@ -320,7 +320,7 @@ config & override     -- merge
 ### Conditionals
 
 ```neve
-if x > 0 then "positive" else "non-positive"
+if x > 0 -> "positive" else "non-positive"
 ```
 
 ### Pattern Matching (Must Be Exhaustive)
@@ -336,8 +336,8 @@ match x {
 }
 
 -- if-else: non-exhaustive (no compiler guarantee)
-if x > 0 then "positive"
-else if x < 0 then "negative"
+if x > 0 -> "positive"
+else if x < 0 -> "negative"
 else "zero"
 ```
 
@@ -400,7 +400,7 @@ config & override     -- 合并
 ### 条件
 
 ```neve
-if x > 0 then "正数" else "非正数"
+if x > 0 -> "正数" else "非正数"
 ```
 
 ### 模式匹配（必须穷尽）
@@ -416,8 +416,8 @@ match x {
 }
 
 -- if-else：非穷尽（不强制覆盖所有情况）
-if x > 0 then "正数"
-else if x < 0 then "负数"
+if x > 0 -> "正数"
+else if x < 0 -> "负数"
 else "零"
 ```
 
@@ -518,7 +518,7 @@ pub add(x: Int, y: Int) -> Int = x + y
 
 use std.list
 use std.list (map, filter)
-use std.list as L
+use std.list = L
 use self.utils
 use super.common
 use crate.utils
@@ -530,7 +530,7 @@ pub add(x: Int, y: Int) -> Int = x + y
 
 use std.list
 use std.list (map, filter)
-use std.list as L
+use std.list = L
 use self.utils
 use super.common
 use crate.utils
@@ -541,7 +541,7 @@ use crate.utils
 
 
 ```neve
-let expensive = lazy compute();
+let expensive = ~compute();
 let result = force(expensive);
 ```
 
@@ -560,7 +560,7 @@ Functions that perform host effects (I/O, process execution, network) must be an
 fn pureAdd(x: Int, y: Int) -> Int = x + y;
 
 -- Effectful function: may call io.*, fetch.* / 副作用函数：可调用 io.*, fetch.*
-fn readHostname() -> String effect = io.readFile("/etc/hostname");
+fn readHostname() -> String = io.readFile("/etc/hostname");
 ```
 
 ### Effect Checking / 副作用检查
@@ -591,7 +591,7 @@ Neve 支持基于 shebang 的脚本编写和命令行参数访问。
 
 ```neve
 #!/usr/bin/env neve
-use std.io as io;
+use std.io = io;
 
 -- Access script arguments / 访问脚本参数
 let args = io.args();
@@ -635,31 +635,31 @@ in the current parser or runtime. Tracked as `#[ignore]` golden tests in
 
 ```
 let fn type trait impl
-pub use as self super crate
+use self
 if else match
-lazy true false effect
+true false
 ```
 
-**17 keywords** (v3.0 canonical; 21 total with legacy aliases)
+**12 keywords** (v4.0 canonical; 18 total with legacy aliases)
 
-> Legacy keywords (`struct`, `enum`, `import`, `then`) still accepted by the
-> lexer for backward compatibility but are not canonical v3.0 syntax.
+> Legacy keywords (`struct`, `enum`, `import`, `pub`, `as`, `then`, `lazy`, `effect`)
+> still accepted by the lexer for backward compatibility but are not canonical v4.0 syntax.
 
 
 ```
 let fn type trait impl
-pub use as self super crate
+use self
 if else match
-lazy true false effect
+true false
 ```
 
-**17 个规范关键字** (v3.0; 含向后兼容别名共 21 个)
+**12 个规范关键字** (v4.0; 含向后兼容别名共 18 个)
 
 
 ## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照
 
 
-| Nix | Neve v3.0 |
+| Nix | Neve v4.0 |
 |-----|-----------|
 | `{ a = 1; }` | `{ a = 1 }` |
 | `[ 1 2 3 ]` | `[1, 2, 3]` |
@@ -668,6 +668,8 @@ lazy true false effect
 | `"${x}"` | `` `{x}` `` |
 | `inherit x;` | `{ x }` |
 | `rec { }` | Automatic recursion |
+| `with pkgs; [foo]` | `use pkgs = p; [p.foo]` |
+| `if cond then a else b` | `if cond -> a else b` |
 
 ---<div align="center">
 

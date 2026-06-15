@@ -48,18 +48,23 @@ Source Code (.neve)
 └──────────────┘
 ```
 
-## Syntax v3.0 Quick Reference
+## Syntax Quick Reference
 
-| Old | v3.0 |
-|-----|------|
-| `struct Foo { }` / `enum Bar { }` | `type Foo = { }` / `type Bar = \| ...` |
-| `import std.list` | `use std.list` |
-| `fn(x) x + 1` | `\|x\| x + 1` |
-| `#{ x = 1 }` | `{ x = 1 }` |
-| `// comment` | `& comment` (also `--` still works) |
-| `let x = 1;` | `let`/`fn`/`;` optional at top level |
-| `a // b` (merge) | `a & b` |
-| 21 keywords | 9 keywords |
+| Feature | v3.0 | v4.0 |
+|---------|------|------|
+| Type definition | `type Foo = { }` / `type Bar = \| ...` | same |
+| Import | `use std.list` | same |
+| Import alias | `use std.io as io` | `use std.io = io` |
+| Lambda | `\|x\| x + 1` | same |
+| Record | `{ x = 1 }` | same |
+| Comment | `& comment` (also `--` still works) | same |
+| Top-level | `let`/`fn`/`;` optional | same |
+| Record merge | `a & b` | same |
+| If expression | `if cond then a else b` | `if cond -> a else b` |
+| Lazy evaluation | `lazy expr` | `~expr` |
+| Effect annotation | `fn foo() effect = ...` | `fn foo() = ...` (auto-inferred) |
+| Visibility | `pub fn` | `fn` (all public by default) |
+| Keywords | 17 | 12 |
 
 ## Crate Map
 
@@ -96,7 +101,7 @@ Source Code (.neve)
 | LSP Methods | 20 |
 | EffectEval Rules | 34 (v4.3) |
 | Lean Modules | 19 |
-| Keywords | 9 (v3.0) |
+| Keywords | 12 (v4.0) |
 
 ## Decisions (2026-06-03)
 
