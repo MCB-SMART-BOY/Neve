@@ -306,6 +306,9 @@ impl<'src> Lexer<'src> {
                 }
             }
 
+            // Tilde - lazy prefix (v4.0)
+            '~' => TokenKind::Tilde,
+
             // Question mark - 问号
             '?' => {
                 if self.peek_char() == Some('?') {

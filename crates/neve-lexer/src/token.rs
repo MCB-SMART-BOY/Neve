@@ -123,6 +123,7 @@ pub enum TokenKind {
     At,               // @ - 模式绑定
     DotDot,           // .. - 范围/展开
     Question,         // ? - 错误传播
+    Tilde,            // ~ - 惰性前缀
 
     // ===== Punctuation 标点 =====
     Comma,     // , - 逗号
@@ -141,30 +142,22 @@ impl TokenKind {
     /// Returns true if this token is a keyword.
     /// 判断是否为关键字。
     pub fn is_keyword(&self) -> bool {
+        // v4.0 canonical keywords: 12 keywords
+        // Legacy (still parsed but not counted): struct enum import pub then as lazy effect
         matches!(
             self,
             TokenKind::Let
                 | TokenKind::Fn
                 | TokenKind::Type
-                | TokenKind::Struct
-                | TokenKind::Enum
                 | TokenKind::Trait
                 | TokenKind::Impl
-                | TokenKind::Pub
-                | TokenKind::Import
                 | TokenKind::Use
-                | TokenKind::As
                 | TokenKind::SelfLower
-                | TokenKind::Super
-                | TokenKind::Crate
                 | TokenKind::If
-                | TokenKind::Then
                 | TokenKind::Else
                 | TokenKind::Match
-                | TokenKind::Lazy
                 | TokenKind::True
                 | TokenKind::False
-                | TokenKind::Effect
         )
     }
 

@@ -29,7 +29,7 @@ fn test_parse_record() {
 
 #[test]
 fn test_parse_if_expr() {
-    let (file, diags) = parse("let x = if true then 1 else 2;");
+    let (file, diags) = parse("let x = if true -> 1 else 2;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -191,7 +191,7 @@ fn test_fn_calling_another() {
 
 #[test]
 fn test_fn_recursive_reference() {
-    let (file, diags) = parse("fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);");
+    let (file, diags) = parse("fn fact(n) = if n <= 1 -> 1 else n * fact(n - 1);");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -260,31 +260,31 @@ fn test_string_concat() {
 
 #[test]
 fn test_if_simple() {
-    let (_, diags) = parse("let x = if true then 1 else 0;");
+    let (_, diags) = parse("let x = if true -> 1 else 0;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_nested_condition() {
-    let (_, diags) = parse("let x = if (a && b) then 1 else 0;");
+    let (_, diags) = parse("let x = if (a && b) -> 1 else 0;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_nested_then() {
-    let (_, diags) = parse("let x = if a then if b then 1 else 2 else 3;");
+    let (_, diags) = parse("let x = if a -> if b -> 1 else 2 else 3;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_complex_branches() {
-    let (_, diags) = parse("let x = if cond then foo(1, 2) else bar(3, 4);");
+    let (_, diags) = parse("let x = if cond -> foo(1, 2) else bar(3, 4);");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_with_comparison() {
-    let (_, diags) = parse("let x = if n > 0 then n else 0;");
+    let (_, diags) = parse("let x = if n > 0 -> n else 0;");
     assert!(diags.is_empty());
 }
 
@@ -1178,7 +1178,7 @@ fn test_import_items() {
 
 #[test]
 fn test_import_aliased() {
-    let (_, diags) = parse("import std.list as L;");
+    let (_, diags) = parse("import std.list = L;");
     assert!(diags.is_empty());
 }
 
@@ -1321,19 +1321,19 @@ fn test_multiline_string_literal() {
 
 #[test]
 fn test_if_simple_ternary() {
-    let (_, diags) = parse("let x = if cond then 1 else 2;");
+    let (_, diags) = parse("let x = if cond -> 1 else 2;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_complex_condition() {
-    let (_, diags) = parse("let x = if a && b || c then 1 else 2;");
+    let (_, diags) = parse("let x = if a && b || c -> 1 else 2;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_if_nested() {
-    let (_, diags) = parse("let x = if a then if b then 1 else 2 else 3;");
+    let (_, diags) = parse("let x = if a -> if b -> 1 else 2 else 3;");
     assert!(diags.is_empty());
 }
 
@@ -1341,9 +1341,9 @@ fn test_if_nested() {
 fn test_if_else_if() {
     let (_, diags) = parse(
         r#"
-        let x = if a then 1
-            else if b then 2
-            else if c then 3
+        let x = if a -> 1
+            else if b -> 2
+            else if c -> 3
             else 4;
     "#,
     );
@@ -1354,7 +1354,7 @@ fn test_if_else_if() {
 fn test_if_with_blocks() {
     let (_, diags) = parse(
         r#"
-        let x = if cond then {
+        let x = if cond -> {
             let a = 1;
             a + 1
         } else {
@@ -1535,7 +1535,7 @@ fn test_pipeline_heavy() {
 
 #[test]
 fn test_parse_fn_with_effect() {
-    let (file, diags) = parse("fn read() -> String effect = io.readFile(\"/x\");");
+    let (file, diags) = parse("fn read() -> String = io.readFile(\"/x\");");
     assert!(diags.is_empty(), "unexpected parse errors: {:?}", diags);
     assert_eq!(file.items.len(), 1);
     match &file.items[0].kind {
@@ -1556,7 +1556,7 @@ fn test_parse_fn_without_effect() {
 
 #[test]
 fn test_parse_import_std_module() {
-    let (file, diags) = parse("import std.io as io;");
+    let (file, diags) = parse("import std.io = io;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -1687,14 +1687,14 @@ fn test_parse_path_literal_parent() {
 
 #[test]
 fn test_parse_lazy_expression() {
-    let (file, diags) = parse("let x = lazy 42;");
+    let (file, diags) = parse("let x = ~42;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
 
 #[test]
 fn test_parse_lazy_function_call() {
-    let (file, diags) = parse("let x = lazy expensive(42);");
+    let (file, diags) = parse("let x = ~expensive(42);");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -1754,7 +1754,7 @@ fn test_parse_unit_return_type() {
 
 #[test]
 fn test_parse_effect_on_trait_method() {
-    let (file, diags) = parse("trait Logger { fn log(msg: String) -> () effect; };");
+    let (file, diags) = parse("trait Logger { fn log(msg: String) -> (); };");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -1764,7 +1764,7 @@ fn test_parse_effect_on_trait_method() {
 fn test_parse_effect_on_impl_method() {
     // effect on impl methods uses the same syntax as fn definitions
     let (file, diags) = parse(
-        "struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> String effect = msg; };",
+        "struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> String = msg; };",
     );
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 2);

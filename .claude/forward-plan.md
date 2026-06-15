@@ -3,7 +3,7 @@
 ## Current State
 
 ```
-v3.18.0  |  541 E2E tests (537 pass + 2 fail + 2 gap)  |  20 LSP methods
+v3.18.0  |  541 E2E tests (538 pass + 2 fail + 1 gap)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
 Audit: 22/30 fixed (73%)  |  Docs: v3.0 syntax synced  |  Phase B: 10/12 gaps closed
 ```
@@ -37,7 +37,7 @@ Audit: 22/30 fixed (73%)  |  Docs: v3.0 syntax synced  |  Phase B: 10/12 gaps cl
 
 **Phase A deliverables**: 5/7 items fixed. 1 spec gap closed (unicode char). Audit: 22/30 = 73%.
 
-### Phase B: Gap Closure (in progress — 10/12 gaps closed)
+### Phase B: Gap Closure (11/12 gaps closed)
 
 **Goal**: Close the 12 E2E gap tests. These represent real missing features.
 
@@ -49,7 +49,7 @@ The 12 gaps, ordered by impact:
 | B2 | TupleIndex expression | neve-eval (HIR) | ✅ Done (already worked, test added) |
 | B3 | Block-with-let lowering | neve-hir | ✅ Done (already worked, test added) |
 | B4 | Nested blocks lowering | neve-hir | ✅ Done (already worked, test added) |
-| B5 | Generic identity inference | neve-typeck | ⚠️ Partial — single-call works; multi-call polymorphism needs instantiation fix |
+| B5 | Generic identity inference | neve-typeck | ✅ Done (2026-06-16) — generalize + instantiate fix |
 | B6 | Option match pattern lowering | neve-hir | ✅ Done (already worked, test added) |
 | B7 | Record match pattern lowering | neve-hir | ✅ Done (works with #{ } syntax; v3.0 { } pattern is parser gap) |
 | B8 | `?.` safe access lowering | neve-hir | ✅ Done (already worked, test added) |

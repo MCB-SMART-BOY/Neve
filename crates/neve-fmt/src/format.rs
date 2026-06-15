@@ -353,7 +353,7 @@ impl Formatter {
     /// 格式化函数参数。
     fn format_param(&self, p: &mut Printer, param: &Param) {
         if param.is_lazy {
-            p.write("lazy ");
+            p.write("~");
         }
         self.format_pattern(p, &param.pattern);
         p.write(": ");
@@ -724,7 +724,7 @@ impl Formatter {
             } => {
                 p.write("if ");
                 self.format_expr(p, condition);
-                p.write(" then ");
+                p.write(" -> ");
                 self.format_expr(p, then_branch);
                 p.write(" else ");
                 self.format_expr(p, else_branch);
@@ -783,9 +783,9 @@ impl Formatter {
                 self.format_expr(p, body);
             }
 
-            // Lazy / 惰性求值
+            // Lazy / 惰性求值 (~expr v4.0)
             ExprKind::Lazy(inner) => {
-                p.write("lazy ");
+                p.write("~");
                 self.format_expr(p, inner);
             }
 

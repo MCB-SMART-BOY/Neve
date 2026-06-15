@@ -328,7 +328,7 @@ fn test_typeck_std_list_builtin_signatures_reject_wrong_annotation() {
 fn test_typeck_std_string_builtin_signatures_allow_valid_uses() {
     check_no_errors(
         r#"
-            import std.string as string;
+            import std.string = string;
             let size: Int = string.len("abc");
             let ok: Bool = string.contains("abc", "a");
         "#,
@@ -340,7 +340,7 @@ fn test_typeck_std_string_builtin_signatures_reject_wrong_annotation() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.string as string;
+            import std.string = string;
             let wrong = expectInt(string.trim("abc"));
         "#,
         Severity::Error,
@@ -352,7 +352,7 @@ fn test_typeck_std_string_builtin_signatures_reject_wrong_annotation() {
 fn test_typeck_std_option_builtins_allow_try_and_coalesce() {
     check_no_errors(
         r#"
-            import std.option as option;
+            import std.option = option;
             let a = option.some(41)? + 1;
             let b = option.none ?? 5;
             let c = option.unwrap_or(option.some(3), 0);
@@ -365,7 +365,7 @@ fn test_typeck_std_option_builtin_signatures_reject_wrong_use() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.option as option;
+            import std.option = option;
             let wrong = expectInt(option.is_some(option.some(1)));
         "#,
         Severity::Error,
@@ -377,7 +377,7 @@ fn test_typeck_std_option_builtin_signatures_reject_wrong_use() {
 fn test_typeck_std_result_builtins_allow_try_and_unwrap() {
     check_no_errors(
         r#"
-            import std.result as result;
+            import std.result = result;
             let a = result.ok(41)? + 1;
             let b = result.unwrap(result.ok(7));
             let c = result.unwrap_err(result.err("boom"));
@@ -390,7 +390,7 @@ fn test_typeck_std_result_builtin_signatures_reject_wrong_use() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.result as result;
+            import std.result = result;
             let wrong = expectInt(result.is_ok(result.ok(1)));
         "#,
         Severity::Error,
@@ -402,7 +402,7 @@ fn test_typeck_std_result_builtin_signatures_reject_wrong_use() {
 fn test_typeck_std_math_constants_have_float_type() {
     check_no_errors(
         r#"
-            import std.math as math;
+            import std.math = math;
             let pi: Float = math.pi;
             let e: Float = math.e;
             let inf: Float = math.inf;
@@ -415,7 +415,7 @@ fn test_typeck_std_math_constants_have_float_type() {
 fn test_typeck_std_math_conversion_bridges_have_explicit_result_types() {
     check_no_errors(
         r#"
-            import std.math as math;
+            import std.math = math;
             let i: Int = math.toInt(true);
             let f: Float = math.toFloat("1.5");
         "#,
@@ -426,7 +426,7 @@ fn test_typeck_std_math_conversion_bridges_have_explicit_result_types() {
 fn test_typeck_std_math_float_predicates_have_explicit_result_types() {
     check_no_errors(
         r#"
-            import std.math as math;
+            import std.math = math;
             let a: Bool = math.isNan(math.nan);
             let b: Bool = math.isInf(math.inf);
         "#,
@@ -437,7 +437,7 @@ fn test_typeck_std_math_float_predicates_have_explicit_result_types() {
 fn test_typeck_std_math_rounding_bridges_have_explicit_result_types() {
     check_no_errors(
         r#"
-            import std.math as math;
+            import std.math = math;
             let a: Int = math.floor(1.9);
             let b: Int = math.ceil(1.1);
             let c: Int = math.round(1.6);
@@ -449,7 +449,7 @@ fn test_typeck_std_math_rounding_bridges_have_explicit_result_types() {
 fn test_typeck_std_math_unary_float_transforms_have_explicit_result_types() {
     check_no_errors(
         r#"
-            import std.math as math;
+            import std.math = math;
             let a: Float = math.sqrt(9.0);
             let b: Float = math.log(1.0);
             let c: Float = math.log10(1000.0);
@@ -462,7 +462,7 @@ fn test_typeck_std_math_unary_float_transforms_have_explicit_result_types() {
 fn test_typeck_std_math_trigonometric_bridges_have_explicit_result_types() {
     check_no_errors(
         r#"
-            import std.math as math;
+            import std.math = math;
             let a: Float = math.sin(0.0);
             let b: Float = math.cos(0.0);
             let c: Float = math.tan(0.0);
@@ -475,7 +475,7 @@ fn test_typeck_std_math_constants_reject_wrong_annotation() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.math as math;
+            import std.math = math;
             let wrong = expectInt(math.pi) + expectInt(math.inf) + expectInt(math.nan);
         "#,
         Severity::Error,
@@ -488,7 +488,7 @@ fn test_typeck_std_math_conversion_bridges_reject_wrong_annotation() {
     assert_has_diagnostic(
         r#"
             fn expectFloat(x: Float) -> Float = x;
-            import std.math as math;
+            import std.math = math;
             let wrong = expectFloat(math.toInt(true));
         "#,
         Severity::Error,
@@ -500,7 +500,7 @@ fn test_typeck_std_math_conversion_bridges_reject_wrong_annotation() {
 fn test_typeck_std_math_float_predicates_reject_int_argument() {
     assert_has_diagnostic(
         r#"
-            import std.math as math;
+            import std.math = math;
             let wrong = math.isNan(1);
         "#,
         Severity::Error,
@@ -512,7 +512,7 @@ fn test_typeck_std_math_float_predicates_reject_int_argument() {
 fn test_typeck_std_math_rounding_bridges_reject_int_argument() {
     assert_has_diagnostic(
         r#"
-            import std.math as math;
+            import std.math = math;
             let wrong = math.floor(1);
         "#,
         Severity::Error,
@@ -524,7 +524,7 @@ fn test_typeck_std_math_rounding_bridges_reject_int_argument() {
 fn test_typeck_std_math_unary_float_transforms_reject_int_argument() {
     assert_has_diagnostic(
         r#"
-            import std.math as math;
+            import std.math = math;
             let wrong = math.sqrt(1);
         "#,
         Severity::Error,
@@ -536,7 +536,7 @@ fn test_typeck_std_math_unary_float_transforms_reject_int_argument() {
 fn test_typeck_std_math_trigonometric_bridges_reject_int_argument() {
     assert_has_diagnostic(
         r#"
-            import std.math as math;
+            import std.math = math;
             let wrong = math.sin(1);
         "#,
         Severity::Error,
@@ -547,7 +547,7 @@ fn test_typeck_std_math_trigonometric_bridges_reject_int_argument() {
 #[test]
 fn test_typeck_std_math_function_remains_inference_hole_outside_explicit_surface() {
     let source = r#"
-        import std.math as math;
+        import std.math = math;
         let value = math.abs(1);
     "#;
     let (ast, parse_diags) = parse(source);
@@ -582,7 +582,7 @@ fn test_typeck_std_math_function_remains_inference_hole_outside_explicit_surface
 fn test_typeck_std_path_builtins_allow_valid_uses() {
     check_no_errors(
         r#"
-            import std.path as path;
+            import std.path = path;
             let structured = path.fromString("/tmp/file.txt");
             let rendered: String = toString(structured);
             let joined: String = path.join("a", "b");
@@ -597,7 +597,7 @@ fn test_typeck_std_path_builtins_reject_wrong_use() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.path as path;
+            import std.path = path;
             let wrong = expectInt(path.is_absolute("/tmp"));
         "#,
         Severity::Error,
@@ -609,7 +609,7 @@ fn test_typeck_std_path_builtins_reject_wrong_use() {
 fn test_typeck_std_path_from_string_does_not_silently_fit_legacy_string_api() {
     assert_has_diagnostic(
         r#"
-            import std.path as path;
+            import std.path = path;
             let wrong = path.is_absolute(path.fromString("/tmp"));
         "#,
         Severity::Error,
@@ -621,7 +621,7 @@ fn test_typeck_std_path_from_string_does_not_silently_fit_legacy_string_api() {
 fn test_typeck_std_typed_path_adapters_allow_valid_uses() {
     check_no_errors(
         r#"
-            import std.path as path;
+            import std.path = path;
             let nested: Path = path.joinPath(path.fromString("/tmp"), "neve.txt");
             let parent: Path = path.parentPath(nested) ?? path.fromString("/");
             let name: String = path.filenamePath(nested) ?? "missing";
@@ -636,7 +636,7 @@ fn test_typeck_std_typed_path_adapters_allow_valid_uses() {
 fn test_typeck_std_typed_path_adapters_reject_string_receiver() {
     assert_has_diagnostic(
         r#"
-            import std.path as path;
+            import std.path = path;
             let wrong = path.extensionPath("neve.txt");
         "#,
         Severity::Error,
@@ -648,9 +648,9 @@ fn test_typeck_std_typed_path_adapters_reject_string_receiver() {
 fn test_typeck_std_list_builtins_allow_sort_and_extrema() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let sorted_names: List<String> = list.sort(["b", "a"]);
             let sorted_paths: List<Path> = list.sort(io.readDirEntryPaths(path.fromString("/tmp")));
             let max_value: Option<Int> = list.max([1, 3, 2]);
@@ -663,9 +663,9 @@ fn test_typeck_std_list_builtins_allow_sort_and_extrema() {
 fn test_typeck_std_list_structural_helpers_allow_precise_uses() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let first: Option<Path> = list.head(entries);
             let last: Option<Path> = list.last(entries);
@@ -679,9 +679,9 @@ fn test_typeck_std_list_structural_helpers_allow_precise_uses() {
 fn test_typeck_std_list_get_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let picked: Option<Path> = list.get(0, entries);
         "#,
@@ -692,9 +692,9 @@ fn test_typeck_std_list_get_allows_precise_use() {
 fn test_typeck_std_list_cons_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let with_root: List<Path> = list.cons(path.fromString("/"), entries);
         "#,
@@ -705,9 +705,9 @@ fn test_typeck_std_list_cons_allows_precise_use() {
 fn test_typeck_std_list_take_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let prefix: List<Path> = list.take(2, entries);
         "#,
@@ -718,9 +718,9 @@ fn test_typeck_std_list_take_allows_precise_use() {
 fn test_typeck_std_list_drop_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let suffix: List<Path> = list.drop(1, entries);
         "#,
@@ -731,9 +731,9 @@ fn test_typeck_std_list_drop_allows_precise_use() {
 fn test_typeck_std_list_contains_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let has_root: Bool = list.contains(path.fromString("/"), entries);
         "#,
@@ -744,9 +744,9 @@ fn test_typeck_std_list_contains_allows_precise_use() {
 fn test_typeck_std_list_index_of_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let entries: List<Path> = io.readDirEntryPaths(path.fromString("/tmp"));
             let root_index: Option<Int> = list.indexOf(path.fromString("/"), entries);
         "#,
@@ -757,7 +757,7 @@ fn test_typeck_std_list_index_of_allows_precise_use() {
 fn test_typeck_std_list_sum_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
+            import std.list = list;
             let total: Int = list.sum([1, 2, 3]);
         "#,
     );
@@ -767,7 +767,7 @@ fn test_typeck_std_list_sum_allows_precise_use() {
 fn test_typeck_std_list_product_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
+            import std.list = list;
             let total: Int = list.product([2, 3, 4]);
         "#,
     );
@@ -777,8 +777,8 @@ fn test_typeck_std_list_product_allows_precise_use() {
 fn test_typeck_std_list_replicate_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.path as path;
+            import std.list = list;
+            import std.path = path;
             let entries: List<Path> = list.replicate(2, path.fromString("/tmp"));
         "#,
     );
@@ -788,9 +788,9 @@ fn test_typeck_std_list_replicate_allows_precise_use() {
 fn test_typeck_std_list_zip_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let pairs = list.zip(
                 io.readDirEntryPaths(path.fromString("/tmp")),
                 [1, 2],
@@ -803,8 +803,8 @@ fn test_typeck_std_list_zip_allows_precise_use() {
 fn test_typeck_std_list_unzip_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
-            import std.path as path;
+            import std.list = list;
+            import std.path = path;
             let pairs = [
                 (path.fromString("/tmp"), 1),
                 (path.fromString("/var"), 2),
@@ -818,7 +818,7 @@ fn test_typeck_std_list_unzip_allows_precise_use() {
 fn test_typeck_std_list_fold_right_allows_precise_use() {
     check_no_errors(
         r#"
-            import std.list as list;
+            import std.list = list;
             fn step(x, acc) = x + acc;
             let total: Int = list.foldRight(0, step, [1, 2, 3]);
         "#,
@@ -829,7 +829,7 @@ fn test_typeck_std_list_fold_right_allows_precise_use() {
 fn test_typeck_std_list_extrema_reject_non_int_items() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.max(["b", "a"]);
         "#,
         Severity::Error,
@@ -841,7 +841,7 @@ fn test_typeck_std_list_extrema_reject_non_int_items() {
 fn test_typeck_std_list_cons_rejects_non_list_tail() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.cons(1, 2);
         "#,
         Severity::Error,
@@ -853,7 +853,7 @@ fn test_typeck_std_list_cons_rejects_non_list_tail() {
 fn test_typeck_std_list_take_rejects_non_int_count() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.take("2", [1, 2, 3]);
         "#,
         Severity::Error,
@@ -865,7 +865,7 @@ fn test_typeck_std_list_take_rejects_non_int_count() {
 fn test_typeck_std_list_drop_rejects_non_int_count() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.drop("1", [1, 2, 3]);
         "#,
         Severity::Error,
@@ -877,7 +877,7 @@ fn test_typeck_std_list_drop_rejects_non_int_count() {
 fn test_typeck_std_list_contains_rejects_mismatched_element_type() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.contains(1, ["1", "2"]);
         "#,
         Severity::Error,
@@ -889,7 +889,7 @@ fn test_typeck_std_list_contains_rejects_mismatched_element_type() {
 fn test_typeck_std_list_index_of_rejects_mismatched_element_type() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.indexOf(1, ["1", "2"]);
         "#,
         Severity::Error,
@@ -901,7 +901,7 @@ fn test_typeck_std_list_index_of_rejects_mismatched_element_type() {
 fn test_typeck_std_list_sum_rejects_non_int_items() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.sum(["1", "2"]);
         "#,
         Severity::Error,
@@ -913,7 +913,7 @@ fn test_typeck_std_list_sum_rejects_non_int_items() {
 fn test_typeck_std_list_product_rejects_non_int_items() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.product(["2", "3"]);
         "#,
         Severity::Error,
@@ -925,8 +925,8 @@ fn test_typeck_std_list_product_rejects_non_int_items() {
 fn test_typeck_std_list_replicate_rejects_non_int_count() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
-            import std.path as path;
+            import std.list = list;
+            import std.path = path;
             let wrong = list.replicate("2", path.fromString("/tmp"));
         "#,
         Severity::Error,
@@ -938,9 +938,9 @@ fn test_typeck_std_list_replicate_rejects_non_int_count() {
 fn test_typeck_std_list_zip_rejects_non_list_argument() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
-            import std.io as io;
-            import std.path as path;
+            import std.list = list;
+            import std.io = io;
+            import std.path = path;
             let wrong = list.zip(io.readDirEntryPaths(path.fromString("/tmp")), 1);
         "#,
         Severity::Error,
@@ -952,7 +952,7 @@ fn test_typeck_std_list_zip_rejects_non_list_argument() {
 fn test_typeck_std_list_unzip_rejects_non_pair_items() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.unzip([1, 2]);
         "#,
         Severity::Error,
@@ -964,7 +964,7 @@ fn test_typeck_std_list_unzip_rejects_non_pair_items() {
 fn test_typeck_std_list_fold_right_rejects_non_list_argument() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             fn step(x, acc) = x + acc;
             let wrong = list.foldRight(0, step, 1);
         "#,
@@ -977,7 +977,7 @@ fn test_typeck_std_list_fold_right_rejects_non_list_argument() {
 fn test_typeck_std_list_get_rejects_non_int_index() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.get("0", [1, 2]);
         "#,
         Severity::Error,
@@ -989,7 +989,7 @@ fn test_typeck_std_list_get_rejects_non_int_index() {
 fn test_typeck_std_list_structural_helpers_reject_non_list_argument() {
     assert_has_diagnostic(
         r#"
-            import std.list as list;
+            import std.list = list;
             let wrong = list.head(1);
         "#,
         Severity::Error,
@@ -1001,8 +1001,8 @@ fn test_typeck_std_list_structural_helpers_reject_non_list_argument() {
 fn test_typeck_std_io_builtins_allow_valid_uses() {
     check_no_errors(
         r#"
-            import std.io as io;
-            import std.path as path;
+            import std.io = io;
+            import std.path = path;
             let content: String = io.readFile("/tmp/file.txt");
             let entries_legacy: List<String> = io.readDir("/tmp");
             let structured: String = io.readFilePath(path.fromString("/tmp/file.txt"));
@@ -1094,7 +1094,7 @@ fn test_typeck_std_io_builtins_reject_wrong_use() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.io as io;
+            import std.io = io;
             let wrong = expectInt(io.pathExists("."));
         "#,
         Severity::Error,
@@ -1106,7 +1106,7 @@ fn test_typeck_std_io_builtins_reject_wrong_use() {
 fn test_typeck_std_io_read_file_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.readFilePath("/tmp/file.txt");
         "#,
         Severity::Error,
@@ -1118,7 +1118,7 @@ fn test_typeck_std_io_read_file_path_rejects_string_argument() {
 fn test_typeck_std_io_read_file_bytes_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.readFileBytesPath("/tmp/file.bin");
         "#,
         Severity::Error,
@@ -1130,7 +1130,7 @@ fn test_typeck_std_io_read_file_bytes_path_rejects_string_argument() {
 fn test_typeck_std_io_read_dir_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.readDirPath("/tmp");
         "#,
         Severity::Error,
@@ -1142,7 +1142,7 @@ fn test_typeck_std_io_read_dir_path_rejects_string_argument() {
 fn test_typeck_std_io_read_dir_entry_paths_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.readDirEntryPaths("/tmp");
         "#,
         Severity::Error,
@@ -1154,7 +1154,7 @@ fn test_typeck_std_io_read_dir_entry_paths_rejects_string_argument() {
 fn test_typeck_std_io_hash_string_rejects_non_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.hashString(1);
         "#,
         Severity::Error,
@@ -1166,7 +1166,7 @@ fn test_typeck_std_io_hash_string_rejects_non_string_argument() {
 fn test_typeck_std_io_write_file_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.writeFilePath("/tmp/file.txt", "hello");
         "#,
         Severity::Error,
@@ -1178,7 +1178,7 @@ fn test_typeck_std_io_write_file_path_rejects_string_argument() {
 fn test_typeck_std_io_append_file_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.appendFilePath("/tmp/file.txt", "hello");
         "#,
         Severity::Error,
@@ -1190,8 +1190,8 @@ fn test_typeck_std_io_append_file_path_rejects_string_argument() {
 fn test_typeck_std_io_write_file_bytes_path_rejects_non_bytes_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
-            import std.path as path;
+            import std.io = io;
+            import std.path = path;
             let wrong = io.writeFileBytesPath(path.fromString("/tmp/file.bin"), "not-bytes");
         "#,
         Severity::Error,
@@ -1203,8 +1203,8 @@ fn test_typeck_std_io_write_file_bytes_path_rejects_non_bytes_argument() {
 fn test_typeck_std_io_append_file_bytes_path_rejects_non_bytes_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
-            import std.path as path;
+            import std.io = io;
+            import std.path = path;
             let wrong = io.appendFileBytesPath(path.fromString("/tmp/file.bin"), "not-bytes");
         "#,
         Severity::Error,
@@ -1216,7 +1216,7 @@ fn test_typeck_std_io_append_file_bytes_path_rejects_non_bytes_argument() {
 fn test_typeck_std_io_path_exists_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.pathExistsPath("/tmp/file.txt");
         "#,
         Severity::Error,
@@ -1228,7 +1228,7 @@ fn test_typeck_std_io_path_exists_path_rejects_string_argument() {
 fn test_typeck_std_io_is_dir_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.isDirPath("/tmp");
         "#,
         Severity::Error,
@@ -1240,7 +1240,7 @@ fn test_typeck_std_io_is_dir_path_rejects_string_argument() {
 fn test_typeck_std_io_is_file_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.isFilePath("/tmp/file.txt");
         "#,
         Severity::Error,
@@ -1252,8 +1252,8 @@ fn test_typeck_std_io_is_file_path_rejects_string_argument() {
 fn test_typeck_std_io_current_dir_path_does_not_silently_fit_string_annotation() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
-            import std.path as path;
+            import std.io = io;
+            import std.path = path;
             let wrong = path.is_absolute(io.currentDirPath());
         "#,
         Severity::Error,
@@ -1265,8 +1265,8 @@ fn test_typeck_std_io_current_dir_path_does_not_silently_fit_string_annotation()
 fn test_typeck_std_io_home_dir_path_does_not_silently_fit_plain_path_annotation() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
-            import std.path as path;
+            import std.io = io;
+            import std.path = path;
             let wrong = path.is_absolute(io.homeDirPath());
         "#,
         Severity::Error,
@@ -1278,7 +1278,7 @@ fn test_typeck_std_io_home_dir_path_does_not_silently_fit_plain_path_annotation(
 fn test_typeck_std_io_create_dir_all_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.createDirAllPath("/tmp/neve-dir");
         "#,
         Severity::Error,
@@ -1290,7 +1290,7 @@ fn test_typeck_std_io_create_dir_all_path_rejects_string_argument() {
 fn test_typeck_std_io_remove_dir_all_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.removeDirAllPath("/tmp/neve-dir");
         "#,
         Severity::Error,
@@ -1302,7 +1302,7 @@ fn test_typeck_std_io_remove_dir_all_path_rejects_string_argument() {
 fn test_typeck_std_io_hash_file_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.hashFilePath("/tmp/file.txt");
         "#,
         Severity::Error,
@@ -1314,7 +1314,7 @@ fn test_typeck_std_io_hash_file_path_rejects_string_argument() {
 fn test_typeck_std_io_command_with_rejects_non_string_program() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.commandWith(#{ program = 1, args = ["neve"] });
         "#,
         Severity::Error,
@@ -1326,7 +1326,7 @@ fn test_typeck_std_io_command_with_rejects_non_string_program() {
 fn test_typeck_std_io_pipeline_rejects_non_command_list_items() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.pipeline(["printf"]);
         "#,
         Severity::Error,
@@ -1338,8 +1338,8 @@ fn test_typeck_std_io_pipeline_rejects_non_command_list_items() {
 fn test_typeck_std_io_pipeline_with_redirects_rejects_command_argument_pair() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
-            import std.path as path;
+            import std.io = io;
+            import std.path = path;
             let wrong = io.pipelineWithRedirects(
                 io.command("printf", ["neve"]),
                 [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
@@ -1354,7 +1354,7 @@ fn test_typeck_std_io_pipeline_with_redirects_rejects_command_argument_pair() {
 fn test_typeck_std_io_pipeline_with_redirects_rejects_non_redirect_list_items() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.pipelineWithRedirects(
                 io.pipeline([io.command("printf", ["neve"])]),
                 [io.command("cat", [])]
@@ -1369,7 +1369,7 @@ fn test_typeck_std_io_pipeline_with_redirects_rejects_non_redirect_list_items() 
 fn test_typeck_std_io_exec_pipeline_rejects_command_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.execPipeline(io.command("printf", ["neve"]));
         "#,
         Severity::Error,
@@ -1381,7 +1381,7 @@ fn test_typeck_std_io_exec_pipeline_rejects_command_argument() {
 fn test_typeck_std_io_exec_pipeline_with_embedded_redirects_rejects_non_redirect_list_items() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.execPipeline(
                 io.pipelineWithRedirects(
                     io.pipeline([io.command("printf", ["neve"])]),
@@ -1398,7 +1398,7 @@ fn test_typeck_std_io_exec_pipeline_with_embedded_redirects_rejects_non_redirect
 fn test_typeck_std_io_redirect_stdout_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.redirectStdoutPath("/tmp/neve.out");
         "#,
         Severity::Error,
@@ -1410,7 +1410,7 @@ fn test_typeck_std_io_redirect_stdout_path_rejects_string_argument() {
 fn test_typeck_std_io_redirect_stderr_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.redirectStderrPath("/tmp/neve.err");
         "#,
         Severity::Error,
@@ -1422,7 +1422,7 @@ fn test_typeck_std_io_redirect_stderr_path_rejects_string_argument() {
 fn test_typeck_std_io_redirect_stdin_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.redirectStdinPath("/tmp/neve.in");
         "#,
         Severity::Error,
@@ -1434,7 +1434,7 @@ fn test_typeck_std_io_redirect_stdin_path_rejects_string_argument() {
 fn test_typeck_std_io_task_command_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.taskCommand("printf");
         "#,
         Severity::Error,
@@ -1446,7 +1446,7 @@ fn test_typeck_std_io_task_command_rejects_string_argument() {
 fn test_typeck_std_io_task_pipeline_rejects_command_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.taskPipeline(io.command("printf", ["neve"]));
         "#,
         Severity::Error,
@@ -1458,7 +1458,7 @@ fn test_typeck_std_io_task_pipeline_rejects_command_argument() {
 fn test_typeck_std_io_await_task_rejects_command_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.awaitTask(io.command("printf", ["neve"]));
         "#,
         Severity::Error,
@@ -1470,7 +1470,7 @@ fn test_typeck_std_io_await_task_rejects_command_argument() {
 fn test_typeck_std_io_await_tasks_rejects_non_task_list_items() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.awaitTasks([io.command("printf", ["neve"])]);
         "#,
         Severity::Error,
@@ -1482,7 +1482,7 @@ fn test_typeck_std_io_await_tasks_rejects_non_task_list_items() {
 fn test_typeck_std_io_exec_command_with_embedded_redirects_rejects_non_redirect_list_items() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.execCommand(
                 io.commandWithRedirects(
                     io.command("printf", ["neve"]),
@@ -1499,7 +1499,7 @@ fn test_typeck_std_io_exec_command_with_embedded_redirects_rejects_non_redirect_
 fn test_typeck_std_io_command_with_redirects_rejects_non_redirect_list_items() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.commandWithRedirects(
                 io.command("printf", ["neve"]),
                 [io.command("cat", [])]
@@ -1514,7 +1514,7 @@ fn test_typeck_std_io_command_with_redirects_rejects_non_redirect_list_items() {
 fn test_typeck_std_io_exec_command_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.execCommand("rustc");
         "#,
         Severity::Error,
@@ -1526,7 +1526,7 @@ fn test_typeck_std_io_exec_command_rejects_string_argument() {
 fn test_typeck_std_io_exec_no_longer_exposes_legacy_record_fields() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.execCommand(io.command("printf", ["neve"])).stdout;
         "#,
         Severity::Error,
@@ -1538,7 +1538,7 @@ fn test_typeck_std_io_exec_no_longer_exposes_legacy_record_fields() {
 fn test_typeck_std_io_exec_with_no_longer_exposes_legacy_record_fields() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.execCommand(io.commandWith(#{ program = "printf", args = ["neve"] })).code;
         "#,
         Severity::Error,
@@ -1550,7 +1550,7 @@ fn test_typeck_std_io_exec_with_no_longer_exposes_legacy_record_fields() {
 fn test_typeck_std_io_process_success_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.processSuccess("not-a-result");
         "#,
         Severity::Error,
@@ -1562,7 +1562,7 @@ fn test_typeck_std_io_process_success_rejects_string_argument() {
 fn test_typeck_std_io_process_stdout_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.processStdout("not-a-result");
         "#,
         Severity::Error,
@@ -1574,7 +1574,7 @@ fn test_typeck_std_io_process_stdout_rejects_string_argument() {
 fn test_typeck_std_io_process_code_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.processCode("not-a-result");
         "#,
         Severity::Error,
@@ -1586,7 +1586,7 @@ fn test_typeck_std_io_process_code_rejects_string_argument() {
 fn test_typeck_std_io_process_stderr_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
-            import std.io as io;
+            import std.io = io;
             let wrong = io.processStderr("not-a-result");
         "#,
         Severity::Error,
@@ -1598,7 +1598,7 @@ fn test_typeck_std_io_process_stderr_rejects_string_argument() {
 fn test_typeck_std_fetch_builtins_allow_valid_uses() {
     check_no_errors(
         r#"
-            import std.fetch as fetch;
+            import std.fetch = fetch;
             let path: String = fetch.path("Cargo.toml").path;
             let remoteHash: String = fetch.url("https://example.com/archive.tar.gz").hash;
             let verified: String = fetch.pathWithHash("Cargo.toml", "0000000000000000000000000000000000000000000000000000000000000000").hash;
@@ -1614,7 +1614,7 @@ fn test_typeck_std_fetch_builtins_reject_wrong_use() {
     assert_has_diagnostic(
         r#"
             fn expectInt(x: Int) -> Int = x;
-            import std.fetch as fetch;
+            import std.fetch = fetch;
             let wrong = expectInt(fetch.path("Cargo.toml").cached);
         "#,
         Severity::Error,
@@ -1628,7 +1628,7 @@ fn test_typeck_std_map_and_set_builtins_allow_valid_uses() {
         r#"
             import std.Map;
             import std.Set;
-            import std.list as list;
+            import std.list = list;
             let map = Map.insert("a", 1, Map.empty);
             let value: Int = Map.getWithDefault("a", 0, map);
             let present: Bool = Map.contains("a", map);
@@ -1718,52 +1718,52 @@ fn test_typeck_not_wrong_type() {
 
 #[test]
 fn test_typeck_if_then_else_int() {
-    check_no_errors("let x = if true then 1 else 0;");
+    check_no_errors("let x = if true -> 1 else 0;");
 }
 
 #[test]
 fn test_typeck_if_then_else_string() {
-    check_no_errors("let x = if true then \"yes\" else \"no\";");
+    check_no_errors("let x = if true -> \"yes\" else \"no\";");
 }
 
 #[test]
 fn test_typeck_if_then_else_bool() {
-    check_no_errors("let x = if true then true else false;");
+    check_no_errors("let x = if true -> true else false;");
 }
 
 #[test]
 fn test_typeck_if_with_comparison() {
-    check_no_errors("let x = if 1 < 2 then 10 else 20;");
+    check_no_errors("let x = if 1 < 2 -> 10 else 20;");
 }
 
 #[test]
 fn test_typeck_if_nested() {
-    check_no_errors("let x = if true then if false then 1 else 2 else 3;");
+    check_no_errors("let x = if true -> if false -> 1 else 2 else 3;");
 }
 
 #[test]
 fn test_typeck_if_deeply_nested() {
-    check_no_errors("let x = if true then if true then if false then 1 else 2 else 3 else 4;");
+    check_no_errors("let x = if true -> if true -> if false -> 1 else 2 else 3 else 4;");
 }
 
 #[test]
 fn test_typeck_if_branch_type_mismatch() {
-    check_has_errors("let x = if true then 1 else false;");
+    check_has_errors("let x = if true -> 1 else false;");
 }
 
 #[test]
 fn test_typeck_if_branch_type_mismatch_string_int() {
-    check_has_errors("let x = if true then \"hello\" else 42;");
+    check_has_errors("let x = if true -> \"hello\" else 42;");
 }
 
 #[test]
 fn test_typeck_if_condition_not_bool() {
-    check_has_errors("let x = if 42 then 1 else 0;");
+    check_has_errors("let x = if 42 -> 1 else 0;");
 }
 
 #[test]
 fn test_typeck_if_condition_not_bool_string() {
-    check_has_errors("let x = if \"true\" then 1 else 0;");
+    check_has_errors("let x = if \"true\" -> 1 else 0;");
 }
 
 // ============================================================================
@@ -1938,12 +1938,12 @@ fn test_typeck_dynamic_record_constraints_reject_missing_nested_field() {
 
 #[test]
 fn test_typeck_lazy_force() {
-    check_no_errors("let thunk = lazy 42; let x = force(thunk);");
+    check_no_errors("let thunk = ~42; let x = force(thunk);");
 }
 
 #[test]
 fn test_typeck_lazy_predicates() {
-    check_no_errors("let thunk = lazy 42; let x = isLazy(thunk); let y = isEvaluated(thunk);");
+    check_no_errors("let thunk = ~42; let x = isLazy(thunk); let y = isEvaluated(thunk);");
 }
 
 #[test]
@@ -2054,7 +2054,7 @@ fn test_typeck_safe_field_on_unknown_param_allows_missing_record_field() {
 fn test_typeck_safe_field_on_unknown_param_accepts_option_record_callsite() {
     check_no_errors(
         "
-        import std.option as option;
+        import std.option = option;
         let readName = fn(config) config?.name ?? \"default\";
         let value = readName(option.some(#{ name = \"neve\" }));
         ",
@@ -2167,7 +2167,7 @@ fn test_typeck_function_returns_bool() {
 
 #[test]
 fn test_typeck_function_with_if() {
-    check_no_errors("fn abs(x) = if x < 0 then -x else x;");
+    check_no_errors("fn abs(x) = if x < 0 -> -x else x;");
 }
 
 #[test]
@@ -2236,7 +2236,7 @@ fn test_typeck_function_call_chain() {
 fn test_typeck_recursive_factorial() {
     check_no_errors(
         "
-        fn fact(n) = if n <= 1 then 1 else n * fact(n - 1);
+        fn fact(n) = if n <= 1 -> 1 else n * fact(n - 1);
     ",
     );
 }
@@ -2245,7 +2245,7 @@ fn test_typeck_recursive_factorial() {
 fn test_typeck_recursive_fibonacci() {
     check_no_errors(
         "
-        fn fib(n) = if n <= 1 then n else fib(n - 1) + fib(n - 2);
+        fn fib(n) = if n <= 1 -> n else fib(n - 1) + fib(n - 2);
     ",
     );
 }
@@ -2254,7 +2254,7 @@ fn test_typeck_recursive_fibonacci() {
 fn test_typeck_recursive_sum() {
     check_no_errors(
         "
-        fn sum_to(n) = if n <= 0 then 0 else n + sum_to(n - 1);
+        fn sum_to(n) = if n <= 0 -> 0 else n + sum_to(n - 1);
     ",
     );
 }
@@ -2263,8 +2263,8 @@ fn test_typeck_recursive_sum() {
 fn test_typeck_mutually_recursive() {
     check_no_errors(
         "
-        fn is_even(n) = if n == 0 then true else is_odd(n - 1);
-        fn is_odd(n) = if n == 0 then false else is_even(n - 1);
+        fn is_even(n) = if n == 0 -> true else is_odd(n - 1);
+        fn is_odd(n) = if n == 0 -> false else is_even(n - 1);
     ",
     );
 }
@@ -2452,7 +2452,7 @@ fn test_typeck_match_user_enum_missing_patterns_follow_declaration_order() {
 fn test_typeck_match_builtin_option_non_exhaustive() {
     assert_has_diagnostic(
         "
-        import std.option as option;
+        import std.option = option;
         let x = match option.some(1) {
             Some(value) -> value
         };
@@ -2466,7 +2466,7 @@ fn test_typeck_match_builtin_option_non_exhaustive() {
 fn test_typeck_match_builtin_result_non_exhaustive() {
     assert_has_diagnostic(
         "
-        import std.result as result;
+        import std.result = result;
         let x = match result.ok(1) {
             Ok(value) -> value
         };
@@ -2480,7 +2480,7 @@ fn test_typeck_match_builtin_result_non_exhaustive() {
 fn test_typeck_match_builtin_option_rejects_wrong_constructor() {
     assert_has_diagnostic(
         "
-        import std.option as option;
+        import std.option = option;
         let x = match option.some(1) {
             Ok(value) -> value,
             None -> 0
@@ -2512,7 +2512,7 @@ fn test_typeck_match_unreachable_after_wildcard() {
 fn test_typeck_match_builtin_option_unreachable_after_complete_coverage() {
     assert_has_diagnostic(
         "
-        import std.option as option;
+        import std.option = option;
         let x = match option.some(1) {
             Some(_) | None -> 1,
             Some(value) -> value
@@ -2526,7 +2526,7 @@ fn test_typeck_match_builtin_option_unreachable_after_complete_coverage() {
 #[test]
 fn test_typeck_match_builtin_option_subset_shadowing_is_unreachable() {
     let source = "
-        import std.option as option;
+        import std.option = option;
         let x = match option.some(1) {
             Some(_) -> 1,
             Some(value) -> value,
@@ -2547,7 +2547,7 @@ fn test_typeck_match_builtin_option_subset_shadowing_is_unreachable() {
 fn test_typeck_match_builtin_result_subset_shadowing_is_unreachable() {
     assert_has_diagnostic(
         "
-        import std.result as result;
+        import std.result = result;
         let x = match result.ok(1) {
             Ok(_) -> 1,
             Ok(value) -> value,
@@ -2749,7 +2749,7 @@ fn test_typeck_let_uses_previous() {
 
 #[test]
 fn test_typeck_complex_expression_1() {
-    check_no_errors("let x = if 1 + 2 > 2 then (3, 4) else (5, 6);");
+    check_no_errors("let x = if 1 + 2 > 2 -> (3, 4) else (5, 6);");
 }
 
 #[test]
@@ -2757,7 +2757,7 @@ fn test_typeck_complex_expression_2() {
     check_no_errors(
         "
         fn f(x) = x * 2;
-        let x = if true then f(5) else f(10);
+        let x = if true -> f(5) else f(10);
     ",
     );
 }
@@ -3268,7 +3268,7 @@ fn test_typeck_impl_method_body_mismatch_reports_assoc_projection_label() {
 
 #[test]
 fn test_typeck_detects_type_error_in_if() {
-    check_has_errors("let x = if true then 1 else \"string\";");
+    check_has_errors("let x = if true -> 1 else \"string\";");
 }
 
 #[test]
@@ -3278,7 +3278,7 @@ fn test_typeck_detects_type_error_in_list() {
 
 #[test]
 fn test_typeck_detects_non_bool_condition() {
-    check_has_errors("let x = if 42 then 1 else 2;");
+    check_has_errors("let x = if 42 -> 1 else 2;");
 }
 
 #[test]

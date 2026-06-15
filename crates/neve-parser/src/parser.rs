@@ -759,9 +759,9 @@ impl Parser {
             ImportItems::Module
         };
 
-        // Parse optional alias
-        // 解析可选的别名
-        let alias = if self.eat(TokenKind::As) {
+        // Parse optional alias (v4.0: `=`, legacy: `as`)
+        // 解析可选的别名（v4.0: `=`, 旧: `as`）
+        let alias = if self.eat(TokenKind::Eq) || self.eat(TokenKind::As) {
             Some(self.parse_ident())
         } else {
             None
@@ -1620,9 +1620,9 @@ impl Parser {
             // Lambda expression (pipe syntax, v3.0)
             // Lambda 表达式（管道语法，v3.0）
             TokenKind::Pipe => self.parse_lambda_pipe(),
-            // Lazy expression
-            // 惰性表达式
-            TokenKind::Lazy => {
+            // Lazy expression (v4.0: ~expr, legacy: lazy expr)
+            // 惰性表达式（v4.0: ~expr, 旧: lazy expr）
+            TokenKind::Tilde | TokenKind::Lazy => {
                 self.advance();
                 let expr = self.parse_expr();
                 let span = start.merge(expr.span);
@@ -2130,14 +2130,18 @@ impl Parser {
     /// Parse an if expression.
     /// 解析 if 表达式。
     ///
-    /// Syntax: `if condition then then_branch else else_branch`
-    /// 语法：`if 条件 then 真分支 else 假分支`
+    /// Syntax: `if condition -> then_branch else else_branch` (v4.0)
+    /// Legacy: `if condition then then_branch else else_branch`
+    /// 语法：`if 条件 -> 真分支 else 假分支`（v4.0）
     fn parse_if(&mut self) -> Expr {
         let start = self.current_span();
         self.advance(); // if
 
         let condition = self.parse_expr();
-        self.expect(TokenKind::Then);
+        // Accept `->` (v4.0) or `then` (legacy)
+        if !self.eat(TokenKind::Arrow) {
+            self.expect(TokenKind::Then);
+        }
         let then_branch = self.parse_expr();
         self.expect(TokenKind::Else);
         let else_branch = self.parse_expr();

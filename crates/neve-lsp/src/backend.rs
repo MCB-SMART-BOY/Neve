@@ -1153,7 +1153,7 @@ impl Backend {
             (
                 "if",
                 "If expression",
-                "if ${1:condition} then ${2:then_branch} else ${3:else_branch}",
+                "if ${1:condition} -> ${2:then_branch} else ${3:else_branch}",
             ),
             (
                 "match",
@@ -2111,7 +2111,7 @@ fn completion_documentation(label: &str, _kind: Option<CompletionItemKind>) -> O
 /// Find the type name of the receiver expression before the dot at `offset`.
 ///
 /// Walks the parsed AST to find the expression whose span ends at or near
-/// the dot position, then looks up its type in the semantics table.
+/// the dot position, -> looks up its type in the semantics table.
 fn find_receiver_type_name(doc: &Document, dot_offset: usize) -> Option<String> {
     let ast = doc.ast.as_ref()?;
     let semantics = doc.semantics.as_ref()?;
