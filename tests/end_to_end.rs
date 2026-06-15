@@ -8715,7 +8715,6 @@ fn test_gap_nested_blocks() {
 }
 
 #[test]
-#[ignore = "TODO(typeck): multi-call-site polymorphism needs instantiation fix"]
 fn test_gap_generic_id() {
     // Generic identity function should be polymorphic across call sites
     let source = "id = |x| x; a = id(42); b = id(\"hello\")";
