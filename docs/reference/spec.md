@@ -640,9 +640,9 @@ if else match
 true false
 ```
 
-**12 keywords** (v4.0 canonical; 18 total with legacy aliases)
+**12 keywords** (v4.0 canonical; 22 total including legacy)
 
-> Legacy keywords (`struct`, `enum`, `import`, `pub`, `as`, `then`, `lazy`, `effect`)
+> Legacy keywords (`struct`, `enum`, `import`, `pub`, `as`, `then`, `lazy`, `effect`, `super`, `crate`)
 > still accepted by the lexer for backward compatibility but are not canonical v4.0 syntax.
 
 
@@ -653,7 +653,7 @@ if else match
 true false
 ```
 
-**12 个规范关键字** (v4.0; 含向后兼容别名共 18 个)
+**12 个规范关键字** (v4.0; 含向后兼容别名共 22 个)
 
 
 ## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照

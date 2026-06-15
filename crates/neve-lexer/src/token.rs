@@ -143,7 +143,7 @@ impl TokenKind {
     /// 判断是否为关键字。
     pub fn is_keyword(&self) -> bool {
         // v4.0 canonical keywords: 12 keywords
-        // Legacy (still parsed but not counted): struct enum import pub then as lazy effect
+        // Legacy (still parsed but not counted): struct enum import pub then as lazy effect super crate
         matches!(
             self,
             TokenKind::Let

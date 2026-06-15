@@ -37,7 +37,7 @@ Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: 11/12 gaps closed
 
 **Phase A deliverables**: 5/7 items fixed. 1 spec gap closed (unicode char). Audit: 22/30 = 73%.
 
-### Phase B: Gap Closure (11/12 gaps closed)
+### Phase B: Gap Closure (11/12 gaps closed — B5 done 2026-06-16)
 
 **Goal**: Close the 12 E2E gap tests. These represent real missing features.
 
@@ -87,9 +87,9 @@ The 12 gaps, ordered by impact:
 ## Immediate Priority (this week)
 
 ```
-1. B5: Fix multi-call-site polymorphism instantiation   ← typeck fix
-2. B9: Fix inherent impl method dispatch                ← HIR+typeck fix
-3. A2: Begin cache.rs unwrap() fix                      ← start the big one
+1. B9: Fix inherent impl method dispatch                ← last Phase B gap
+2. A2: Begin cache.rs unwrap() fix                      ← error handling
+3. Phase C: Q6 registry + Q7 contributions docs          ← decision gates
 ```
 
 ## Risk Register

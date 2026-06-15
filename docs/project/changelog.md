@@ -62,7 +62,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Lambda syntax**: `|params| expr` — Rust-style closures replace `fn(x) body`.
 - **Path `/` operator**: `/` operator for path joining (e.g. `base / "file.neve"`).
 - **Pipeline combinator builtins**: `map`, `filter`, `fold`, `flatMap`, `take`, `drop`, `collect`.
-- **Keyword reduction: 21 → 9**: `type`, `trait`, `impl`, `if`, `then`, `else`, `match`, `use`, `pub`, `as`, `lazy`.
+- **Keyword reduction: 21 → 17**: `type`, `trait`, `impl`, `if`, `then`, `else`, `match`, `use`, `pub`, `as`, `lazy`, `true`, `false`, `effect`, `self`, `super`, `crate`. Legacy `struct`/`enum`/`import` retained.
 - **Unified type declaration**: `struct`/`enum` → `type`, with `|` separator and optional leading `|`.
 - **Selective import**: `import` → `use` with `.{}` selective import syntax.
 - **Record values without `#` prefix**: `#{ }` → `{ }`.
