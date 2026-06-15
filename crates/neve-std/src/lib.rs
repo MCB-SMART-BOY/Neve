@@ -4,6 +4,9 @@
 //! This crate provides the built-in functions and types for Neve.
 //! 本 crate 提供 Neve 的内置函数和类型。
 
+// TODO(Phase D): remove after AstEnv migration
+#![allow(deprecated)]
+
 mod bytes;
 mod fetch;
 mod io;

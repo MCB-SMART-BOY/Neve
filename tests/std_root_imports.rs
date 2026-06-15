@@ -1,5 +1,8 @@
 //! Integration tests for root-level `std` builtin-module imports.
 
+// TODO(Phase D): remove after AstEnv migration
+#![allow(deprecated)]
+
 use neve_common::Int;
 use neve_eval::{EvaluableModuleRef, Evaluator, Value, compat::AstEvaluator};
 use neve_frontend::{analyze_snippet_ast, analyze_source};

@@ -1251,9 +1251,11 @@ mod tests {
 
         let ty =
             infer_repl_type("outputs", &runtime, &state).expect("type inference should succeed");
-        assert_eq!(
-            normalize_inference_vars(&ty),
-            "({ dep: { packages: { default: ?, .. }, .. }, .. }) -> ?"
+        let normalized = normalize_inference_vars(&ty);
+        // With function-level generalization (v3.19), the type is wrapped in Forall.
+        assert!(
+            normalized.contains("({ dep: { packages: { default: ?, .. }, .. }, .. }) -> ?"),
+            "expected dynamic record function type, got {normalized}"
         );
     }
 
@@ -1264,7 +1266,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.option as option;",
+            "import std.option = option;",
             true,
             &context,
             &mut runtime,
@@ -1284,7 +1286,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1304,7 +1306,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1328,7 +1330,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1336,7 +1338,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1344,7 +1346,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1368,7 +1370,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1388,7 +1390,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1396,7 +1398,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1404,7 +1406,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1428,7 +1430,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1436,7 +1438,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1444,7 +1446,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1468,7 +1470,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1476,7 +1478,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1484,7 +1486,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1508,7 +1510,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1516,7 +1518,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1524,7 +1526,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1548,7 +1550,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1556,7 +1558,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1564,7 +1566,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1588,7 +1590,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1596,7 +1598,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1604,7 +1606,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1628,7 +1630,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1636,7 +1638,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1644,7 +1646,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1668,7 +1670,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1676,7 +1678,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1684,7 +1686,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1708,7 +1710,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1728,7 +1730,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1748,7 +1750,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1756,7 +1758,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1780,7 +1782,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -1788,7 +1790,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -1796,7 +1798,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -1820,7 +1822,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1840,7 +1842,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1864,7 +1866,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1888,7 +1890,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1915,7 +1917,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1945,7 +1947,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1972,7 +1974,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math as math;",
+            "import std.math = math;",
             true,
             &context,
             &mut runtime,
@@ -1995,7 +1997,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch as fetch;",
+            "import std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
@@ -2015,7 +2017,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch as fetch;",
+            "import std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
@@ -2039,7 +2041,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch as fetch;",
+            "import std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
@@ -2063,7 +2065,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch as fetch;",
+            "import std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
@@ -2087,7 +2089,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch as fetch;",
+            "import std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
@@ -2107,7 +2109,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch as fetch;",
+            "import std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
@@ -2167,7 +2169,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -2175,7 +2177,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2202,7 +2204,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list as list;",
+            "import std.list = list;",
             true,
             &context,
             &mut runtime,
@@ -2230,7 +2232,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2238,7 +2240,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2262,7 +2264,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2270,7 +2272,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2294,7 +2296,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2302,7 +2304,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2326,7 +2328,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2334,7 +2336,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2358,7 +2360,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2366,7 +2368,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2390,7 +2392,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2398,7 +2400,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2422,7 +2424,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2446,7 +2448,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2470,7 +2472,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2478,7 +2480,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2502,7 +2504,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2510,7 +2512,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2534,7 +2536,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2554,7 +2556,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2574,7 +2576,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2594,7 +2596,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2614,7 +2616,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2634,7 +2636,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2654,7 +2656,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2674,7 +2676,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2694,7 +2696,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2714,7 +2716,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io; import std.path as path;",
+            "import std.io = io; import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2738,7 +2740,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io; import std.path as path;",
+            "import std.io = io; import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2762,7 +2764,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2782,7 +2784,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2802,7 +2804,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2822,7 +2824,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2842,7 +2844,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io; import std.path as path;",
+            "import std.io = io; import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -2866,7 +2868,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2886,7 +2888,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2906,7 +2908,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2926,7 +2928,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2950,7 +2952,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2974,7 +2976,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -2998,7 +3000,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;\nimport std.path as path;",
+            "import std.io = io;\nimport std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3022,7 +3024,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3046,7 +3048,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3054,7 +3056,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3083,7 +3085,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3091,7 +3093,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3123,7 +3125,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3131,7 +3133,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3158,7 +3160,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3166,7 +3168,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3190,7 +3192,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3198,7 +3200,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3222,7 +3224,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3230,7 +3232,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3254,7 +3256,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3262,7 +3264,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3291,7 +3293,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3299,7 +3301,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3331,7 +3333,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3355,7 +3357,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3379,7 +3381,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3403,7 +3405,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3427,7 +3429,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3451,7 +3453,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3475,7 +3477,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3499,7 +3501,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3523,7 +3525,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3547,7 +3549,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3571,7 +3573,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3595,7 +3597,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3603,7 +3605,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3627,7 +3629,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3635,7 +3637,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3655,7 +3657,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3663,7 +3665,7 @@ mod tests {
         )
         .expect("import should evaluate");
         evaluate_repl_input(
-            "import std.path as path;",
+            "import std.path = path;",
             true,
             &context,
             &mut runtime,
@@ -3687,7 +3689,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.option as option;",
+            "import std.option = option;",
             true,
             &context,
             &mut runtime,
@@ -3707,7 +3709,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.option as option;",
+            "import std.option = option;",
             true,
             &context,
             &mut runtime,
@@ -3731,7 +3733,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.result as result;",
+            "import std.result = result;",
             true,
             &context,
             &mut runtime,
@@ -3820,7 +3822,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io as io;",
+            "import std.io = io;",
             true,
             &context,
             &mut runtime,
@@ -3971,7 +3973,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.string as string;",
+            "import std.string = string;",
             true,
             &context,
             &mut runtime,

@@ -700,13 +700,16 @@ impl Flake {
                     .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?
             }
             Value::AstClosure(ref closure) => {
-                use neve_eval::compat::AstEvaluator;
-                let mut eval = AstEvaluator::new();
-                eval = eval.with_base_path(self.root.clone());
+                #[allow(deprecated)]
+                {
+                    use neve_eval::compat::AstEvaluator;
+                    let mut eval = AstEvaluator::new();
+                    eval = eval.with_base_path(self.root.clone());
 
-                let inputs_value = Value::Record(Rc::new(inputs_record));
-                eval.call_closure(closure, vec![inputs_value])
-                    .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?
+                    let inputs_value = Value::Record(Rc::new(inputs_record));
+                    eval.call_closure(closure, vec![inputs_value])
+                        .map_err(|e| ConfigError::Eval(format!("{:?}", e)))?
+                }
             }
             Value::Record(outputs) => Value::Record(outputs),
             _ => {

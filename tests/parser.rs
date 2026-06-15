@@ -1763,9 +1763,8 @@ fn test_parse_effect_on_trait_method() {
 // TODO: effect annotation on impl methods needs syntax clarification
 fn test_parse_effect_on_impl_method() {
     // effect on impl methods uses the same syntax as fn definitions
-    let (file, diags) = parse(
-        "struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> String = msg; };",
-    );
+    let (file, diags) =
+        parse("struct Dummy {}; impl Logger for Dummy { fn log(msg: String) -> String = msg; };");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 2);
 }

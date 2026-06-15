@@ -2,6 +2,9 @@
 //!
 //! This file contains extensive edge case tests for the evaluator.
 
+// TODO(Phase D): remove after AstEnv migration
+#![allow(deprecated)]
+
 mod support;
 
 use neve_common::Int;
