@@ -39,11 +39,6 @@ enum Commands {
     Eval {
         /// The expression to evaluate. / 要求值的表达式。
         expr: String,
-
-        /// Use the legacy AST compatibility backend when HIR cannot handle the input shape yet.
-        /// 当 HIR 暂不支持该输入形态时，使用旧的 AST 兼容后端。
-        #[arg(long = "compat-ast")]
-        compat_ast: bool,
     },
 
     /// Run tests in a directory. / 运行目录中的测试。
@@ -57,11 +52,6 @@ enum Commands {
     Run {
         /// The file to run. / 要运行的文件。
         file: String,
-
-        /// Use the legacy AST compatibility backend when HIR cannot handle the module shape yet.
-        /// 当 HIR 暂不支持该模块形态时，使用旧的 AST 兼容后端。
-        #[arg(long = "compat-ast")]
-        compat_ast: bool,
 
         /// Arguments to pass to the script (accessible via io.args()).
         /// 传递给脚本的参数（通过 io.args() 访问）。
@@ -342,17 +332,16 @@ fn main() {
     let result = match cli.command {
         // Cross-platform commands (language features)
         // 跨平台命令（语言功能）
-        Commands::Eval { expr, compat_ast } => commands::eval::run(&expr, cli.verbose, compat_ast),
+        Commands::Eval { expr } => commands::eval::run(&expr, cli.verbose),
         Commands::Test { dir } => commands::test::run(&dir, cli.verbose),
         Commands::Run {
             file,
-            compat_ast,
             args,
         } => {
             if !args.is_empty() {
                 neve_std::set_script_args(args);
             }
-            commands::run::run(&file, cli.verbose, compat_ast)
+            commands::run::run(&file, cli.verbose)
         }
         Commands::Check {
             file,
