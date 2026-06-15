@@ -3,9 +3,9 @@
 ## Current State
 
 ```
-v3.18.0+  |  541 E2E tests (538 pass + 2 fail + 1 gap)  |  20 LSP methods
+v3.19.0+  |  541 E2E tests (539 pass + 2 fail)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
-Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: 11/12 gaps closed
+Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: ✅ complete
 ```
 
 ## v4.0 Exit Criteria
@@ -37,7 +37,7 @@ Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: 11/12 gaps closed
 
 **Phase A deliverables**: 5/7 items fixed. 1 spec gap closed (unicode char). Audit: 22/30 = 73%.
 
-### Phase B: Gap Closure (11/12 gaps closed — B5 done 2026-06-16)
+### Phase B: Gap Closure ✅ COMPLETE (12/12 — 2026-06-16)
 
 **Goal**: Close the 12 E2E gap tests. These represent real missing features.
 
@@ -53,7 +53,7 @@ The 12 gaps, ordered by impact:
 | B6 | Option match pattern lowering | neve-hir | ✅ Done (already worked, test added) |
 | B7 | Record match pattern lowering | neve-hir | ✅ Done (works with #{ } syntax; v3.0 { } pattern is parser gap) |
 | B8 | `?.` safe access lowering | neve-hir | ✅ Done (already worked, test added) |
-| B9 | Impl method dispatch | neve-hir + neve-typeck | ⬜ Remaining — self parameter type resolution needed |
+| B9 | Impl method dispatch | neve-hir + neve-typeck | ✅ Done (2026-06-16) — impl Int method dispatch |
 | B10 | Stdlib pipeline module resolution | neve-frontend | ✅ Done (2026-06-16) |
 | B11 | List comprehension HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
 | B12 | Match Option HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
@@ -87,9 +87,9 @@ The 12 gaps, ordered by impact:
 ## Immediate Priority (this week)
 
 ```
-1. B9: Fix inherent impl method dispatch                ← last Phase B gap
-2. A2: Begin cache.rs unwrap() fix                      ← error handling
-3. Phase C: Q6 registry + Q7 contributions docs          ← decision gates
+1. A2: Begin cache.rs unwrap() fix                      ← error handling
+2. Phase C: Q6 registry + Q7 contributions docs          ← decision gates
+3. Phase D: Remove AST compat path                       ← v4.0 preparation
 ```
 
 ## Risk Register
