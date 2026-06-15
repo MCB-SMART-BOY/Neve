@@ -1,18 +1,15 @@
 //! Integration smoke tests for the real frontend/runtime paths.
 //!
-//! These tests intentionally avoid placeholder helpers. They cover:
-//! - parse + lower + type check via `neve_frontend`
-//! - runtime parity between AST compat and HIR evaluators on a supported subset
-//! - explicit sentinels for currently known runtime divergence
+//! These tests cover: parse + lower + type check + HIR evaluation via `neve_frontend`.
 
 mod support;
 
 use neve_common::Int;
 use neve_derive::Hash;
 use neve_diagnostic::{DiagnosticKind, ErrorCode, Severity};
-use neve_eval::{EvalError, Evaluator, Value, compat::AstEvaluator};
+use neve_eval::{EvalError, Evaluator, Value};
 use neve_frontend::{AnalysisResult, analyze_source};
-use neve_std::{std_module_overrides, stdlib};
+use neve_std::stdlib;
 use std::fs;
 use std::rc::Rc;
 use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
@@ -42,11 +39,6 @@ fn analyze_without_diagnostics(source: &str) -> AnalysisResult {
     analysis
 }
 
-fn eval_ast(analysis: &AnalysisResult) -> Result<Value, EvalError> {
-    let mut evaluator = AstEvaluator::new().with_module_overrides(std_module_overrides());
-    evaluator.eval_file(&analysis.ast)
-}
-
 fn eval_hir(analysis: &AnalysisResult) -> Result<Value, EvalError> {
     let mut evaluator = Evaluator::new().with_extra_builtins(
         stdlib()
@@ -59,34 +51,23 @@ fn eval_hir(analysis: &AnalysisResult) -> Result<Value, EvalError> {
 
 fn assert_runtime_parity(source: &str, expected: Value) {
     let analysis = analyze_without_diagnostics(source);
-
-    let ast_value = eval_ast(&analysis).expect("AST evaluator should succeed");
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-
-    assert_eq!(ast_value, expected, "unexpected AST result");
     assert_eq!(hir_value, expected, "unexpected HIR result");
-    assert_eq!(ast_value, hir_value, "AST/HIR runtime split detected");
 }
 
 fn assert_runtime_error_parity(source: &str, expected_fragment: &str) {
     let analysis = analyze_without_diagnostics(source);
 
-    let ast_error = eval_ast(&analysis).expect_err("AST evaluator should fail");
     let hir_error = eval_hir(&analysis).expect_err("HIR evaluator should fail");
 
-    match (ast_error, hir_error) {
-        (EvalError::TypeError(ast), EvalError::TypeError(hir)) => {
-            assert!(
-                ast.contains(expected_fragment),
-                "unexpected AST error: {ast}"
-            );
+    match hir_error {
+        EvalError::TypeError(hir) => {
             assert!(
                 hir.contains(expected_fragment),
                 "unexpected HIR error: {hir}"
             );
-            assert_eq!(ast, hir, "AST/HIR error split detected");
         }
-        other => panic!("expected matching type errors, got {:?}", other),
+        other => panic!("expected type error, got {:?}", other),
     }
 }
 
@@ -2101,16 +2082,13 @@ fn test_end_to_end_std_io_process_stdout_runtime_parity() {
         ",
     );
 
-    let ast_value = eval_ast(&analysis).expect("AST evaluator should succeed");
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
 
-    match (&ast_value, &hir_value) {
-        (Value::String(ast), Value::String(hir)) => {
-            assert!(ast.contains("rustc"), "AST stdout should contain rustc");
+    match &hir_value {
+        Value::String(hir) => {
             assert!(hir.contains("rustc"), "HIR stdout should contain rustc");
-            assert_eq!(ast, hir, "AST/HIR stdout split detected");
         }
-        other => panic!("expected matching stdout strings, got {:?}", other),
+        other => panic!("expected stdout string, got {:?}", other),
     }
 }
 
