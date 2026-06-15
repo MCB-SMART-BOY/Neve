@@ -90,7 +90,7 @@ Source Code (.neve)
 |--------|-------|
 | Phase 6 (Syntax v3.0) | ✅ Complete |
 | Phase 4 (Shell) | ✅ Complete |
-| E2E Tests | 450 |
+| E2E Tests | 541 |
 | Formatter idempotency | 37/37 |
 | Stream<T> APIs | 14 (Phase A-C) |
 | LSP Methods | 20 |

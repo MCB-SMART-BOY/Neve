@@ -58,7 +58,10 @@ struct Binding {
 /// to allow persistent state across evaluations.
 /// 注意：对于 REPL 使用，可以将 `AstEnv` 包装在 `Rc<RefCell<AstEnv>>` 中
 /// 以便在多次求值之间保持持久状态。
-#[deprecated(since = "3.18.0", note = "AST compat path will be removed in v4.0. Use HIR evaluator via neve_eval::Evaluator instead.")]
+#[deprecated(
+    since = "3.18.0",
+    note = "AST compat path will be removed in v4.0. Use HIR evaluator via neve_eval::Evaluator instead."
+)]
 #[derive(Clone, Default)]
 pub struct AstEnv {
     /// Variable bindings in this scope / 此作用域中的变量绑定
@@ -275,7 +278,10 @@ impl AstEnv {
 /// It supports module imports, lazy evaluation, and higher-order functions.
 /// 此求值器直接对 AST 进行操作，无需降级到 HIR。
 /// 支持模块导入、惰性求值和高阶函数。
-#[deprecated(since = "3.18.0", note = "AST compat path will be removed in v4.0. Use HIR evaluator via neve_eval::Evaluator instead.")]
+#[deprecated(
+    since = "3.18.0",
+    note = "AST compat path will be removed in v4.0. Use HIR evaluator via neve_eval::Evaluator instead."
+)]
 pub struct AstEvaluator {
     /// Current evaluation environment / 当前求值环境
     env: Rc<AstEnv>,

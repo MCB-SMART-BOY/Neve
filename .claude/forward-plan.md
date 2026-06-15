@@ -3,9 +3,9 @@
 ## Current State
 
 ```
-v3.18.0  |  537 E2E tests (525 pass + 12 gap)  |  20 LSP methods
+v3.18.0  |  541 E2E tests (537 pass + 2 fail + 2 gap)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
-Audit: 17/30 fixed (57%)  |  Docs: v3.0 syntax synced
+Audit: 22/30 fixed (73%)  |  Docs: v3.0 syntax synced  |  Phase B: 10/12 gaps closed
 ```
 
 ## v4.0 Exit Criteria
@@ -37,28 +37,28 @@ Audit: 17/30 fixed (57%)  |  Docs: v3.0 syntax synced
 
 **Phase A deliverables**: 5/7 items fixed. 1 spec gap closed (unicode char). Audit: 22/30 = 73%.
 
-### Phase B: Gap Closure (2-4 weeks)
+### Phase B: Gap Closure (in progress — 10/12 gaps closed)
 
 **Goal**: Close the 12 E2E gap tests. These represent real missing features.
 
 The 12 gaps, ordered by impact:
 
-| # | Gap | Crate to fix | Difficulty |
-|---|-----|-------------|------------|
-| B1 | v3.0 enum pipe syntax (`| Red \| Green \| Blue`) | neve-parser | Medium |
-| B2 | TupleIndex expression | neve-eval (HIR) | Medium |
-| B3 | Block-with-let lowering | neve-hir | Medium |
-| B4 | Nested blocks lowering | neve-hir | Medium |
-| B5 | Generic identity inference | neve-typeck | Hard |
-| B6 | Option match pattern lowering | neve-hir | Medium |
-| B7 | Record match pattern lowering | neve-hir | Medium |
-| B8 | `?.` safe access lowering | neve-hir | Medium |
-| B9 | Impl method dispatch | neve-hir + neve-typeck | Hard |
-| B10 | Stdlib pipeline module resolution | neve-frontend | Medium |
-| B11 | List comprehension HIR/AST parity | neve-eval | Medium |
-| B12 | Match Option HIR/AST parity | neve-eval | Medium |
+| # | Gap | Crate to fix | Status |
+|---|-----|-------------|--------|
+| B1 | v3.0 enum pipe syntax (`\| Red \| Green \| Blue`) | neve-parser | ✅ Done (2026-06-16) |
+| B2 | TupleIndex expression | neve-eval (HIR) | ✅ Done (already worked, test added) |
+| B3 | Block-with-let lowering | neve-hir | ✅ Done (already worked, test added) |
+| B4 | Nested blocks lowering | neve-hir | ✅ Done (already worked, test added) |
+| B5 | Generic identity inference | neve-typeck | ⚠️ Partial — single-call works; multi-call polymorphism needs instantiation fix |
+| B6 | Option match pattern lowering | neve-hir | ✅ Done (already worked, test added) |
+| B7 | Record match pattern lowering | neve-hir | ✅ Done (works with #{ } syntax; v3.0 { } pattern is parser gap) |
+| B8 | `?.` safe access lowering | neve-hir | ✅ Done (already worked, test added) |
+| B9 | Impl method dispatch | neve-hir + neve-typeck | ⬜ Remaining — self parameter type resolution needed |
+| B10 | Stdlib pipeline module resolution | neve-frontend | ✅ Done (2026-06-16) |
+| B11 | List comprehension HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
+| B12 | Match Option HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
 
-**Phase B deliverables**: 12 gap tests un-ignored. E2E: 537 → 549 (all pass).
+**Phase B deliverables**: 10/12 gap tests un-ignored. 2 remaining: B5 (polymorphism) + B9 (impl dispatch). E2E: 537 → 541 tests.
 
 ### Phase C: Ecosystem Readiness (2-4 weeks, parallel with B)
 
@@ -87,11 +87,9 @@ The 12 gaps, ordered by impact:
 ## Immediate Priority (this week)
 
 ```
-1. A1: Close unicode char + shebang parser gaps  ← quick wins
-2. A3: Centralize libc dependency               ← quick win
-3. A4: Fix tree-sitter-neve workspace            ← quick win
-4. B1: v3.0 enum syntax                          ← first gap closure
-5. A2: Begin cache.rs unwrap() fix               ← start the big one
+1. B5: Fix multi-call-site polymorphism instantiation   ← typeck fix
+2. B9: Fix inherent impl method dispatch                ← HIR+typeck fix
+3. A2: Begin cache.rs unwrap() fix                      ← start the big one
 ```
 
 ## Risk Register

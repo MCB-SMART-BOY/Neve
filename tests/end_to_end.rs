@@ -8569,7 +8569,8 @@ fn test_record_shorthand_field() {
 
 #[test]
 fn test_match_guard_int() {
-    let source = "x = 5; match x { n if n > 0 -> \"positive\", n if n < 0 -> \"negative\", _ -> \"zero\" }";
+    let source =
+        "x = 5; match x { n if n > 0 -> \"positive\", n if n < 0 -> \"negative\", _ -> \"zero\" }";
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("eval");
     assert_eq!(hir_value, Value::String(Rc::new("positive".to_string())));
@@ -8644,7 +8645,10 @@ fn test_string_interp() {
     let source = "name = \"World\"; msg = `Hello, {name}!`";
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("eval");
-    assert_eq!(hir_value, Value::String(Rc::new("Hello, World!".to_string())));
+    assert_eq!(
+        hir_value,
+        Value::String(Rc::new("Hello, World!".to_string()))
+    );
 }
 
 // --- Unit & Char ---
@@ -8684,38 +8688,145 @@ fn test_type_alias_tuple_ok() {
 
 // === Known gaps (documented divergence, will be enabled as pipeline matures) ===
 
-#[test] #[ignore = "TODO(HIR): TupleIndex expression"]
-fn test_gap_tuple_index() {}
+#[test]
+fn test_gap_tuple_index() {
+    assert_runtime_parity("x = (10, 20, 30).0", Value::Int(int(10)));
+}
 
-#[test] #[ignore = "TODO(HIR): block-with-let lowering"]
-fn test_gap_block_with_let() {}
+#[test]
+fn test_gap_tuple_index_second() {
+    assert_runtime_parity("x = (10, 20, 30).1", Value::Int(int(20)));
+}
 
-#[test] #[ignore = "TODO(HIR): nested blocks lowering"]
-fn test_gap_nested_blocks() {}
+#[test]
+fn test_gap_block_with_let() {
+    let source = "let result = { let x = 1; x + 1 };";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(2)));
+}
 
-#[test] #[ignore = "TODO(typeck): generic identity inference"]
-fn test_gap_generic_id() {}
+#[test]
+fn test_gap_nested_blocks() {
+    let source = "let result = { let x = 1; { let y = 2; x + y } };";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(3)));
+}
 
-#[test] #[ignore = "TODO(HIR): Option match pattern lowering"]
-fn test_gap_match_option() {}
+#[test]
+#[ignore = "TODO(typeck): multi-call-site polymorphism needs instantiation fix"]
+fn test_gap_generic_id() {
+    // Generic identity function should be polymorphic across call sites
+    let source = "id = |x| x; a = id(42); b = id(\"hello\")";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::String(Rc::new("hello".to_string())));
+}
 
-#[test] #[ignore = "TODO(HIR): record match pattern lowering"]
-fn test_gap_match_record() {}
+#[test]
+fn test_gap_generic_id_single_call() {
+    // Single call to generic identity should work
+    let source = "id = |x| x; result = id(42)";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(42)));
+}
 
-#[test] #[ignore = "TODO(HIR): ?. safe access lowering"]
-fn test_gap_safe_access() {}
+#[test]
+fn test_gap_match_option() {
+    let source = "use std.option; match option.some(42) { Some(x) -> x, None -> 0 }";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(42)));
+}
 
-#[test] #[ignore = "TODO(frontend): stdlib pipeline module resolution"]
-fn test_gap_pipeline_stdlib() {}
+#[test]
+fn test_gap_match_option_none() {
+    let source = "use std.option; match option.none { Some(x) -> x, None -> 0 }";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(0)));
+}
 
-#[test] #[ignore = "TODO(HIR): inherent impl method dispatch"]
-fn test_gap_impl_method() {}
+#[test]
+fn test_gap_match_record() {
+    // Record pattern matching works; v3.0 { x, y } pattern syntax is tracked as parser gap
+    let source = "let r = #{ x = 10, y = 20 }; match r { #{ x, y } -> x + y }";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(30)));
+}
 
-#[test] #[ignore = "TODO(parser): v3.0 enum pipe syntax"]
-fn test_gap_v3_enum() {}
+#[test]
+fn test_gap_safe_access() {
+    let source = "r = { name = \"test\" }; r?.name ?? \"fallback\"";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::String(Rc::new("test".to_string())));
+}
 
-#[test] #[ignore = "TODO(parity): list comprehension HIR/AST"]
-fn test_gap_parity_list_comp() {}
+#[test]
+fn test_gap_safe_access_missing_field() {
+    let source = "r = { name = \"test\" }; r?.age ?? 0";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(0)));
+}
 
-#[test] #[ignore = "TODO(parity): match Option HIR/AST"]
-fn test_gap_parity_match_opt() {}
+#[test]
+fn test_gap_pipeline_stdlib() {
+    // Stdlib pipeline module resolution — verify std.io module resolves correctly
+    // io.execPipeline and related functions are accessible for pipeline operations
+    let source = "use std.io as io; result = io.execPipeline";
+    let analysis = analyze_without_diagnostics(source);
+    // Module resolution succeeds if no errors; we don't call the effectful function
+    assert!(
+        analysis.diagnostics.is_empty()
+            || analysis
+                .diagnostics
+                .iter()
+                .all(|d| d.severity != neve_diagnostic::Severity::Error),
+        "unexpected errors resolving std.io pipeline: {:?}",
+        analysis.diagnostics
+    );
+    let _ = eval_hir(&analysis).expect("eval");
+}
+
+#[test]
+#[ignore = "TODO(HIR): inherent impl method dispatch — self parameter type resolution"]
+fn test_gap_impl_method() {
+    // Inherent impl method dispatch — self.value field access needs type resolution
+    let source = "type Counter = #{ value: Int }; impl Counter { fn incr(self: Counter, by: Int) -> Int = self.value + by; }; let c = #{ value = 10 }; c.incr(5)";
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("eval");
+    assert_eq!(hir_value, Value::Int(int(15)));
+}
+
+#[test]
+fn test_gap_v3_enum() {
+    // v3.0 bare enum pipe syntax: type Color = | Red | Green | Blue
+    let source = "type Color = | Red | Green | Blue; let c = Red";
+    let analysis = analyze_without_diagnostics(source);
+    let _ = eval_hir(&analysis).expect("eval");
+}
+
+#[test]
+fn test_gap_parity_list_comp() {
+    assert_runtime_parity(
+        "r = [x * 2 | x <- [1, 2, 3]]",
+        Value::List(Rc::new(vec![
+            Value::Int(int(2)),
+            Value::Int(int(4)),
+            Value::Int(int(6)),
+        ])),
+    );
+}
+
+#[test]
+fn test_gap_parity_match_opt() {
+    assert_runtime_parity(
+        "use std.option; match option.some(42) { Some(x) -> x + 1, None -> 0 }",
+        Value::Int(int(43)),
+    );
+}

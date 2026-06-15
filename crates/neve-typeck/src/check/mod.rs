@@ -2211,7 +2211,10 @@ impl TypeChecker {
         let refined_global_ty =
             self.reify_named_generics(refined_global_ty, &fn_def.generics, &generic_vars);
         let refined_global_ty = if fn_def.generics.is_empty() {
-            refined_global_ty
+            // Generalize free type variables in the inferred type so that
+            // functions without explicit generics (e.g., `id = |x| x`) get
+            // polymorphic types (for example, `forall t0. (t0) -> t0`).
+            generalize(&refined_global_ty, &[])
         } else {
             let params: Vec<String> = fn_def.generics.iter().map(|g| g.name.clone()).collect();
             Ty {

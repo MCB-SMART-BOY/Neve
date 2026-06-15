@@ -452,6 +452,16 @@ impl Parser {
                 } else {
                     ItemKind::Struct(self.parse_struct_def_body(name, generics, visibility))
                 }
+            } else if self.eat(TokenKind::Pipe) {
+                // v3.0 bare enum pipe syntax: type Foo = | Red | Green | Blue
+                let variants = self.parse_variants();
+                self.eat(TokenKind::Semicolon);
+                ItemKind::Enum(EnumDef {
+                    visibility,
+                    name,
+                    generics,
+                    variants,
+                })
             } else {
                 // type alias: type Foo = Type
                 let ty = self.parse_type();
@@ -913,7 +923,8 @@ impl Parser {
         // 可选的前导 `|`（v3.0 语法）
         self.eat(TokenKind::Pipe);
 
-        while !self.check(TokenKind::RBrace) && !self.at_end() {
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Semicolon) && !self.at_end()
+        {
             let start = self.current_span();
 
             // Skip leading `|` separator between variants (v3.0)
