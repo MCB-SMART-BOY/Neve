@@ -381,13 +381,18 @@ pub fn instantiate(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> Ty {
     match &ty.kind {
         TyKind::Forall(params, body) => {
             let mut subst = Substitution::new();
-            for param_name in params {
-                // Param names are like "t0", "t1" — parse the numeric var ID
+            for (idx, param_name) in params.iter().enumerate() {
+                // generalize() produces param names like "t0", "t1" whose suffix
+                // matches the numeric var ID inside TyKind::Var nodes in the body.
                 if let Some(var_id_str) = param_name.strip_prefix('t') {
                     if let Ok(var_id) = var_id_str.parse::<u32>() {
                         subst.extend(var_id, fresh_var());
+                        continue;
                     }
                 }
+                // Explicit generics use custom names (e.g. "T").  Fall back to
+                // positional binding via TyKind::Param nodes.
+                subst.bind_param(idx as u32, fresh_var());
             }
             subst.apply(body)
         }
