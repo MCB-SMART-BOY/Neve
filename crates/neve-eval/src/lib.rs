@@ -40,7 +40,6 @@ pub mod compat {
     //! 规范管线使用 HIR 求值器 (`neve_eval::Evaluator`)。
     //! 所有新代码请使用 `neve_eval::Evaluator` 配合 `neve_frontend`。
 
-    #[allow(deprecated)]
     pub use crate::ast_eval::{AstEnv, AstEvaluator};
 }
 pub mod pattern;

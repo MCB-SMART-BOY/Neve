@@ -2,9 +2,6 @@
 //!
 //! These tests intentionally avoid placeholder helpers. They cover:
 //! - parse + lower + type check via `neve_frontend`
-
-// TODO(Phase D): remove after AstEnv migration
-#![allow(deprecated)]
 //! - runtime parity between AST compat and HIR evaluators on a supported subset
 //! - explicit sentinels for currently known runtime divergence
 

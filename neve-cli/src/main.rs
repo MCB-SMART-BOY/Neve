@@ -1,9 +1,6 @@
 //! Neve CLI - The Neve language command line interface.
 //! Neve CLI - Neve 语言的命令行界面。
 
-// TODO(Phase D): remove after AstEnv migration
-#![allow(deprecated)]
-
 mod commands;
 mod output;
 mod platform;

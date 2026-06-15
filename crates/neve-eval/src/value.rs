@@ -7,7 +7,6 @@
 //! Note: AST compat types (AstEnv, AstClosure) are used here as internal
 //! implementation details. External callers should prefer HIR evaluator.
 
-#![allow(deprecated)]
 use crate::Environment;
 use crate::ast_eval::AstEnv;
 use neve_common::{Int, int_to_f64};
