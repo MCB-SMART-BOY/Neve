@@ -14,7 +14,6 @@ use neve_std::stdlib;
 use std::fs;
 use std::rc::Rc;
 use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
-use support::module_fixtures::create_test_module;
 use support::source_fixtures::{
     pipeline_execution_source as shared_pipeline_execution_source,
     shell_projection_source as shared_shell_projection_source,

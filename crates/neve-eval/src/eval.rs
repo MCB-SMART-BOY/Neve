@@ -2686,11 +2686,8 @@ impl Evaluator {
                         "infinite recursion in lazy evaluation".to_string(),
                     ));
                 }
-                crate::value::ThunkState::HirUnevaluated { .. } => {}
                 crate::value::ThunkState::HirUnevaluated { .. } => {
-                    return Err(EvalError::TypeError(
-                        "cannot force AST thunk in HIR evaluator".to_string(),
-                    ));
+                    // Fall through to force evaluation below
                 }
             }
         }

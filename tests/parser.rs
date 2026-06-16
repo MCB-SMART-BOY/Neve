@@ -1540,7 +1540,9 @@ fn test_parse_fn_with_effect() {
     assert!(diags.is_empty(), "unexpected parse errors: {:?}", diags);
     assert_eq!(file.items.len(), 1);
     match &file.items[0].kind {
-        neve_syntax::ItemKind::Fn(def) => assert!(def.effect, "expected effect=true with legacy keyword"),
+        neve_syntax::ItemKind::Fn(def) => {
+            assert!(def.effect, "expected effect=true with legacy keyword")
+        }
         _ => panic!("expected Fn item"),
     }
 }
