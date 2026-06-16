@@ -23,7 +23,7 @@ use crate::unify::{
     Substitution, free_type_vars, generalize, instantiate_with_map, occurs_check, unify,
 };
 use neve_common::Span;
-use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
+use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label, Severity};
 use neve_hir::{
     BinOp, DefId, EnumDef, Expr, ExprKind, FnDef, ImplDef, Item, ItemKind, Literal, LocalId,
     MatchArm, Module, Pattern, PatternKind, Stmt, StmtKind, StructDef, TraitDef, Ty, TyKind,
@@ -154,6 +154,9 @@ pub struct TypeChecker {
     /// Key: DefId → (param_index, TraitBound).
     /// 多态函数的泛型参数特征约束。键：DefId → (参数索引, TraitBound)。
     fn_bounds: HashMap<DefId, Vec<(u32, TraitBound)>>,
+    /// Track defined names to detect duplicates within a module.
+    /// 跟踪已定义的名称以检测模块内的重复定义。
+    defined_names: std::collections::HashSet<String>,
     /// Map from def_id to trait_id.
     /// 定义 ID 到特征 ID 的映射。
     trait_ids: HashMap<DefId, TraitId>,
@@ -215,6 +218,7 @@ impl TypeChecker {
             global_names: HashMap::new(),
             pending_trait_constraints: Vec::new(),
             fn_bounds: HashMap::new(),
+            defined_names: std::collections::HashSet::new(),
         }
     }
 
@@ -2017,6 +2021,18 @@ impl TypeChecker {
 
         // Record the name for "did you mean?" suggestions
         if let Some(name) = Self::item_name(&item.kind) {
+            if !self.defined_names.insert(name.to_string()) {
+                self.diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::Parser,
+                    severity: Severity::Warning,
+                    message: format!("duplicate definition of `{name}` shadows previous"),
+                    span: item.span,
+                    labels: vec![],
+                    notes: vec![],
+                    code: None,
+                    help: None,
+                });
+            }
             self.global_names.insert(item.id, name.to_string());
         }
 
