@@ -6,7 +6,7 @@
 v3.19.0+  |  541 E2E tests (539 pass + 2 fail)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
 Comprehensive audit: 62 findings (13 fixed this session)  |  Keywords: 12 (v4.0)
-Phase B: ✅ complete  |  Phase D: ✅ complete  |  Audit fixes: 🔄 in progress
+Phase B: ✅ complete  |  Phase D: ✅ complete  |  Audit fixes: 22 done (Batch 1-3 complete)
 ```
 
 ## v4.0 Exit Criteria
@@ -141,7 +141,7 @@ Q6 + Q7 are the last two gates before v4.0.
 |----|---------|----------|
 | C2 | AST nodes unsealed (no #[non_exhaustive]) | Critical |
 | C3 | 10+ pub types → pub(crate) | Critical |
-| C7 | CacheStats naming conflict | Critical |
+| C7 | CacheStats → HirCacheStats | ✅ Fixed |
 | C6 | Formatter drops all comments | Critical |
 | H3 | Trait bounds never enforced at call sites | High |
 | H4 | types_match ignores type args | High |
