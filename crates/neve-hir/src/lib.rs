@@ -16,7 +16,7 @@ mod module_paths;
 mod resolve;
 
 pub use hir::*;
-pub use incremental::{CacheStats, ModuleCache};
+
 pub use lower::lower;
 pub use module_loader::{
     ImportResolveError, ModuleInfo, ModuleLoadError, ModuleLoader, Visibility,

@@ -37,7 +37,7 @@ pub struct Thunk {
 /// The state of a thunk.
 /// Thunk 的状态。
 #[derive(Clone)]
-pub enum ThunkState {
+pub(crate) enum ThunkState {
     /// Unevaluated thunk with HIR expression.
     /// 带有 HIR 表达式的未求值 thunk。
     HirUnevaluated { expr: Expr, env: Environment },
@@ -81,13 +81,13 @@ impl Thunk {
 
     /// Get the state for inspection.
     /// 获取状态以供检查。
-    pub fn state(&self) -> std::cell::Ref<'_, ThunkState> {
+    pub(crate) fn state(&self) -> std::cell::Ref<'_, ThunkState> {
         self.inner.borrow()
     }
 
     /// Get mutable state for force evaluation.
     /// 获取可变状态以进行强制求值。
-    pub fn state_mut(&self) -> std::cell::RefMut<'_, ThunkState> {
+    pub(crate) fn state_mut(&self) -> std::cell::RefMut<'_, ThunkState> {
         self.inner.borrow_mut()
     }
 }
@@ -514,6 +514,34 @@ pub struct BuiltinFn {
     pub func: fn(&[Value]) -> Result<Value, String>,
 }
 
+impl BuiltinFn {
+    /// Create a new built-in function.
+    /// 创建新的内置函数。
+    pub fn new(
+        name: &'static str,
+        arity: usize,
+        func: fn(&[Value]) -> Result<Value, String>,
+    ) -> Self {
+        Self { name, arity, func }
+    }
+
+    /// Call this builtin with the given arguments.
+    /// 用给定参数调用此内置函数。
+    pub fn call(&self, args: &[Value]) -> Result<Value, String> {
+        (self.func)(args)
+    }
+
+    /// The name of this builtin. / 内置函数名称。
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// The arity of this builtin. / 内置函数参数数量。
+    pub fn arity(&self) -> usize {
+        self.arity
+    }
+}
+
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -905,10 +933,10 @@ pub struct StreamValue {
 }
 
 /// Type alias for the line-oriented stream channel receiver.
-pub type LinesChannelRx = std::sync::mpsc::Receiver<Result<String, String>>;
+pub(crate) type LinesChannelRx = std::sync::mpsc::Receiver<Result<String, String>>;
 
 /// Type alias for the byte-oriented stream channel receiver.
-pub type BytesChannelRx = std::sync::mpsc::Receiver<Result<Vec<u8>, String>>;
+pub(crate) type BytesChannelRx = std::sync::mpsc::Receiver<Result<Vec<u8>, String>>;
 
 /// Transform applied to a wrapped stream.
 /// 应用于包装流的变换。

@@ -960,7 +960,7 @@ pub(crate) fn poll_event(event: &EventValue) -> Result<Value, String> {
 /// Closures are not supported in this context (requires evaluator).
 pub(crate) fn apply_value_function(func: &Value, args: &[Value]) -> Result<Value, String> {
     match func {
-        Value::Builtin(b) => (b.func)(args),
+        Value::Builtin(b) => b.call(args),
         Value::BuiltinFn(_, f) => f(args.to_vec()),
         _ => Err(format!(
             "poll: cannot apply {:?} as a function (only builtins supported in event chains)",

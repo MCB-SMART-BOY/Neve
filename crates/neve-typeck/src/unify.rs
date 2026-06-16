@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 /// Substitution mapping type variables to types.
 /// 将类型变量映射到具体类型的替换。
-pub struct Substitution {
+pub(crate) struct Substitution {
     /// Type variable bindings.
     /// 类型变量绑定。
     map: HashMap<u32, Ty>,

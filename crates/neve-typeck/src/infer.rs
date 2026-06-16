@@ -9,7 +9,7 @@ use neve_hir::{Ty, TyKind};
 
 /// Type variable counter for fresh variables.
 /// 用于生成新类型变量的计数器。
-pub struct InferContext {
+pub(crate) struct InferContext {
     /// Next type variable ID to assign.
     /// 下一个要分配的类型变量 ID。
     next_var: u32,

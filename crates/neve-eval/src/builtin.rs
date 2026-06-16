@@ -1844,7 +1844,7 @@ fn value_to_json(v: &Value) -> String {
 }
 
 /// Format a value for display (user-friendly, not debug).
-pub fn format_value(v: &Value) -> String {
+pub(crate) fn format_value(v: &Value) -> String {
     match v {
         Value::Unit => "()".to_string(),
         Value::Bool(b) => b.to_string(),

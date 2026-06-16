@@ -16,7 +16,7 @@ use std::time::SystemTime;
 
 use neve_diagnostic::Diagnostic;
 
-use crate::incremental::{CacheStats, IncrementalCache, get_mtime};
+use crate::incremental::{HirCacheStats, IncrementalCache, get_mtime};
 use crate::module_diagnostics::ModuleDiagnostics;
 use crate::module_graph::ModuleGraphState;
 use crate::module_lowering::{LoweredModuleArtifacts, collect_imports, lower_module_with_imports};
@@ -156,7 +156,7 @@ impl ModuleLoader {
     }
 
     /// Get cache statistics. / 获取缓存统计信息。
-    pub fn cache_stats(&self) -> &CacheStats {
+    pub fn cache_stats(&self) -> &HirCacheStats {
         self.cache.cache_stats()
     }
 

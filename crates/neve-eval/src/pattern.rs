@@ -42,7 +42,8 @@ impl Specificity {
 
 /// Calculate the specificity of a pattern.
 /// 计算模式的特异性。
-pub fn pattern_specificity(pattern: &Pattern) -> Specificity {
+#[allow(dead_code)]
+fn pattern_specificity(pattern: &Pattern) -> Specificity {
     match &pattern.kind {
         PatternKind::Wildcard => Specificity::WILDCARD,
         PatternKind::Var(ident) => {
@@ -122,7 +123,8 @@ pub fn pattern_specificity(pattern: &Pattern) -> Specificity {
 /// Pattern kind classification for fast-path matching.
 /// 用于快速路径匹配的模式类型分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PatternClass {
+#[allow(dead_code)]
+enum PatternClass {
     /// Always matches (wildcard, variable). / 总是匹配（通配符、变量）。
     Irrefutable,
     /// Matches a specific literal value. / 匹配特定字面量值。
@@ -140,7 +142,8 @@ pub enum PatternClass {
 
 /// Classify a pattern for optimization hints.
 /// 对模式进行分类以获取优化提示。
-pub fn classify_pattern(pattern: &Pattern) -> PatternClass {
+#[allow(dead_code)]
+fn classify_pattern(pattern: &Pattern) -> PatternClass {
     match &pattern.kind {
         PatternKind::Wildcard => PatternClass::Irrefutable,
         PatternKind::Var(_) => PatternClass::Irrefutable,
@@ -157,7 +160,8 @@ pub fn classify_pattern(pattern: &Pattern) -> PatternClass {
 
 /// Check if a pattern is irrefutable (always matches).
 /// 检查模式是否不可反驳（总是匹配）。
-pub fn is_irrefutable(pattern: &Pattern) -> bool {
+#[allow(dead_code)]
+fn is_irrefutable(pattern: &Pattern) -> bool {
     match &pattern.kind {
         PatternKind::Wildcard => true,
         PatternKind::Var(_) => true,
@@ -176,7 +180,8 @@ pub fn is_irrefutable(pattern: &Pattern) -> bool {
 /// Get discriminant hint for a pattern (what value component to check first).
 /// 获取模式的判别提示（首先检查哪个值组件）。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Discriminant {
+#[allow(dead_code)]
+enum Discriminant {
     /// Check type/constructor tag. / 检查类型/构造器标签。
     Tag,
     /// Check literal value. / 检查字面量值。
@@ -191,7 +196,8 @@ pub enum Discriminant {
 
 /// Get the primary discriminant for a pattern.
 /// 获取模式的主要判别。
-pub fn get_discriminant(pattern: &Pattern) -> Discriminant {
+#[allow(dead_code)]
+fn get_discriminant(pattern: &Pattern) -> Discriminant {
     match &pattern.kind {
         PatternKind::Wildcard | PatternKind::Var(_) => Discriminant::None,
         PatternKind::Literal(_) => Discriminant::Value,
@@ -225,7 +231,8 @@ pub fn get_discriminant(pattern: &Pattern) -> Discriminant {
 /// Extract literal value from a literal pattern for direct comparison.
 /// 从字面量模式中提取字面量值以进行直接比较。
 #[derive(Debug, Clone, PartialEq)]
-pub enum LiteralValue {
+#[allow(dead_code)]
+enum LiteralValue {
     Int(Int),
     Float(f64),
     String(String),
@@ -235,7 +242,8 @@ pub enum LiteralValue {
 
 /// Try to extract a literal value from a pattern.
 /// 尝试从模式中提取字面量值。
-pub fn extract_literal(pattern: &Pattern) -> Option<LiteralValue> {
+#[allow(dead_code)]
+fn extract_literal(pattern: &Pattern) -> Option<LiteralValue> {
     match &pattern.kind {
         PatternKind::Literal(lit) => match lit {
             LiteralPattern::Int(n) => Some(LiteralValue::Int(n.clone())),
@@ -252,7 +260,8 @@ pub fn extract_literal(pattern: &Pattern) -> Option<LiteralValue> {
 /// Optimization hints for a match expression.
 /// 匹配表达式的优化提示。
 #[derive(Debug, Clone)]
-pub struct MatchHints {
+#[allow(dead_code)]
+struct MatchHints {
     /// Whether all arms are irrefutable (only last should be).
     /// 是否所有分支都不可反驳（只有最后一个应该是）。
     pub has_irrefutable_non_last: bool,
@@ -270,7 +279,8 @@ pub struct MatchHints {
 
 /// Analyze a match expression's arms for optimization hints.
 /// 分析匹配表达式的分支以获取优化提示。
-pub fn analyze_match(patterns: &[&Pattern]) -> MatchHints {
+#[allow(dead_code)]
+fn analyze_match(patterns: &[&Pattern]) -> MatchHints {
     let mut has_irrefutable_non_last = false;
     let mut has_catchall = false;
     let mut literal_count = 0;

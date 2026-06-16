@@ -10,5 +10,5 @@ pub mod value;
 pub use builtin::builtins;
 pub use env::Environment;
 pub use eval::{EvalError, EvaluableModuleRef, Evaluator};
-pub use pattern::{MatchHints, Specificity, analyze_match, is_irrefutable, pattern_specificity};
+// Internal pattern analysis types — not re-exported (pub(crate) access only)
 pub use value::{BuiltinFn, Value, stable_key};

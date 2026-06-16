@@ -12,7 +12,7 @@ use neve_syntax::SourceFile;
 /// Cache entry for incremental compilation.
 /// 用于增量编译的缓存条目。
 #[derive(Debug, Clone)]
-pub struct ModuleCache {
+pub(crate) struct ModuleCache {
     /// Modification time when cached. / 缓存时的修改时间。
     pub mtime: SystemTime,
     /// Cached parsed AST hash (for content-based invalidation).
@@ -95,7 +95,7 @@ impl ModuleCache {
 /// Statistics for incremental compilation cache.
 /// 增量编译缓存的统计信息。
 #[derive(Debug, Clone, Default)]
-pub struct CacheStats {
+pub struct HirCacheStats {
     /// Number of cache hits. / 缓存命中次数。
     pub hits: usize,
     /// Number of cache misses. / 缓存未命中次数。
@@ -122,7 +122,7 @@ struct ParsedSource {
 pub(crate) struct IncrementalCache {
     file_cache: HashMap<PathBuf, ModuleCache>,
     parsed_sources: HashMap<PathBuf, ParsedSource>,
-    stats: CacheStats,
+    stats: HirCacheStats,
 }
 
 impl IncrementalCache {
@@ -180,7 +180,7 @@ impl IncrementalCache {
     }
 
     /// Get cache statistics. / 获取缓存统计信息。
-    pub(crate) fn cache_stats(&self) -> &CacheStats {
+    pub(crate) fn cache_stats(&self) -> &HirCacheStats {
         &self.stats
     }
 
@@ -210,7 +210,7 @@ impl IncrementalCache {
     pub(crate) fn clear(&mut self) {
         self.file_cache.clear();
         self.parsed_sources.clear();
-        self.stats = CacheStats::default();
+        self.stats = HirCacheStats::default();
     }
 
     /// Get list of files that need recompilation.
