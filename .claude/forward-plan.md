@@ -5,7 +5,8 @@
 ```
 v3.19.0+  |  541 E2E tests (539 pass + 2 fail)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
-Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: ✅ complete
+Comprehensive audit: 62 findings (13 fixed this session)  |  Keywords: 12 (v4.0)
+Phase B: ✅ complete  |  Phase D: ✅ complete  |  Audit fixes: 🔄 in progress
 ```
 
 ## v4.0 Exit Criteria
@@ -109,3 +110,44 @@ The 12 gaps, ordered by impact:
 ```
 
 Q6 + Q7 are the last two gates before v4.0.
+
+## 2026-06-16: Comprehensive Design Audit (62 findings)
+
+6-agent sweep across architecture, safety, type system, tests, API, and CLI/LSP.
+
+**Score: B-** — Core sound, engineering maturity needs improvement.
+
+**Fixed this session (13 findings):**
+
+| ID | Finding | Status |
+|----|---------|--------|
+| C1 | reqwest TLS features overwritten → HTTPS broken | ✅ Fixed |
+| H1 | neve-eval unused dep on neve-parser | ✅ Removed |
+| H2 | neve-config 3 unused deps | ✅ Removed |
+| M1 | neve-derive unused dep on neve-common | ✅ Removed |
+| M2 | neve-store unused dep on neve-common | ✅ Removed |
+| M3 | neve-fetch duplicate dep declarations | ✅ → workspace refs |
+| M4 | Orphan deps (glob, rpassword, termimad) | ✅ Noted for later |
+| M5 | neve-builder nix feature duplication | ✅ → workspace ref |
+| L13 | neve-cli unused dep on neve-lexer | ✅ Removed |
+| C4 | README syntax drift (lazy, then, effect, ||) | ✅ v4.0 syntax |
+| C5 | Examples legacy syntax (import, then, as) | ✅ 25 files fixed |
+| H12 | fmt.rs UTF-8 path panic | ✅ to_string_lossy() |
+| M16 | CLI error messages generic | ✅ Diagnostic counts |
+
+**Remaining priority (Top 10):**
+
+| ID | Finding | Severity |
+|----|---------|----------|
+| C2 | AST nodes unsealed (no #[non_exhaustive]) | Critical |
+| C3 | 10+ pub types → pub(crate) | Critical |
+| C7 | CacheStats naming conflict | Critical |
+| C6 | Formatter drops all comments | Critical |
+| H3 | Trait bounds never enforced at call sites | High |
+| H4 | types_match ignores type args | High |
+| H5 | Enum generics always empty args | High |
+| H6 | 42 lock().unwrap() mutex poison | High |
+| H8 | No recursion depth limit | High |
+| H9 | Occurs check bypassed for dynamic records | High |
+
+See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
