@@ -144,10 +144,10 @@ Q6 + Q7 are the last two gates before v4.0.
 | C7 | CacheStats → HirCacheStats | ✅ Fixed |
 | C6 | Formatter drops all comments | Critical |
 | H3 | Trait bounds never enforced at call sites | High |
-| H4 | types_match ignores type args | High |
+| H4 | types_match ignores type args | ✅ Fixed |
 | H5 | Enum generics always empty args | High |
 | H6 | 42 lock().unwrap() mutex poison | High |
 | H8 | No recursion depth limit | High |
-| H9 | Occurs check bypassed for dynamic records | High |
+| H9 | Occurs check bypassed for dynamic records | ✅ Fixed |
 
 See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
