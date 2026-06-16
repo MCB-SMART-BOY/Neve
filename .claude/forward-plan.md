@@ -6,7 +6,7 @@
 v3.19.0+  |  541 E2E tests (539 pass + 2 fail)  |  20 LSP methods
 14 Stream<T> APIs  |  34 EffectEval rules  |  19 Lean modules
 Comprehensive audit: 62 findings (13 fixed this session)  |  Keywords: 12 (v4.0)
-Phase B: ✅ complete  |  Phase D: ✅ complete  |  Audit fixes: 22 done (Batch 1-3 complete)
+Phase B: ✅ complete  |  Phase D: ✅ complete  |  Audit fixes: 26 done (Batch 1-4 complete)
 ```
 
 ## v4.0 Exit Criteria
@@ -146,8 +146,8 @@ Q6 + Q7 are the last two gates before v4.0.
 | H3 | Trait bounds never enforced at call sites | High |
 | H4 | types_match ignores type args | ✅ Fixed |
 | H5 | Enum generics always empty args | High |
-| H6 | 42 lock().unwrap() mutex poison | High |
-| H8 | No recursion depth limit | High |
+| H6 | 42 lock().unwrap() mutex poison | ✅ Fixed |
+| H8 | No recursion depth limit | ✅ Fixed |
 | H9 | Occurs check bypassed for dynamic records | ✅ Fixed |
 
 See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
