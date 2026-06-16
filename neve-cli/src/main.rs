@@ -459,6 +459,17 @@ fn main() {
         if !cli.quiet {
             eprintln!("error: {}", e);
         }
-        std::process::exit(1);
+        // Distinguish error categories via exit code for scripting use.
+        // 通过退出码区分错误类型，便于脚本使用。
+        let code = if e.starts_with("parse error") {
+            2
+        } else if e.starts_with("type error") {
+            3
+        } else if e.starts_with("eval error") || e.starts_with("runtime error") {
+            4
+        } else {
+            1 // I/O, config, unknown errors
+        };
+        std::process::exit(code);
     }
 }

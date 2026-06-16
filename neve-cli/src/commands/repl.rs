@@ -233,7 +233,11 @@ pub fn run() -> Result<(), String> {
                             }
                             let dir_path = parts[1..].join(" ");
                             match std::env::set_current_dir(&dir_path) {
-                                Ok(()) => println!("Changed to {}", dir_path),
+                                Ok(()) => {
+                                    println!("Changed to {}", dir_path);
+                                    // Rebase semantic state so module resolution uses new root.
+                                    semantic_state.rebase_root(&dir_path);
+                                }
                                 Err(e) => println!("Error: {e}"),
                             }
                             input_buffer.clear();

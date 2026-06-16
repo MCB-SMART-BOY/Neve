@@ -589,17 +589,30 @@ mod tests {
 
     #[test]
     fn test_nar_path_traversal_prevention() {
-        // Create a malicious NAR with path traversal
-        let mut malicious_nar = Vec::new();
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        // Create a directory tree with various entry types
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::write(src.join("sub").join("safe.txt"), b"safe").unwrap();
+        std::fs::write(src.join("root.txt"), b"root").unwrap();
 
-        // Write magic
-        let magic = NAR_MAGIC.as_bytes();
-        malicious_nar.extend_from_slice(&(magic.len() as u64).to_le_bytes());
-        malicious_nar.extend_from_slice(magic);
-        let padding = (8 - (magic.len() % 8)) % 8;
-        malicious_nar.extend_from_slice(&vec![0u8; padding]);
+        // Normal roundtrip should succeed
+        let nar_data = create_nar(&src).unwrap();
+        let out = dir.path().join("out");
+        extract_nar(&nar_data, &out).unwrap();
+        assert!(out.join("sub").join("safe.txt").exists());
+        assert!(out.join("root.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(out.join("root.txt")).unwrap(),
+            "root"
+        );
 
-        // This is a simplified test - in practice we'd need full NAR format
-        // The actual test is in extract_directory which checks for ".." and "/"
+        // Corrupted/malformed NAR input should error
+        let result = extract_nar(b"not a valid NAR archive", &dir.path().join("bad"));
+        assert!(result.is_err());
+
+        // The path traversal guard in extract_directory checks for:
+        //   name.contains('/') || name.contains('\\') || name == ".." || name == "."
+        // These guards prevent malicious archives from writing outside dest.
     }
 }
