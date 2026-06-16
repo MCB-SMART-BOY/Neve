@@ -283,7 +283,7 @@ impl TraitResolver {
 
     /// Convert a type (representing a trait bound) to a TraitBound.
     /// 将类型（表示特征约束）转换为 TraitBound。
-    fn ty_to_trait_bound(&self, ty: &Ty) -> Option<TraitBound> {
+    pub(crate) fn ty_to_trait_bound(&self, ty: &Ty) -> Option<TraitBound> {
         self.resolve_trait_ref(ty).map(|trait_ref| TraitBound {
             trait_id: trait_ref.trait_id,
             args: trait_ref.args,

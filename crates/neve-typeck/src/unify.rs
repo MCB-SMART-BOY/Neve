@@ -378,28 +378,35 @@ pub fn occurs_check(var: u32, ty: &Ty) -> bool {
 }
 
 /// Instantiate a polymorphic type by replacing type parameters with fresh variables.
-/// 实例化多态类型，用新的类型变量替换类型参数。
-pub fn instantiate(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> Ty {
+/// Returns (instantiated_type, param_to_fresh_var_mapping) where the mapping is from
+/// generic parameter index to the fresh type variable created for it.
+/// 实例化多态类型，返回（实例化类型，参数到新变量的映射）。
+pub fn instantiate_with_map(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> (Ty, Vec<Ty>) {
     match &ty.kind {
         TyKind::Forall(params, body) => {
             let mut subst = Substitution::new();
+            let mut fresh_vars = Vec::with_capacity(params.len());
             for (idx, param_name) in params.iter().enumerate() {
-                // generalize() produces param names like "t0", "t1" whose suffix
-                // matches the numeric var ID inside TyKind::Var nodes in the body.
+                let fv = fresh_var();
+                fresh_vars.push(fv.clone());
                 if let Some(var_id_str) = param_name.strip_prefix('t')
                     && let Ok(var_id) = var_id_str.parse::<u32>()
                 {
-                    subst.extend(var_id, fresh_var());
+                    subst.extend(var_id, fv);
                     continue;
                 }
-                // Explicit generics use custom names (e.g. "T").  Fall back to
-                // positional binding via TyKind::Param nodes.
-                subst.bind_param(idx as u32, fresh_var());
+                subst.bind_param(idx as u32, fv);
             }
-            subst.apply(body)
+            (subst.apply(body), fresh_vars)
         }
-        _ => ty.clone(),
+        _ => (ty.clone(), Vec::new()),
     }
+}
+
+/// Instantiate a polymorphic type by replacing type parameters with fresh variables.
+/// 实例化多态类型，用新的类型变量替换类型参数。
+pub fn instantiate(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> Ty {
+    instantiate_with_map(ty, fresh_var).0
 }
 
 /// Generalize a type by wrapping free type variables in Forall.

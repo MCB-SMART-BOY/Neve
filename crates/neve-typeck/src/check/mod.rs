@@ -16,8 +16,12 @@ use crate::errors::{
 };
 use crate::infer::InferContext;
 use crate::pattern_analysis::{PatternAnalysisContext, analyze_match};
-use crate::traits::{ImplId, ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
-use crate::unify::{Substitution, free_type_vars, generalize, instantiate, occurs_check, unify};
+use crate::traits::{
+    ImplId, ImplInfo, TraitBound, TraitConstraint, TraitId, TraitInfo, TraitResolver,
+};
+use crate::unify::{
+    Substitution, free_type_vars, generalize, instantiate_with_map, occurs_check, unify,
+};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{
@@ -143,6 +147,13 @@ pub struct TypeChecker {
     /// Trait resolver for trait/impl handling.
     /// 用于处理 trait/impl 的特征解析器。
     trait_resolver: TraitResolver,
+    /// Pending trait constraints to verify at end of type checking.
+    /// 待验证的特征约束（在类型检查结束时验证）。
+    pending_trait_constraints: Vec<TraitConstraint>,
+    /// Generic parameter trait bounds for polymorphic functions.
+    /// Key: DefId → (param_index, TraitBound).
+    /// 多态函数的泛型参数特征约束。键：DefId → (参数索引, TraitBound)。
+    fn_bounds: HashMap<DefId, Vec<(u32, TraitBound)>>,
     /// Map from def_id to trait_id.
     /// 定义 ID 到特征 ID 的映射。
     trait_ids: HashMap<DefId, TraitId>,
@@ -202,6 +213,8 @@ impl TypeChecker {
             in_effectful_fn: false,
             effectful_functions: HashSet::new(),
             global_names: HashMap::new(),
+            pending_trait_constraints: Vec::new(),
+            fn_bounds: HashMap::new(),
         }
     }
 
@@ -260,6 +273,12 @@ impl TypeChecker {
         for item in &module.items {
             self.check_item(item);
         }
+
+        // Fourth pass: verify deferred trait bound constraints.
+        // By now, type variables should be unified, so the actual types
+        // are known and we can check trait impls against them.
+        // 第四遍：验证延迟的特征约束。此时类型变量应该已经统一化。
+        self.check_trait_bounds();
     }
 
     /// Check all registered impls for completeness.
@@ -985,6 +1004,56 @@ impl TypeChecker {
     /// 借用所有已记录的表达式类型（规范化前）。
     pub fn expr_types_ref(&self) -> &HashMap<Span, Ty> {
         &self.expr_types
+    }
+
+    /// Check all deferred trait bound constraints.
+    /// For each constraint, verify the (now-unified) type implements the trait.
+    /// Emit diagnostics for unsatisfied constraints.
+    /// 检查所有延迟的特征约束。验证（已统一化的）类型是否实现了特征。
+    fn check_trait_bounds(&mut self) {
+        for constraint in std::mem::take(&mut self.pending_trait_constraints) {
+            // Apply substitution to resolve any remaining type variables.
+            let concrete_ty = self.apply(&constraint.ty);
+            // Skip checking if the type is still a variable (unresolved) or unknown.
+            if matches!(&concrete_ty.kind, TyKind::Var(_) | TyKind::Unknown) {
+                continue;
+            }
+            // Check if the concrete type implements the trait.
+            if self
+                .trait_resolver
+                .find_trait_impl(constraint.bound.trait_id, &concrete_ty)
+                .is_none()
+            {
+                let trait_name = self
+                    .trait_resolver
+                    .get_trait(constraint.bound.trait_id)
+                    .map(|info| info.name.clone())
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                self.error(
+                    constraint.span,
+                    format!(
+                        "type `{}` does not implement trait `{trait_name}`",
+                        format_type(&concrete_ty)
+                    ),
+                );
+            }
+        }
+    }
+
+    /// Collect trait bounds from a function's generic parameters for later enforcement.
+    /// 收集函数泛型参数的特征约束以供后续检查。
+    fn collect_fn_bounds(&mut self, def_id: DefId, fn_def: &neve_hir::FnDef) {
+        let mut bounds = Vec::new();
+        for (idx, param) in fn_def.generics.iter().enumerate() {
+            for bound_ty in &param.bounds {
+                if let Some(bound) = self.trait_resolver.ty_to_trait_bound(bound_ty) {
+                    bounds.push((idx as u32, bound));
+                }
+            }
+        }
+        if !bounds.is_empty() {
+            self.fn_bounds.insert(def_id, bounds);
+        }
     }
 
     fn format_trait_bound(&self, bound: &TraitBound) -> String {
@@ -1968,6 +2037,8 @@ impl TypeChecker {
                     let fn_ty = self.fn_signature(fn_def);
                     self.globals.insert(item.id, fn_ty);
                 }
+                // Collect trait bounds on generic parameters for later enforcement.
+                self.collect_fn_bounds(item.id, fn_def);
             }
             ItemKind::Expr(_) => {}
             ItemKind::Trait(trait_def) => {
@@ -2732,8 +2803,23 @@ impl TypeChecker {
 
             ExprKind::Global(def_id) => {
                 if let Some(ty) = self.globals.get(def_id).cloned() {
-                    // Instantiate polymorphic types with fresh type variables
-                    instantiate(&ty, &mut || self.fresh_var())
+                    // Instantiate polymorphic types with fresh type variables,
+                    // tracking the mapping from generic params to fresh vars.
+                    let (inst_ty, fresh_vars) = instantiate_with_map(&ty, &mut || self.fresh_var());
+                    // If this function has trait bounds on its generic parameters,
+                    // record constraints to be checked after unification completes.
+                    if let Some(bounds) = self.fn_bounds.get(def_id) {
+                        for (param_idx, bound) in bounds {
+                            if let Some(fv) = fresh_vars.get(*param_idx as usize) {
+                                self.pending_trait_constraints.push(TraitConstraint {
+                                    ty: fv.clone(),
+                                    bound: bound.clone(),
+                                    span,
+                                });
+                            }
+                        }
+                    }
+                    inst_ty
                 } else if def_id.0 == u32::MAX {
                     let msg = self.suggest_global_name(span, None);
                     self.error(span, msg);
