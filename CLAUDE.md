@@ -45,7 +45,7 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 ## Key Rules
 
 - **Code is truth.** Skills in `.claude/skills/` must match actual code. Run `.claude/hooks/verify-skills.sh` after API changes.
-- **Canonical pipeline only.** Do not introduce new AST fallback paths. `neve_eval::compat::AstEvaluator` is `#[deprecated]` — removal target v4.0.
+- **Canonical pipeline only.** Do not introduce new AST fallback paths. AST compat path (`neve_eval::compat`) has been removed in v4.0.
 - **Every effectful builtin** needs: typeck entry + frontend wire-up + HIR eval + REPL `:type` + LSP hover + E2E parity. Update `is_effectful_builtin()` in `neve-std`.
 - **Match must be exhaustive.** Use `if-else` for non-exhaustive conditions.
 - **Conventional Commits:** `feat(scope):`, `fix(scope):`, `docs:`, `refactor:`, `release:`.
@@ -62,4 +62,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v3.18.0. 537 E2E tests (525 pass + 12 documented gap markers). 20 LSP methods. 14 Stream<T> APIs. Audit grade A- (22/30 fixed). Next: Phase B — close 12 E2E gaps.
+v3.19.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade A- (22/30 fixed). Phase B complete, Phase D complete. Next: A2 cache.rs error handling, Phase C docs.

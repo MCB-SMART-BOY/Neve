@@ -25,7 +25,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - **Keyword simplification: 17 → 12**: `then` replaced by `->` arrow, `as` replaced by `=` in imports, `lazy` replaced by `~` prefix, `effect` made optional (auto-inferred), `pub` removed (all public by default). Legacy keywords still accepted for backward compatibility.
-- **Phase B gap closure: 11/12**: 11 of 12 E2E gap tests now pass. Remaining: B9 (impl method dispatch).
+- **Phase B gap closure: 12/12**: All 12 E2E gap tests now pass. Phase B complete.
 - **Generic identity inference**: Functions without explicit generics (`id = |x| x`) now get polymorphic types via `generalize` + `instantiate` fix.
 
 ### Fixed

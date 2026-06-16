@@ -1788,7 +1788,6 @@ fn test_parse_import_glob() {
 }
 
 #[test]
-// TODO: crate:: import prefix not yet implemented in parser
 fn test_parse_import_crate() {
     let (file, diags) = parse("import crate.utils;");
     assert!(diags.is_empty());
@@ -1814,7 +1813,6 @@ fn test_parse_generic_multiple_bounds() {
 // --- Comments (multi-line) ---
 
 #[test]
-// TODO: multi-line -- ... -- comments not yet supported by lexer
 fn test_parse_multiline_comment() {
     let (file, diags) = parse("let x = 1; -- -- block comment -- --\nlet y = 2;");
     assert!(diags.is_empty());

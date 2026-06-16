@@ -70,8 +70,9 @@ peek_char()
     └── ...
 ```
 
-### Known gap: `\u{...}` escapes
-Unicode escapes in char/string literals not yet supported. Tracked as `#[ignore]` test at `tests/parser.rs:1620`.
+### Resolved gaps
+- Unicode `\u{...}` escapes: ✅ Done (v3.18)
+- Shebang handling: ⚠️ Handled by CLI, not parser (tracked at `tests/parser.rs:1829`)
 
 ## Parser Design (neve-parser)
 
@@ -177,4 +178,4 @@ pub enum ExprKind {
 
 - **Golden tests**: Parse source, compare formatted AST output to `.txt` baseline
 - **Integration tests**: `tests/parser.rs` — 220+ tests covering all syntax forms
-- **Remaining gaps (2)**: Unicode `\u{...}` in chars, shebang at parser level
+- **Remaining gap**: Shebang at parser level (handled by CLI; tracked as `#[ignore]`)

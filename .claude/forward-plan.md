@@ -12,8 +12,8 @@ Audit: 22/30 fixed (73%)  |  Keywords: 12 (v4.0)  |  Phase B: ✅ complete
 
 | # | Criterion | Status |
 |---|-----------|--------|
-| 1 | AST compat path fully removed | Not started — AstEvaluator still used in 5 files |
-| 2 | All 6 implementation gaps closed | 2/6 remain (unicode char, shebang parser) |
+| 1 | AST compat path fully removed | ✅ Done (2026-06-16) — ast_eval.rs deleted |
+| 2 | All 6 implementation gaps closed | 1/6 remain (shebang parser handled by CLI) |
 | 3 | Lean axioms closed | 3 axioms blocked on Lean 4.29+ |
 | 4 | Release policy stable for 2+ minor versions | ✅ v3.18 → v3.19 → v3.20 |
 | 5 | External contribution policy published | Not started (Q7) |
@@ -58,7 +58,7 @@ The 12 gaps, ordered by impact:
 | B11 | List comprehension HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
 | B12 | Match Option HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
 
-**Phase B deliverables**: 10/12 gap tests un-ignored. 2 remaining: B5 (polymorphism) + B9 (impl dispatch). E2E: 537 → 541 tests.
+**Phase B deliverables**: 12/12 gap tests un-ignored. Phase B complete (2026-06-16). E2E: 539 pass, 2 flaky, 0 ignored.
 
 ### Phase C: Ecosystem Readiness (2-4 weeks, parallel with B)
 

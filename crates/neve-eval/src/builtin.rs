@@ -1304,7 +1304,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
         ),
         // === Higher-order functions ===
         // These builtins require evaluator access and are intercepted by evaluator-owned
-        // builtin dispatch in both HIR and AST compatibility evaluators.
+        // builtin dispatch in the HIR evaluator.
         (
             "map",
             Value::Builtin(BuiltinFn {

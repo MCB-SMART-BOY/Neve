@@ -3,29 +3,24 @@
 ## Architecture
 
 ```
-                    ┌───────────────────┐
-                    │   Typed HIR Module │ ← from neve-typeck
-                    └─────────┬─────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-              ▼                               ▼
-┌──────────────────────────┐  ┌──────────────────────────┐
-│  HIR Evaluator           │  │  AST Compat Evaluator     │
-│  (eval.rs) CANONICAL     │  │  (ast_eval.rs) DEPRECATED │
-│                          │  │                          │
-│  eval_module()           │  │  eval_module()            │
-│  eval_expr()             │  │  eval_expr()              │
-│  eval_call()             │  │  eval_call()              │
-│  force() — lazy thunk    │  │  force() — lazy thunk     │
-│  perform_effect()        │  │  perform_effect()         │
-│                          │  │                          │
-│  ✅ Use for all new code │  │  #[deprecated] ← v4.0    │
-└──────────────────────────┘  └──────────────────────────┘
+   ┌───────────────────┐
+   │ Typed HIR Module  │ ← from neve-typeck
+   └─────────┬─────────┘
+             │
+             ▼
+   ┌──────────────────────────┐
+   │  HIR Evaluator (eval.rs) │
+   │                          │
+   │  eval_module()           │
+   │  eval_expr()             │
+   │  eval_call()             │
+   │  force() — lazy thunk    │
+   │  perform_effect()        │
+   └──────────┬───────────────┘
               │
               ▼
        ┌─────────────┐
-       │   Value     │  ← shared between both evaluators
+       │   Value     │
        │   (value.rs)│
        └─────────────┘
 ```
@@ -72,7 +67,7 @@ pub enum ThunkState {
 ## Lazy Evaluation Flow
 
 ```
-let x = lazy expensive_computation
+let x = ~expensive_computation
 //
 // x is Value::Thunk(Pending(expr, env))
 //
@@ -169,17 +164,6 @@ impl Evaluator {
 }
 ```
 
-## Dual Evaluator Architecture
-
-| Aspect | HIR Evaluator (canonical) | AST Compat (deprecated) |
-|--------|--------------------------|------------------------|
-| Input | TypedHIR (typed, resolved) | AST (raw, unresolved) |
-| Names | DefId (integer lookup) | String (hashmap lookup) |
-| Types | Pre-computed by typeck | Runtime type checking |
-| Effects | Explicit effect dispatch | Inline effect handling |
-| Module loading | Module graph (via frontend) | Own ModuleLoader |
-| Status | **Primary** ✅ | **Deprecated** (v4.0 removal) |
-
 ## Memory & Performance
 
 - **Thunks**: Memoized on first force; no re-evaluation
@@ -202,12 +186,11 @@ impl Evaluator {
 | File | What |
 |------|------|
 | `eval/src/eval.rs` | HIR evaluator — `Evaluator`, `eval_module`, `eval_expr`, `force` |
-| `eval/src/ast_eval.rs` | **Deprecated** AST compat evaluator — `AstEvaluator`, `AstEnv` |
-| `eval/src/value.rs` | Value types + `ThunkState` + `Closure` + `AstClosure` |
+| `eval/src/value.rs` | Value types + `ThunkState` + `Closure` |
 | `eval/src/env.rs` | `Environment` — scoped variable lookup with parent chain |
 | `eval/src/pattern.rs` | Pattern analysis — specificity, irrefutability, match hints |
 | `eval/src/builtin.rs` | Built-in function registry |
-| `eval/src/lib.rs` | Crate root + `compat` module re-exports |
+| `eval/src/lib.rs` | Crate root + public API re-exports |
 
 ## Error Types
 
