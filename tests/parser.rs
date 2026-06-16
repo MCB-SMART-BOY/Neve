@@ -1535,11 +1535,12 @@ fn test_pipeline_heavy() {
 
 #[test]
 fn test_parse_fn_with_effect() {
-    let (file, diags) = parse("fn read() -> String = io.readFile(\"/x\");");
+    // effect keyword is auto-inferred in v4.0; parser still accepts legacy `effect` keyword
+    let (file, diags) = parse("fn read() -> String effect = io.readFile(\"/x\");");
     assert!(diags.is_empty(), "unexpected parse errors: {:?}", diags);
     assert_eq!(file.items.len(), 1);
     match &file.items[0].kind {
-        neve_syntax::ItemKind::Fn(def) => assert!(def.effect, "expected effect=true"),
+        neve_syntax::ItemKind::Fn(def) => assert!(def.effect, "expected effect=true with legacy keyword"),
         _ => panic!("expected Fn item"),
     }
 }

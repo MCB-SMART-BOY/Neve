@@ -572,9 +572,11 @@ fn test_typeck_std_math_function_remains_inference_hole_outside_explicit_surface
         .global_type(def_id)
         .expect("global type should exist");
     let rendered = format_type(&ty);
+    // With v4.0 function-level generalization, the inference hole is wrapped in Forall.
+    // This is correct: `value` has a polymorphic type that can be instantiated later.
     assert!(
-        rendered.starts_with('?'),
-        "expected math.abs result to remain an inference hole, got {rendered}",
+        rendered.contains('?'),
+        "expected math.abs result to contain an inference hole, got {rendered}",
     );
 }
 
