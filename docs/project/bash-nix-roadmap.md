@@ -97,7 +97,7 @@ Phase 2 (completed: v3.12-v3.17)
   └─ 脚本体验：chmod/symlink/tempDir/walk/参数解析
      耗时：3-4 轮
 
-Phase 3 (in progress: v3.18-v4.0)
+Phase 3 (in progress: v3.19-v4.0)
   └─ 构建系统：derivation 语法、并行、缓存
      耗时：4-5 轮
 

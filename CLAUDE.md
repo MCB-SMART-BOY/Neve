@@ -62,4 +62,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v3.19.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade B+ (28/62 fixed, see .claude/audit-report.md). Phase B complete, Phase D complete. Next: C6 formatter comments, H5 enum generics
+v3.19.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade B+ (31/62 fixed, see .claude/audit-report.md). Phase B complete, Phase D complete. Next: C6 formatter comments, H5 enum generics

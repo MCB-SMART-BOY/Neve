@@ -25,12 +25,28 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - **Keyword simplification: 17 → 12**: `then` replaced by `->` arrow, `as` replaced by `=` in imports, `lazy` replaced by `~` prefix, `effect` made optional (auto-inferred), `pub` removed (all public by default). Legacy keywords still accepted for backward compatibility.
+- **Phase D complete**: AST compatibility path (`ast_eval.rs`, `AstClosure`, `AstEnv`) fully removed (~3500 lines). All evaluation goes through canonical HIR pipeline.
 - **Phase B gap closure: 12/12**: All 12 E2E gap tests now pass. Phase B complete.
 - **Generic identity inference**: Functions without explicit generics (`id = |x| x`) now get polymorphic types via `generalize` + `instantiate` fix.
+- **Dependency cleanup**: Removed 6 unused crate dependencies. Normalized workspace references for tar, flate2, xz2, tempfile, nix.
 
 ### Fixed
 - **Parser**: v3.0 bare enum pipe syntax (`type Foo = | Red | Green | Blue`) now supported.
 - **Typeck**: Multi-call-site polymorphism via `instantiate` fix for `generalize`-generated `Forall` types.
+- **Typeck**: `types_match` now compares type arguments (fixes `List[Int]` == `List[String]` in impl lookup).
+- **Typeck**: Occurs check added to dynamic/safe record field constraints (infinite type prevention).
+- **Typeck**: Trait bounds on generic parameters now enforced at call sites via deferred constraint checking.
+- **Typeck**: Duplicate global definition detection (`defined_names` HashSet).
+- **Eval**: Mutex poisoning no longer cascades (44 `.lock().unwrap()` → `.unwrap_or_else(|e| e.into_inner())`).
+- **Eval**: Recursion depth limit (10,000) with RAII guard for non-tail calls.
+- **CLI**: `fmt.rs` UTF-8 path panic fixed (`to_str().unwrap()` → `to_string_lossy()`).
+- **CLI**: Error messages include diagnostic counts.
+- **CLI**: Error exit codes differentiated: 2=parse, 3=type, 4=eval/runtime, 1=other.
+- **REPL**: `:cd` now rebases semantic state for correct module resolution.
+- **API**: 12 types sealed (`pub` → `pub(crate)`/private); `CacheStats` renamed to `HirCacheStats`.
+- **reqwest**: TLS feature restored (was overwritten by crate-level `features = ["blocking"]`).
+- **NAR**: Path traversal test replaced with proper roundtrip test.
+- **Docs**: 20+ files synchronized to v4.0/v3.19.0 syntax and current state.
 
 ## [3.18.0] - 2026-05-27
 
