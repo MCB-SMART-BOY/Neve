@@ -61,7 +61,7 @@ fix(ci): correct script paths          # Bug fix
 docs: update changelog                 # Documentation
 refactor(typeck): simplify unification # Refactor
 style(fmt): trailing commas            # Style only
-release: bump version to 3.18.0        # Release
+release: bump version to 3.19.0        # Release
 ```
 
 ## Feature Addition Checklist
@@ -83,7 +83,7 @@ Every new effectful builtin:
 |----------|------|-----|
 | HIR as canonical pipeline | v1.2 | Single semantic truth, no AST/HIR divergence |
 | `neve-frontend` as facade | v1.2 | Share analysis across CLI + LSP + REPL |
-| `neve_eval::compat` deprecated | v3.18 | Clear migration path to HIR evaluator |
+| AST compat path removed | v4.0 | HIR evaluator is the only path |
 | SemVer-hybrid release | v3.18 | Rapid evolution with clear deprecation lifecycle |
 | `match` must be exhaustive | v3.18 | Compiler-grade safety; if-else for non-exhaustive |
 
@@ -91,7 +91,7 @@ Every new effectful builtin:
 
 | Phase | Status | Key Deliverable |
 |-------|--------|----------------|
-| Phase 6 (Syntax v3.0) | ✅ | 21→9 keywords, `{}` containers |
+| Syntax v4.0 | ✅ | 12 keywords, `if->`, `use=`, `~expr`, effect auto |
 | Phase 5 (Ecosystem) | 🔄 95% | Flake/lock/store, Registry v1 |
 | Phase 4 (Shell) | ✅ | Stream<T> 14 APIs, Task, TTY |
 | Phase 3 (Runtime) | ✅ | Path/Bytes/Command/ProcessResult |

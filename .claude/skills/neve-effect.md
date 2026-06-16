@@ -121,7 +121,7 @@ neve check --allow-effects     # Permissive mode — allows effects
 |------|------|
 | `typeck/src/effects.rs` | Effect inference in type checker |
 | `eval/src/eval.rs` → `handle_effect()` | Effect dispatch in HIR evaluator |
-| `eval/src/ast_eval.rs` → effect handling | Effect dispatch in AST compat (deprecated) |
+
 | `std/src/lib.rs` → `is_effectful_builtin()` | Canonical effect classification |
 | `std/src/io/mod.rs` | I/O effect implementations |
 | `cli/src/commands/check.rs` | `neve check` purity enforcement |

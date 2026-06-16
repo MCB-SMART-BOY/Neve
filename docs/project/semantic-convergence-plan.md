@@ -378,13 +378,13 @@ The main semantic artifacts should converge toward:
 
 ### D-027: AST evaluator downgrade should start with a repo-wide `compat` namespace migration
 
-- The first `PR-009` batch should introduce `neve_eval::compat::AstEvaluator` as the preferred internal path.
+- AST compat path removed in v4.0 — canonical pipeline uses HIR evaluator.
 - Repository-internal AST evaluator consumers should migrate to the `compat` namespace before the legacy top-level re-export is removed.
 - This batch should avoid semantic changes; it only narrows the public identity of the AST path and makes its compatibility role explicit in code and docs.
 
 ### D-028: Legacy top-level AST evaluator re-exports can remain temporarily, but should be hidden from primary docs after internal migration
 
-- After internal consumers move to `neve_eval::compat`, the legacy top-level `AstEvaluator` / `AstEnv` re-exports may stay temporarily for compatibility.
+- Legacy AST compat paths have been fully removed in v4.0.
 - While they remain, they should be treated as legacy escape hatches rather than primary documented APIs.
 
 ### D-029: Runtime builtin convergence should target canonical frontend-visible entrypoints first
@@ -395,7 +395,7 @@ The main semantic artifacts should converge toward:
 
 ### D-030: Legacy top-level AST evaluator re-exports should be removed once repository-internal consumers finish migrating
 
-- After repository-internal callers use `neve_eval::compat`, the hidden top-level `AstEvaluator` / `AstEnv` re-exports should be deleted rather than kept indefinitely.
+- AST compat paths fully deleted in v4.0.
 - `neve-std` and other internal crates should treat `compat` as the only public AST-compat namespace.
 - Any future AST-compat use must remain explicit at the import site as well as at the command/backend layer.
 
@@ -447,7 +447,7 @@ The main semantic artifacts should converge toward:
 - Because of that, the first `PR-010` slice should not try to replace the config-module graph with the frontend/module-loader graph in one step.
 - The mainline migration target for this slice is narrower:
   - keep config-owned recursive import loading based on evaluated `imports`
-  - replace per-file `AstEvaluator` execution with canonical frontend/HIR analysis + HIR evaluation
+  - AST compat removed — all evaluation via canonical frontend/HIR pipeline
   - let `neve-config` focus on translating the evaluated record into `Module` / `SystemConfig`
 - Once this per-file semantic authority is moved to frontend/HIR, follow-up slices can decide whether config imports should later be modeled on top of typed runtime objects or a dedicated platform graph.
 

@@ -16,7 +16,7 @@
 
 </div>
 
-**当前状态**: Phase 6 (Syntax Overhaul v3.0) 已完成 ✅ — v3.18.0, E2E 450 测试, Formatter 幂等性 37/37, Stream<T> 14 APIs ✅, LSP 20 methods ✅。Phase 5 (生态补完) 进行中 🔄 (~95% 完成)。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
+**当前状态**: v4.0 语法 — v3.19.0, E2E 541 测试, 12 规范关键字, Formatter 幂等性 37/37, Stream<T> 14 APIs ✅, LSP 20 methods ✅, Phase B/D 完成 ✅, AST 兼容路径已移除。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
 
 Welcome to the Neve documentation hub. For **developer reference** (per-crate APIs,
 architecture, integration points), see `.claude/skills/` — one skill per crate,

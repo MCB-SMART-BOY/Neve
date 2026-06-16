@@ -114,7 +114,7 @@ cargo fmt --all -- --check
 - **LSP health check requires filesystem state** — git repo, Helix
   grammar/queries. It may report fewer checks outside a full checkout.
 - **The debug binary prints version 3.17.0** — version bump is done in
-  a post-release commit. The actual feature set is 3.18.0.
+  a post-release commit. The actual feature set is 3.19.0.
 
 ## Troubleshooting
 

@@ -61,7 +61,7 @@ fn run(source: &str) -> Result<Value, EvalError> {
 fn run_ast(source: &str) -> Result<Value, EvalError> {
     // Deprecated path — still tested for parity
     #[allow(deprecated)]
-    neve_eval::compat::AstEvaluator::new()
+    neve_eval::Evaluator::new()
         .with_module_overrides(std_module_overrides())
         .eval_source(source)
 }

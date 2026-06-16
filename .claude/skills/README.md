@@ -1,6 +1,6 @@
 # Neve Language Development Skills
 
-A comprehensive skill suite for developing the Neve functional programming language (v3.18.0).
+A comprehensive skill suite for developing the Neve functional programming language (v3.19.0).
 
 ## Available Skills
 
@@ -13,7 +13,7 @@ A comprehensive skill suite for developing the Neve functional programming langu
 | [neve-eval](neve-eval.md) | HIR tree-walking interpreter | neve-eval |
 | [neve-std](neve-std.md) | Standard library (I/O, Stream<T>, List) | neve-std |
 | [neve-lsp](neve-lsp.md) | Language Server Protocol | neve-lsp |
-| [neve-test](neve-test.md) | Testing strategy + 450 E2E tests | tests/ |
+| [neve-test](neve-test.md) | Testing strategy + 541 E2E tests | tests/ |
 | [neve-effect](neve-effect.md) | Effect system (EffectEval v4.3) | neve-typeck, neve-eval |
 | [neve-lean](neve-lean.md) | Formal verification (Lean 4) | formal/ |
 
@@ -76,7 +76,7 @@ Source Code (.neve)
 | `neve-hir` | High-level IR + name resolution |
 | `neve-typeck` | Hindley-Milner type inference + Traits |
 | `neve-frontend` | Pipeline facade (driver + session) |
-| `neve-eval` | HIR tree-walking interpreter + AST compat |
+| `neve-eval` | HIR tree-walking interpreter |
 | `neve-std` | Standard library (I/O, Stream<T>, collections) |
 | `neve-lsp` | Language Server Protocol (20 methods) |
 | `neve-fmt` | Code formatter (37/37 idempotency) |
@@ -89,7 +89,7 @@ Source Code (.neve)
 | `neve-config` | System configuration (generation-based) |
 | `neve-derive` | Derivation model + hashing |
 
-## Current Status (v3.18.0)
+## Current Status (v3.19.0)
 
 | Metric | Value |
 |--------|-------|
@@ -108,5 +108,5 @@ Source Code (.neve)
 - G2: Method dispatch is type-based; retain callable fallback
 - Match: `match` must be exhaustive; non-exhaustive → `if-else`
 - Lean: Continue full formal verification
-- AST: `#[deprecated]` on AstEvaluator/AstEnv → removal v4.0
+- AST: compat path removed in v4.0 — HIR evaluator is canonical
 - Release: SemVer-hybrid (see `docs/reference/stability.md`)

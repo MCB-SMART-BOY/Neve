@@ -37,7 +37,7 @@ Remaining issues are concentrated in error handling (unwrap/expect) and file siz
 | # | Issue | Location | Impact |
 |---|-------|----------|--------|
 | C4 | 12 ignored E2E gap tests | `tests/end_to_end.rs` | 12 features documented as missing |
-| C5 | Deprecated AstEvaluator still primary | 5 production files | 2,686 lines slated for v4.0 removal |
+| C5 | AstEvaluator removed | ✅ Done | 2,686 lines deleted in v4.0 |
 | C6 | 3 files >3000 lines | parser.rs, eval.rs, check/mod.rs | Unmaintainable monoliths |
 
 ### Medium

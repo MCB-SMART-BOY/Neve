@@ -48,7 +48,7 @@ Each module below includes its role, core types, and a good entry file.
 | `neve-parser` | Recursive descent parser with recovery | 递归下降解析器（含错误恢复） | `crates/neve-parser/src/parser.rs` |
 | `neve-hir` | Name resolution + HIR lowering | 名称解析与 HIR 降级 | `crates/neve-hir/src/resolve.rs` |
 | `neve-typeck` | HM inference + traits | HM 推断与 Trait 系统 | `crates/neve-typeck/src/check.rs` |
-| `neve-eval` | Tree-walk evaluator + lazy runtime | 树遍历求值器 + 惰性运行时 | `crates/neve-eval/src/eval.rs` |
+| `neve-eval` | Tree-walk evaluator + lazy runtime | 树遍历求值器 + 惰性运行时 | `crates/neve-eval/src/eval.rs` (canonical HIR evaluator) |
 | `neve-std` | Standard library modules | 标准库模块 | `crates/neve-std/src/lib.rs` |
 | `neve-frontend` | Frontend pipeline (parse → lower → typeck) | 前端管线（解析 → 降级 → 类型检查） | `crates/neve-frontend/src/lib.rs` |
 | `neve-diagnostic` | Diagnostics and ariadne rendering | 诊断与 ariadne 渲染 | `crates/neve-diagnostic/src/lib.rs` |
@@ -94,7 +94,7 @@ Key files: `crates/neve-typeck/src/check.rs`, `crates/neve-typeck/src/traits.rs`
 ### neve-eval / 求值器
 Tree-walking evaluator with lazy thunks and builtin primitives.
 树遍历求值器，带惰性 thunk 与内建原语。
-Key files: `crates/neve-eval/src/eval.rs`, `crates/neve-eval/src/value.rs`.
+Key files: `crates/neve-eval/src/eval.rs` (canonical HIR evaluator), `crates/neve-eval/src/value.rs`.
 
 ### neve-std / 标准库
 Neve standard library modules used by programs and tooling.
