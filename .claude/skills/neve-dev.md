@@ -11,7 +11,7 @@ neve-cli ──────┬── neve-frontend ───┬── neve-parse
                │
                ├── neve-lsp ──────── neve-frontend
                ├── neve-fmt ──────── neve-parser + neve-lexer
-               ├── neve-config ───── neve-eval (compat)
+               ├── neve-config ───── neve-eval
                ├── neve-builder ──── neve-store + neve-fetch + neve-derive
                └── neve-diagnostic ─ (all crates)
 ```
@@ -83,9 +83,9 @@ Every new effectful builtin:
 |----------|------|-----|
 | HIR as canonical pipeline | v1.2 | Single semantic truth, no AST/HIR divergence |
 | `neve-frontend` as facade | v1.2 | Share analysis across CLI + LSP + REPL |
-| AST compat path removed | v4.0 | HIR evaluator is the only path |
-| SemVer-hybrid release | v3.18 | Rapid evolution with clear deprecation lifecycle |
-| `match` must be exhaustive | v3.18 | Compiler-grade safety; if-else for non-exhaustive |
+| AST compat path removed | v4.0 (2026-06) | HIR evaluator is the only path; ~3500 lines deleted |
+| SemVer-hybrid release | v3.19 | Rapid evolution with clear deprecation lifecycle |
+| `match` must be exhaustive | v3.18+ | Compiler-grade safety; if-else for non-exhaustive |
 
 ## Project Status
 

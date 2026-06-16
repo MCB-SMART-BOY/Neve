@@ -11,7 +11,7 @@ From this point onward, implementation work for semantic convergence should read
 - State: **active** — Phase 4 (Shell Capability Replacement) 完成 ✅，Phase 5 进行中 🔄
 - Current phase: **Phase 5 — Ecosystem Completion**
 - Overall completion: **~95%**（语言核心）；系统脚本 **~60%**
-- Recent: EffectEval v4.3 (34 rules); Stream<T> Phase A-C complete (14 APIs); 440 E2E tests; io.cancel + io.awaitAny; TTY APIs (4); Job control (2); Type safety v18; BinOp 12/12; Bytes formalized; M-2 kill unified; CI bug hunter; Effect boundary doc v1.0; Pipeline |> AST=HIR=typeck parity; Phase 5 ecosystem: flake/lock/store/registry CLI
+- Recent: EffectEval v4.3 (34 rules); Stream<T> Phase A-C complete (14 APIs); 541 E2E tests; io.cancel + io.awaitAny; TTY APIs (4); Job control (2); Type safety v18; BinOp 12/12; Bytes formalized; M-2 kill unified; CI bug hunter; Effect boundary doc v1.0; Pipeline |> AST=HIR=typeck parity; Phase 5 ecosystem: flake/lock/store/registry CLI
 
 ### Decision Gate Status
 
@@ -27,7 +27,7 @@ From this point onward, implementation work for semantic convergence should read
 
 1. Stream<T> Phase A-C: 14 APIs complete ✅
 2. EffectEval v4.3 (34 rules): Phase C rules added ✅
-3. 端到端测试扩展（440 E2E tests）✅
+3. 端到端测试扩展（541 E2E tests）✅
 4. TTY raw mode 完整集成
 5. Phase 5 生态规划（确定性 lockfile、registry 元数据）
 
@@ -2314,7 +2314,7 @@ Track progress with concrete metrics rather than narrative only:
 
 - **Version**: 3.9.0
 - **Phase 4: Shell Capability Replacement — Complete** ✅
-- **E2E tests**: 440 (+124 from 316)
+- **E2E tests**: 541 (+225 from 316)
   - Stream Phase C integration: streamMap/streamFilter/streamTake/streamDrop/streamPipe
   - Job control: io.jobs/io.waitAnyJob
   - TTY: io.setRawMode/io.resetTerminal

@@ -12,8 +12,8 @@ Neve is a pure functional language for system configuration, built in Rust (edit
 cargo build -p neve                     # build CLI
 cargo check --workspace                 # fast validation
 cargo test --workspace                  # all tests
-cargo test --test end_to_end -- --nocapture  # 537 E2E tests
-cargo test --test parser                # 219 parser tests
+cargo test --test end_to_end -- --nocapture  # 541 E2E tests
+cargo test --test parser                # 220+ parser tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 .claude/skills/run-neve/driver.sh       # smoke-test all CLI paths
@@ -62,4 +62,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v3.19.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade A- (22/30 fixed). Phase B complete, Phase D complete. Next: A2 cache.rs error handling, Phase C docs.
+v3.19.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade B+ (28/62 fixed, see .claude/audit-report.md). Phase B complete, Phase D complete. Next: C6 formatter comments, H5 enum generics

@@ -71,7 +71,7 @@ peek_char()
 ```
 
 ### Resolved gaps
-- Unicode `\u{...}` escapes: ✅ Done (v3.18)
+- Unicode `\u{...}` escapes: ✅ Done (v3.18+)
 - Shebang handling: ⚠️ Handled by CLI, not parser (tracked at `tests/parser.rs:1829`)
 
 ## Parser Design (neve-parser)

@@ -4,7 +4,7 @@
 
 ```
            ┌──────────┐
-           │ E2E      │  450 tests — full pipeline smoke
+           │ E2E      │  541 tests — full pipeline smoke
            │ (smoke)  │  tests/end_to_end.rs
            ├──────────┤
            │ Inte-    │  ~600 tests — subsystem validation
@@ -38,8 +38,8 @@ mod tests {
 |-----------|-------------------|-------|
 | `tests/parser.rs` | Lexer + parser for all syntax forms | 220+ |
 | `tests/typeck.rs` | Type inference, traits, exhaustiveness | 287+ |
-| `tests/end_to_end.rs` | Full pipeline: parse→typeck→eval | 450 |
-| `tests/eval.rs` | AST compat evaluation path | ~50 |
+| `tests/end_to_end.rs` | Full pipeline: parse→typeck→eval | 541 |
+| `tests/eval.rs` | HIR evaluator unit tests | ~30 |
 | `tests/lsp_e2e.rs` | LSP protocol conformance | 8 |
 | `tests/syntax_policy.rs` | Semantic policy assertions | 4 |
 | `tests/std_root_imports.rs` | Stdlib import resolution | 3 |
@@ -62,12 +62,11 @@ fn run_ast(source: &str) -> Result<Value, EvalError> {
     // Deprecated path — still tested for parity
     #[allow(deprecated)]
     neve_eval::Evaluator::new()
-        .with_module_overrides(std_module_overrides())
         .eval_source(source)
 }
 ```
 
-## E2E Coverage (450 tests)
+## E2E Coverage (541 tests)
 
 | Category | Tests | Examples |
 |----------|-------|----------|
@@ -88,35 +87,6 @@ fn run_ast(source: &str) -> Result<Value, EvalError> {
 | Formatter | 37 | idempotency round-trips |
 | Shebang | 3+ | script entrypoints |
 
-## Differential Testing
-
-```
-Random expression generator
-       │
-       ├──→ HIR evaluator → Value A
-       │
-       └──→ AST evaluator → Value B
-                │
-                ▼
-          assert_eq!(A, B)   ← 300+ random tests (ALL MATCH)
-```
-
-## Bug Hunter
-
-```
-┌────────────────────────────────────────────┐
-│ Fuzzer — generates valid + invalid programs │
-│                                            │
-│ Tests:                                     │
-│  1. No crashes on malformed input          │
-│  2. Security boundaries (H-1, H-2, M-1,   │
-│     M-2, M-4) never violated               │
-│  3. Path sanitization holds                │
-│  4. Buffer limits enforced                 │
-└────────────────────────────────────────────┘
-```
-
-## Test Commands
 
 ```bash
 cargo test --workspace                     # Everything
@@ -126,7 +96,6 @@ cargo test --test typeck                   # Type checker only
 cargo test --test end_to_end -- --nocapture  # With output
 cargo test -p neve-parser                   # Crate unit tests
 ./scripts/test.sh --clippy                  # Pre-commit
-./scripts/test.sh --differential            # 300+ parity tests
 ./scripts/test.sh --bug-hunt                # Fuzzing
 ```
 
@@ -145,10 +114,10 @@ Implementation order:
 
 | File | What |
 |------|------|
-| `tests/end_to_end.rs` | 450 canonical pipeline tests |
+| `tests/end_to_end.rs` | 541 canonical pipeline tests |
 | `tests/parser.rs` | 220+ parser integration tests + golden tests |
 | `tests/typeck.rs` | 287+ type system tests |
-| `tests/eval.rs` | AST compat evaluation tests |
+| `tests/eval.rs` | HIR evaluator tests |
 | `tests/README.md` | Test policy — gap naming, divergence sentinels |
 | `scripts/test.sh` | Pre-commit pipeline |
 | `scripts/bug_hunt.py` | Fuzzing harness |

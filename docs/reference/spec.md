@@ -514,7 +514,7 @@ x.foo(y)
 
 
 ```neve
-pub add(x: Int, y: Int) -> Int = x + y
+add(x: Int, y: Int) -> Int = x + y
 
 use std.list
 use std.list (map, filter)
@@ -526,7 +526,7 @@ use crate.utils
 
 
 ```neve
-pub add(x: Int, y: Int) -> Int = x + y
+add(x: Int, y: Int) -> Int = x + y
 
 use std.list
 use std.list (map, filter)
@@ -621,12 +621,12 @@ in the current parser or runtime. Tracked as `#[ignore]` golden tests in
 
 | Gap | Status | Issue |
 |-----|--------|-------|
-| Unicode `\u{...}` in char literals | ✅ Done | Resolved (v3.18), lexer supports `\u{XXXXXX}` |
+| Unicode `\u{...}` in char literals | ✅ Done | Resolved (v3.18+), lexer supports `\u{XXXXXX}` |
 | `effect` on impl methods | ⚠️ Syntax | Syntax clarification needed |
 | `crate::` import prefix | ✅ Done | Resolved (v3.5), parser supports `crate.path` |
 | Multi-line `-- ... --` comments | ✅ Done | Resolved (v3.5), lexer supports `-- -- open -- -- close` |
 | Shebang stripping | ⚠️ CLI | Handled by CLI, not parser |
-| Tuple index `t.0` | ✅ Done | Resolved (v3.18), parser + lowering + typeck + eval support |
+| Tuple index `t.0` | ✅ Done | Resolved (v3.18+), parser + lowering + typeck + eval support |
 
 ---
 

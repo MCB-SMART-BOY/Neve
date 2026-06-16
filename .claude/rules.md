@@ -56,7 +56,7 @@ Every claim in a skill file must be checkable against the codebase:
 - "Key file: `typeck/src/infer.rs`" → the file must exist
 - "20 LSP methods" → grep for handler functions must return ~20
 - "EffectEval v4.3 (34 rules)" → the Lean file must declare 34 rules
-- "537 E2E tests" → grep `#[test]` in `tests/end_to_end.rs` must return 537
+- "541 E2E tests" → grep `#[test]` in `tests/end_to_end.rs` must return 537
 
 Claims that can't be verified are speculation. Remove them.
 

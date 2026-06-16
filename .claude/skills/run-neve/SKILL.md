@@ -96,7 +96,7 @@ cargo run -p neve -- run file.neve
 
 ```bash
 cargo test --workspace                     # unit + integration
-cargo test --test end_to_end -- --nocapture  # 537 E2E tests
+cargo test --test end_to_end -- --nocapture  # 541 E2E tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
@@ -113,7 +113,7 @@ cargo fmt --all -- --check
   with indentation may need the tmux approach above.
 - **LSP health check requires filesystem state** — git repo, Helix
   grammar/queries. It may report fewer checks outside a full checkout.
-- **The debug binary prints version 3.17.0** — version bump is done in
+- **The debug binary prints version 3.19.0** — version bump is done in
   a post-release commit. The actual feature set is 3.19.0.
 
 ## Troubleshooting

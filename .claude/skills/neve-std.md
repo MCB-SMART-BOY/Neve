@@ -24,8 +24,6 @@ neve-std/src/lib.rs
     ├── bytes.rs        ← 7 operations (len/concat/fromString/fromList/...)
     ├── fmt.rs          ← Formatting helpers
     └── net.rs          ← Networking (scaffolded)
-```
-
 ## Effect Classification
 
 Every stdlib function is classified:
@@ -62,21 +60,6 @@ pub fn is_effectful_builtin(name: &str) -> bool {
         "fetch.url" | "fetch.git"
     )
 }
-```
-
-## Module Override Mechanism
-
-The stdlib is injected into the AST evaluator via `std_module_overrides()`:
-
-```rust
-pub fn std_module_overrides() -> HashMap<Vec<String>, Rc<AstEnv>> {
-    // Each stdlib module is pre-built as an AstEnv
-    // Key: module path segments (e.g., ["std", "list"])
-    // Value: pre-populated environment with function bindings
-}
-```
-
-## I/O — File Operations
 
 | Function | Input | Output | Effect |
 |----------|-------|--------|--------|
@@ -101,8 +84,6 @@ Command construction:
        ├── io.execCommand(cmd) → ProcessResult { code, stdout, stderr }
        ├── io.taskCommand(cmd) → Task<ProcessResult>
        └── io.execCommandStreaming(cmd) → Stream<String>
-```
-
 ## I/O — Task Lifecycle
 
 ```
@@ -118,8 +99,6 @@ io.taskCommand(cmd)
        │     ├── io.cancel(spawn_id)  → Unit
        │     └── io.awaitAny(tasks)   → ProcessResult (first to complete)
        └── io.awaitTasks(tasks)       → List<ProcessResult> (all complete)
-```
-
 ## Stream<T> — 14 APIs
 
 ```
@@ -130,30 +109,3 @@ streamLines(path)    streamFilter(s, p)   streamPipe(s, cmd)
 streamCommand(cmd)   streamTake(s, n)     streamForEach(s, f)
 streamBytes(path)    streamDrop(s, n)     streamFold(s, init, f)
                      streamWrite(s, path)
-```
-
-## AST Compatibility Bridge
-
-`neve-std` provides `std_module_overrides()` for the **deprecated** AST evaluator path. When the AST compat layer is removed in v4.0, this interface will be removed or replaced with an HIR-native module loading mechanism.
-
-## Integration Points
-
-| From | To | Data |
-|------|----|------|
-| neve-std | neve-eval | `std_module_overrides()` → maps module paths to pre-built `AstEnv`s |
-| neve-std | neve-typeck | `is_effectful_builtin()` → effect classification for type checker |
-| neve-std | all consumers | `Value`, `Command`, `ProcessResult` type definitions |
-
-## Key Files
-
-| File | What |
-|------|------|
-| `std/src/lib.rs` | Module declarations + `std_module_overrides()` + `is_effectful_builtin()` |
-| `std/src/io/mod.rs` | I/O builtins — files, processes, tasks, streams, TTY, signals |
-| `std/src/list.rs` | List operations |
-| `std/src/string.rs` | String operations |
-| `std/src/path.rs` | Path manipulation |
-| `std/src/option.rs` | Option type + operations |
-| `std/src/result.rs` | Result type + operations |
-| `std/src/math.rs` | Math operations + constants |
-| `std/src/bytes.rs` | Bytes type + operations |

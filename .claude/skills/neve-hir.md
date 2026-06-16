@@ -133,4 +133,4 @@ pub enum HIRExpr {
 
 - **Lowering fidelity**: Every pattern form must survive lowering without loss
 - **Lossy lowering is a bug**: If a construct degrades to wildcard, it must be fixed
-- **Module resolution**: Test self/super/crate/relative/absolute/`use as` paths
+- **Module resolution**: Test self/super/crate/relative/absolute/`use =` paths

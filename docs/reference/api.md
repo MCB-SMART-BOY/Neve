@@ -375,7 +375,7 @@ io.streamForEach(s: Stream<T>, f: T -> Unit) -> Unit
 io.streamFold(s: Stream<T>, init: A, f: A -> T -> A) -> A
 io.streamWithTimeout(s: Stream<T>, ms: Int) -> Stream<Option<T>>
 
--- Short I/O aliases (v3.18): read, write, exec, cmd, run, sh, env, pwd, home, ok, stdout, stderr, code, ls, exists
+-- Short I/O aliases (v3.19+): read, write, exec, cmd, run, sh, env, pwd, home, ok, stdout, stderr, code, ls, exists
 ```
 
 ## Bytes Module (std.bytes)

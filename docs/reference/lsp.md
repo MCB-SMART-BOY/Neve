@@ -41,9 +41,9 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/documentSymbol` | ✅ | Hierarchical symbol view |
 | `textDocument/semanticTokens/full` | ✅ | AST-based semantic tokens (10 types, 8 node kinds) |
 | `textDocument/inlayHint` | ✅ | Type inference hints for let bindings and function returns |
-| `textDocument/foldingRange` | ✅ | Code folding for functions, structs, enums, traits, impls |
+| `textDocument/foldingRange` | ✅ | Code folding for functions, types, traits, impls |
 | `textDocument/codeAction` | ✅ | Quick-fix diagnostics |
-| `textDocument/codeLens` | ✅ | Reference counts on functions, structs, and traits |
+| `textDocument/codeLens` | ✅ | Reference counts on functions, types, and traits |
 
 ### Workspace Features
 
@@ -122,7 +122,7 @@ When typing `expr.`, only methods applicable to the expression's inferred type a
 | 0 | `keyword` | Lexer keywords |
 | 1 | `variable` | Let bindings, use aliases, references |
 | 2 | `function` | fn_def, trait items, impl items |
-| 3 | `type` | struct, enum, trait, type alias names; enum variants |
+| 3 | `type` | type, trait, type alias names; enum variants |
 | 4 | `string` | String/char/path literals |
 | 5 | `number` | Int/float literals |
 | 6 | `comment` | Reserved for future lexer comment tokens |

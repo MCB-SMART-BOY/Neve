@@ -93,7 +93,7 @@ Source Code (.neve)
 
 | Metric | Value |
 |--------|-------|
-| Phase 6 (Syntax v3.0) | ✅ Complete |
+| Phase 6 (Syntax v4.0) | ✅ Complete |
 | Phase 4 (Shell) | ✅ Complete |
 | E2E Tests | 541 |
 | Formatter idempotency | 37/37 |

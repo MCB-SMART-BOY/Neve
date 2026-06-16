@@ -60,7 +60,7 @@ Create `hello.neve`:
 greet(name) = `Hello, {name}!`
 
 factorial(n) = {
-    if n <= 1 then 1
+    if n <= 1 -> 1
     else n * factorial(n - 1)
 }
 

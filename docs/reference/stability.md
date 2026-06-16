@@ -44,18 +44,14 @@ This document defines the stability guarantees for the Neve standard library (st
 | `last` | `(list: List a) -> Option a` | Last element |
 | `map` | `(f: a -> b, list: List a) -> List b` | Transform each element |
 | `filter` | `(f: a -> Bool, list: List a) -> List a` | Keep elements matching predicate |
-| `foldl` | `(f: b -> a -> b, init: b, list: List a) -> b` | Left fold |
-| `foldr` | `(f: a -> b -> b, init: b, list: List a) -> b` | Right fold |
+| `fold` | `(f: b -> a -> b, init: b, list: List a) -> b` | Left fold |
+| `foldRight` | `(f: a -> b -> b, init: b, list: List a) -> b` | Right fold |
 
 ### Type Introspection
 
 | API | Signature | Description |
 |-----|-----------|-------------|
 | `typeOf` | `(value: a) -> String` | Get runtime type name |
-| `isInt` | `(value: a) -> Bool` | Check if value is Int |
-| `isFloat` | `(value: a) -> Bool` | Check if value is Float |
-| `isBool` | `(value: a) -> Bool` | Check if value is Bool |
-| `isString` | `(value: a) -> Bool` | Check if value is String |
 
 ### Path Manipulation
 
@@ -78,7 +74,7 @@ This document defines the stability guarantees for the Neve standard library (st
 
 | API | Signature | Description |
 |-----|-----------|-------------|
-| `string.concat` | `(a: String, b: String) -> String` | Concatenate strings |
+| `string interpolation (+)` | `(a: String, b: String) -> String` | Concatenate strings |
 | `string.contains` | `(s: String, substr: String) -> Bool` | Check substring membership |
 | `string.split` | `(s: String, delim: String) -> List String` | Split string by delimiter |
 
@@ -88,7 +84,7 @@ This document defines the stability guarantees for the Neve standard library (st
 |-----|-----------|-------------|
 | `list.map` | `(f: a -> b, list: List a) -> List b` | Map over list |
 | `list.filter` | `(f: a -> Bool, list: List a) -> List a` | Filter list |
-| `list.foldl` | `(f: b -> a -> b, init: b, list: List a) -> b` | Left fold |
+| `list.fold` | `(f: b -> a -> b, init: b, list: List a) -> b` | Left fold |
 
 ### Basic Types
 
@@ -299,8 +295,8 @@ Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 | Version | Meaning | Breaking changes |
 |---------|---------|------------------|
 | **Major** (v3 → v4) | Semantic completeness milestone. Represents "the language is mature enough to consider stable." | Allowed, with documented migration paths. |
-| **Minor** (v3.18 → v3.19) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
-| **Patch** (v3.18.0 → v3.18.1) | Bug fix release. No new features. | Not allowed. |
+| **Minor** (v3.19 → v3.20) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
+| **Patch** (v3.19.0 → v3.19.1) | Bug fix release. No new features. | Not allowed. |
 
 ### Deprecation Policy / 废弃策略
 

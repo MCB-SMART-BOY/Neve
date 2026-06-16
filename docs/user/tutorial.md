@@ -282,7 +282,7 @@ isAdult(user) = match user {
 
 ```neve
 divide(a, b) = {
-    if b == 0 then Err("div by zero")
+    if b == 0 -> Err("div by zero")
     else Ok(a / b)
 }
 
@@ -331,7 +331,7 @@ isAdult(user) = match user {
 
 ```neve
 divide(a, b) = {
-    if b == 0 then Err("除以零了")
+    if b == 0 -> Err("除以零了")
     else Ok(a / b)
 }
 
@@ -428,7 +428,7 @@ print_all<T: Show>(items: List<T>) = {
 
 ```neve
 -- utils.neve
-pub add(x, y) = x + y
+add(x, y) = x + y
 helper() = 42  -- private
 ```
 
@@ -450,7 +450,7 @@ r = add(1, 2)
 
 ```neve
 -- utils.neve
-pub add(x, y) = x + y
+add(x, y) = x + y
 helper() = 42  -- 私有的
 ```
 

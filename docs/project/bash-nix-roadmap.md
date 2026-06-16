@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Neve v3.5.0 已经具备系统脚本和构建系统的基础能力：
+Neve v3.19.0 已经具备系统脚本和构建系统的基础能力：
 
 | 能力 | Bash | Neve | Nix |
 |------|------|------|-----|
@@ -89,19 +89,19 @@ Neve v3.5.0 已经具备系统脚本和构建系统的基础能力：
 ## 优先级建议
 
 ```
-Phase 1 (v3.6)  ← 现在开始
+Phase 1 (completed: v3.6-v3.12)  ← 现在开始
   └─ Effect 类型系统 v2
      耗时：2-3 轮
 
-Phase 2 (v3.7-v3.8)
+Phase 2 (completed: v3.12-v3.17)
   └─ 脚本体验：chmod/symlink/tempDir/walk/参数解析
      耗时：3-4 轮
 
-Phase 3 (v3.9-v4.0)
+Phase 3 (in progress: v3.18-v4.0)
   └─ 构建系统：derivation 语法、并行、缓存
      耗时：4-5 轮
 
-Phase 4 (v4.1+)
+Phase 4 (planned: v4.1+)
   └─ 生态：包仓库、插件、文档
      持续
 ```
