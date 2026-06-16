@@ -1641,7 +1641,11 @@ mod tests {
         }
 
         fn read_path(&self, path: &str) -> Option<Vec<u8>> {
-            self.storage.lock().unwrap().get(path).cloned()
+            self.storage
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(path)
+                .cloned()
         }
 
         fn fail_next_put(&self, path: &str, count: usize) {
@@ -1775,7 +1779,10 @@ mod tests {
 
         match method {
             "PUT" => {
-                if let Some(remaining) = fail_puts.lock().unwrap().get_mut(path)
+                if let Some(remaining) = fail_puts
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .get_mut(path)
                     && *remaining > 0
                 {
                     *remaining -= 1;
@@ -1786,11 +1793,17 @@ mod tests {
                         b"retry later",
                     );
                 }
-                storage.lock().unwrap().insert(path.to_string(), body);
+                storage
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(path.to_string(), body);
                 write_http_response(stream, "200 OK", "text/plain", b"ok")
             }
             "GET" => {
-                if let Some(remaining) = fail_gets.lock().unwrap().get_mut(path)
+                if let Some(remaining) = fail_gets
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .get_mut(path)
                     && *remaining > 0
                 {
                     *remaining -= 1;
@@ -1801,7 +1814,11 @@ mod tests {
                         b"retry later",
                     );
                 }
-                let payload = storage.lock().unwrap().get(path).cloned();
+                let payload = storage
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .get(path)
+                    .cloned();
                 match payload {
                     Some(payload) => {
                         let content_type = if path.ends_with(".narinfo") {

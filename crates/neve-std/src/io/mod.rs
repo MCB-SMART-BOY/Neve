@@ -432,7 +432,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         }
                         if enable {
                             // Save original terminal settings for later restore
-                            let mut saved = saved_termios().lock().unwrap();
+                            let mut saved =
+                                saved_termios().lock().unwrap_or_else(|e| e.into_inner());
                             saved.insert(fd, termios);
                             // Set raw mode: cfmakeraw equivalent
                             termios.c_iflag &= !(libc::IGNBRK
@@ -455,7 +456,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             termios.c_cc[libc::VTIME] = 0;
                         } else {
                             // Restore saved settings
-                            let mut saved = saved_termios().lock().unwrap();
+                            let mut saved =
+                                saved_termios().lock().unwrap_or_else(|e| e.into_inner());
                             if let Some(&saved_termios) = saved.get(&fd) {
                                 termios = saved_termios;
                                 saved.remove(&fd);
@@ -488,7 +490,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     };
                     #[cfg(unix)]
                     {
-                        let mut saved = saved_termios().lock().unwrap();
+                        let mut saved = saved_termios().lock().unwrap_or_else(|e| e.into_inner());
                         if let Some(&saved_termios) = saved.get(&fd) {
                             if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &saved_termios) } != 0 {
                                 return Err(format!(
@@ -606,7 +608,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                         String::from_utf8_lossy(&output.stderr).to_string(),
                                     ))
                                 })();
-                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                                *state_clone.lock().unwrap_or_else(|e| e.into_inner()) =
+                                    SpawnState::Done(result);
                             });
                         }
                         neve_eval::value::TaskTargetValue::Pipeline(pipeline) => {
@@ -623,16 +626,20 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                 .collect();
                             std::thread::spawn(move || {
                                 let result = run_pipeline_stages(&stages);
-                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                                *state_clone.lock().unwrap_or_else(|e| e.into_inner()) =
+                                    SpawnState::Done(result);
                             });
                         }
                     }
                     let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    spawn_registry().lock().unwrap().insert(id, state.clone());
+                    spawn_registry()
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(id, state.clone());
                     // Timeout watcher
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_millis(timeout_ms));
-                        let mut s = state.lock().unwrap();
+                        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                         if matches!(&*s, SpawnState::Running) {
                             *s = SpawnState::Cancelled;
                         }
@@ -693,7 +700,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                         String::from_utf8_lossy(&output.stderr).to_string(),
                                     ))
                                 })();
-                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                                *state_clone.lock().unwrap_or_else(|e| e.into_inner()) =
+                                    SpawnState::Done(result);
                             });
                         }
                         neve_eval::value::TaskTargetValue::Pipeline(pipeline) => {
@@ -711,12 +719,16 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                 .collect();
                             std::thread::spawn(move || {
                                 let result = run_pipeline_stages(&stages);
-                                *state_clone.lock().unwrap() = SpawnState::Done(result);
+                                *state_clone.lock().unwrap_or_else(|e| e.into_inner()) =
+                                    SpawnState::Done(result);
                             });
                         }
                     }
                     let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    spawn_registry().lock().unwrap().insert(id, state);
+                    spawn_registry()
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(id, state);
                     Ok(Value::Int(id.into()))
                 },
             }),
@@ -735,13 +747,13 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         _ => return Err("io.poll expects an Int (spawn ID)".to_string()),
                     };
                     let state = {
-                        let registry = spawn_registry().lock().unwrap();
+                        let registry = spawn_registry().lock().unwrap_or_else(|e| e.into_inner());
                         registry
                             .get(&id)
                             .ok_or(format!("io.poll: no task with ID {id}"))?
                             .clone()
                     };
-                    let mut s = state.lock().unwrap();
+                    let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                     match &*s {
                         SpawnState::Running => Ok(Value::None),
                         SpawnState::Done(Ok((code, success, stdout, stderr))) => {
@@ -754,12 +766,18 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                                 ),
                             ))));
                             *s = SpawnState::Cancelled;
-                            spawn_registry().lock().unwrap().remove(&id);
+                            spawn_registry()
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&id);
                             Ok(result)
                         }
                         SpawnState::Done(Err(e)) => {
                             let err = e.clone();
-                            spawn_registry().lock().unwrap().remove(&id);
+                            spawn_registry()
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&id);
                             Err(err)
                         }
                         SpawnState::Cancelled => {
@@ -782,8 +800,12 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             .map_err(|_| "io.cancel: invalid ID".to_string())?,
                         _ => return Err("io.cancel expects an Int (spawn ID)".to_string()),
                     };
-                    if let Some(state) = spawn_registry().lock().unwrap().remove(&id) {
-                        *state.lock().unwrap() = SpawnState::Cancelled;
+                    if let Some(state) = spawn_registry()
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&id)
+                    {
+                        *state.lock().unwrap_or_else(|e| e.into_inner()) = SpawnState::Cancelled;
                     }
                     Ok(Value::Unit)
                 },
@@ -796,10 +818,10 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 name: "io.jobs",
                 arity: 0,
                 func: |_args| {
-                    let registry = spawn_registry().lock().unwrap();
+                    let registry = spawn_registry().lock().unwrap_or_else(|e| e.into_inner());
                     let mut jobs = Vec::new();
                     for (&id, state) in registry.iter() {
-                        let state_str = match &*state.lock().unwrap() {
+                        let state_str = match &*state.lock().unwrap_or_else(|e| e.into_inner()) {
                             SpawnState::Running => "Running",
                             SpawnState::Done(Ok(_)) => "Done",
                             SpawnState::Done(Err(_)) => "Failed",
@@ -824,9 +846,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 arity: 0,
                 func: |_args| {
                     loop {
-                        let registry = spawn_registry().lock().unwrap();
+                        let registry = spawn_registry().lock().unwrap_or_else(|e| e.into_inner());
                         for (&id, state) in registry.iter() {
-                            let mut s = state.lock().unwrap();
+                            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
                             if let SpawnState::Done(Ok((code, success, stdout, stderr))) = &*s {
                                 let result =
                                     Value::ProcessResult(Rc::new(ProcessResultValue::new(
@@ -1288,7 +1310,7 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
             };
 
             // Track current pid for kill-on-timeout
-            *pid_for_kill.lock().unwrap() = Some(child.id());
+            *pid_for_kill.lock().unwrap_or_else(|e| e.into_inner()) = Some(child.id());
 
             // Feed stdin from previous stage or initial input
             let stage_stdin = if idx == 0 {
@@ -1333,7 +1355,7 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
             }
         }
 
-        *pid_for_kill.lock().unwrap() = None;
+        *pid_for_kill.lock().unwrap_or_else(|e| e.into_inner()) = None;
         let _ = tx.send(Ok(RawProcessResult {
             code: last_code,
             success: last_success,
@@ -1356,7 +1378,7 @@ fn await_pipeline_with_timeout(pipeline: &PipelineValue, timeout_ms: u64) -> Res
         },
         Err(mpsc::RecvTimeoutError::Timeout) => {
             // Kill the currently running process
-            if let Some(pid) = *current_pid.lock().unwrap() {
+            if let Some(pid) = *current_pid.lock().unwrap_or_else(|e| e.into_inner()) {
                 neve_common::kill_process(pid);
             }
             Ok(Value::None)
@@ -1528,7 +1550,8 @@ pub(crate) fn await_any(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
                             String::from_utf8_lossy(&output.stderr).to_string(),
                         ))
                     })();
-                    *state_clone.lock().unwrap() = SpawnState::Done(result);
+                    *state_clone.lock().unwrap_or_else(|e| e.into_inner()) =
+                        SpawnState::Done(result);
                 });
             }
             TaskTargetValue::Pipeline(pipeline) => {
@@ -1545,13 +1568,17 @@ pub(crate) fn await_any(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
                     .collect();
                 std::thread::spawn(move || {
                     let result = run_pipeline_stages(&stages);
-                    *state_clone.lock().unwrap() = SpawnState::Done(result);
+                    *state_clone.lock().unwrap_or_else(|e| e.into_inner()) =
+                        SpawnState::Done(result);
                 });
             }
         }
 
         let id = NEXT_SPAWN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        spawn_registry().lock().unwrap().insert(id, state);
+        spawn_registry()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, state);
         spawn_ids.push(id);
     }
 
@@ -1559,13 +1586,13 @@ pub(crate) fn await_any(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
     loop {
         for &id in &spawn_ids {
             let state = {
-                let registry = spawn_registry().lock().unwrap();
+                let registry = spawn_registry().lock().unwrap_or_else(|e| e.into_inner());
                 match registry.get(&id) {
                     Some(s) => s.clone(),
                     None => continue,
                 }
             };
-            let mut s = state.lock().unwrap();
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
             match &*s {
                 SpawnState::Running => continue,
                 SpawnState::Done(Ok((code, success, stdout, stderr))) => {
@@ -1579,13 +1606,19 @@ pub(crate) fn await_any(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
                     // Cancel all other tasks
                     for &other_id in &spawn_ids {
                         if other_id != id
-                            && let Some(other_state) =
-                                spawn_registry().lock().unwrap().remove(&other_id)
+                            && let Some(other_state) = spawn_registry()
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&other_id)
                         {
-                            *other_state.lock().unwrap() = SpawnState::Cancelled;
+                            *other_state.lock().unwrap_or_else(|e| e.into_inner()) =
+                                SpawnState::Cancelled;
                         }
                     }
-                    spawn_registry().lock().unwrap().remove(&id);
+                    spawn_registry()
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&id);
                     return Ok(result);
                 }
                 SpawnState::Done(Err(e)) => {
@@ -1593,13 +1626,19 @@ pub(crate) fn await_any(tasks: &[Rc<TaskValue>]) -> Result<Value, String> {
                     // Cancel all other tasks
                     for &other_id in &spawn_ids {
                         if other_id != id
-                            && let Some(other_state) =
-                                spawn_registry().lock().unwrap().remove(&other_id)
+                            && let Some(other_state) = spawn_registry()
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&other_id)
                         {
-                            *other_state.lock().unwrap() = SpawnState::Cancelled;
+                            *other_state.lock().unwrap_or_else(|e| e.into_inner()) =
+                                SpawnState::Cancelled;
                         }
                     }
-                    spawn_registry().lock().unwrap().remove(&id);
+                    spawn_registry()
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&id);
                     return Err(err);
                 }
                 SpawnState::Cancelled => continue,

@@ -212,6 +212,10 @@ pub struct Evaluator {
     /// Maximum intermediate buffer size in bytes for pipeline stages.
     /// 管道阶段中间缓冲区的最大字节数（默认 50 MB）。
     max_intermediate_buffer: usize,
+    /// Current recursion depth (non-tail calls only). Uses Cell for interior mutability
+    /// so the DepthGuard can decrement without conflicting with `&self` borrows.
+    /// 当前递归深度（仅非尾调用）。使用 Cell 实现内部可变性。
+    recursion_depth: std::cell::Cell<u32>,
 }
 
 /// Default limits for streaming I/O safety.
@@ -219,6 +223,9 @@ pub struct Evaluator {
 const DEFAULT_MAX_STREAM_LINES: usize = 100_000;
 const DEFAULT_MAX_STDIN_BYTES: usize = 10 * 1024 * 1024; // 10 MB
 const DEFAULT_MAX_INTERMEDIATE_BUFFER: usize = 50 * 1024 * 1024; // 50 MB
+/// Maximum recursion depth for non-tail calls (prevents stack overflow).
+/// 非尾调用的最大递归深度（防止栈溢出）。
+const MAX_RECURSION_DEPTH: u32 = 10_000;
 
 /// A global definition.
 /// 全局定义。
@@ -253,6 +260,7 @@ impl Evaluator {
             max_stream_lines: DEFAULT_MAX_STREAM_LINES,
             max_stdin_bytes: DEFAULT_MAX_STDIN_BYTES,
             max_intermediate_buffer: DEFAULT_MAX_INTERMEDIATE_BUFFER,
+            recursion_depth: std::cell::Cell::new(0),
         }
     }
 
@@ -1117,6 +1125,26 @@ impl Evaluator {
     }
 
     fn apply(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
+        // Recursion depth guard: prevents stack overflow from non-tail recursion.
+        // Uses a raw pointer to the Cell to avoid borrow conflicts with &self in TCO loop.
+        let depth = self.recursion_depth.get() + 1;
+        self.recursion_depth.set(depth);
+        if depth > MAX_RECURSION_DEPTH {
+            self.recursion_depth
+                .set(self.recursion_depth.get().saturating_sub(1));
+            return Err(EvalError::TypeError(format!(
+                "recursion depth exceeded (max {MAX_RECURSION_DEPTH})"
+            )));
+        }
+        struct DepthGuard(*const std::cell::Cell<u32>);
+        impl Drop for DepthGuard {
+            fn drop(&mut self) {
+                let cell = unsafe { &*self.0 };
+                cell.set(cell.get().saturating_sub(1));
+            }
+        }
+        let _guard = DepthGuard(&self.recursion_depth as *const std::cell::Cell<u32>);
+
         // Tail call optimization: use iteration instead of recursion
         let mut current_func = func;
         let mut current_args = args;
@@ -2093,7 +2121,7 @@ impl Evaluator {
                 };
 
                 // Track PID for kill-on-timeout
-                *pid_for_kill.lock().unwrap() = Some(child.id());
+                *pid_for_kill.lock().unwrap_or_else(|e| e.into_inner()) = Some(child.id());
 
                 // Write stdin for this stage
                 if let Some(data) = stage_stdin
@@ -2171,7 +2199,7 @@ impl Evaluator {
                 }
             }
 
-            *pid_for_kill.lock().unwrap() = None;
+            *pid_for_kill.lock().unwrap_or_else(|e| e.into_inner()) = None;
         });
 
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
@@ -2182,7 +2210,7 @@ impl Evaluator {
             let now = Instant::now();
             if now >= deadline {
                 // Timeout — kill the process
-                if let Some(pid) = *current_pid.lock().unwrap() {
+                if let Some(pid) = *current_pid.lock().unwrap_or_else(|e| e.into_inner()) {
                     neve_common::kill_process(pid);
                 }
                 return Ok(Value::None);
@@ -2193,7 +2221,7 @@ impl Evaluator {
                 Ok(Ok(line)) => {
                     line_count += 1;
                     if line_count > self.max_stream_lines {
-                        if let Some(pid) = *current_pid.lock().unwrap() {
+                        if let Some(pid) = *current_pid.lock().unwrap_or_else(|e| e.into_inner()) {
                             neve_common::kill_process(pid);
                         }
                         return Err(EvalError::TypeError(format!(
@@ -2212,7 +2240,7 @@ impl Evaluator {
                     return Err(EvalError::TypeError(e));
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(pid) = *current_pid.lock().unwrap() {
+                    if let Some(pid) = *current_pid.lock().unwrap_or_else(|e| e.into_inner()) {
                         neve_common::kill_process(pid);
                     }
                     return Ok(Value::None);
@@ -2711,6 +2739,7 @@ impl Evaluator {
             max_stream_lines: self.max_stream_lines,
             max_stdin_bytes: self.max_stdin_bytes,
             max_intermediate_buffer: self.max_intermediate_buffer,
+            recursion_depth: std::cell::Cell::new(0),
         };
         let result = eval.eval(&expr);
 
