@@ -13,7 +13,6 @@ path = "src/main.rs"
 [dependencies]
 neve-common.workspace = true
 neve-diagnostic.workspace = true
-neve-lexer.workspace = true
 neve-syntax.workspace = true
 neve-parser.workspace = true
 neve-hir.workspace = true
@@ -41,5 +40,5 @@ neve-store.workspace = true
 neve-derive.workspace = true
 neve-builder.workspace = true
 neve-fetch.workspace = true
-reqwest = { workspace = true, features = ["blocking"] }
+reqwest = { workspace = true }
 libc.workspace = true

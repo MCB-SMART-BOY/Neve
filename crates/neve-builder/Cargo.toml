@@ -16,7 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["user", "fs", "process", "mount", "sched", "hostname", "resource"] }
+nix = { workspace = true, features = ["sched", "hostname", "resource"] }
 libc.workspace = true
 
 [dev-dependencies]

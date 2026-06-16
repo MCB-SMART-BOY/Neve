@@ -17,7 +17,7 @@ pub fn run(expr: &str, verbose: bool) -> Result<(), String> {
         emit(&source, "<eval>", diag);
     }
     if !diagnostics.is_empty() {
-        return Err("parse error".to_string());
+        return Err(format!("parse error: {} diagnostic(s)", diagnostics.len()));
     }
 
     eval_and_print(&file, &source, verbose)
@@ -87,7 +87,7 @@ fn eval_value(
         emit(source, "<eval>", diag);
     }
     if loaded_had_parse_errors {
-        return Err("parse error".to_string());
+        return Err("parse error during file loading".to_string());
     }
     if loaded_had_errors
         || analysis
@@ -95,7 +95,12 @@ fn eval_value(
             .iter()
             .any(|diag| diag.severity == Severity::Error)
     {
-        return Err("type error".to_string());
+        let count = analysis
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count();
+        return Err(format!("type error: {count} diagnostic(s)"));
     }
 
     let mut evaluator = Evaluator::new().with_extra_builtins(

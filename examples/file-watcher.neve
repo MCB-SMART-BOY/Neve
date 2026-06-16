@@ -1,7 +1,7 @@
 #!/usr/bin/env neve
 -- File watcher: polls a directory and reports changes
 -- 文件监控器：轮询目录并报告变化
-import std.io as io;
+use std.io = io;
 
 let dir = match io.args() {
     (args, _) -> match args {

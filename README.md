@@ -39,17 +39,17 @@ for i in 1 2 3; do
 done
 ```
 
-这是 Neve（v3.0）：
+这是 Neve（v4.0）：
 
 ```neve
 #!/usr/bin/env neve run
-use std.io as io
+use std.io = io
 
 config = io.readFilePath(./config.toml)
 port = config.port ?? 8080
 
 io.retry(
-    || io.read(./health-check),
+    ~io.read(./health-check),
     maxAttempts = 3,
     backoffMs = 2000,
 )
@@ -82,7 +82,7 @@ loadAndParse(path: Path) -> Result<Config, String> = {
 port = server?.config?.port or 8080
 
 -- 惰性求值。只在第一次 force 的时候计算
-expensive = lazy { loadAllFromDisk() }
+expensive = ~(loadAllFromDisk())
 -- ……中间可能根本不用 ……
 value = force(expensive)
 
@@ -147,15 +147,15 @@ io.atomicWrite(./critical.json, newConfig)
 **信号处理**。注册操作系统信号回调：
 
 ```neve
-io.onSignal(SIGTERM, || { io.writeFilePath(./shutdown.log, "正常关闭") })
-io.onSignal(SIGINT, || { println("收到中断信号") })
+io.onSignal(SIGTERM, fn() { io.writeFilePath(./shutdown.log, "正常关闭") })
+io.onSignal(SIGINT, fn() { println("收到中断信号") })
 ```
 
 **重试和条件等待**：
 
 ```neve
-io.retry(|| = io.read(./health-check), maxAttempts = 5, backoffMs = 1000)
-io.ensure(|| = io.pathExistsPath(./ready), timeoutMs = 30000, intervalMs = 500)
+io.retry(~io.read(./health-check), maxAttempts = 5, backoffMs = 1000)
+io.ensure(~io.pathExistsPath(./ready), timeoutMs = 30000, intervalMs = 500)
 ```
 
 **二进制数据**。`Bytes` 是一等类型：
@@ -189,11 +189,11 @@ io.tempDir(|dir| { io.writeFilePath(./temp.txt, "y"); 42 })
 -- 纯函数。不能调 IO，编译器强制检查
 add(x: Int, y: Int) -> Int = x + y
 
--- 标了 effect 才能做 IO
-save(path: Path, data: String) effect = io.writeFilePath(path, data)
+-- effect 由编译器自动推断，无需手动标注
+save(path: Path, data: String) = io.writeFilePath(path, data)
 
--- neve check 默认拒绝 IO
--- neve check --pure 连标了 effect 的函数都不让调
+-- neve check 检测 IO 调用
+-- neve check --pure 拒绝所有 effectful 函数调用
 ```
 
 ---
@@ -233,7 +233,7 @@ neve registry-publish # 发布包到 registry
 
 ---
 
-**Phase 4 (Shell 能力替代) 已完成** ✅ — Stream<T> 14 APIs、E2E 440 测试、Formatter 幂等性 37/37、Clippy 0 warnings。
+**Phase 4 (Shell 能力替代) 已完成** ✅ — Stream<T> 14 APIs、E2E 541 测试、Formatter 幂等性 37/37、Clippy 0 warnings。
 
 **Phase 5 (生态补完) 进行中** 🔄 — flake/lock 系统、content-addressed store、registry CLI（17 个命令）、稳定性分级（Tier 1/2/3）。
 

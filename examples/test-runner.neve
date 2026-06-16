@@ -1,8 +1,8 @@
 #!/usr/bin/env neve
 -- Simple test runner: lists .neve test files in a directory and reports them
 -- 简单测试运行器：列出目录中的 .neve 测试文件并报告
-import std.io as io;
-import std.string as str;
+use std.io = io;
+use std.string = str;
 
 let dir = match io.args() {
     (args, _) -> match args {

@@ -1,7 +1,7 @@
-import std.list;
-import std.string;
-import std.Map;
-import std.Set;
+use std.list;
+use std.string;
+use std.Map;
+use std.Set;
 
 let nums = list.range(1, 4);
 let total = list.len(nums);

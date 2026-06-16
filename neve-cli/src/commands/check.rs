@@ -89,12 +89,12 @@ pub fn run(file: &str, verbose: bool, allow_effects: bool) -> Result<(), String>
 
     if parse_errors > 0 {
         output::error(&format!("{parse_errors} parse error(s) found"));
-        return Err("parse error".to_string());
+        return Err(format!("parse error: {parse_errors} diagnostic(s)"));
     }
 
     if type_errors > 0 {
         output::error(&format!("{type_errors} type error(s) found"));
-        return Err("type error".to_string());
+        return Err(format!("type error: {type_errors} diagnostic(s)"));
     }
 
     if !allow_effects {

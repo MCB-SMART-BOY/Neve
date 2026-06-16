@@ -7,7 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 blake3.workspace = true

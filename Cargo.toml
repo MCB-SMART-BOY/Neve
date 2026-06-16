@@ -75,7 +75,7 @@ lzma-rs = "0.3"
 zstd = "0.13"
 tempfile = "3"
 # Platform-specific: nix crate only on Unix-like systems
-nix = { version = "0.29", features = ["user", "fs", "process", "mount"] }
+nix = { version = "0.29", features = ["user", "fs", "process", "mount", "sched", "hostname", "resource"] }
 tower-lsp = "0.20"
 async-trait = "0.1"
 dashmap = "6"

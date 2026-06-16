@@ -1,5 +1,5 @@
 #!/usr/bin/env neve run
-import std.io as io
+use std.io = io
 
 main() = {
   (args, _) = io.args()

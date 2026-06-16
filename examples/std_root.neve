@@ -1,4 +1,4 @@
-import std;
+use std;
 
 let nums = std.list.range(1, 3);
 let total = std.list.len(nums);

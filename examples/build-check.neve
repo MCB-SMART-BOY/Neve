@@ -1,8 +1,8 @@
 #!/usr/bin/env neve
-import std.io as io;
+use std.io = io;
 
 let build = io.execCommand(io.command("cargo", ["build", "--workspace"]));
-if io.processSuccess(build) then {
+if io.processSuccess(build) -> {
     let test = io.execCommand(io.command("cargo", ["test", "--workspace"]));
     io.processSuccess(test)
 } else false

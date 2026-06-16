@@ -4,7 +4,7 @@ type Result =  {
 }
 
 safe_div(a: Int, b: Int) -> Result = {
-  if b == 0 then Err("division by zero") else Ok(a / b)
+  if b == 0 -> Err("division by zero") else Ok(a / b)
 }
 
 divide_or_zero(a: Int, b: Int) -> Int = match safe_div(a, b) {

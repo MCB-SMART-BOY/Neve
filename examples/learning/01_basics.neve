@@ -37,7 +37,7 @@ name = "World"
 
 welcome = `Hi {name}, the answer is {add(40, 2)}`
 
-status = if answer > 0 then "positive" else "non-positive"
+status = if answer > 0 -> "positive" else "non-positive"
 
 piped = 10 |> double |> double
 

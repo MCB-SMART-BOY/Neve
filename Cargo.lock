@@ -1374,7 +1374,6 @@ dependencies = [
  "neve-fmt",
  "neve-frontend",
  "neve-hir",
- "neve-lexer",
  "neve-lsp",
  "neve-parser",
  "neve-std",
@@ -1419,14 +1418,11 @@ name = "neve-config"
 version = "3.18.0"
 dependencies = [
  "neve-builder",
- "neve-common",
  "neve-derive",
  "neve-diagnostic",
  "neve-eval",
  "neve-fetch",
  "neve-frontend",
- "neve-lexer",
- "neve-parser",
  "neve-store",
  "serde",
  "serde_json",
@@ -1439,7 +1435,6 @@ name = "neve-derive"
 version = "3.18.0"
 dependencies = [
  "blake3",
- "neve-common",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1463,7 +1458,6 @@ dependencies = [
  "neve-derive",
  "neve-diagnostic",
  "neve-hir",
- "neve-parser",
  "neve-syntax",
  "thiserror 2.0.18",
 ]
@@ -1472,7 +1466,6 @@ dependencies = [
 name = "neve-fetch"
 version = "3.18.0"
 dependencies = [
- "blake3",
  "flate2",
  "git2",
  "neve-derive",
@@ -1577,7 +1570,6 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "lzma-rs",
- "neve-common",
  "neve-derive",
  "neve-fetch",
  "reqwest",

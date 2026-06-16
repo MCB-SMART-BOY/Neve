@@ -117,7 +117,7 @@ fn format_dir_recursive(dir: &Path, write: bool, errors: &mut Vec<String>) -> Re
         if path.is_dir() {
             format_dir_recursive(&path, write, errors)?;
         } else if path.extension().is_some_and(|ext| ext == "neve")
-            && let Err(e) = run(path.to_str().unwrap(), write)
+            && let Err(e) = run(&path.to_string_lossy(), write)
         {
             errors.push(e);
         }
