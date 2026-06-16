@@ -4,11 +4,10 @@
 //! This module defines all value types that can exist during Neve program execution.
 //! 本模块定义了 Neve 程序执行过程中可能存在的所有值类型。
 //!
-//! Note: AST compat types (AstEnv, AstClosure) are used here as internal
+
 //! implementation details. External callers should prefer HIR evaluator.
 
 use crate::Environment;
-use crate::ast_eval::AstEnv;
 use neve_common::{Int, int_to_f64};
 use neve_hir::{Expr, Param};
 use std::cell::RefCell;
@@ -16,10 +15,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::PathBuf;
 use std::rc::Rc;
-
-// Forward declaration for AstClosure
-// AstClosure 的前向声明
-pub use crate::ast_eval::AstClosure;
 
 /// A thunk represents a suspended computation for lazy evaluation.
 /// Thunk 表示用于惰性求值的暂停计算。
@@ -43,12 +38,6 @@ pub struct Thunk {
 /// Thunk 的状态。
 #[derive(Clone)]
 pub enum ThunkState {
-    /// Unevaluated thunk with AST expression.
-    /// 带有 AST 表达式的未求值 thunk。
-    AstUnevaluated {
-        expr: neve_syntax::Expr,
-        env: Rc<crate::ast_eval::AstEnv>,
-    },
     /// Unevaluated thunk with HIR expression.
     /// 带有 HIR 表达式的未求值 thunk。
     HirUnevaluated { expr: Expr, env: Environment },
@@ -62,13 +51,6 @@ pub enum ThunkState {
 
 impl Thunk {
     /// Create a new unevaluated thunk from an AST expression.
-    /// 从 AST 表达式创建新的未求值 thunk。
-    pub fn new_ast(expr: neve_syntax::Expr, env: Rc<crate::ast_eval::AstEnv>) -> Self {
-        Self {
-            inner: Rc::new(RefCell::new(ThunkState::AstUnevaluated { expr, env })),
-        }
-    }
-
     /// Create a new unevaluated thunk from a HIR expression.
     /// 从 HIR 表达式创建新的未求值 thunk。
     pub fn new_hir(expr: Expr, env: Environment) -> Self {
@@ -113,7 +95,7 @@ impl Thunk {
 impl fmt::Debug for Thunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &*self.inner.borrow() {
-            ThunkState::AstUnevaluated { .. } | ThunkState::HirUnevaluated { .. } => {
+            ThunkState::HirUnevaluated { .. } => {
                 write!(f, "<thunk:unevaluated>")
             }
             ThunkState::Evaluating => write!(f, "<thunk:evaluating>"),
@@ -493,8 +475,6 @@ pub enum Value {
         body: Expr,
         env: Environment,
     },
-    /// AST Closure (for direct AST evaluation) / AST 闭包（用于直接 AST 求值）
-    AstClosure(Rc<AstClosure>),
     /// Built-in function / 内置函数
     Builtin(BuiltinFn),
     /// Built-in function with Rc closure (for stdlib) / 带 Rc 闭包的内置函数（用于标准库）
@@ -702,7 +682,6 @@ impl fmt::Debug for Value {
                 write!(f, "}}")
             }
             Value::Closure { .. } => write!(f, "<closure>"),
-            Value::AstClosure(_) => write!(f, "<function>"),
             Value::Builtin(b) => write!(f, "<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => write!(f, "<builtin:{}>", name),
             Value::VariantCtor { name, arity } => write!(f, "<variant:{}:{}>", name, arity),
@@ -1141,7 +1120,7 @@ impl StreamValue {
         match func {
             Value::Builtin(b) => (b.func)(&[arg]),
             Value::BuiltinFn(_, f) => f(vec![arg]),
-            Value::Closure { .. } | Value::AstClosure(_) => Err(
+            Value::Closure { .. } => Err(
                 "stream transform: closures require evaluator context (not yet supported)"
                     .to_string(),
             ),
@@ -1484,22 +1463,6 @@ impl KeyCtx {
                     env_key
                 )
             }
-            Value::AstClosure(closure) => {
-                let ptr = Rc::as_ptr(closure) as usize;
-                self.key_for_ptr(ptr, |ctx| {
-                    let params_key = format!(
-                        "AstParams({})",
-                        escape_string(&format!("{:?}", closure.params))
-                    );
-                    let body_key =
-                        format!("AstExpr({})", escape_string(&format!("{:?}", closure.body)));
-                    let env_key = ctx.ast_env_key(&closure.env);
-                    format!(
-                        "AstClosure{{params={},body={},env={}}}",
-                        params_key, body_key, env_key
-                    )
-                })
-            }
             Value::Builtin(b) => format!("Builtin({})", escape_string(b.name)),
             Value::BuiltinFn(name, _) => format!("BuiltinFn({})", escape_string(name)),
             Value::VariantCtor { name, arity } => {
@@ -1522,12 +1485,6 @@ impl KeyCtx {
                 self.key_for_ptr(ptr, |ctx| match &*thunk.state() {
                     ThunkState::Evaluated(v) => format!("Thunk(Evaluated,{})", ctx.value_key(v)),
                     ThunkState::Evaluating => "Thunk(Evaluating)".to_string(),
-                    ThunkState::AstUnevaluated { expr, env } => {
-                        let expr_key =
-                            format!("AstExpr({})", escape_string(&format!("{:?}", expr)));
-                        let env_key = ctx.ast_env_key(env);
-                        format!("Thunk(AstUnevaluated,{expr_key},{env_key})")
-                    }
                     ThunkState::HirUnevaluated { expr, env } => {
                         let expr_key = format!("Expr({})", escape_string(&format!("{:?}", expr)));
                         let env_key = ctx.env_key(env);
@@ -1552,30 +1509,6 @@ impl KeyCtx {
                 format!("Env{{{}}}|Parent({parent})", parts.join(","))
             } else {
                 format!("Env{{{}}}", parts.join(","))
-            }
-        })
-    }
-
-    fn ast_env_key(&mut self, env: &Rc<AstEnv>) -> String {
-        let ptr = Rc::as_ptr(env) as usize;
-        self.key_for_ptr(ptr, |ctx| {
-            let mut bindings = env.bindings_snapshot();
-            bindings.sort_by(|a, b| a.0.cmp(&b.0));
-            let parts: Vec<String> = bindings
-                .into_iter()
-                .map(|(name, value, is_public)| {
-                    let vis = if is_public { "pub" } else { "priv" };
-                    format!("{}:{vis}={}", escape_string(&name), ctx.value_key(&value))
-                })
-                .collect();
-            let parent_key = env
-                .parent_rc()
-                .as_ref()
-                .map(|parent| ctx.ast_env_key(parent));
-            if let Some(parent) = parent_key {
-                format!("AstEnv{{{}}}|Parent({parent})", parts.join(","))
-            } else {
-                format!("AstEnv{{{}}}", parts.join(","))
             }
         })
     }

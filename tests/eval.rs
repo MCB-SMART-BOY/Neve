@@ -6,11 +6,11 @@ mod support;
 
 use neve_common::Int;
 use neve_derive::Hash;
-use neve_eval::{EvalError, EvaluableModuleRef, Evaluator, Value, compat::AstEvaluator};
+use neve_eval::{EvalError, EvaluableModuleRef, Evaluator, Value};
 use neve_frontend::analyze_source;
 use neve_hir::lower;
 use neve_parser::parse;
-use neve_std::{std_module_overrides, stdlib};
+use neve_std::stdlib;
 use std::fs;
 use std::rc::Rc;
 use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
@@ -46,24 +46,22 @@ fn eval_checked_hir(source: &str) -> Result<Value, EvalError> {
     ))
 }
 
-/// Evaluate source with builtins available (using the AST compat evaluator).
+/// Evaluate source through the canonical HIR pipeline.
 fn eval_with_builtins(source: &str) -> Result<Value, String> {
-    let (ast, errors) = parse(source);
-    if !errors.is_empty() {
-        return Err(format!("parse error: {:?}", errors));
-    }
-    let mut eval = AstEvaluator::new();
-    eval.eval_file(&ast).map_err(|e| e.to_string())
+    let analysis = analyze_source(source);
+    let mut evaluator = Evaluator::new().with_extra_builtins(
+        stdlib()
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value)),
+    );
+    evaluator
+        .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
+        .map_err(|e| e.to_string())
 }
 
-/// Evaluate source with stdlib module overrides.
+/// Evaluate source through HIR pipeline.
 fn eval_with_std(source: &str) -> Result<Value, String> {
-    let (ast, errors) = parse(source);
-    if !errors.is_empty() {
-        return Err(format!("parse error: {:?}", errors));
-    }
-    let mut eval = AstEvaluator::new().with_module_overrides(std_module_overrides());
-    eval.eval_file(&ast).map_err(|e| e.to_string())
+    eval_with_builtins(source)
 }
 
 fn int(value: i64) -> Int {
@@ -2995,34 +2993,6 @@ fn test_eval_hir_try_on_result_like_enum_error() {
 }
 
 #[test]
-fn test_eval_ast_compat_try_rejects_known_non_optional_value() {
-    let result = eval_with_builtins("let x = 41?;");
-    match result {
-        Err(message) => {
-            assert!(
-                message.contains("try requires"),
-                "unexpected error: {message}"
-            );
-        }
-        other => panic!("expected error, got {:?}", other),
-    }
-}
-
-#[test]
-fn test_eval_ast_compat_coalesce_rejects_known_non_optional_value() {
-    let result = eval_with_builtins("let x = 41 ?? 0;");
-    match result {
-        Err(message) => {
-            assert!(
-                message.contains("coalesce requires"),
-                "unexpected error: {message}"
-            );
-        }
-        other => panic!("expected error, got {:?}", other),
-    }
-}
-
-#[test]
 fn test_eval_hir_trait_method_runtime_dispatch() {
     let result = eval_checked_hir(
         "
@@ -3033,52 +3003,6 @@ fn test_eval_hir_trait_method_runtime_dispatch() {
         let x = 21.twice();
     ",
     );
-    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
-}
-
-#[test]
-fn test_eval_ast_trait_method_runtime_dispatch() {
-    let result = eval_with_builtins(
-        "
-        trait Twice { fn twice(self) -> Int; };
-        impl Twice for Int {
-            fn twice(self) -> Int = self + self;
-        };
-        let x = 21.twice();
-    ",
-    );
-    assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
-}
-
-#[test]
-fn test_eval_ast_imported_trait_method_runtime_dispatch() {
-    let temp_dir = TempDir::new().unwrap();
-    let root = temp_dir.path();
-
-    create_test_module(
-        root,
-        &["methods"],
-        r#"
-            pub trait Twice { fn twice(self) -> Int; };
-            impl Twice for Int {
-                fn twice(self) -> Int = self + self;
-            };
-        "#,
-    );
-
-    create_test_module(
-        root,
-        &["main"],
-        r#"
-            import methods;
-            let x = 21.twice();
-        "#,
-    );
-
-    let main_path = root.join("main.neve");
-    let mut eval = AstEvaluator::new().with_base_path(root.to_path_buf());
-    let result = eval.eval_file_at_path(&main_path);
-
     assert!(matches!(result, Ok(Value::Int(n)) if n == int(42)));
 }
 

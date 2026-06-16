@@ -1,10 +1,10 @@
 //! Integration tests for root-level `std` builtin-module imports.
 
 use neve_common::Int;
-use neve_eval::{EvaluableModuleRef, Evaluator, Value, compat::AstEvaluator};
+use neve_eval::{EvaluableModuleRef, Evaluator, Value};
 use neve_frontend::{analyze_snippet_ast, analyze_source};
 use neve_parser::parse;
-use neve_std::{std_module_overrides, stdlib};
+use neve_std::stdlib;
 use tempfile::TempDir;
 
 fn int(value: i64) -> Int {
@@ -41,7 +41,7 @@ fn test_snippet_analysis_accepts_std_root_module_item_imports() {
 }
 
 #[test]
-fn test_std_root_module_item_import_runtime_parity() {
+fn test_std_root_module_item_import_hir_runtime() {
     let analysis = analyze_source("import std (list); let result = list.len([1, 2]);");
     assert!(
         analysis.diagnostics.is_empty(),
@@ -49,12 +49,7 @@ fn test_std_root_module_item_import_runtime_parity() {
         analysis.diagnostics
     );
 
-    let ast_value = AstEvaluator::new()
-        .with_module_overrides(std_module_overrides())
-        .eval_file(&analysis.ast)
-        .expect("AST evaluator should succeed");
-
-    let hir_value = Evaluator::new()
+    let value = Evaluator::new()
         .with_extra_builtins(
             stdlib()
                 .into_iter()
@@ -64,10 +59,7 @@ fn test_std_root_module_item_import_runtime_parity() {
             &analysis.hir,
             &analysis.semantics.method_resolutions,
         ))
-        .expect("HIR evaluator should succeed");
+        .expect("evaluation should succeed");
 
-    let expected = Value::Int(int(2));
-    assert_eq!(ast_value, expected, "unexpected AST result");
-    assert_eq!(hir_value, expected, "unexpected HIR result");
-    assert_eq!(ast_value, hir_value, "AST/HIR runtime split detected");
+    assert_eq!(value, Value::Int(int(2)));
 }

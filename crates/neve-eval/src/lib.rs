@@ -1,7 +1,6 @@
 //! Interpreter/evaluator for Neve — HIR tree-walking interpreter.
 //! Neve 解释器/求值器 — HIR 树遍历解释器。
 
-mod ast_eval;
 mod builtin;
 mod env;
 mod eval;

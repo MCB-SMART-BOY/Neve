@@ -1184,12 +1184,6 @@ impl Evaluator {
 
                     return Ok(Value::Variant(name, Box::new(payload)));
                 }
-                Value::AstClosure(_) => {
-                    // AstClosure not supported in HIR evaluator
-                    return Err(EvalError::TypeError(
-                        "AstClosure not supported in HIR evaluator".to_string(),
-                    ));
-                }
                 _ => return Err(EvalError::NotAFunction),
             }
         }
@@ -2693,7 +2687,7 @@ impl Evaluator {
                     ));
                 }
                 crate::value::ThunkState::HirUnevaluated { .. } => {}
-                crate::value::ThunkState::AstUnevaluated { .. } => {
+                crate::value::ThunkState::HirUnevaluated { .. } => {
                     return Err(EvalError::TypeError(
                         "cannot force AST thunk in HIR evaluator".to_string(),
                     ));
@@ -3028,7 +3022,6 @@ impl Evaluator {
             Value::VariantCtor { name, arity } => format!("<variant:{}:{}>", name, arity),
             Value::Builtin(b) => format!("<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
-            Value::AstClosure(_) => "<function>".to_string(),
             Value::Closure { .. } => "<function>".to_string(),
             Value::Event(_) => "Event(..)".to_string(),
             Value::Live(_) => "Live(..)".to_string(),
@@ -3038,9 +3031,7 @@ impl Evaluator {
                 match &*thunk.state() {
                     ThunkState::Evaluated(v) => Self::value_to_string(v),
                     ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
-                    ThunkState::AstUnevaluated { .. } | ThunkState::HirUnevaluated { .. } => {
-                        "<thunk>".to_string()
-                    }
+                    ThunkState::HirUnevaluated { .. } => "<thunk>".to_string(),
                 }
             }
         }

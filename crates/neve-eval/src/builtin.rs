@@ -876,7 +876,6 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::Map(_) => "Map",
                         Value::Set(_) => "Set",
                         Value::Closure { .. } => "Function",
-                        Value::AstClosure(_) => "Function",
                         Value::Builtin(_) => "Function",
                         Value::BuiltinFn(_, _) => "Function",
                         Value::VariantCtor { .. } => "Function",
@@ -1009,10 +1008,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 func: |args| {
                     Ok(Value::Bool(matches!(
                         &args[0],
-                        Value::Closure { .. }
-                            | Value::AstClosure(_)
-                            | Value::Builtin(_)
-                            | Value::BuiltinFn(_, _)
+                        Value::Closure { .. } | Value::Builtin(_) | Value::BuiltinFn(_, _)
                     )))
                 },
             }),
@@ -1041,7 +1037,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             use crate::value::ThunkState;
                             match &*thunk.state() {
                                 ThunkState::Evaluated(v) => Ok(v.clone()),
-                                ThunkState::AstUnevaluated { .. }
+                                ThunkState::HirUnevaluated { .. }
                                 | ThunkState::HirUnevaluated { .. }
                                 | ThunkState::Evaluating => {
                                     Err("cannot force unevaluated thunk in this context"
@@ -1926,7 +1922,6 @@ pub fn format_value(v: &Value) -> String {
             format!("Set{{ {} }}", parts.join(", "))
         }
         Value::Closure { .. } => "<function>".to_string(),
-        Value::AstClosure(_) => "<function>".to_string(),
         Value::Builtin(f) => format!("<builtin:{}>", f.name),
         Value::BuiltinFn(name, _) => format!("<builtin:{name}>"),
         Value::VariantCtor { name, arity } => format!("<variant:{}:{}>", name, arity),
@@ -1949,9 +1944,7 @@ pub fn format_value(v: &Value) -> String {
             match &*thunk.state() {
                 ThunkState::Evaluated(v) => format_value(v),
                 ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
-                ThunkState::AstUnevaluated { .. } | ThunkState::HirUnevaluated { .. } => {
-                    "<thunk>".to_string()
-                }
+                ThunkState::HirUnevaluated { .. } => "<thunk>".to_string(),
             }
         }
     }

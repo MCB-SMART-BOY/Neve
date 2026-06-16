@@ -334,10 +334,7 @@ fn main() {
         // 跨平台命令（语言功能）
         Commands::Eval { expr } => commands::eval::run(&expr, cli.verbose),
         Commands::Test { dir } => commands::test::run(&dir, cli.verbose),
-        Commands::Run {
-            file,
-            args,
-        } => {
+        Commands::Run { file, args } => {
             if !args.is_empty() {
                 neve_std::set_script_args(args);
             }

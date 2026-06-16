@@ -874,7 +874,7 @@ fn format_repl_value(value: &Value) -> String {
         Value::Thunk(_) => "<thunk>".to_string(),
         Value::Builtin(_) => "<builtin>".to_string(),
         Value::BuiltinFn(n, _) => format!("<builtin {}>", n),
-        Value::Closure { .. } | Value::AstClosure(_) => "<function>".to_string(),
+        Value::Closure { .. } => "<function>".to_string(),
         Value::VariantCtor { name, .. } => format!("<constructor {}>", name),
     }
 }
@@ -1029,7 +1029,6 @@ mod tests {
             Value::Builtin(builtin) => fn_repl_ty(builtin.arity),
             Value::BuiltinFn(_, _) => named_repl_ty(REPL_FN_TYPE_ID, Vec::new()),
             Value::Closure { params, .. } => fn_repl_ty(params.len()),
-            Value::AstClosure(closure) => fn_repl_ty(closure.params.len()),
             Value::VariantCtor { arity, .. } => fn_repl_ty(*arity),
             Value::Variant(name, payload) => match name.as_str() {
                 "Some" => builtin_option(type_from_value(payload), Span::DUMMY),
