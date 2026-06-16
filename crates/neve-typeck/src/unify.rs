@@ -357,7 +357,9 @@ pub fn unify(t1: &Ty, t2: &Ty, subst: &mut Substitution) -> Result<(), String> {
 
 /// Check if a type variable occurs in a type (for infinite type prevention).
 /// 检查类型变量是否出现在类型中（用于防止无限类型）。
-fn occurs_check(var: u32, ty: &Ty) -> bool {
+/// Check whether a type variable occurs in a type (infinite type detection).
+/// 检查类型变量是否出现在类型中。
+pub fn occurs_check(var: u32, ty: &Ty) -> bool {
     match &ty.kind {
         TyKind::Var(v) => *v == var,
         TyKind::Param(_, _) => false,

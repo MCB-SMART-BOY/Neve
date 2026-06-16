@@ -356,8 +356,10 @@ impl TraitResolver {
         self.inherent_impls.get(&key).cloned().unwrap_or_default()
     }
 
-    /// Check if two types match (simplified - ignores generics for now).
-    /// 检查两个类型是否匹配（简化版本 - 暂时忽略泛型）。
+    /// Check if two types match (for trait impl lookup).
+    /// Type variables match anything (concrete types resolved during unification).
+    /// 检查两个类型是否匹配（用于 trait impl 查找）。
+    /// 类型变量匹配任何类型（具体类型在统一化期间解析）。
     fn types_match(&self, t1: &Ty, t2: &Ty) -> bool {
         match (&t1.kind, &t2.kind) {
             (TyKind::Int, TyKind::Int) => true,
@@ -368,7 +370,30 @@ impl TraitResolver {
             (TyKind::Unit, TyKind::Unit) => true,
             (TyKind::SelfType, TyKind::SelfType) => true,
             (TyKind::SelfAssoc(left), TyKind::SelfAssoc(right)) => left == right,
-            (TyKind::Named(id1, _), TyKind::Named(id2, _)) => id1 == id2,
+            (TyKind::Named(id1, args1), TyKind::Named(id2, args2)) => {
+                id1 == id2
+                    && args1.len() == args2.len()
+                    && args1.iter().zip(args2.iter()).all(|(a, b)| {
+                        matches!(
+                            (&a.kind, &b.kind),
+                            (TyKind::Var(_), _) | (_, TyKind::Var(_))
+                        ) || self.types_match(a, b)
+                    })
+            }
+            (TyKind::Record(f1), TyKind::Record(f2)) => {
+                f1.len() == f2.len()
+                    && f1
+                        .iter()
+                        .zip(f2.iter())
+                        .all(|((n1, t1), (n2, t2))| n1 == n2 && self.types_match(t1, t2))
+            }
+            (TyKind::Tuple(ts1), TyKind::Tuple(ts2)) => {
+                ts1.len() == ts2.len()
+                    && ts1
+                        .iter()
+                        .zip(ts2.iter())
+                        .all(|(a, b)| self.types_match(a, b))
+            }
             (TyKind::Record(_), TyKind::DynamicRecord(_))
             | (TyKind::DynamicRecord(_), TyKind::Record(_))
             | (TyKind::DynamicRecord(_), TyKind::DynamicRecord(_))

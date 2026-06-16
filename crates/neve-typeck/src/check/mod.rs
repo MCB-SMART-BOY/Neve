@@ -17,7 +17,7 @@ use crate::errors::{
 use crate::infer::InferContext;
 use crate::pattern_analysis::{PatternAnalysisContext, analyze_match};
 use crate::traits::{ImplId, ImplInfo, TraitBound, TraitId, TraitInfo, TraitResolver};
-use crate::unify::{Substitution, free_type_vars, generalize, instantiate, unify};
+use crate::unify::{Substitution, free_type_vars, generalize, instantiate, occurs_check, unify};
 use neve_common::Span;
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_hir::{
@@ -1456,6 +1456,19 @@ impl TypeChecker {
             .unwrap_or_else(|| self.fresh_var())
     }
 
+    /// Extend substitution with occurs check (infinite type prevention).
+    /// 用 occurs check 扩展替换（无限类型预防）。
+    fn extend_subst(&mut self, var: u32, ty: Ty, span: Span) {
+        if occurs_check(var, &ty) {
+            self.error(
+                span,
+                "infinite type: type variable occurs in its own definition",
+            );
+        } else {
+            self.subst.extend(var, ty);
+        }
+    }
+
     fn constrain_dynamic_record_field(&mut self, base_ty: &Ty, field: &str, span: Span) -> Ty {
         let applied_base_ty = self.apply(base_ty);
 
@@ -1469,23 +1482,25 @@ impl TypeChecker {
 
                 let field_ty = self.fresh_var();
                 updated_fields.push((field.to_string(), field_ty.clone()));
-                self.subst.extend(
+                self.extend_subst(
                     *var,
                     Ty {
                         kind: TyKind::DynamicRecord(updated_fields),
                         span: base_ty.span,
                     },
+                    span,
                 );
                 field_ty
             }
             (TyKind::Var(var), TyKind::Var(_)) | (TyKind::Var(var), TyKind::Unknown) => {
                 let field_ty = self.fresh_var();
-                self.subst.extend(
+                self.extend_subst(
                     *var,
                     Ty {
                         kind: TyKind::DynamicRecord(vec![(field.to_string(), field_ty.clone())]),
                         span: base_ty.span,
                     },
+                    span,
                 );
                 field_ty
             }
@@ -1497,12 +1512,13 @@ impl TypeChecker {
 
                 let field_ty = self.fresh_var();
                 updated_fields.push((field.to_string(), field_ty.clone()));
-                self.subst.extend(
+                self.extend_subst(
                     *var,
                     Ty {
                         kind: TyKind::DynamicRecord(updated_fields),
                         span: base_ty.span,
                     },
+                    span,
                 );
                 field_ty
             }
@@ -1525,12 +1541,13 @@ impl TypeChecker {
 
     fn constrain_safe_record_base(&mut self, var: u32, span: Span, field: &str) -> Ty {
         let field_ty = self.fresh_var();
-        self.subst.extend(
+        self.extend_subst(
             var,
             Ty {
                 kind: TyKind::SafeRecordBase(vec![(field.to_string(), field_ty.clone())]),
                 span,
             },
+            span,
         );
         field_ty
     }
@@ -1549,12 +1566,13 @@ impl TypeChecker {
         let field_ty = self.fresh_var();
         let mut updated_fields = fields.to_vec();
         updated_fields.push((field.to_string(), field_ty.clone()));
-        self.subst.extend(
+        self.extend_subst(
             var,
             Ty {
                 kind: TyKind::SafeRecordBase(updated_fields),
                 span,
             },
+            span,
         );
         field_ty
     }
