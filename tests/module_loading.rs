@@ -21,8 +21,8 @@ fn test_simple_module_loading() {
         &["math"],
         r#"
 
-            pub fn add(x, y) = x + y;
-            pub fn multiply(x, y) = x * y;
+            fn add(x, y) = x + y;
+            fn multiply(x, y) = x * y;
         "#,
     );
 
@@ -32,7 +32,7 @@ fn test_simple_module_loading() {
         &["main"],
         r#"
 
-            import math (add, multiply);
+            use math (add, multiply);
 
             fn compute(a, b) = multiply(add(a, b), 2);
         "#,
@@ -56,7 +56,7 @@ fn test_nested_module_loading() {
         &["utils", "string"],
         r#"
 
-            pub fn toUpper(s) = s;  // Simplified
+            fn toUpper(s) = s;  // Simplified
         "#,
     );
 
@@ -66,7 +66,7 @@ fn test_nested_module_loading() {
         &["utils", "mod"],
         r#"
 
-            pub import self.string (toUpper);
+            use self.string (toUpper);
         "#,
     );
 
@@ -76,7 +76,7 @@ fn test_nested_module_loading() {
         &["main"],
         r#"
 
-            import utils (toUpper);
+            use utils (toUpper);
 
             fn process(text) = toUpper(text);
         "#,
@@ -99,8 +99,8 @@ fn test_circular_dependency_detection() {
         &["a"],
         r#"
 
-            import b (funcB);
-            pub fn funcA() = funcB();
+            use b (funcB);
+            fn funcA() = funcB();
         "#,
     );
 
@@ -109,8 +109,8 @@ fn test_circular_dependency_detection() {
         &["b"],
         r#"
 
-            import c (funcC);
-            pub fn funcB() = funcC();
+            use c (funcC);
+            fn funcB() = funcC();
         "#,
     );
 
@@ -119,8 +119,8 @@ fn test_circular_dependency_detection() {
         &["c"],
         r#"
 
-            import a (funcA);
-            pub fn funcC() = funcA();
+            use a (funcA);
+            fn funcC() = funcA();
         "#,
     );
 
@@ -150,8 +150,8 @@ fn test_circular_dependency_error_message() {
         &["a"],
         r#"
 
-            import b (funcB);
-            pub fn funcA() = funcB();
+            use b (funcB);
+            fn funcA() = funcB();
         "#,
     );
 
@@ -160,8 +160,8 @@ fn test_circular_dependency_error_message() {
         &["b"],
         r#"
 
-            import a (funcA);
-            pub fn funcB() = funcA();
+            use a (funcA);
+            fn funcB() = funcA();
         "#,
     );
 
@@ -191,7 +191,7 @@ fn test_self_import() {
         &["mylib", "utils"],
         r#"
 
-            pub fn helper(x) = x + 1;
+            fn helper(x) = x + 1;
         "#,
     );
 
@@ -200,9 +200,9 @@ fn test_self_import() {
         &["mylib", "mod"],
         r#"
 
-            import self.utils (helper);
+            use self.utils (helper);
 
-            pub fn process(x) = helper(x) * 2;
+            fn process(x) = helper(x) * 2;
         "#,
     );
 
@@ -264,7 +264,7 @@ fn test_super_import() {
         &["mylib", "config"],
         r#"
 
-            pub let DEBUG = true;
+            let DEBUG = true;
         "#,
     );
 
@@ -296,7 +296,7 @@ fn test_crate_import() {
         &["lib"],
         r#"
 
-            pub fn rootFunc() = 42;
+            fn rootFunc() = 42;
         "#,
     );
 
@@ -308,9 +308,9 @@ fn test_crate_import() {
         &["deep", "nested", "worker"],
         r#"
 
-            import crate.lib (rootFunc);
+            use crate.lib (rootFunc);
 
-            pub fn work() = rootFunc() + 1;
+            fn work() = rootFunc() + 1;
         "#,
     );
 
@@ -330,7 +330,7 @@ fn test_module_not_found() {
         &["main"],
         r#"
 
-            import nonexistent (func);
+            use nonexistent (func);
 
             fn test() = func();
         "#,
@@ -360,7 +360,7 @@ fn test_diamond_dependency() {
         &["c"],
         r#"
 
-            pub fn funcC() = 42;
+            fn funcC() = 42;
         "#,
     );
 
@@ -369,8 +369,8 @@ fn test_diamond_dependency() {
         &["a"],
         r#"
 
-            import c (funcC);
-            pub fn funcA() = funcC() + 1;
+            use c (funcC);
+            fn funcA() = funcC() + 1;
         "#,
     );
 
@@ -379,8 +379,8 @@ fn test_diamond_dependency() {
         &["b"],
         r#"
 
-            import c (funcC);
-            pub fn funcB() = funcC() * 2;
+            use c (funcC);
+            fn funcB() = funcC() * 2;
         "#,
     );
 
@@ -389,8 +389,8 @@ fn test_diamond_dependency() {
         &["main"],
         r#"
 
-            import a (funcA);
-            import b (funcB);
+            use a (funcA);
+            use b (funcB);
 
             fn compute() = funcA() + funcB();
         "#,

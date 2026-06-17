@@ -338,9 +338,10 @@ impl ModuleLoader {
             if let neve_syntax::ItemKind::Import(import_def) = &item.kind {
                 let import_path = ModulePath::from_import_def(import_def);
 
-                // Check if this is a re-export (pub import)
-                // 检查是否为重导出（pub import）
-                let is_reexport = import_def.visibility != neve_syntax::Visibility::Private;
+                // v4.0: all imports are public, no re-export concept.
+                // Circular dependencies must always be detected.
+                // v4.0: 所有导入都是公开的，没有重导出概念。
+                // 循环依赖必须始终被检测到。
 
                 #[allow(clippy::collapsible_if)]
                 if let Some(abs_path) = self
@@ -349,19 +350,6 @@ impl ModuleLoader {
                     && abs_path != path
                 // Only load if not a self-reference / 仅在不是自引用时加载
                 {
-                    // For re-exports, check if the target module is already being loaded
-                    // in our dependency chain. If so, we can safely skip loading it now
-                    // and defer symbol resolution to later.
-                    // 对于重导出，检查目标模块是否已在我们的依赖链中加载。
-                    // 如果是，我们可以安全地跳过现在加载它，并将符号解析推迟到以后。
-                    if is_reexport && self.loading.contains(&abs_path) {
-                        // This is a re-export of a module that's currently being loaded.
-                        // This is safe - we'll resolve the symbols later after all modules
-                        // are loaded. This breaks the infinite loop.
-                        // 这是当前正在加载的模块的重导出。
-                        // 这是安全的 - 我们将在所有模块加载后解析符号。这打破了无限循环。
-                        continue;
-                    }
 
                     // Propagate circular dependency errors immediately
                     // 立即传播循环依赖错误
