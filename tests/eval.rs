@@ -2036,8 +2036,8 @@ fn test_eval_hir_higher_order_list_builtins() {
 }
 
 #[test]
-fn test_eval_import_std_root() {
-    let source = "use std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
+fn test_eval_use_std_root() {
+    let source = "use std.list; let xs = list.range(1, 3); let n = list.len(xs);";
     match eval_with_std(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(2)),
         other => panic!("expected int, got {:?}", other),

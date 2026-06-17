@@ -3,7 +3,6 @@ name = "neve-workspace"
 version = "4.0.0"
 edition = "2024"
 license = "MPL-2.0"
-publish = false
 
 [workspace]
 resolver = "2"
@@ -19,7 +18,6 @@ version = "4.0.0"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/MCB-SMART-BOY/neve"
-rust-version = "1.85"
 
 # Optimized release profile for smaller, faster binaries
 # 优化的 release profile，生成更小更快的二进制文件
