@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "n3v3"
+name = "neve"
 path = "src/main.rs"
 
 [dependencies]
