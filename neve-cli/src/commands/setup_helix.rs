@@ -6,16 +6,16 @@ use std::path::{Path, PathBuf};
 
 // Pre-compiled tree-sitter grammar embedded in binary.
 // 预编译的 tree-sitter 语法嵌入二进制文件。
-const GRAMMAR_SO: &[u8] = include_bytes!("../../../tree-sitter-neve/neve.so");
+const GRAMMAR_SO: &[u8] = include_bytes!("../../tree-sitter-neve/neve.so");
 
 // Tree-sitter query files embedded in binary.
 // tree-sitter 查询文件嵌入二进制文件。
-const HIGHLIGHTS: &str = include_str!("../../../tree-sitter-neve/queries/highlights.scm");
-const LOCALS: &str = include_str!("../../../tree-sitter-neve/queries/locals.scm");
-const INDENTS: &str = include_str!("../../../tree-sitter-neve/queries/indents.scm");
-const TEXTOBJECTS: &str = include_str!("../../../tree-sitter-neve/queries/textobjects.scm");
-const INJECTIONS: &str = include_str!("../../../tree-sitter-neve/queries/injections.scm");
-const FOLDS: &str = include_str!("../../../tree-sitter-neve/queries/folds.scm");
+const HIGHLIGHTS: &str = include_str!("../../tree-sitter-neve/queries/highlights.scm");
+const LOCALS: &str = include_str!("../../tree-sitter-neve/queries/locals.scm");
+const INDENTS: &str = include_str!("../../tree-sitter-neve/queries/indents.scm");
+const TEXTOBJECTS: &str = include_str!("../../tree-sitter-neve/queries/textobjects.scm");
+const INJECTIONS: &str = include_str!("../../tree-sitter-neve/queries/injections.scm");
+const FOLDS: &str = include_str!("../../tree-sitter-neve/queries/folds.scm");
 
 /// Canonical languages.toml snippet — always kept in sync with editors/helix/languages.toml.
 /// 权威的 languages.toml 片段 — 始终与 editors/helix/languages.toml 保持同步。

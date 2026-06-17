@@ -2,7 +2,7 @@
 
 ## API Stability Tiers
 
-This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Current release is v4.0.1 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
+This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Current release is v4.0.2 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
 
 ## Tier 1: Stable ✅
 
@@ -296,7 +296,7 @@ Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 |---------|---------|------------------|
 | **Major** (v4 → v5) | Semantic completeness milestone. | Allowed, with documented migration paths. |
 | **Minor** (v4.0 → v4.1) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
-| **Patch** (v4.0.1 → v4.0.2) | Bug fix release. No new features. | Not allowed. |
+| **Patch** (v4.0.2 → v4.0.2) | Bug fix release. No new features. | Not allowed. |
 
 ### Deprecation Policy / 废弃策略
 

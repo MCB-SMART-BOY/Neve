@@ -7,8 +7,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-neve-diagnostic = { version = "4.0.1", path = "../neve-diagnostic" }
-neve-syntax = { version = "4.0.1", path = "../neve-syntax" }
-neve-parser = { version = "4.0.1", path = "../neve-parser" }
+neve-diagnostic = { version = "4.0.2", path = "../neve-diagnostic" }
+neve-syntax = { version = "4.0.2", path = "../neve-syntax" }
+neve-parser = { version = "4.0.2", path = "../neve-parser" }
 
 [dev-dependencies]

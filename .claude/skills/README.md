@@ -1,6 +1,6 @@
 # Neve Language Development Skills
 
-A comprehensive skill suite for developing the Neve functional programming language (v4.0.1).
+A comprehensive skill suite for developing the Neve functional programming language (v4.0.2).
 
 ## Available Skills
 
@@ -91,7 +91,7 @@ Source Code (.neve)
 | `neve-config` | System configuration (generation-based) |
 | `neve-derive` | Derivation model + hashing |
 
-## Current Status (v4.0.1)
+## Current Status (v4.0.2)
 
 | Metric | Value |
 |--------|-------|

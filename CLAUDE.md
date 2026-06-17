@@ -62,4 +62,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v4.0.1. 541 E2E tests (all pass). 20 LSP methods. 14 Stream<T> APIs. 53 error codes. 12 canonical keywords. Audit grade B+ → A- (62/62 fixed). All Phases complete. All CI green. Published on crates.io (`cargo install neve`).
+v4.0.2. 541 E2E tests (all pass). 20 LSP methods. 14 Stream<T> APIs. 53 error codes. 12 canonical keywords. Audit grade B+ → A- (62/62 fixed). All Phases complete. All CI green. Published on crates.io (`cargo install neve`).
