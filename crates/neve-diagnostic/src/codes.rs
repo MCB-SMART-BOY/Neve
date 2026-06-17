@@ -230,9 +230,7 @@ impl ErrorCode {
             ErrorCode::UnreachablePattern => {
                 Some("remove the unreachable pattern or reorder the match arms")
             }
-            ErrorCode::PrivateAccess => {
-                Some("make the binding accessible from the calling module")
-            }
+            ErrorCode::PrivateAccess => Some("make the binding accessible from the calling module"),
             ErrorCode::CyclicDependency => {
                 Some("break the cycle by restructuring the dependencies")
             }
@@ -253,12 +251,8 @@ impl ErrorCode {
             ErrorCode::EvalWrongArity => {
                 Some("check the function definition for the expected number of arguments")
             }
-            ErrorCode::EvalUnboundVariable => {
-                Some("define the variable before using it")
-            }
-            ErrorCode::ModuleNotFound => {
-                Some("check the module name or add it as a dependency")
-            }
+            ErrorCode::EvalUnboundVariable => Some("define the variable before using it"),
+            ErrorCode::ModuleNotFound => Some("check the module name or add it as a dependency"),
             ErrorCode::ModuleParseError => {
                 Some("fix the parse errors in the imported module first")
             }

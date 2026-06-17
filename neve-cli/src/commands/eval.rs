@@ -103,15 +103,18 @@ fn eval_value(
         return Err(format!("type error: {count} diagnostic(s)"));
     }
 
-    let source_span = Span::new(neve_common::BytePos(0), neve_common::BytePos(source.len() as u32));
+    let source_span = Span::new(
+        neve_common::BytePos(0),
+        neve_common::BytePos(source.len() as u32),
+    );
     let mut evaluator = Evaluator::new().with_extra_builtins(
         stdlib()
             .into_iter()
             .map(|(name, value)| (name.to_string(), value)),
     );
     for entry in &analysis.evaluable_loaded_modules {
-        if let Err(e) = evaluator
-            .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
+        if let Err(e) =
+            evaluator.eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
         {
             let diag = eval_error_to_diagnostic(&e, source_span);
             emit(source, "<eval>", &diag);

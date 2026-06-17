@@ -350,7 +350,6 @@ impl ModuleLoader {
                     && abs_path != path
                 // Only load if not a self-reference / 仅在不是自引用时加载
                 {
-
                     // Propagate circular dependency errors immediately
                     // 立即传播循环依赖错误
                     if let Err(e) = self.load_module(&abs_path) {

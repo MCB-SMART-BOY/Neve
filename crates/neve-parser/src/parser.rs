@@ -144,7 +144,10 @@ impl Parser {
             TokenKind::Ident(_) => self.parse_ident_item(is_pub),
             _ => {
                 if is_pub {
-                    self.error_with_code("expected item after `pub`", ErrorCode::ExpectedExpression);
+                    self.error_with_code(
+                        "expected item after `pub`",
+                        ErrorCode::ExpectedExpression,
+                    );
                 }
                 if self.is_start_of_pattern() {
                     Some(ItemKind::Let(self.parse_let_def(is_pub)))
@@ -1445,7 +1448,10 @@ impl Parser {
                     // Tuple index: expr.0
                     // 元组索引：expr.0
                     let n = int_to_u32(n).unwrap_or_else(|| {
-                        self.error_with_code("tuple index out of range", ErrorCode::InvalidTupleIndex);
+                        self.error_with_code(
+                            "tuple index out of range",
+                            ErrorCode::InvalidTupleIndex,
+                        );
                         0
                     });
                     self.advance();
@@ -2344,7 +2350,10 @@ impl Parser {
                     let expr = self.parse_expr();
                     parts.push(StringPart::Expr(expr));
                     if !self.eat(TokenKind::InterpolationEnd) {
-                        self.error_with_code("expected `}` to close interpolation", ErrorCode::UnclosedDelimiter);
+                        self.error_with_code(
+                            "expected `}` to close interpolation",
+                            ErrorCode::UnclosedDelimiter,
+                        );
                     }
                 }
                 TokenKind::InterpolatedEnd => {

@@ -14,6 +14,9 @@ use neve_diagnostic::explain;
 pub fn run(code: &str) -> Result<(), String> {
     explain(code).map_err(|e| {
         // Also show a helpful hint for querying all error codes
-        format!("{}\n\nTip: use `neve doc diagnostics` to browse all error codes.", e)
+        format!(
+            "{}\n\nTip: use `neve doc diagnostics` to browse all error codes.",
+            e
+        )
     })
 }

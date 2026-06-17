@@ -788,7 +788,10 @@ pub fn argument_type_mismatch(
     if let Some(ps) = param_span {
         diag = diag.with_label(Label::new(
             ps,
-            format!("parameter `{}` declared with type `{}`", param_name, expected_str),
+            format!(
+                "parameter `{}` declared with type `{}`",
+                param_name, expected_str
+            ),
         ));
     }
 
@@ -798,11 +801,7 @@ pub fn argument_type_mismatch(
 
 /// Create an error for trait not implemented.
 /// 创建 trait 未实现的错误。
-pub fn trait_not_implemented(
-    trait_name: &str,
-    ty: &Ty,
-    span: Span,
-) -> Diagnostic {
+pub fn trait_not_implemented(trait_name: &str, ty: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(ty);
 
     Diagnostic::error(

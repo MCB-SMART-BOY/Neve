@@ -87,6 +87,9 @@ pub fn explain(code_str: &str) -> Result<(), String> {
 
             Ok(())
         }
-        None => Err(format!("unknown error code: `{}`\n\nUse `neve doc diagnostics` to see all error codes.", code_str)),
+        None => Err(format!(
+            "unknown error code: `{}`\n\nUse `neve doc diagnostics` to see all error codes.",
+            code_str
+        )),
     }
 }

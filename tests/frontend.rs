@@ -684,11 +684,7 @@ fn test_frontend_reports_invalid_io_read_file_path_message_and_code() {
 #[test]
 fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(
-        temp_dir.path().join("math.neve"),
-        "fn add(x, y) = x + y;",
-    )
-    .unwrap();
+    fs::write(temp_dir.path().join("math.neve"), "fn add(x, y) = x + y;").unwrap();
 
     let source = "use math (add); let result = add(1, 2);";
     let (ast, diagnostics) = parse(source);
@@ -869,11 +865,7 @@ fn test_frontend_snippet_returns_only_evaluable_loaded_modules_in_dependency_ord
         "use util (inc); fn add_one(x) = inc(x);",
     )
     .unwrap();
-    fs::write(
-        temp_dir.path().join("broken.neve"),
-        "fn bad() = 1 + true;",
-    )
-    .unwrap();
+    fs::write(temp_dir.path().join("broken.neve"), "fn bad() = 1 + true;").unwrap();
 
     let source = "use math (add_one); use broken (bad); let result = add_one(1);";
     let (ast, diagnostics) = parse(source);

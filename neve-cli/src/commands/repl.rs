@@ -1346,14 +1346,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1406,14 +1400,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1446,14 +1434,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1486,14 +1468,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1526,14 +1502,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1566,14 +1536,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1606,14 +1570,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1646,14 +1604,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1686,14 +1638,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -1798,14 +1744,8 @@ mod tests {
             &mut state,
         )
         .expect("use should evaluate");
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2240,14 +2180,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2272,14 +2206,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2304,14 +2232,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2336,14 +2258,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2368,14 +2284,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2400,14 +2310,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2432,14 +2336,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.writeFile("/tmp/file.out", "hello")"#,
@@ -2456,14 +2354,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.appendFile("/tmp/file.out", "hello")"#,
@@ -2480,14 +2372,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2512,14 +2398,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -2544,14 +2424,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.currentDirPath()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2564,14 +2438,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.currentDir()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2584,14 +2452,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.getEnv("HOME")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2604,14 +2466,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.homeDirPath()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2624,14 +2480,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.homeDir()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2644,14 +2494,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.currentSystem()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2664,14 +2508,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.readFile("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2684,14 +2522,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.readDir("/tmp")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2704,14 +2536,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.createDirAll("/tmp/neve-dir")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2772,14 +2598,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.removeDirAll("/tmp/neve-dir")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2792,14 +2612,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.pathExists("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2812,14 +2626,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.isDir("/tmp")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2832,14 +2640,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.isFile("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2876,14 +2678,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.hashFile("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2896,14 +2692,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.hashString("abc")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2916,14 +2706,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.command("printf", ["neve"])"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2936,14 +2720,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" })"#,
@@ -2960,14 +2738,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.command("rustc", ["--version"]))"#,
@@ -2984,14 +2756,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])"#,
@@ -3032,14 +2798,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]))"#,
@@ -3056,14 +2816,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3093,14 +2847,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3133,14 +2881,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3168,14 +2910,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3200,14 +2936,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3232,14 +2962,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3264,14 +2988,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3301,14 +3019,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3341,14 +3053,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.taskCommand(io.command("printf", ["neve"]))"#,
@@ -3365,14 +3071,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.taskPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]))"#,
@@ -3389,14 +3089,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.awaitTask(io.taskCommand(io.command("rustc", ["--version"])))"#,
@@ -3413,14 +3107,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.awaitTask(io.taskPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])))"#,
@@ -3437,14 +3125,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.awaitTasks([io.taskCommand(io.command("printf", ["neve"])), io.taskPipeline(io.pipeline([io.command("printf", ["lang"]), io.command("cat", [])]))])"#,
@@ -3461,14 +3143,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.command("sh", ["-c", "rustc --version"]))"#,
@@ -3485,14 +3161,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }))"#,
@@ -3509,14 +3179,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processSuccess(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3533,14 +3197,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processStdout(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3557,14 +3215,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processCode(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3581,14 +3233,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processStderr(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3605,14 +3251,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3637,14 +3277,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3665,14 +3299,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
         evaluate_repl_input(
             "use std.path = path;",
             true,
@@ -3830,14 +3458,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input(
-            "use std.io = io;",
-            true,
-            &context,
-            &mut runtime,
-            &mut state,
-        )
-        .expect("use should evaluate");
+        evaluate_repl_input("use std.io = io;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         assert_repl_type_diagnostic(
             r#"io.readFilePath("/tmp/file.txt")"#,
@@ -4038,11 +3660,7 @@ mod tests {
     #[test]
     fn repl_hir_runtime_preserves_project_module_item_imports() {
         let temp_dir = TempDir::new().unwrap();
-        fs::write(
-            temp_dir.path().join("math.neve"),
-            "fn add(x, y) = x + y;",
-        )
-        .unwrap();
+        fs::write(temp_dir.path().join("math.neve"), "fn add(x, y) = x + y;").unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
         let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
@@ -4072,11 +3690,7 @@ mod tests {
     #[test]
     fn repl_hir_runtime_preserves_project_module_namespace_imports() {
         let temp_dir = TempDir::new().unwrap();
-        fs::write(
-            temp_dir.path().join("math.neve"),
-            "fn add(x, y) = x + y;",
-        )
-        .unwrap();
+        fs::write(temp_dir.path().join("math.neve"), "fn add(x, y) = x + y;").unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
         let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
@@ -4155,11 +3769,7 @@ mod tests {
     #[test]
     fn repl_reports_type_errors_from_newly_imported_modules() {
         let temp_dir = TempDir::new().unwrap();
-        fs::write(
-            temp_dir.path().join("broken.neve"),
-            "fn bad() = 1 + true;",
-        )
-        .unwrap();
+        fs::write(temp_dir.path().join("broken.neve"), "fn bad() = 1 + true;").unwrap();
 
         let mut runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
         let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
@@ -4192,11 +3802,7 @@ mod tests {
     #[test]
     fn repl_checked_input_reports_type_errors_from_newly_imported_modules() {
         let temp_dir = TempDir::new().unwrap();
-        fs::write(
-            temp_dir.path().join("broken.neve"),
-            "fn bad() = 1 + true;",
-        )
-        .unwrap();
+        fs::write(temp_dir.path().join("broken.neve"), "fn bad() = 1 + true;").unwrap();
 
         let runtime = ReplHirState::with_root_dir(temp_dir.path().to_path_buf());
         let mut semantic = ReplSemanticState::with_root_dir(temp_dir.path());
