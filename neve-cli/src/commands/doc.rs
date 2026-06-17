@@ -88,12 +88,11 @@ fn resolve_topic(input: &str) -> Option<&'static str> {
             return Some(target);
         }
     }
-    for (name, _, _) in TOPICS {
-        if *name == topic {
-            return Some(name);
-        }
-    }
-    None
+    TOPICS
+        .iter()
+        .map(|(name, _, _)| name)
+        .find(|&name| *name == topic)
+        .map(|v| v as _)
 }
 
 fn create_skin() -> MadSkin {
