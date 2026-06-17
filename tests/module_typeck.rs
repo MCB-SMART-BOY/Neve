@@ -28,7 +28,7 @@ fn test_typeck_imported_function() {
         root,
         &["math"],
         r#"
-            pub fn add(x: Int, y: Int) -> Int = x + y;
+            fn add(x: Int, y: Int) -> Int = x + y;
         "#,
     );
 
@@ -36,7 +36,7 @@ fn test_typeck_imported_function() {
         root,
         &["main"],
         r#"
-            import math (add);
+            use math (add);
             let result = add(1, 2);
         "#,
     );
@@ -75,7 +75,7 @@ fn test_module_typeck_formats_imported_named_types_readably() {
         root,
         &["types"],
         r#"
-            pub struct User {};
+            type User = { name: String };
         "#,
     );
 
@@ -83,7 +83,7 @@ fn test_module_typeck_formats_imported_named_types_readably() {
         root,
         &["main"],
         r#"
-            import types (User);
+            use types (User);
             fn broken(x: User) -> Int = x;
         "#,
     );
