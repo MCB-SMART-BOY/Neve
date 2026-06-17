@@ -389,7 +389,7 @@ config & override     -- 合并
 [x * 2 | x <- xs, x > 0]    -- 推导式
 ```
 
-### 闭包 / Lambdas (v3.0)
+### 闭包 / Lambdas (v4.0)
 
 ```neve
 |x| x + 1

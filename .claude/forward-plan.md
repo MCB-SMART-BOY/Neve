@@ -3,7 +3,7 @@
 ## Current State
 
 ```
-v4.0.2  |  541 E2E tests (all pass)  |  20 LSP methods  |  55 error codes
+v4.0.4  |  541 E2E tests (all pass)  |  21 LSP methods  |  55 error codes
 14 Stream<T> APIs  |  34 EffectEval rules  |  21 Lean modules  |  12 keywords
 Design Audit: ✅ 62/62 (100%)  |  All Phases: ✅  |  Grade: B- → A-
 All decision gates cleared. All CI green. Published on crates.io.
@@ -16,7 +16,7 @@ All decision gates cleared. All CI green. Published on crates.io.
 | 1 | AST compat path fully removed | ✅ Done (2026-06-16) — ast_eval.rs deleted |
 | 2 | All 6 implementation gaps closed | ✅ Done — shebang now handled by parser (M22) |
 | 3 | Lean axioms documented | ✅ 3 axioms documented (blocked on Lean 4.29+) |
-| 4 | Release policy stable for 2+ minor versions | ✅ v3.18 → v3.19 → v4.0 → v4.0.2 |
+| 4 | Release policy stable for 2+ minor versions | ✅ v3.18 → v3.19 → v4.0 → v4.0.4 |
 | 5 | External contribution policy published | ✅ Done — docs/contributor/contributing.md |
 | 6 | Semantic convergence verified | ✅ 12 E2E gap tests resolved |
 
@@ -73,7 +73,7 @@ The 12 gaps, ordered by impact:
 | C4 | CONTRIBUTING.md update | ✅ Done (comprehensive guide) |
 | C5 | CLA/DCO decision | Deferred (MPL-2.0 is inbound-only) |
 
-### Phase D: v4.0 Launch ✅ COMPLETE (v4.0.0 released, v4.0.2 published on crates.io)
+### Phase D: v4.0 Launch ✅ COMPLETE (v4.0.4 released, v4.0.4 published on crates.io)
 
 **Goal**: Execute the v4.0 exit criteria. All done.
 
@@ -83,14 +83,14 @@ The 12 gaps, ordered by impact:
 | D2 | Migrate all callers off AstEvaluator | ✅ Done |
 | D3 | Lean axioms documented (Lean 4.29+ pending) | ✅ Documented |
 | D4 | v4.0 release notes + migration guide | ✅ Done |
-| D5 | v4.0.0 release | ✅ Released |
-| D6 | v4.0.2 patch release on crates.io | ✅ Done |
+| D5 | v4.0.4 release | ✅ Released |
+| D6 | v4.0.4 patch release on crates.io | ✅ Done |
 
 ## Immediate Priority
 
 ```
 ✅ Audit (62/62)  ✅ Phase A  ✅ Phase B  ✅ Phase C  ✅ Phase D
-v4.0.2 released on crates.io. All CI green. Next: v4.1 feature development.
+v4.0.4 released on crates.io. All CI green. Next: v4.1 feature development.
 ```
 
 ## Risk Register

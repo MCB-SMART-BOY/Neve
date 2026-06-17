@@ -70,7 +70,7 @@ cargo build
 cargo test
 
 # Run the CLI / 运行 CLI
-cargo run -p neve -- --help
+cargo run -p n3v3 -- --help
 
 # Format code / 格式化代码
 cargo fmt

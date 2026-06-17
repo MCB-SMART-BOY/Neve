@@ -41,7 +41,7 @@
 ### Via Cargo (all platforms) / 通过 Cargo 安装（全平台）
 
 ```bash
-cargo install neve
+cargo install n3v3
 ```
 
 Requires Rust 1.85+. This is the recommended method for developers.

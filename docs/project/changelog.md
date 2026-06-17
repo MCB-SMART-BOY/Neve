@@ -21,10 +21,33 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [4.0.4] - 2026-06-17
+
+### Changed
+- **Docs refresh**: All 17 documentation files synchronized to v4.0.4 — version numbers, syntax examples, status claims, and links updated throughout. Fixed stale E2E test counts and clarified binary/package name distinction (`neve` binary, `n3v3` package on crates.io).
+- **Version bump**: Workspace version 4.0.3 → 4.0.4.
+
+## [4.0.3] - 2026-06-17
+
+### Changed
+- **Binary/package split**: Binary name is `neve`, package name on crates.io is `n3v3`. `cargo install n3v3` installs the `neve` binary.
+- **Version bump**: Workspace version 4.0.2 → 4.0.3.
+
+### Fixed
+- **CI**: Package name references updated from `neve` to `n3v3` in CI workflows.
+- **Clippy**: Fixed `manual Iterator::find` warning.
+- **Formatting**: `cargo fmt --all` applied across entire workspace.
+
+## [4.0.2] - 2026-06-17
+
+### Changed
+- **Crates.io publish**: Renamed package from `neve` to `n3v3` to resolve crates.io name conflict. Added explicit `version`+`path` fields to internal workspace dependencies for publish compatibility.
+- **Version bump**: Workspace version 4.0.1 → 4.0.2.
+
 ## [4.0.1] - 2026-06-17
 
 ### Changed
-- **Docs refresh**: All 17 documentation files synchronized to v4.0.1 — version numbers, syntax examples, status claims, and links updated throughout.
+- **Docs refresh**: All 17 documentation files synchronized to v4.0.4 — version numbers, syntax examples, status claims, and links updated throughout.
 - **Version bump**: Workspace version 4.0.0 → 4.0.1.
 
 ### Fixed
@@ -99,7 +122,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Spec gap table**: 3 of 6 gaps confirmed closed (`crate::`, multi-line comment, tuple index). 2 remain (`\u{...}`, shebang parser).
 - **Feature matrix**: High-level truth + bottom line updated to reflect Phase 6 completion.
 - **Stability tiers**: Versioning policy updated with deprecation lifecycle and v4.0 exit criteria.
-- **AGENTS.md**: Decision log added for G2, pattern match, Lean, AST deprecation, release policy.
+- **CLAUDE.md**: Decision log added for G2, pattern match, Lean, AST deprecation, release policy.
 
 ### Fixed
 - **CI fixes**: Corrected script paths in CI workflows, added `PATH` configuration for `diff-test` and `bug-hunt` jobs, and fixed `rustfmt` formatting issues.
@@ -144,7 +167,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Semantic tokens**: Lexer-only -> AST-based with lexer fallback.
 - **languages.toml**: Removed broken formatter command; rely on LSP formatting.
 - **Completion ordering**: Local symbols first, then stdlib, types, keywords.
-- **AGENTS.md**: Updated LSP status (~98%) and priority items.
+- **CLAUDE.md**: Updated LSP status (~98%) and priority items.
 
 ### Fixed
 - **DefId resolution**: type_to_name now resolves Named types through ModuleSemantics.global_names.

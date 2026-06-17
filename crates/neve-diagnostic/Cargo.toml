@@ -7,6 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common = { version = "4.0.3", path = "../neve-common" }
+neve-common = { version = "4.0.4", path = "../neve-common" }
 ariadne.workspace = true
 thiserror.workspace = true

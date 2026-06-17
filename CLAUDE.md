@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Neve is a pure functional language for system configuration, built in Rust. 17 crates in a Cargo workspace. The CLI binary is `neve` (at `neve-cli/`). Published on crates.io. Install: `cargo install neve`.
+Neve is a pure functional language for system configuration, built in Rust. 17 crates in a Cargo workspace. The CLI binary is `neve` (at `neve-cli/`). Published on crates.io as `n3v3`. Install: `cargo install n3v3`. Usage: `neve`.
 
 ## Build & Test
 
@@ -32,7 +32,7 @@ crates/neve-typeck/    Hindley-Milner + traits
 crates/neve-frontend/  pipeline facade (shared by CLI/LSP/REPL)
 crates/neve-eval/      tree-walking interpreter (HIR canonical, AST deprecated)
 crates/neve-std/       standard library (I/O, Stream<T>, collections)
-crates/neve-lsp/       Language Server (20 methods)
+crates/neve-lsp/       Language Server (21 methods)
 crates/neve-fmt/       formatter
 ```
 
@@ -62,4 +62,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v4.0.2. 541 E2E tests (all pass). 20 LSP methods. 14 Stream<T> APIs. 53 error codes. 12 canonical keywords. Audit grade B+ → A- (62/62 fixed). All Phases complete. All CI green. Published on crates.io (`cargo install neve`).
+v4.0.4. 541 E2E tests (all pass). 21 LSP methods. 14 Stream<T> APIs. 55 error codes. 12 canonical keywords. Audit grade B+ → A- (62/62 fixed). All Phases complete. All CI green. Published on crates.io as `n3v3` (`cargo install n3v3`).

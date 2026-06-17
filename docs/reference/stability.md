@@ -2,7 +2,7 @@
 
 ## API Stability Tiers
 
-This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Current release is v4.0.2 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
+This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Current release is v4.0.4 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
 
 ## Tier 1: Stable ✅
 
@@ -296,7 +296,7 @@ Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 |---------|---------|------------------|
 | **Major** (v4 → v5) | Semantic completeness milestone. | Allowed, with documented migration paths. |
 | **Minor** (v4.0 → v4.1) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
-| **Patch** (v4.0.2 → v4.0.2) | Bug fix release. No new features. | Not allowed. |
+| **Patch** (v4.0.4 → v4.0.4) | Bug fix release. No new features. | Not allowed. |
 
 ### Deprecation Policy / 废弃策略
 
@@ -308,15 +308,15 @@ v4.X: deprecation warning → v4.X+1: continued warning → v4.X+2: removal
 
 Example (AST evaluator removal):
 - **v3.18.0**: `#[deprecated]` on `AstEnv`/`AstEvaluator` (warning emitted)
-- **v4.0.0**: Types removed (breaking change in major)
+- **v4.0.4**: Types removed (breaking change in major)
 
 ### v4.0 Exit Criteria (Completed)
 
 v4.0 marked the transition from "language prototype" to "stable language platform":
 
-1. AST compat path (`neve_eval::compat`) fully removed — ✅ Done (v4.0.0)
-2. All 6 known implementation gaps closed — ✅ Done (v4.0.0)
-3. 12 canonical keywords, v4.0 syntax canonical — ✅ Done (v4.0.0)
+1. AST compat path (`neve_eval::compat`) fully removed — ✅ Done (v4.0.4)
+2. All 6 known implementation gaps closed — ✅ Done (v4.0.4)
+3. 12 canonical keywords, v4.0 syntax canonical — ✅ Done (v4.0.4)
 4. Release policy formalized and stable — ✅ Done
 5. 62/62 design audit findings resolved — ✅ Done
 6. Semantic convergence: all features survive lowering without loss — ✅ Done

@@ -11,17 +11,17 @@ name = "neve"
 path = "src/main.rs"
 
 [dependencies]
-neve-common = { version = "4.0.3", path = "../crates/neve-common" }
-neve-diagnostic = { version = "4.0.3", path = "../crates/neve-diagnostic" }
-neve-syntax = { version = "4.0.3", path = "../crates/neve-syntax" }
-neve-parser = { version = "4.0.3", path = "../crates/neve-parser" }
-neve-hir = { version = "4.0.3", path = "../crates/neve-hir" }
-neve-typeck = { version = "4.0.3", path = "../crates/neve-typeck" }
-neve-eval = { version = "4.0.3", path = "../crates/neve-eval" }
-neve-std = { version = "4.0.3", path = "../crates/neve-std" }
-neve-fmt = { version = "4.0.3", path = "../crates/neve-fmt" }
-neve-frontend = { version = "4.0.3", path = "../crates/neve-frontend" }
-neve-lsp = { version = "4.0.3", path = "../crates/neve-lsp" }
+neve-common = { version = "4.0.4", path = "../crates/neve-common" }
+neve-diagnostic = { version = "4.0.4", path = "../crates/neve-diagnostic" }
+neve-syntax = { version = "4.0.4", path = "../crates/neve-syntax" }
+neve-parser = { version = "4.0.4", path = "../crates/neve-parser" }
+neve-hir = { version = "4.0.4", path = "../crates/neve-hir" }
+neve-typeck = { version = "4.0.4", path = "../crates/neve-typeck" }
+neve-eval = { version = "4.0.4", path = "../crates/neve-eval" }
+neve-std = { version = "4.0.4", path = "../crates/neve-std" }
+neve-fmt = { version = "4.0.4", path = "../crates/neve-fmt" }
+neve-frontend = { version = "4.0.4", path = "../crates/neve-frontend" }
+neve-lsp = { version = "4.0.4", path = "../crates/neve-lsp" }
 
 clap.workspace = true
 rustyline.workspace = true
@@ -35,10 +35,10 @@ tempfile.workspace = true
 
 # Unix-only dependencies for package management features
 [target.'cfg(unix)'.dependencies]
-neve-config = { version = "4.0.3", path = "../crates/neve-config" }
-neve-store = { version = "4.0.3", path = "../crates/neve-store" }
-neve-derive = { version = "4.0.3", path = "../crates/neve-derive" }
-neve-builder = { version = "4.0.3", path = "../crates/neve-builder" }
-neve-fetch = { version = "4.0.3", path = "../crates/neve-fetch" }
+neve-config = { version = "4.0.4", path = "../crates/neve-config" }
+neve-store = { version = "4.0.4", path = "../crates/neve-store" }
+neve-derive = { version = "4.0.4", path = "../crates/neve-derive" }
+neve-builder = { version = "4.0.4", path = "../crates/neve-builder" }
+neve-fetch = { version = "4.0.4", path = "../crates/neve-fetch" }
 reqwest = { workspace = true }
 libc.workspace = true

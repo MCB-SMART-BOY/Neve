@@ -57,7 +57,7 @@
 3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) ✅ 已完成。**
 4. **端到端测试已覆盖 541 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
 5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete) ✅。**
-6. **LSP 20 methods implemented ✅ (CodeLens)，补全评分排序，模块↔flake 集成。**
+6. **LSP 21 methods implemented ✅ (CodeLens)，补全评分排序，模块↔flake 集成。**
 7. **Registry v1 API 完整 (8 endpoints) ✅，RegistryClient 已接入 install/search。**
 8. **v4.0 syntax is canonical — 12 keywords, `let`/`fn`/`;` optional, `|` lambda, `{}` records, `&` comments, `pub` removed.**
 
@@ -84,7 +84,7 @@
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
 | 一等 Stream<T> | N/A | N/A | N/A | N/A | N/A | N/A | ✅ Phase A-C complete (14 APIs) |
-| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 541 个真实 frontend/runtime smoke tests (539 pass + 2 flaky)（TupleIndex, block-with-let, 泛型推导, Option match, record match, 安全访问, pipeline stdlib, impl method, v3 enum, list comprehension, match parity） |
+| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 541 个真实 frontend/runtime smoke tests (541 pass)（TupleIndex, block-with-let, 泛型推导, Option match, record match, 安全访问, pipeline stdlib, impl method, v3 enum, list comprehension, match parity） |
 
 ## 工具链一致性矩阵 / Tooling Fidelity Matrix
 
@@ -95,8 +95,8 @@
 | `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR，跨模块命名类型在 diagnostics 中的显示也已更可读；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
-| LSP | ⚠️ 持续收敛中 (20 methods) | 前端管线已接入，hover 支持定义点类型和语义类型。`goto definition` / `references` / `rename` 对局部遮蔽场景已按实际绑定解析。补全评分排序 (exact/prefix/contains)。CodeLens 引用计数。20 methods: hover, completion (type-aware + scored), completionItem/resolve, signatureHelp, definition, references, documentHighlight, rename, prepareRename, formatting, documentSymbol, workspace/symbol, semanticTokens/full, inlayHint, foldingRange, codeAction, codeLens, didOpen, didChange, didSave, didClose |
-| End-to-end tests | ⚠️ 可信 smoke baseline（541 个测试，539 pass + 2 flaky） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
+| LSP | ⚠️ 持续收敛中 (21 methods) | 前端管线已接入，hover 支持定义点类型和语义类型。`goto definition` / `references` / `rename` 对局部遮蔽场景已按实际绑定解析。补全评分排序 (exact/prefix/contains)。CodeLens 引用计数。21 methods: hover, completion (type-aware + scored), completionItem/resolve, signatureHelp, definition, references, documentHighlight, rename, prepareRename, formatting, documentSymbol, workspace/symbol, semanticTokens/full, inlayHint, foldingRange, codeAction, codeLens, didOpen, didChange, didSave, didClose |
+| End-to-end tests | ⚠️ 可信 smoke baseline（541 个测试，541 pass） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 

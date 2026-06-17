@@ -56,7 +56,7 @@ For crate-level architecture, APIs, key files, and integration points:
 ## Quick Reference
 
 ```bash
-cargo build -p neve                    # build
+cargo build -p n3v3                    # build
 cargo test --workspace                 # test
 cargo clippy --workspace --all-targets -- -D warnings  # lint
 .claude/skills/run-neve/driver.sh      # smoke test

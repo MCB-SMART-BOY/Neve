@@ -7,11 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common = { version = "4.0.3", path = "../neve-common" }
-neve-syntax = { version = "4.0.3", path = "../neve-syntax" }
-neve-hir = { version = "4.0.3", path = "../neve-hir" }
-neve-diagnostic = { version = "4.0.3", path = "../neve-diagnostic" }
-neve-derive = { version = "4.0.3", path = "../neve-derive" }
+neve-common = { version = "4.0.4", path = "../neve-common" }
+neve-syntax = { version = "4.0.4", path = "../neve-syntax" }
+neve-hir = { version = "4.0.4", path = "../neve-hir" }
+neve-diagnostic = { version = "4.0.4", path = "../neve-diagnostic" }
+neve-derive = { version = "4.0.4", path = "../neve-derive" }
 thiserror.workspace = true
 
 [target.'cfg(unix)'.dependencies]

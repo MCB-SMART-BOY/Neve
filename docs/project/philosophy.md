@@ -104,7 +104,7 @@ Do one thing well. Compose. Text is universal.
 |------------|--------|-------------|
 | Language core / 语言核心 | ✅ Converged | v4.0 syntax canonical, parser/lowering/typeck/eval 全链路闭环 |
 | Runtime / 运行时 | ✅ HIR canonical | AST compat path removed, all eval goes through HIR |
-| Toolchain / 工具链 | ✅ Usable | REPL, formatter, diagnostics, LSP (20 methods), all CI green |
+| Toolchain / 工具链 | ✅ Usable | REPL, formatter, diagnostics, LSP (21 methods), all CI green |
 | Package system / 包管理 | ✅ Implemented | Fetch/store/derive/builder/registry, binary cache with narinfo signing |
 | OS integration / 系统集成 | ⚠️ Linux-only | System configuration and sandbox are Linux-native; Docker backend for macOS |
 

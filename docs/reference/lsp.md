@@ -19,7 +19,7 @@ neve lsp --check
 
 Open any `.neve` file in Helix — syntax highlighting, auto-completion, and diagnostics work out of the box.
 
-## Supported LSP Methods (20 total)
+## Supported LSP Methods (21 total)
 
 ### Text Document Features
 
@@ -37,6 +37,7 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/references` | ✅ | Find all references with declaration toggle |
 | `textDocument/documentHighlight` | ✅ | Read/write occurrence highlighting |
 | `textDocument/rename` | ✅ | Batch rename with prepare support |
+| `textDocument/prepareRename` | ✅ | Prepare rename validation |
 | `textDocument/formatting` | ✅ | Format document via `neve-fmt` |
 | `textDocument/documentSymbol` | ✅ | Hierarchical symbol view |
 | `textDocument/semanticTokens/full` | ✅ | AST-based semantic tokens (10 types, 8 node kinds) |
@@ -153,7 +154,7 @@ Source Text → Parser (AST) → Lowering (HIR) → Type Check → ModuleSemanti
 
 ```bash
 # Build
-cargo build -p neve
+cargo build -p n3v3
 
 # Test LSP crate
 cargo test -p neve-lsp          # 20 unit tests
@@ -162,5 +163,5 @@ cargo test -p neve-lsp          # 20 unit tests
 cargo test --test lsp            # LSP integration tests
 
 # Health check
-cargo run -p neve -- lsp --check  # 7 automated checks
+cargo run -p n3v3 -- lsp --check  # 7 automated checks
 ```

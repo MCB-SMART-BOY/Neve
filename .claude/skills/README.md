@@ -1,6 +1,6 @@
 # Neve Language Development Skills
 
-A comprehensive skill suite for developing the Neve functional programming language (v4.0.2).
+A comprehensive skill suite for developing the Neve functional programming language (v4.0.4).
 
 ## Available Skills
 
@@ -80,7 +80,7 @@ Source Code (.neve)
 | `neve-frontend` | Pipeline facade (driver + session) |
 | `neve-eval` | HIR tree-walking interpreter |
 | `neve-std` | Standard library (I/O, Stream<T>, collections) |
-| `neve-lsp` | Language Server Protocol (20 methods) |
+| `neve-lsp` | Language Server Protocol (21 methods) |
 | `neve-fmt` | Code formatter (37/37 idempotency) |
 | `neve-cli` | Command-line interface |
 | `neve-diagnostic` | Error reporting (ariadne) |
@@ -91,7 +91,7 @@ Source Code (.neve)
 | `neve-config` | System configuration (generation-based) |
 | `neve-derive` | Derivation model + hashing |
 
-## Current Status (v4.0.2)
+## Current Status (v4.0.4)
 
 | Metric | Value |
 |--------|-------|
