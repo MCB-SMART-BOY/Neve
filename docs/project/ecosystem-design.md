@@ -255,7 +255,7 @@ The index is searched by `neve search <query>` which matches against both packag
 
 ### 6.2 Module System Integration
 
-Tighter integration between the flake system and Neve's module system, allowing `import` to resolve flake inputs.
+Tighter integration between the flake system and Neve's module system, allowing `use` to resolve flake inputs.
 
 ### 6.3 Remote Registry & Publishing
 
@@ -268,7 +268,7 @@ Currently package management is Unix-only. Future phases may extend to Windows v
 ## 7. References
 
 - [Stability Tiers](../reference/stability.md) — Stdlib stability guarantees
-- [Language Roadmap](language-roadmap.md) — Overall project phases
+- [Forward Plan](../../.claude/forward-plan.md) — Overall project phases
 - [Feature Matrix](feature-matrix.md) — Capability assessment
 - [API Reference](../reference/api.md) — Stdlib API documentation
 - [Specification](../reference/spec.md) — Language specification

@@ -1,6 +1,6 @@
 # Neve 设计审查报告 (Design Audit)
 
-**日期**: 2026-06-16 | **版本**: v3.19.0 | **审查范围**: 全项目 (17 crates, 541 E2E)
+**日期**: 2026-06-16 | **版本**: v4.0.0 | **审查范围**: 全项目 (17 crates, 541 E2E)
 
 ---
 
@@ -345,7 +345,7 @@ builder、config、fetch、frontend、lsp、store、fmt 集成测试在 Windows 
 ### 第 1 轮: 致命问题 — 立即修复
 1. [ ] C1: 修复 reqwest TLS 特性覆盖 (2 行改动)
 2. [ ] C6: Formatter 注释保留 (需要 AST 支持或 CST 层)
-3. [ ] C2/C3/C7: API 密封/可见性/命名冲突 (批量 `pub` → `pub(crate)` + `#[non_exhaustive]`)
+3. [x] C2/C3/C7: API 密封/可见性/命名冲突 (批量 `pub` → `pub(crate)` + `#[non_exhaustive]`) ✅ Fixed
 4. [ ] C4/C5: README 和示例语法更新
 
 ### 第 2 轮: 高风险问题 — 下个迭代

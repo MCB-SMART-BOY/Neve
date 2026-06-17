@@ -24,11 +24,11 @@ fn parse_ok(source: &str) -> neve_syntax::SourceFile {
 #[test]
 fn test_frontend_session_builds_in_memory_module_against_loaded_dependencies() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let ast = parse_ok(
         r#"
-            import math (add);
+            use math (add);
             fn compute() = add(1, 2);
         "#,
     );
@@ -64,12 +64,12 @@ fn test_frontend_session_builds_in_memory_module_against_loaded_dependencies() {
 #[test]
 fn test_frontend_session_resolves_imported_bindings_and_module_aliases() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let ast = parse_ok(
         r#"
-            import math (add);
-            import math as ops;
+            use math (add);
+            use math = ops;
             fn compute() = ops.add(add(1, 2), 3);
         "#,
     );
@@ -105,9 +105,9 @@ fn test_frontend_session_resolves_builtin_std_import_bookkeeping() {
     let temp_dir = TempDir::new().unwrap();
     let ast = parse_ok(
         r#"
-            import std.list (len);
-            import std.list as list_ops;
-            import std (*);
+            use std.list (len);
+            use std.list = list_ops;
+            use std (*);
             fn compute() = list_ops.len([1, 2]) + len([3, 4]);
         "#,
     );
@@ -146,14 +146,14 @@ fn test_frontend_session_resolves_builtin_std_import_bookkeeping() {
 #[test]
 fn test_frontend_session_prepares_module_and_resolves_imports_in_one_step() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let ast = parse_ok(
         r#"
-            import math (add);
-            import math as ops;
-            import std.list as list_ops;
-            import std.list (len);
+            use math (add);
+            use math = ops;
+            use std.list = list_ops;
+            use std.list (len);
             fn compute() = ops.add(len([1, 2]), list_ops.len([3, 4]));
         "#,
     );
@@ -218,12 +218,12 @@ fn test_frontend_session_prepares_module_and_resolves_imports_in_one_step() {
 #[test]
 fn test_frontend_session_prepares_checked_module_in_one_step() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let ast = parse_ok(
         r#"
-            import math (add);
-            import std.list as list_ops;
+            use math (add);
+            use std.list = list_ops;
             fn compute() = list_ops.len([add(1, 2)]);
         "#,
     );
@@ -262,13 +262,13 @@ fn test_frontend_session_prepares_checked_module_in_one_step() {
 #[test]
 fn test_frontend_session_parses_and_checks_source_in_one_step() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let mut session = FrontendSession::new(temp_dir.path());
     let checked = session
         .parse_checked_source_with_context(
             r#"
-                import math (add);
+                use math (add);
                 fn compute() = add(1, 2);
             "#,
             &SessionModuleContext::repl(),
@@ -381,13 +381,13 @@ fn test_frontend_session_parses_checked_source_with_explicit_display_name() {
 #[test]
 fn test_frontend_session_parses_checked_source_with_context_for_display() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let mut session = FrontendSession::new(temp_dir.path());
     let checked = session
         .parse_checked_source_with_context_for_display(
             r#"
-                import math (add);
+                use math (add);
                 fn compute() = add(1, 2);
             "#,
             &SessionModuleContext::repl(),
@@ -582,11 +582,11 @@ fn test_frontend_session_formats_named_checked_binding_types_with_current_module
 #[test]
 fn test_frontend_session_prepare_checked_module_reports_loaded_module_errors() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+    create_test_module(temp_dir.path(), &["broken"], "fn bad() = 1 + true;");
 
     let ast = parse_ok(
         r#"
-            import broken (bad);
+            use broken (bad);
             fn run() = 1;
         "#,
     );
@@ -618,11 +618,11 @@ fn test_frontend_session_prepare_checked_module_reports_loaded_module_errors() {
 #[test]
 fn test_frontend_session_check_error_projects_loaded_module_diagnostics_for_display() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+    create_test_module(temp_dir.path(), &["broken"], "fn bad() = 1 + true;");
 
     let ast = parse_ok(
         r#"
-            import broken (bad);
+            use broken (bad);
             fn run() = 1;
         "#,
     );
@@ -715,15 +715,15 @@ fn test_frontend_session_check_error_projects_current_module_diagnostics_for_dis
 #[test]
 fn test_frontend_session_commit_prepared_module_carries_visible_state_between_inputs() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["math"], "pub fn add(x, y) = x + y;");
+    create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");
 
     let mut session = FrontendSession::new(temp_dir.path());
     let mut visible_state = SessionVisibleState::default();
 
     let first = parse_ok(
         r#"
-            import math (add);
-            import std.list as list_ops;
+            use math (add);
+            use std.list = list_ops;
             fn compute() = add(1, 2);
         "#,
     );
@@ -761,16 +761,16 @@ fn test_frontend_session_commit_prepared_module_carries_visible_state_between_in
 #[test]
 fn test_frontend_session_returns_loaded_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["util"], "pub fn inc(x) = x + 1;");
+    create_test_module(temp_dir.path(), &["util"], "fn inc(x) = x + 1;");
     create_test_module(
         temp_dir.path(),
         &["math"],
-        "import util (inc); pub fn add_one(x) = inc(x);",
+        "use util (inc); fn add_one(x) = inc(x);",
     );
 
     let ast = parse_ok(
         r#"
-            import math (add_one);
+            use math (add_one);
             fn compute() = add_one(1);
         "#,
     );
@@ -812,13 +812,13 @@ fn test_frontend_session_returns_loaded_modules_in_dependency_order() {
 #[test]
 fn test_frontend_session_returns_only_evaluable_loaded_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["util"], "pub fn inc(x) = x + 1;");
-    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+    create_test_module(temp_dir.path(), &["util"], "fn inc(x) = x + 1;");
+    create_test_module(temp_dir.path(), &["broken"], "fn bad() = 1 + true;");
 
     let ast = parse_ok(
         r#"
-            import util (inc);
-            import broken (bad);
+            use util (inc);
+            use broken (bad);
             fn compute() = inc(1);
         "#,
     );
@@ -975,11 +975,11 @@ fn test_frontend_session_rejects_root_switch_when_not_pristine() {
 #[test]
 fn test_frontend_session_attributes_diagnostics_for_newly_loaded_modules() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_module(temp_dir.path(), &["broken"], "pub fn bad() = 1 + true;");
+    create_test_module(temp_dir.path(), &["broken"], "fn bad() = 1 + true;");
 
     let ast = parse_ok(
         r#"
-            import broken (bad);
+            use broken (bad);
             fn run() = 1;
         "#,
     );
@@ -998,7 +998,7 @@ fn test_frontend_session_attributes_diagnostics_for_newly_loaded_modules() {
     assert_eq!(diagnostics.len(), 1, "expected one broken dependency");
     assert!(diagnostics[0].file_path.ends_with("broken.neve"));
     assert!(
-        diagnostics[0].source.contains("pub fn bad() = 1 + true;"),
+        diagnostics[0].source.contains("fn bad() = 1 + true;"),
         "expected projected source text, got {:?}",
         diagnostics[0].source
     );

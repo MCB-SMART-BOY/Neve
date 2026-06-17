@@ -5,7 +5,7 @@
 **版本**: v1.0 (Implemented)
 **日期**: 2026-05-12
 **状态**: Implemented — Phase A-C complete (14 APIs)
-**关联**: [Effect Boundary](./effect-boundary.md) · [Language Roadmap](./language-roadmap.md) · [Feature Matrix](./feature-matrix.md)
+**关联**: [Effect Boundary](./effect-boundary-design.md) · [Forward Plan](./forward-plan.md) · [Feature Matrix](../docs/project/feature-matrix.md)
 **作者**: Chief Architect
 
 </div>

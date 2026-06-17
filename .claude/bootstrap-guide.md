@@ -44,7 +44,7 @@ These examples represent the earliest building blocks of a future bootstrap chai
     name = "package-name",
     version = "1.0.0",
 
-    meta = #{
+    meta = {
         description = "Package description",
         homepage = "https://...",
         license = "MIT",

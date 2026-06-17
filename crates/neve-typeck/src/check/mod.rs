@@ -2096,10 +2096,22 @@ impl TypeChecker {
 
         self.structs.insert(def_id, info);
 
+        // Build generic type arguments from struct's generic parameters.
+        // H5: Use Param references so that generic structs carry their type args.
+        let generic_args: Vec<Ty> = struct_def
+            .generics
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| Ty {
+                kind: TyKind::Param(idx as u32, p.name.clone()),
+                span: Span::DUMMY,
+            })
+            .collect();
+
         // Register the struct type in globals as a type constructor
         // 将结构体类型注册为类型构造函数
         let struct_ty = Ty {
-            kind: TyKind::Named(def_id, Vec::new()),
+            kind: TyKind::Named(def_id, generic_args),
             span: Span::DUMMY,
         };
         self.globals.insert(def_id, struct_ty);
@@ -2122,10 +2134,22 @@ impl TypeChecker {
 
         self.enums.insert(def_id, info);
 
+        // Build generic type arguments from enum's generic parameters.
+        // H5: Use Param references so that generic enums carry their type args.
+        let generic_args: Vec<Ty> = enum_def
+            .generics
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| Ty {
+                kind: TyKind::Param(idx as u32, p.name.clone()),
+                span: Span::DUMMY,
+            })
+            .collect();
+
         // Register the enum type in globals as a type constructor
         // 将枚举类型注册为类型构造函数
         let enum_ty = Ty {
-            kind: TyKind::Named(def_id, Vec::new()),
+            kind: TyKind::Named(def_id, generic_args.clone()),
             span: Span::DUMMY,
         };
         self.globals.insert(def_id, enum_ty);
@@ -2147,7 +2171,7 @@ impl TypeChecker {
                 kind: TyKind::Fn(
                     fields,
                     Box::new(Ty {
-                        kind: TyKind::Named(def_id, Vec::new()),
+                        kind: TyKind::Named(def_id, generic_args.clone()),
                         span: Span::DUMMY,
                     }),
                 ),
@@ -2256,10 +2280,14 @@ impl TypeChecker {
     }
 
     fn check_fn(&mut self, id: DefId, fn_def: &FnDef) {
+        // Pre-pass: scan the body for effectful calls so that the effect context
+        // is correct during body inference (nested lambdas need it).
+        let body_is_effectful = self.body_has_effectful_calls(&fn_def.body);
+
         // Track whether we're inside an effectful function
         // so that nested lambdas inherit the effect context.
         let prev_effectful = self.in_effectful_fn;
-        self.in_effectful_fn = fn_def.effectful;
+        self.in_effectful_fn = fn_def.effectful || body_is_effectful;
 
         // Create fresh type variables for generic parameters
         let mut generic_vars: HashMap<String, Ty> = HashMap::new();
@@ -2342,7 +2370,6 @@ impl TypeChecker {
         // Record effectful functions for inter-procedural checking.
         // Effect is auto-inferred: a function is effectful if annotated `effect`
         // or if its body contains effectful calls.
-        let body_is_effectful = self.body_has_effectful_calls(&fn_def.body);
         if fn_def.effectful || body_is_effectful {
             self.effectful_functions.insert(id);
         }
@@ -2371,10 +2398,14 @@ impl TypeChecker {
         impl_generics: &HashMap<String, Ty>,
         assoc_types: &HashMap<String, Ty>,
     ) {
+        // Pre-pass: scan the body for effectful calls so that the effect context
+        // is correct during body inference (nested lambdas need it).
+        let body_is_effectful = self.body_has_effectful_calls(&item.body);
+
         // Track whether we're inside an effectful impl method
         // so that nested lambdas inherit the effect context.
         let prev_effectful = self.in_effectful_fn;
-        self.in_effectful_fn = item.effectful;
+        self.in_effectful_fn = item.effectful || body_is_effectful;
 
         let mut generic_vars = impl_generics.clone();
         for param in &item.generics {
@@ -2442,7 +2473,7 @@ impl TypeChecker {
         self.globals.insert(item.id, method_ty);
 
         // Effect auto-inference for impl methods.
-        if item.effectful || self.body_has_effectful_calls(&item.body) {
+        if item.effectful || body_is_effectful {
             self.effectful_functions.insert(item.id);
         }
 

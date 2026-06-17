@@ -30,7 +30,7 @@ pub fn format_with_config(source: &str, config: &FormatConfig) -> Result<String,
     }
 
     let formatter = Formatter::new(config.clone());
-    Ok(formatter.format(&ast))
+    formatter.format(&ast).map_err(FormatError::Internal)
 }
 
 /// Check if source code is already formatted.
@@ -48,6 +48,8 @@ pub enum FormatError {
     Parse(Vec<Diagnostic>),
     /// I/O error. / I/O 错误。
     Io(String),
+    /// Internal formatter error. / 内部格式化错误.
+    Internal(String),
 }
 
 impl FormatError {
@@ -73,6 +75,7 @@ impl std::fmt::Display for FormatError {
                 write!(f, "parse error: {}", summary)
             }
             FormatError::Io(msg) => write!(f, "I/O error: {}", msg),
+            FormatError::Internal(msg) => write!(f, "format error: {}", msg),
         }
     }
 }

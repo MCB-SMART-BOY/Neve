@@ -7,7 +7,7 @@
 mod codes;
 mod diagnostic;
 
-pub use codes::ErrorCode;
+pub use codes::{ErrorCode, lookup_error_code};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Label, Severity};
 
 use ariadne::{ColorGenerator, Label as AriadneLabel, Report, ReportKind, Source};
@@ -57,4 +57,36 @@ pub fn emit(source: &str, filename: &str, diagnostic: &Diagnostic) {
         .finish()
         .eprint((filename, Source::from(source)))
         .expect("failed to print diagnostic to stderr");
+}
+
+/// Print an extended explanation for an error code to stdout.
+/// 将错误代码的扩展说明打印到标准输出。
+///
+/// This is like `rustc --explain E0001`.
+/// 类似于 `rustc --explain E0001`。
+pub fn explain(code_str: &str) -> Result<(), String> {
+    match lookup_error_code(code_str) {
+        Some(code) => {
+            // Header
+            println!("error code: {}", code.as_str());
+            println!("description: {}", code.description());
+            println!();
+
+            // Suggestion
+            if let Some(suggestion) = code.suggestion() {
+                println!("suggestion: {}", suggestion);
+                println!();
+            }
+
+            // Extended explanation
+            if let Some(extended) = code.extended_explanation() {
+                println!("{}", extended);
+            } else {
+                println!("(no extended explanation available for this error code)");
+            }
+
+            Ok(())
+        }
+        None => Err(format!("unknown error code: `{}`\n\nUse `neve doc diagnostics` to see all error codes.", code_str)),
+    }
 }

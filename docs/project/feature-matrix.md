@@ -11,7 +11,7 @@
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
   <strong><a href="../README.md">Docs</a></strong> ·
-  <strong><a href="language-roadmap.md">Language Roadmap</a></strong>
+  <strong><a href="../../.claude/forward-plan.md">Forward Plan</a></strong>
 </p>
 
 </div>
@@ -55,7 +55,7 @@
 1. **语法表面比语义闭环走得更快。**
 2. **AST 路径历史上补过更多缺口，但主 CLI 路径已经开始优先收敛到 HIR。**
 3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) ✅ 已完成。**
-4. **端到端测试已覆盖 537 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
+4. **端到端测试已覆盖 541 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
 5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete) ✅。**
 6. **LSP 20 methods implemented ✅ (CodeLens)，补全评分排序，模块↔flake 集成。**
 7. **Registry v1 API 完整 (8 endpoints) ✅，RegistryClient 已接入 install/search。**
@@ -70,7 +70,7 @@
 | 列表推导 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 语言层基本可用，工具链覆盖不足 |
 | 安全字段访问 `?.` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / record / option-record；类型拒绝非 record 非 option 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | 路径字面量 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `./config` 推断为 `Path` 类型；typed-path adapter 和 bridge 全覆盖 |
-| 惰性表达式 `lazy` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `lazy/force/isLazy/isEvaluated` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
+| 惰性表达式 `~` (lazy) | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `lazy/force/isLazy/isEvaluated` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
 | 空值合并 `??` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / user enum `Some/None`；类型拒绝非 Option-like 的 `??` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | 错误传播 `?` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option/Result / user enum `Some/None`/`Ok/Err`；类型拒绝非 optional 的 `?` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | impl 签名规范化与方法派发优先顺序已定；impl-assoc 类型解析已统一到 canonical 路径；方法调用 UnknownMethod 诊断已到位；关联类型与缺省 alias 链的解析在全管线一致 |
@@ -114,7 +114,7 @@
 | 字符串拼接 | `"a" + "b"` |
 | 管道语法 | `a |> f` 等价于 `f(a)` |
 | 输出 | `print` / `println` 全局可用 |
-| 效果系统 | `effect` 关键字；fn / impl fn / lambda 全覆盖 |
+| 效果系统 | v4.0: auto-inferred, no keyword needed；fn / impl fn / lambda 全覆盖 |
 | REPL | 历史持久化、Tab 补全、`:save` / `:cd`、智能输入完成 |
 | 事件系统 | `Event<T>`、`io.every(ms)`、`io.watchFile(p)`、`io.eventNext(e)` |
 | 反应式 | `Live<T>`、`io.reactive(e)`、`io.liveNext(l)` |
@@ -172,22 +172,4 @@
 - 脚本入口模型 ✅ (shebang + io.args() + argv 解析)
 - 流变换 ✅ (Stream<T> 14 APIs, Phase A-C complete)
 
-## 下一步怎么用这份矩阵 / What To Do Next
-
-这份矩阵对应语言路线图里的 `WP-0A`。
-下一步最合理的动作是：
-
-1. 继续把这份矩阵扩成更完整的 feature inventory。
-2. 先修矩阵里最红的语义项，而不是继续加新语法。
-3. 用这份矩阵反向修正文档里的 `Complete` 表述。
-4. 继续扩展 `tests/end_to_end.rs`（541 个测试，539 pass + 2 flaky），而不是把现有 smoke baseline 误当成完整闭环。
-
-## 当前结论 / Bottom Line
-
-今天可以对外比较诚实地说：
-
-- Neve 已经是一个**语法表面丰富、核心功能可运行**的语言原型。
-- Neve 还不是一个**语义完全收敛的独立完备语言**。
-- Neve 已经开始具备**系统脚本能力**，管道/重定向/进程执行/流式输出/信号/Task/glob/TTY/Job 已就绪。
-- **替代 Bash** 的最后一层差距 **Stream<T> 抽象** 已完成（14 APIs, Phase A-C complete）✅。Phase 4 (Shell 能力替代) ✅。Phase 5 (生态补完) 进行中：flake/lock/store/registry CLI 已上线。
-- **Phase 6 (Syntax Overhaul v3.0) ✅ 已完成** — 22→12 关键字，`let`/`fn`/`;` 可选，`type` 统一 `struct`/`enum`，`|` lambda 语法，`{}` 记录语法，`&` 注释。
+> 开发状态见 [`.claude/forward-plan.md`](../../.claude/forward-plan.md)。

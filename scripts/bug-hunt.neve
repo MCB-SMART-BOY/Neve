@@ -1,7 +1,7 @@
 #!/usr/bin/env neve run
 -- Bug hunter: security regression tests / 安全回归测试
 -- Usage: neve run scripts/bug-hunt.neve
-import std.io as io;
+use std.io = io;
 
 let check = fn(name, expected) {
     io.print("  [" ++ name ++ "] ... ");
@@ -31,7 +31,7 @@ let check = fn(name, expected) {
         _ -> "unknown"
     };
 
-    if result == expected then {
+    if result == expected -> {
         io.println("PASS");
         true
     } else {
@@ -48,11 +48,11 @@ let r3 = check("capture-stderr", "err");
 let r4 = check("exit-code-0", "true");
 
 -- Count results (convert bools to ints and sum)
-let toInt = fn(b) { if b then 1 else 0 };
+let toInt = fn(b) { if b -> 1 else 0 };
 let passed = toInt(r1) + toInt(r2) + toInt(r3) + toInt(r4);
 let failed = 4 - passed;
 
 io.println("");
 io.println("Results: " ++ toString(passed) ++ " passed, " ++ toString(failed) ++ " failed");
 
-if failed > 0 then 1 else 0
+if failed > 0 -> 1 else 0

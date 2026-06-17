@@ -160,7 +160,6 @@ fn classify_token_with_context(token: &Token, ctx: &ClassifyContext) -> Option<(
         TokenKind::Let
         | TokenKind::Fn
         | TokenKind::If
-        | TokenKind::Then
         | TokenKind::Else
         | TokenKind::Match
         | TokenKind::Type
@@ -168,14 +167,10 @@ fn classify_token_with_context(token: &Token, ctx: &ClassifyContext) -> Option<(
         | TokenKind::Enum
         | TokenKind::Trait
         | TokenKind::Impl
-        | TokenKind::Import
-        | TokenKind::Pub
-        | TokenKind::Lazy
-        | TokenKind::As
+        | TokenKind::Use
         | TokenKind::SelfLower
         | TokenKind::Super
-        | TokenKind::Crate
-        | TokenKind::Effect => (token_types::KEYWORD, 0),
+        | TokenKind::Crate => (token_types::KEYWORD, 0),
 
         // Record literal #{ / 记录字面量开始
         TokenKind::HashLBrace => (token_types::KEYWORD, 0),
@@ -324,19 +319,13 @@ pub fn highlight_terminal(source: &str) -> String {
             TokenKind::Let
             | TokenKind::Fn
             | TokenKind::If
-            | TokenKind::Then
             | TokenKind::Else
             | TokenKind::Match
-            | TokenKind::Import
-            | TokenKind::As
             | TokenKind::Type
             | TokenKind::Struct
             | TokenKind::Enum
             | TokenKind::Trait
-            | TokenKind::Impl
-            | TokenKind::Pub
-            | TokenKind::Effect
-            | TokenKind::Lazy => "\x1b[35m",
+            | TokenKind::Impl => "\x1b[35m",
 
             // Identifiers in white / 标识符用白色
             TokenKind::Ident(_) => "\x1b[37m",

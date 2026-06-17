@@ -13,7 +13,7 @@ fn int(value: i64) -> Int {
 
 #[test]
 fn test_frontend_accepts_std_root_module_item_imports() {
-    let analysis = analyze_source("import std (list); let result = list.len([1, 2]);");
+    let analysis = analyze_source("use std (list); let result = list.len([1, 2]);");
     assert!(
         analysis.diagnostics.is_empty(),
         "unexpected diagnostics: {:?}",
@@ -23,7 +23,7 @@ fn test_frontend_accepts_std_root_module_item_imports() {
 
 #[test]
 fn test_snippet_analysis_accepts_std_root_module_item_imports() {
-    let source = "import std (list); let result = list.len([1, 2]);";
+    let source = "use std (list); let result = list.len([1, 2]);";
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -42,7 +42,7 @@ fn test_snippet_analysis_accepts_std_root_module_item_imports() {
 
 #[test]
 fn test_std_root_module_item_import_hir_runtime() {
-    let analysis = analyze_source("import std (list); let result = list.len([1, 2]);");
+    let analysis = analyze_source("use std (list); let result = list.len([1, 2]);");
     assert!(
         analysis.diagnostics.is_empty(),
         "unexpected diagnostics: {:?}",

@@ -1075,7 +1075,7 @@ impl Resolver {
                         generics: Vec::new(),
                         params: Vec::new(),
                         return_ty: Self::unknown_ty(item.span),
-                        effectful: true, // let bindings allow effects (REPL wrappers)
+                        effectful: false, // auto-inferred by typeck from body
                         body,
                     }),
                     span: item.span,
@@ -1488,7 +1488,14 @@ impl Resolver {
                                     }
                                 };
                                 ExprKind::Global(def_id)
+                            } else if parts.len() == 1 {
+                                // Single unresolved name: use Builtin for consistent error reporting
+                                // with lower_name_kind.
+                                ExprKind::Builtin(full_name)
                             } else {
+                                // Multi-segment unresolved path: use a sentinel Global wrapped in
+                                // Field chains. The field access on the unknown base produces
+                                // a clear "undefined name" diagnostic in typeck.
                                 let mut result_kind = ExprKind::Global(DefId(u32::MAX));
                                 for part in &parts[1..] {
                                     let base_expr = Expr {

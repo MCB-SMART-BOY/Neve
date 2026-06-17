@@ -26,7 +26,6 @@ fn test_keywords() {
             TokenKind::Let,
             TokenKind::Fn,
             TokenKind::If,
-            TokenKind::Then,
             TokenKind::Else,
             TokenKind::Match,
             TokenKind::Eof,
@@ -36,11 +35,10 @@ fn test_keywords() {
 
 #[test]
 fn test_all_keywords() {
-    let keywords = lex("let fn if then else match type import module where with in true false");
+    let keywords = lex("let fn if else match type use module true false");
     assert!(keywords.contains(&TokenKind::Let));
     assert!(keywords.contains(&TokenKind::Fn));
     assert!(keywords.contains(&TokenKind::If));
-    assert!(keywords.contains(&TokenKind::Then));
     assert!(keywords.contains(&TokenKind::Else));
     assert!(keywords.contains(&TokenKind::Match));
     assert!(keywords.contains(&TokenKind::True));
@@ -1056,8 +1054,8 @@ fn test_type_annotation_tokens() {
 
 #[test]
 fn test_import_statement_tokens() {
-    let tokens = lex("import std.list (map, filter);");
-    assert!(tokens.contains(&TokenKind::Import));
+    let tokens = lex("use std.list (map, filter);");
+    assert!(tokens.contains(&TokenKind::Use));
     assert!(tokens.contains(&TokenKind::Dot));
     assert!(tokens.contains(&TokenKind::Semicolon));
 }

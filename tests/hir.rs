@@ -89,7 +89,7 @@ fn test_lower_binary_expr() {
 
 #[test]
 fn test_lower_if_expr() {
-    let source = "let x = if true then 1 else 0;";
+    let source = "let x = if true -> 1 else 0;";
     let (ast, diagnostics) = parse(source);
     assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
 

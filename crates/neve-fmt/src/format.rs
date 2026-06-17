@@ -12,7 +12,7 @@ use neve_syntax::{
     GenericParam, ImplDef, ImplItem, ImportDef, ImportItems, Item, ItemKind, LambdaParam, LetDef,
     LiteralPattern, MatchArm, Param, Pattern, PatternKind, RecordField, RecordPatternField,
     RecordTypeField, SourceFile, Stmt, StmtKind, StringPart, StructDef, TraitDef, TraitItem, Type,
-    TypeAlias, TypeKind, UnaryOp, VariantKind, Visibility,
+    TypeAlias, TypeKind, UnaryOp, VariantKind,
 };
 
 /// Code formatter.
@@ -31,7 +31,7 @@ impl Formatter {
 
     /// Format a source file.
     /// 格式化源文件。
-    pub fn format(&self, file: &SourceFile) -> String {
+    pub fn format(&self, file: &SourceFile) -> Result<String, String> {
         let mut printer = Printer::new(self.config.clone());
 
         for (i, item) in file.items.iter().enumerate() {
@@ -48,9 +48,14 @@ impl Formatter {
 
         // Ensure we're at indent level 0 at end of file
         // 确保在文件末尾缩进级别为 0
-        debug_assert_eq!(printer.current_indent(), 0, "unbalanced indentation");
+        let indent = printer.current_indent();
+        if indent != 0 {
+            return Err(format!(
+                "unbalanced indentation: final indent level is {indent}, expected 0"
+            ));
+        }
 
-        printer.finish()
+        Ok(printer.finish())
     }
 
     /// Format an item.
@@ -76,9 +81,7 @@ impl Formatter {
     /// Format a let binding.
     /// 格式化 let 绑定。
     fn format_let(&self, p: &mut Printer, def: &LetDef) {
-        if def.visibility == Visibility::Public {
-            p.write("pub ");
-        }
+        // v4.0: pub removed, all items are public by default
         // let omitted in v3.0
         self.format_pattern(p, &def.pattern);
 
@@ -95,9 +98,7 @@ impl Formatter {
     /// Format a function definition.
     /// 格式化函数定义。
     fn format_fn(&self, p: &mut Printer, def: &FnDef) {
-        if def.visibility == Visibility::Public {
-            p.write("pub ");
-        }
+        // v4.0: pub removed, all items are public by default
         // fn omitted in v3.0
         p.write(&def.name.name);
 
@@ -134,9 +135,7 @@ impl Formatter {
     /// Format a type alias.
     /// 格式化类型别名。
     fn format_type_alias(&self, p: &mut Printer, def: &TypeAlias) {
-        if def.visibility == Visibility::Public {
-            p.write("pub ");
-        }
+        // v4.0: pub removed, all items are public by default
         p.write("type ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
@@ -149,9 +148,7 @@ impl Formatter {
     /// Format a struct definition.
     /// 格式化结构体定义。
     fn format_struct(&self, p: &mut Printer, def: &StructDef) {
-        if def.visibility == Visibility::Public {
-            p.write("pub ");
-        }
+        // v4.0: pub removed, all items are public by default
         p.write("type ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
@@ -178,9 +175,7 @@ impl Formatter {
     /// Format an enum definition.
     /// 格式化枚举定义。
     fn format_enum(&self, p: &mut Printer, def: &EnumDef) {
-        if def.visibility == Visibility::Public {
-            p.write("pub ");
-        }
+        // v4.0: pub removed, all items are public by default
         p.write("type ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
@@ -226,9 +221,7 @@ impl Formatter {
     /// Format a trait definition.
     /// 格式化 trait 定义。
     fn format_trait(&self, p: &mut Printer, def: &TraitDef) {
-        if def.visibility == Visibility::Public {
-            p.write("pub ");
-        }
+        // v4.0: pub removed, all items are public by default
         p.write("trait ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
@@ -318,7 +311,7 @@ impl Formatter {
         }
 
         if let Some(ref alias) = def.alias {
-            p.write(" as ");
+            p.write(" = ");
             p.write(&alias.name);
         }
 
@@ -631,11 +624,27 @@ impl Formatter {
             ExprKind::Call { func, args } => {
                 self.format_expr(p, func);
                 p.write("(");
+                // H11: wrap long argument lists to stay within max_width.
+                let wrap = args.len() > 3 && p.would_exceed_width(10);
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
-                        p.write(", ");
+                        p.write(",");
+                        if wrap {
+                            p.newline();
+                        } else {
+                            p.write(" ");
+                        }
                     }
-                    self.format_expr(p, arg);
+                    if wrap {
+                        p.indent();
+                        self.format_expr(p, arg);
+                        p.dedent();
+                    } else {
+                        self.format_expr(p, arg);
+                    }
+                }
+                if wrap {
+                    p.newline();
                 }
                 p.write(")");
             }
@@ -650,11 +659,27 @@ impl Formatter {
                 p.write(".");
                 p.write(&method.name);
                 p.write("(");
+                // H11: wrap long argument lists.
+                let wrap = args.len() > 3 && p.would_exceed_width(10);
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
-                        p.write(", ");
+                        p.write(",");
+                        if wrap {
+                            p.newline();
+                        } else {
+                            p.write(" ");
+                        }
                     }
-                    self.format_expr(p, arg);
+                    if wrap {
+                        p.indent();
+                        self.format_expr(p, arg);
+                        p.dedent();
+                    } else {
+                        self.format_expr(p, arg);
+                    }
+                }
+                if wrap {
+                    p.newline();
                 }
                 p.write(")");
             }

@@ -47,6 +47,30 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **reqwest**: TLS feature restored (was overwritten by crate-level `features = ["blocking"]`).
 - **NAR**: Path traversal test replaced with proper roundtrip test.
 - **Docs**: 20+ files synchronized to v4.0/v3.19.0 syntax and current state.
+- **Eval**: Thunk forcing in binary/comparison operations.
+- **Eval**: Signal check points in long-running builtins — `map`, `fold`, `filter`, `flatMap`, `all`, `any`, generators, `streamCollect`, `streamForEach`.
+- **Typeck**: Effect auto-inference pre-pass — `in_effectful_fn` now set before body inference so nested lambdas inherit correct context.
+- **Typeck**: Enum generic type parameters now preserved via `TyKind::Param` references instead of empty `Vec::new()`.
+- **Typeck**: `DynamicRecord`/`SafeRecordBase` exhaustiveness analysis — only wildcard patterns are exhaustive.
+- **HIR**: Unresolved single-segment paths now use `Builtin(name)` consistently with simple name resolution.
+- **HIR**: `EnumDef::variant_constructors()` shared method unifies variant collection between eval and typeck.
+- **LSP**: `did_change` debouncing (300ms quiet period) reduces keystroke-triggered re-analysis.
+- **LSP**: Hover type names now resolve through `global_names` instead of showing placeholder `"T"`.
+- **LSP**: `did_change_configuration`/`did_change_watched_files` stub handlers added.
+- **LSP**: `code_action` now shows actual diagnostic message instead of generic label.
+- **Fmt**: `debug_assert!` replaced with `Result`-based indentation check, works in release builds.
+- **Fmt**: Basic line wrapping for function/method calls using `max_width` + `would_exceed_width`.
+- **Parser**: Shebang stripping (`#!/usr/bin/env neve`) now built into parser.
+- **CLI**: REPL history save/load errors now reported via `eprintln!` instead of silently discarded.
+- **CLI**: `neve run` and `neve test` public functions now have doc comments.
+- **Config**: `ServiceUnit.service_type`/`restart` converted from `String` to `ServiceType`/`RestartPolicy` enums.
+- **Config**: `panic = "abort"` documented with `catch_unwind` caveat.
+- **Store**: NAR `u64 → usize` truncation guarded with `try_from`.
+- **AST**: `FnDef.effect`/`TraitItem.effect`/`ImplItem.effect` marked DEPRECATED.
+- **Tree-sitter**: `build.rs` handles missing `parser.c` gracefully.
+- **CI**: `cargo test --doc` step and MSRV 1.85 verification job added.
+- **Tests**: 2 typeck unit tests (duplicate detection, effect inference) and 2 eval unit tests (thunk forcing) added.
+- **Audit**: 62/62 design audit findings resolved — Critical 3/3, High 13/13, Medium 18/18, Low 28/28. Grade: B+ → A-.
 
 ## [3.18.0] - 2026-05-27
 
@@ -280,7 +304,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Legacy compat execution wrappers**: Removed public compat wrappers `io.exec`, `io.execWith`, `io.execShell`, `io.execResult`, `io.execWithResult`, `io.execShellResult`, and the old boundary redirect execution wrappers. Shell behavior is still available, but now only through explicit `Command` construction such as `io.command("sh", ["-c", ...])` or `io.command("cmd", ["/C", ...])`. / **旧兼容执行 wrapper**: 移除了公开 compat wrapper：`io.exec`、`io.execWith`、`io.execShell`、`io.execResult`、`io.execWithResult`、`io.execShellResult`，以及旧的 boundary redirect 执行 wrapper。shell 语义仍可用，但现在只能通过显式 `Command` 构造表达，例如 `io.command("sh", ["-c", ...])` 或 `io.command("cmd", ["/C", ...])`。
 
 ### Improved / 改进
-- **Full-pipeline release baseline**: The release was validated against `cargo build -p neve`, `cargo test --workspace`, and `cargo clippy --workspace --all-targets -- -D warnings`, in addition to the narrower convergence slices recorded in `semantic-convergence-plan.md`. / **全流水线发布基线**: 本次发布除 convergence plan 中的窄切片验证外，还通过了 `cargo build -p neve`、`cargo test --workspace` 与 `cargo clippy --workspace --all-targets -- -D warnings` 的完整发布基线。
+- **Full-pipeline release baseline**: The release was validated against `cargo build -p neve`, `cargo test --workspace`, and `cargo clippy --workspace --all-targets -- -D warnings`, in addition to the narrower convergence slices recorded in the forward plan. / **全流水线发布基线**: 本次发布除前向计划中的窄切片验证外，还通过了 `cargo build -p neve`、`cargo test --workspace` 与 `cargo clippy --workspace --all-targets -- -D warnings` 的完整发布基线。
 
 ## [2.0.0] - 2026-04-15
 

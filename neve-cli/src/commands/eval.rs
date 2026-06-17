@@ -2,8 +2,9 @@
 //! `neve eval` 命令 — 规范 HIR 管线。
 
 use crate::output;
+use neve_common::Span;
 use neve_diagnostic::{Severity, emit};
-use neve_eval::{Evaluator, Value};
+use neve_eval::{Evaluator, Value, eval_error_to_diagnostic};
 use neve_frontend::{LoadedSnippetModule, analyze_snippet_ast};
 use neve_parser::parse;
 use neve_std::stdlib;
@@ -103,20 +104,29 @@ fn eval_value(
         return Err(format!("type error: {count} diagnostic(s)"));
     }
 
+    let source_span = Span::new(neve_common::BytePos(0), neve_common::BytePos(source.len() as u32));
     let mut evaluator = Evaluator::new().with_extra_builtins(
         stdlib()
             .into_iter()
             .map(|(name, value)| (name.to_string(), value)),
     );
     for entry in &analysis.evaluable_loaded_modules {
-        evaluator
+        if let Err(e) = evaluator
             .eval_module_with_method_resolutions(&entry.module, &entry.method_resolutions)
-            .map_err(|e| format!("eval error: {e:?}"))?;
+        {
+            let diag = eval_error_to_diagnostic(&e, source_span);
+            emit(source, "<eval>", &diag);
+            return Err(format!("eval error: {}", e));
+        }
     }
 
     evaluator
         .eval_module_with_method_resolutions(&analysis.hir, &analysis.semantics.method_resolutions)
-        .map_err(|e| format!("eval error: {e:?}"))
+        .map_err(|e| {
+            let diag = eval_error_to_diagnostic(&e, source_span);
+            emit(source, "<eval>", &diag);
+            format!("eval error: {}", e)
+        })
 }
 
 fn emit_loaded_module_diagnostics(

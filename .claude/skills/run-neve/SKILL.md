@@ -48,7 +48,7 @@ BIN=./target/debug/neve
 
 # Evaluate an expression
 echo '1 + 2 * 3' | $BIN repl          # → 7 (interactive)
-$BIN eval "1 + 2 * 3"                 # → 3 (non-interactive)
+$BIN eval "1 + 2 * 3"                 # → 7 (non-interactive)
 
 # Run a .neve file
 $BIN run examples/hello.neve

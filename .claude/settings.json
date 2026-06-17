@@ -101,7 +101,7 @@
       "path": ".claude/skills/neve-hir.md"
     },
     "neve-eval": {
-      "description": "Tree-walking interpreter (HIR canonical + AST deprecated)",
+      "description": "Tree-walking interpreter (HIR canonical)",
       "path": ".claude/skills/neve-eval.md"
     },
     "neve-std": {
@@ -109,7 +109,7 @@
       "path": ".claude/skills/neve-std.md"
     },
     "neve-lsp": {
-      "description": "Language Server Protocol (20 methods)",
+      "description": "Language Server Protocol (23 methods)",
       "path": ".claude/skills/neve-lsp.md"
     },
     "neve-test": {
@@ -121,7 +121,7 @@
       "path": ".claude/skills/neve-effect.md"
     },
     "neve-lean": {
-      "description": "Formal verification with Lean 4 (19 modules)",
+      "description": "Formal verification with Lean 4 (21 modules)",
       "path": ".claude/skills/neve-lean.md"
     }
   },
@@ -151,10 +151,6 @@
     "pre-release": {
       "description": "Pre-release checklist: test + clippy + fmt + changelog",
       "path": ".claude/workflows/pre-release.js"
-    },
-    "check-migration": {
-      "description": "Check AST→HIR migration status across the codebase",
-      "path": ".claude/workflows/check-migration.js"
     }
   }
 }

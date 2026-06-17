@@ -1788,7 +1788,7 @@ mod tests {
 
         fs::write(
             root.join("helpers.neve"),
-            r#"pub fn package(name) = #{
+            r#"fn package(name) = #{
     name = name,
     version = "3.1.0"
 };"#,
@@ -1796,7 +1796,7 @@ mod tests {
 
         fs::write(
             root.join("flake.neve"),
-            r#"import helpers (package);
+            r#"use helpers (package);
 
 let flake = #{
     outputs = fn(inputs) #{

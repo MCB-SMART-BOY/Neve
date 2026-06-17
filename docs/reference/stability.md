@@ -2,7 +2,7 @@
 
 ## API Stability Tiers
 
-This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Stability tiers are scoped to the v3.x major version. Breaking changes to stable APIs will only occur with a major version bump.
+This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Current release is v4.0.0 (transitional — v4.0 syntax with legacy aliases). v4.0 is in preparation. Breaking changes to stable APIs will only occur with a major version bump.
 
 ## Tier 1: Stable ✅
 
@@ -90,7 +90,7 @@ This document defines the stability guarantees for the Neve standard library (st
 
 All these types are stable:
 
-- `Int` — 64-bit signed integer
+- `Int` — arbitrary-precision signed integer
 - `Float` — 64-bit IEEE 754 float
 - `Bool` — Boolean (`true` / `false`)
 - `String` — UTF-8 string
@@ -296,7 +296,7 @@ Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 |---------|---------|------------------|
 | **Major** (v3 → v4) | Semantic completeness milestone. Represents "the language is mature enough to consider stable." | Allowed, with documented migration paths. |
 | **Minor** (v3.19 → v3.20) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
-| **Patch** (v3.19.0 → v3.19.1) | Bug fix release. No new features. | Not allowed. |
+| **Patch** (v4.0.0 → v3.19.1) | Bug fix release. No new features. | Not allowed. |
 
 ### Deprecation Policy / 废弃策略
 
@@ -314,8 +314,8 @@ Example (AST evaluator removal):
 
 v4.0 marks the transition from "language prototype" to "stable language platform":
 
-1. AST compat path (`neve_eval::compat`) fully removed
-2. All 6 known implementation gaps closed
+1. AST compat path (`neve_eval::compat`) fully removed — ✅ Done (v4.0.0)
+2. All 6 known implementation gaps closed — ✅ Done (v4.0.0)
 3. Lean formal verification: all axioms closed
 4. Release policy formalized and stable for 2+ minor versions
 5. External contribution policy published

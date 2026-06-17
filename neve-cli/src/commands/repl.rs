@@ -103,7 +103,9 @@ pub fn run() -> Result<(), String> {
 
                 in_multiline = false;
 
-                let _ = rl.add_history_entry(input);
+                if let Err(e) = rl.add_history_entry(input) {
+                    eprintln!("warning: failed to add history entry: {e}");
+                }
 
                 // Handle REPL commands
                 // 处理 REPL 命令
@@ -311,7 +313,9 @@ pub fn run() -> Result<(), String> {
     }
 
     // Save history before exit
-    let _ = save_repl_history(&mut rl);
+    if let Err(e) = save_repl_history(&mut rl) {
+        eprintln!("warning: failed to save REPL history: {e}");
+    }
     println!("Goodbye!");
     Ok(())
 }
@@ -586,7 +590,7 @@ const BUILTIN_COMPLETIONS: &[&str] = &[
     "if",
     "else",
     "then",
-    "import",
+    "use",
     "enum",
     "struct",
     "trait",
@@ -794,8 +798,10 @@ fn repl_history_path() -> Option<PathBuf> {
 
 /// Load REPL command history from disk.
 fn load_repl_history<H: Helper>(rl: &mut rustyline::Editor<H, rustyline::history::FileHistory>) {
-    if let Some(path) = repl_history_path() {
-        let _ = rl.load_history(&path);
+    if let Some(path) = repl_history_path()
+        && let Err(e) = rl.load_history(&path)
+    {
+        eprintln!("warning: failed to load REPL history: {e}");
     }
 }
 
@@ -1269,13 +1275,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.option = option;",
+            "use std.option = option;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type("option.some(41)? + 1", &runtime, &state)
             .expect("type inference should succeed");
@@ -1289,13 +1295,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"path.fromString("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -1309,13 +1315,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"path.extensionPath(path.joinPath(path.fromString("/tmp"), "neve.txt"))"#,
@@ -1333,29 +1339,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.sort(io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1373,13 +1379,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"list.max([1, 3, 2])"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -1393,29 +1399,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.head(io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1433,29 +1439,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.reverse(io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1473,29 +1479,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.get(0, io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1513,29 +1519,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.cons(path.fromString("/"), io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1553,29 +1559,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.take(2, io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1593,29 +1599,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.drop(1, io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1633,29 +1639,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.contains(path.fromString("/"), io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1673,29 +1679,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.indexOf(path.fromString("/"), io.readDirEntryPaths(path.fromString("/tmp")))"#,
@@ -1713,13 +1719,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"list.sum([1, 2, 3])"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -1733,13 +1739,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"list.product([2, 3, 4])"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -1753,21 +1759,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.replicate(2, path.fromString("/tmp"))"#,
@@ -1785,29 +1791,29 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.zip(io.readDirEntryPaths(path.fromString("/tmp")), [1, 2])"#,
@@ -1825,13 +1831,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty =
             infer_repl_type("math.inf", &runtime, &state).expect("type inference should succeed");
@@ -1845,13 +1851,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let int_ty = infer_repl_type("math.toInt(true)", &runtime, &state)
             .expect("type inference should succeed");
@@ -1869,13 +1875,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let nan_ty = infer_repl_type("math.isNan(math.nan)", &runtime, &state)
             .expect("type inference should succeed");
@@ -1893,13 +1899,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let floor_ty = infer_repl_type("math.floor(1.9)", &runtime, &state)
             .expect("type inference should succeed");
@@ -1920,13 +1926,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let sqrt_ty = infer_repl_type("math.sqrt(9.0)", &runtime, &state)
             .expect("type inference should succeed");
@@ -1950,13 +1956,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let sin_ty = infer_repl_type("math.sin(0.0)", &runtime, &state)
             .expect("type inference should succeed");
@@ -1977,13 +1983,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.math = math;",
+            "use std.math = math;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type("math.abs(1)", &runtime, &state)
             .expect("type inference should succeed");
@@ -2000,13 +2006,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch = fetch;",
+            "use std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"fetch.path("Cargo.toml").cached"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2020,13 +2026,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch = fetch;",
+            "use std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"fetch.pathWithHash("Cargo.toml", "0000000000000000000000000000000000000000000000000000000000000000").hash"#,
@@ -2044,13 +2050,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch = fetch;",
+            "use std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"fetch.url("https://example.com/archive.tar.gz").hash"#,
@@ -2068,13 +2074,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch = fetch;",
+            "use std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"fetch.urlWithHash("https://example.com/archive.tar.gz", "0000000000000000000000000000000000000000000000000000000000000000").hash"#,
@@ -2092,13 +2098,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch = fetch;",
+            "use std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"fetch.git("/tmp/repo", "main").hash"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2112,13 +2118,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.fetch = fetch;",
+            "use std.fetch = fetch;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"fetch.gitWithHash("/tmp/repo", "main", "0000000000000000000000000000000000000000000000000000000000000000").hash"#,
@@ -2135,8 +2141,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input("import std.Map;", true, &context, &mut runtime, &mut state)
-            .expect("import should evaluate");
+        evaluate_repl_input("use std.Map;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"Map.values(Map.insert("a", 1, Map.empty))"#,
@@ -2153,8 +2159,8 @@ mod tests {
         let mut state = ReplSemanticState::default();
         let context = ReplInputContext::repl();
 
-        evaluate_repl_input("import std.Set;", true, &context, &mut runtime, &mut state)
-            .expect("import should evaluate");
+        evaluate_repl_input("use std.Set;", true, &context, &mut runtime, &mut state)
+            .expect("use should evaluate");
 
         let ty = infer_repl_type(
             "Set.isDisjoint(Set.fromList([1]), Set.fromList([2]))",
@@ -2172,21 +2178,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"list.unzip([
@@ -2207,13 +2213,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.list = list;",
+            "use std.list = list;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
             "fn step(x, acc) = x + acc;",
             true,
@@ -2235,21 +2241,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.readFilePath(path.fromString("/tmp/file.txt"))"#,
@@ -2267,21 +2273,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.readFileBytesPath(path.fromString("/tmp/file.bin"))"#,
@@ -2299,21 +2305,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.readDirPath(path.fromString("/tmp"))"#,
@@ -2331,21 +2337,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.readDirEntryPaths(path.fromString("/tmp"))"#,
@@ -2363,21 +2369,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.writeFileBytesPath(path.fromString("/tmp/file.out"), io.readFileBytesPath(path.fromString("/tmp/file.bin")))"#,
@@ -2395,21 +2401,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.writeFilePath(path.fromString("/tmp/file.out"), "hello")"#,
@@ -2427,13 +2433,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.writeFile("/tmp/file.out", "hello")"#,
@@ -2451,13 +2457,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.appendFile("/tmp/file.out", "hello")"#,
@@ -2475,21 +2481,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.appendFilePath(path.fromString("/tmp/file.out"), "hello")"#,
@@ -2507,21 +2513,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.appendFileBytesPath(path.fromString("/tmp/file.out"), io.readFileBytesPath(path.fromString("/tmp/file.bin")))"#,
@@ -2539,13 +2545,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.currentDirPath()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2559,13 +2565,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.currentDir()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2579,13 +2585,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.getEnv("HOME")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2599,13 +2605,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.homeDirPath()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2619,13 +2625,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.homeDir()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2639,13 +2645,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.currentSystem()"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2659,13 +2665,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.readFile("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2679,13 +2685,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.readDir("/tmp")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2699,13 +2705,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.createDirAll("/tmp/neve-dir")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2719,13 +2725,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io; import std.path = path;",
+            "use std.io = io; use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.createDirAllPath(path.fromString("/tmp/neve-dir"))"#,
@@ -2743,13 +2749,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io; import std.path = path;",
+            "use std.io = io; use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.removeDirAllPath(path.fromString("/tmp/neve-dir"))"#,
@@ -2767,13 +2773,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.removeDirAll("/tmp/neve-dir")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2787,13 +2793,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.pathExists("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2807,13 +2813,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.isDir("/tmp")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2827,13 +2833,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.isFile("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2847,13 +2853,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io; import std.path = path;",
+            "use std.io = io; use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.hashFilePath(path.fromString("/tmp/file.txt"))"#,
@@ -2871,13 +2877,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.hashFile("/tmp/file.txt")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2891,13 +2897,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.hashString("abc")"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2911,13 +2917,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.command("printf", ["neve"])"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -2931,13 +2937,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" })"#,
@@ -2955,13 +2961,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.command("rustc", ["--version"]))"#,
@@ -2979,13 +2985,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])"#,
@@ -3003,13 +3009,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;\nimport std.path = path;",
+            "use std.io = io;\nuse std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.pipelineWithRedirects(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]), [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))])"#,
@@ -3027,13 +3033,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]))"#,
@@ -3051,21 +3057,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execPipeline(
@@ -3088,21 +3094,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execPipeline(
@@ -3128,21 +3134,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.commandWithRedirects(
@@ -3163,21 +3169,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.redirectStdoutPath(path.fromString("/tmp/neve.out"))"#,
@@ -3195,21 +3201,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.redirectStderrPath(path.fromString("/tmp/neve.err"))"#,
@@ -3227,21 +3233,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.redirectStdinPath(path.fromString("/tmp/neve.in"))"#,
@@ -3259,21 +3265,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(
@@ -3296,21 +3302,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(
@@ -3336,13 +3342,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.taskCommand(io.command("printf", ["neve"]))"#,
@@ -3360,13 +3366,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.taskPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]))"#,
@@ -3384,13 +3390,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.awaitTask(io.taskCommand(io.command("rustc", ["--version"])))"#,
@@ -3408,13 +3414,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.awaitTask(io.taskPipeline(io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])))"#,
@@ -3432,13 +3438,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.awaitTasks([io.taskCommand(io.command("printf", ["neve"])), io.taskPipeline(io.pipeline([io.command("printf", ["lang"]), io.command("cat", [])]))])"#,
@@ -3456,13 +3462,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.command("sh", ["-c", "rustc --version"]))"#,
@@ -3480,13 +3486,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }))"#,
@@ -3504,13 +3510,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processSuccess(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3528,13 +3534,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processStdout(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3552,13 +3558,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processCode(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3576,13 +3582,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.processStderr(io.execCommand(io.command("rustc", ["--version"])))"#,
@@ -3600,21 +3606,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.pathExistsPath(path.fromString("/tmp/file.txt"))"#,
@@ -3632,21 +3638,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(r#"io.isDirPath(path.fromString("/tmp"))"#, &runtime, &state)
             .expect("type inference should succeed");
@@ -3660,21 +3666,21 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
         evaluate_repl_input(
-            "import std.path = path;",
+            "use std.path = path;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             r#"io.isFilePath(path.fromString("/tmp/file.txt"))"#,
@@ -3692,13 +3698,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.option = option;",
+            "use std.option = option;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type("option.none ?? 5", &runtime, &state)
             .expect("type inference should succeed");
@@ -3712,13 +3718,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.option = option;",
+            "use std.option = option;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type(
             "option.some(#{ name = \"test\" })?.name ?? \"default\"",
@@ -3736,13 +3742,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.result = result;",
+            "use std.result = result;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let ty = infer_repl_type("result.ok(41)? + 1", &runtime, &state)
             .expect("type inference should succeed");
@@ -3825,13 +3831,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.io = io;",
+            "use std.io = io;",
             true,
             &context,
             &mut runtime,
             &mut state,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         assert_repl_type_diagnostic(
             r#"io.readFilePath("/tmp/file.txt")"#,
@@ -3976,13 +3982,13 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import std.string = string;",
+            "use std.string = string;",
             true,
             &context,
             &mut runtime,
             &mut semantic,
         )
-        .expect("import should evaluate");
+        .expect("use should evaluate");
 
         let expr = FrontendSession::prepare_repl_source(r#"string.len("abcd")"#);
         let value = evaluate_repl_input(
@@ -4034,7 +4040,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
             temp_dir.path().join("math.neve"),
-            "pub fn add(x, y) = x + y;",
+            "fn add(x, y) = x + y;",
         )
         .unwrap();
 
@@ -4043,7 +4049,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         evaluate_repl_input(
-            "import math (add);",
+            "use math (add);",
             true,
             &context,
             &mut runtime,
@@ -4068,7 +4074,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
             temp_dir.path().join("math.neve"),
-            "pub fn add(x, y) = x + y;",
+            "fn add(x, y) = x + y;",
         )
         .unwrap();
 
@@ -4077,14 +4083,14 @@ mod tests {
         let context = ReplInputContext::repl();
 
         // Namespace import: brings module into scope, items accessible via selective import
-        evaluate_repl_input("import math;", true, &context, &mut runtime, &mut semantic)
+        evaluate_repl_input("use math;", true, &context, &mut runtime, &mut semantic)
             .expect("module namespace import should evaluate");
 
         // Selective import from namespaced module — dotted access math.add is
         // TODO: namespace-qualified dotted access (math.add) not yet resolved for
         // project-local modules; selective import is the working path.
         evaluate_repl_input(
-            "import math (add);",
+            "use math (add);",
             true,
             &context,
             &mut runtime,
@@ -4110,12 +4116,12 @@ mod tests {
         fs::create_dir_all(temp_dir.path().join("app")).unwrap();
         fs::write(
             temp_dir.path().join("app").join("helper.neve"),
-            "pub fn inc(x) = x + 1;",
+            "fn inc(x) = x + 1;",
         )
         .unwrap();
         fs::write(
             temp_dir.path().join("app").join("mod.neve"),
-            "import self.helper (inc); let answer = inc(41);",
+            "use self.helper (inc); let answer = inc(41);",
         )
         .unwrap();
 
@@ -4151,7 +4157,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
             temp_dir.path().join("broken.neve"),
-            "pub fn bad() = 1 + true;",
+            "fn bad() = 1 + true;",
         )
         .unwrap();
 
@@ -4160,7 +4166,7 @@ mod tests {
         let context = ReplInputContext::repl();
 
         let error = evaluate_repl_input(
-            "import broken (bad);",
+            "use broken (bad);",
             true,
             &context,
             &mut runtime,
@@ -4188,7 +4194,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
             temp_dir.path().join("broken.neve"),
-            "pub fn bad() = 1 + true;",
+            "fn bad() = 1 + true;",
         )
         .unwrap();
 
@@ -4198,7 +4204,7 @@ mod tests {
 
         let error = semantic
             .parse_checked_source_with_context_for_display(
-                "import broken (bad);",
+                "use broken (bad);",
                 &context,
                 &runtime.visible_state,
             )
@@ -4226,12 +4232,12 @@ mod tests {
         fs::create_dir_all(second.path().join("app")).unwrap();
         fs::write(
             second.path().join("app").join("helper.neve"),
-            "pub fn inc(x) = x + 1;",
+            "fn inc(x) = x + 1;",
         )
         .unwrap();
         fs::write(
             second.path().join("app").join("mod.neve"),
-            "import self.helper (inc); let answer = inc(41);",
+            "use self.helper (inc); let answer = inc(41);",
         )
         .unwrap();
 

@@ -2,7 +2,7 @@
 -- Differential test: compare basic expressions
 -- 差分测试：比较基础表达式
 -- Usage: neve run scripts/diff-test.neve
-import std.io as io;
+use std.io = io;
 
 let runTest = fn(expr, expected) {
     io.print("  " ++ expr ++ " = " ++ expected ++ " ... ");
@@ -12,7 +12,7 @@ let runTest = fn(expr, expected) {
     let neve_result = io.execCommand(neve_cmd);
     let actual = io.processStdout(neve_result);
 
-    if actual == expected then {
+    if actual == expected -> {
         io.println("PASS");
         true
     } else {
@@ -32,11 +32,11 @@ let r3 = runTest("1 == 1", "true");
 let r4 = runTest("1 == 2", "false");
 
 -- Count results (convert bools to ints and sum)
-let toInt = fn(b) { if b then 1 else 0 };
+let toInt = fn(b) { if b -> 1 else 0 };
 let passed = toInt(r1) + toInt(r2) + toInt(r3) + toInt(r4);
 let failed = 4 - passed;
 
 io.println("");
 io.println("Results: " ++ toString(passed) ++ " passed, " ++ toString(failed) ++ " failed");
 
-if failed > 0 then 1 else 0
+if failed > 0 -> 1 else 0

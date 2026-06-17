@@ -663,7 +663,7 @@ fn test_frontend_reports_safe_field_boundary_message_and_code() {
 fn test_frontend_reports_invalid_io_read_file_path_message_and_code() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let value = io.readFilePath("/tmp/file.txt");
         "#,
     );
@@ -686,11 +686,11 @@ fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
     let temp_dir = TempDir::new().unwrap();
     fs::write(
         temp_dir.path().join("math.neve"),
-        "pub fn add(x, y) = x + y;",
+        "fn add(x, y) = x + y;",
     )
     .unwrap();
 
-    let source = "import math (add); let result = add(1, 2);";
+    let source = "use math (add); let result = add(1, 2);";
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -718,9 +718,9 @@ fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
 #[test]
 fn test_frontend_snippet_reports_loaded_module_diagnostics() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("math.neve"), "pub fn add(x, y) = ;").unwrap();
+    fs::write(temp_dir.path().join("math.neve"), "fn add(x, y) = ;").unwrap();
 
-    let source = "import math (add); let result = add(1, 2);";
+    let source = "use math (add); let result = add(1, 2);";
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -744,14 +744,14 @@ fn test_frontend_snippet_reports_loaded_module_diagnostics() {
 #[test]
 fn test_frontend_snippet_preserves_dependency_first_loaded_module_order() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("util.neve"), "pub fn inc(x) = x + 1;").unwrap();
+    fs::write(temp_dir.path().join("util.neve"), "fn inc(x) = x + 1;").unwrap();
     fs::write(
         temp_dir.path().join("math.neve"),
-        "import util (inc); pub fn add_one(x) = inc(x);",
+        "use util (inc); fn add_one(x) = inc(x);",
     )
     .unwrap();
 
-    let source = "import math (add_one); let result = add_one(1);";
+    let source = "use math (add_one); let result = add_one(1);";
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -780,17 +780,17 @@ fn test_frontend_snippet_preserves_dependency_first_loaded_module_order() {
 #[test]
 fn test_frontend_snippet_loaded_diagnostic_stats_distinguish_errors_and_warnings() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("bad_parse.neve"), "pub fn broken(x) =").unwrap();
+    fs::write(temp_dir.path().join("bad_parse.neve"), "fn broken(x) =").unwrap();
     fs::write(
         temp_dir.path().join("bad_type.neve"),
-        "pub fn bad() = 1 + true;",
+        "fn bad() = 1 + true;",
     )
     .unwrap();
     fs::write(
         temp_dir.path().join("warn_only.neve"),
         r#"
-            import std.option = option;
-            pub fn warned() = match option.some(1) {
+            use std.option = option;
+            fn warned() = match option.some(1) {
                 Some(_) -> 1,
                 Some(inner) -> inner,
                 None -> 0
@@ -799,7 +799,7 @@ fn test_frontend_snippet_loaded_diagnostic_stats_distinguish_errors_and_warnings
     )
     .unwrap();
 
-    let source = "import bad_parse; import bad_type; import warn_only; let result = 1;";
+    let source = "use bad_parse; use bad_type; use warn_only; let result = 1;";
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -863,19 +863,19 @@ fn test_frontend_snippet_current_diagnostic_stats_report_blocking_type_errors() 
 #[test]
 fn test_frontend_snippet_returns_only_evaluable_loaded_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("util.neve"), "pub fn inc(x) = x + 1;").unwrap();
+    fs::write(temp_dir.path().join("util.neve"), "fn inc(x) = x + 1;").unwrap();
     fs::write(
         temp_dir.path().join("math.neve"),
-        "import util (inc); pub fn add_one(x) = inc(x);",
+        "use util (inc); fn add_one(x) = inc(x);",
     )
     .unwrap();
     fs::write(
         temp_dir.path().join("broken.neve"),
-        "pub fn bad() = 1 + true;",
+        "fn bad() = 1 + true;",
     )
     .unwrap();
 
-    let source = "import math (add_one); import broken (bad); let result = add_one(1);";
+    let source = "use math (add_one); use broken (bad); let result = add_one(1);";
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -1044,8 +1044,8 @@ fn test_frontend_reports_dedicated_missing_method_diagnostic_when_no_fallback_ex
 fn test_frontend_accepts_std_item_and_module_imports() {
     let result = analyze_source(
         r#"
-            import std.list (len);
-            import std.string = string;
+            use std.list (len);
+            use std.string = string;
             let a = len([1, 2, 3]);
             let b = string.len("abc");
         "#,
@@ -1072,7 +1072,7 @@ fn test_frontend_accepts_std_item_and_module_imports() {
 fn test_frontend_accepts_std_glob_imports() {
     let result = analyze_source(
         r#"
-            import std.list (*);
+            use std.list (*);
             let x = len([1, 2, 3]);
         "#,
     );
@@ -1098,8 +1098,8 @@ fn test_frontend_accepts_std_glob_imports() {
 fn test_frontend_accepts_std_option_and_result_builtins() {
     let result = analyze_source(
         r#"
-            import std.option = option;
-            import std.result = result;
+            use std.option = option;
+            use std.result = result;
             let a = option.some(41)? + 1;
             let b = option.none ?? 5;
             let c = result.ok(1)? + 1;
@@ -1127,7 +1127,7 @@ fn test_frontend_accepts_std_option_and_result_builtins() {
 fn test_frontend_accepts_std_math_constants() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let top = math.inf;
             let quiet = math.nan;
         "#,
@@ -1154,7 +1154,7 @@ fn test_frontend_accepts_std_math_constants() {
 fn test_frontend_accepts_std_math_conversion_bridges() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let count = math.toInt(true);
             let ratio = math.toFloat("1.5");
         "#,
@@ -1181,7 +1181,7 @@ fn test_frontend_accepts_std_math_conversion_bridges() {
 fn test_frontend_accepts_std_math_float_predicates() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let a = math.isNan(math.nan);
             let b = math.isInf(math.inf);
         "#,
@@ -1208,7 +1208,7 @@ fn test_frontend_accepts_std_math_float_predicates() {
 fn test_frontend_accepts_std_math_rounding_bridges() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let a = math.floor(1.9);
             let b = math.ceil(1.1);
             let c = math.round(1.6);
@@ -1236,7 +1236,7 @@ fn test_frontend_accepts_std_math_rounding_bridges() {
 fn test_frontend_accepts_std_math_unary_float_transforms() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let a = math.sqrt(9.0);
             let b = math.log(1.0);
             let c = math.log10(1000.0);
@@ -1265,7 +1265,7 @@ fn test_frontend_accepts_std_math_unary_float_transforms() {
 fn test_frontend_accepts_std_math_trigonometric_bridges() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let a = math.sin(0.0);
             let b = math.cos(0.0);
             let c = math.tan(0.0);
@@ -1293,7 +1293,7 @@ fn test_frontend_accepts_std_math_trigonometric_bridges() {
 fn test_frontend_accepts_std_math_function_pending_explicit_surface() {
     let result = analyze_source(
         r#"
-            import std.math = math;
+            use std.math = math;
             let value = math.abs(1);
         "#,
     );
@@ -1319,7 +1319,7 @@ fn test_frontend_accepts_std_math_function_pending_explicit_surface() {
 fn test_frontend_accepts_std_path_builtins() {
     let result = analyze_source(
         r#"
-            import std.path = path;
+            use std.path = path;
             let p = path.fromString("/tmp/file.txt");
             let d = toString(p);
             let a = path.join("a", "b");
@@ -1349,7 +1349,7 @@ fn test_frontend_accepts_std_path_builtins() {
 fn test_frontend_accepts_std_typed_path_adapters() {
     let result = analyze_source(
         r#"
-            import std.path = path;
+            use std.path = path;
             let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
             let parent = path.parentPath(nested) ?? path.fromString("/");
             let name = path.filenamePath(nested) ?? "missing";
@@ -1380,7 +1380,7 @@ fn test_frontend_accepts_std_typed_path_adapters() {
 fn test_frontend_accepts_std_fetch_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.fetch = fetch;
+            use std.fetch = fetch;
             let value = fetch.path("Cargo.toml").hash;
         "#,
     );
@@ -1406,7 +1406,7 @@ fn test_frontend_accepts_std_fetch_path_bridge() {
 fn test_frontend_accepts_std_fetch_path_with_hash_bridge() {
     let result = analyze_source(
         r#"
-            import std.fetch = fetch;
+            use std.fetch = fetch;
             let value = fetch.pathWithHash(
                 "Cargo.toml",
                 "0000000000000000000000000000000000000000000000000000000000000000",
@@ -1435,7 +1435,7 @@ fn test_frontend_accepts_std_fetch_path_with_hash_bridge() {
 fn test_frontend_accepts_std_fetch_url_bridge() {
     let result = analyze_source(
         r#"
-            import std.fetch = fetch;
+            use std.fetch = fetch;
             let value = fetch.url("https://example.com/archive.tar.gz").hash;
         "#,
     );
@@ -1461,7 +1461,7 @@ fn test_frontend_accepts_std_fetch_url_bridge() {
 fn test_frontend_accepts_std_fetch_url_with_hash_bridge() {
     let result = analyze_source(
         r#"
-            import std.fetch = fetch;
+            use std.fetch = fetch;
             let value = fetch.urlWithHash(
                 "https://example.com/archive.tar.gz",
                 "0000000000000000000000000000000000000000000000000000000000000000",
@@ -1490,7 +1490,7 @@ fn test_frontend_accepts_std_fetch_url_with_hash_bridge() {
 fn test_frontend_accepts_std_fetch_git_bridge() {
     let result = analyze_source(
         r#"
-            import std.fetch = fetch;
+            use std.fetch = fetch;
             let value = fetch.git("/tmp/repo", "main").hash;
         "#,
     );
@@ -1516,7 +1516,7 @@ fn test_frontend_accepts_std_fetch_git_bridge() {
 fn test_frontend_accepts_std_fetch_git_with_hash_bridge() {
     let result = analyze_source(
         r#"
-            import std.fetch = fetch;
+            use std.fetch = fetch;
             let value = fetch.gitWithHash("/tmp/repo", "main", "0000000000000000000000000000000000000000000000000000000000000000").hash;
         "#,
     );
@@ -1542,7 +1542,7 @@ fn test_frontend_accepts_std_fetch_git_with_hash_bridge() {
 fn test_frontend_accepts_std_io_current_system_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let system = io.currentSystem();
         "#,
     );
@@ -1568,7 +1568,7 @@ fn test_frontend_accepts_std_io_current_system_bridge() {
 fn test_frontend_accepts_std_io_current_dir_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let cwd = io.currentDir();
         "#,
     );
@@ -1594,7 +1594,7 @@ fn test_frontend_accepts_std_io_current_dir_bridge() {
 fn test_frontend_accepts_std_io_get_env_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let value = io.getEnv("HOME");
         "#,
     );
@@ -1620,7 +1620,7 @@ fn test_frontend_accepts_std_io_get_env_bridge() {
 fn test_frontend_accepts_std_io_hash_file_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let digest = io.hashFile("/tmp/file.txt");
         "#,
     );
@@ -1646,7 +1646,7 @@ fn test_frontend_accepts_std_io_hash_file_bridge() {
 fn test_frontend_accepts_std_io_hash_string_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let digest = io.hashString("abc");
         "#,
     );
@@ -1672,7 +1672,7 @@ fn test_frontend_accepts_std_io_hash_string_bridge() {
 fn test_frontend_accepts_std_io_read_file_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let content = io.readFile("/tmp/file.txt");
         "#,
     );
@@ -1698,8 +1698,8 @@ fn test_frontend_accepts_std_io_read_file_bridge() {
 fn test_frontend_accepts_std_io_read_dir_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.list = list;
+            use std.io = io;
+            use std.list = list;
             let entries = list.sort(io.readDir("/tmp"));
         "#,
     );
@@ -1725,8 +1725,8 @@ fn test_frontend_accepts_std_io_read_dir_bridge() {
 fn test_frontend_accepts_std_io_hash_file_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let digest = io.hashFilePath(path.fromString("/tmp/file.txt"));
         "#,
     );
@@ -1752,7 +1752,7 @@ fn test_frontend_accepts_std_io_hash_file_path_bridge() {
 fn test_frontend_accepts_std_io_exec_migrated_process_result_surface() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let result = io.execCommand(io.command("rustc", ["--version"]));
             let shown = toString(result);
         "#,
@@ -1779,7 +1779,7 @@ fn test_frontend_accepts_std_io_exec_migrated_process_result_surface() {
 fn test_frontend_accepts_std_io_explicit_shell_command_process_result_surface() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let result = io.execCommand(io.command("sh", ["-c", "rustc --version"]));
             let shown = toString(result);
         "#,
@@ -1806,7 +1806,7 @@ fn test_frontend_accepts_std_io_explicit_shell_command_process_result_surface() 
 fn test_frontend_accepts_std_io_exec_with_migrated_process_result_surface() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let result = io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
             let shown = toString(result);
         "#,
@@ -1833,8 +1833,8 @@ fn test_frontend_accepts_std_io_exec_with_migrated_process_result_surface() {
 fn test_frontend_accepts_std_io_read_file_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let content = io.readFilePath(path.fromString("/tmp/file.txt"));
         "#,
     );
@@ -1860,8 +1860,8 @@ fn test_frontend_accepts_std_io_read_file_path_bridge() {
 fn test_frontend_accepts_std_io_read_file_bytes_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
             let shown = toString(bytes);
         "#,
@@ -1888,9 +1888,9 @@ fn test_frontend_accepts_std_io_read_file_bytes_path_bridge() {
 fn test_frontend_accepts_std_io_read_dir_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
-            import std.list = list;
+            use std.io = io;
+            use std.path = path;
+            use std.list = list;
             let entries = io.readDirPath(path.fromString("/tmp"));
             let sorted = list.sort(entries);
         "#,
@@ -1917,9 +1917,9 @@ fn test_frontend_accepts_std_io_read_dir_path_bridge() {
 fn test_frontend_accepts_std_list_sort_and_extrema_builtins() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let sorted = list.sort(io.readDirEntryPaths(path.fromString("/tmp")));
             let hi = list.max([1, 3, 2]);
             let lo = list.min([1, 3, 2]);
@@ -1947,9 +1947,9 @@ fn test_frontend_accepts_std_list_sort_and_extrema_builtins() {
 fn test_frontend_accepts_std_list_structural_helpers() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let first = list.head(entries);
             let last = list.last(entries);
@@ -1979,9 +1979,9 @@ fn test_frontend_accepts_std_list_structural_helpers() {
 fn test_frontend_accepts_std_list_get_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let picked = list.get(0, entries);
         "#,
@@ -2008,9 +2008,9 @@ fn test_frontend_accepts_std_list_get_builtin() {
 fn test_frontend_accepts_std_list_cons_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let rooted = list.cons(path.fromString("/"), entries);
         "#,
@@ -2037,9 +2037,9 @@ fn test_frontend_accepts_std_list_cons_builtin() {
 fn test_frontend_accepts_std_list_take_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let prefix = list.take(2, entries);
         "#,
@@ -2066,9 +2066,9 @@ fn test_frontend_accepts_std_list_take_builtin() {
 fn test_frontend_accepts_std_list_drop_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let suffix = list.drop(1, entries);
         "#,
@@ -2095,9 +2095,9 @@ fn test_frontend_accepts_std_list_drop_builtin() {
 fn test_frontend_accepts_std_list_contains_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let has_root = list.contains(path.fromString("/"), entries);
         "#,
@@ -2124,9 +2124,9 @@ fn test_frontend_accepts_std_list_contains_builtin() {
 fn test_frontend_accepts_std_list_index_of_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let root_index = list.indexOf(path.fromString("/"), entries);
         "#,
@@ -2153,7 +2153,7 @@ fn test_frontend_accepts_std_list_index_of_builtin() {
 fn test_frontend_accepts_std_list_sum_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
+            use std.list = list;
             let total = list.sum([1, 2, 3]);
         "#,
     );
@@ -2179,7 +2179,7 @@ fn test_frontend_accepts_std_list_sum_builtin() {
 fn test_frontend_accepts_std_list_product_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
+            use std.list = list;
             let total = list.product([2, 3, 4]);
         "#,
     );
@@ -2205,8 +2205,8 @@ fn test_frontend_accepts_std_list_product_builtin() {
 fn test_frontend_accepts_std_list_replicate_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.path = path;
+            use std.list = list;
+            use std.path = path;
             let entries = list.replicate(2, path.fromString("/tmp"));
         "#,
     );
@@ -2232,9 +2232,9 @@ fn test_frontend_accepts_std_list_replicate_builtin() {
 fn test_frontend_accepts_std_list_zip_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.io = io;
-            import std.path = path;
+            use std.list = list;
+            use std.io = io;
+            use std.path = path;
             let pairs = list.zip(
                 io.readDirEntryPaths(path.fromString("/tmp")),
                 [1, 2],
@@ -2263,8 +2263,8 @@ fn test_frontend_accepts_std_list_zip_builtin() {
 fn test_frontend_accepts_std_list_unzip_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
-            import std.path = path;
+            use std.list = list;
+            use std.path = path;
             let pairs = [
                 (path.fromString("/tmp"), 1),
                 (path.fromString("/var"), 2),
@@ -2294,7 +2294,7 @@ fn test_frontend_accepts_std_list_unzip_builtin() {
 fn test_frontend_accepts_std_list_fold_right_builtin() {
     let result = analyze_source(
         r#"
-            import std.list = list;
+            use std.list = list;
             fn step(x, acc) = x + acc;
             let total = list.foldRight(0, step, [1, 2, 3]);
         "#,
@@ -2321,8 +2321,8 @@ fn test_frontend_accepts_std_list_fold_right_builtin() {
 fn test_frontend_accepts_std_io_read_dir_entry_paths_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let entries = io.readDirEntryPaths(path.fromString("/tmp"));
             let shown = toString(entries);
         "#,
@@ -2349,8 +2349,8 @@ fn test_frontend_accepts_std_io_read_dir_entry_paths_bridge() {
 fn test_frontend_accepts_std_io_write_file_bytes_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
             let done = io.writeFileBytesPath(path.fromString("/tmp/file.out"), bytes);
         "#,
@@ -2377,8 +2377,8 @@ fn test_frontend_accepts_std_io_write_file_bytes_path_bridge() {
 fn test_frontend_accepts_std_io_write_file_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let done = io.writeFilePath(path.fromString("/tmp/file.out"), "hello");
         "#,
     );
@@ -2404,7 +2404,7 @@ fn test_frontend_accepts_std_io_write_file_path_bridge() {
 fn test_frontend_accepts_std_io_write_file_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let done = io.writeFile("/tmp/file.out", "hello");
         "#,
     );
@@ -2430,7 +2430,7 @@ fn test_frontend_accepts_std_io_write_file_bridge() {
 fn test_frontend_accepts_std_io_append_file_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let done = io.appendFile("/tmp/file.out", "hello");
         "#,
     );
@@ -2456,8 +2456,8 @@ fn test_frontend_accepts_std_io_append_file_bridge() {
 fn test_frontend_accepts_std_io_append_file_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let done = io.appendFilePath(path.fromString("/tmp/file.out"), "hello");
         "#,
     );
@@ -2483,8 +2483,8 @@ fn test_frontend_accepts_std_io_append_file_path_bridge() {
 fn test_frontend_accepts_std_io_append_file_bytes_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let bytes = io.readFileBytesPath(path.fromString("/tmp/file.bin"));
             let done = io.appendFileBytesPath(path.fromString("/tmp/file.out"), bytes);
         "#,
@@ -2511,7 +2511,7 @@ fn test_frontend_accepts_std_io_append_file_bytes_path_bridge() {
 fn test_frontend_accepts_std_io_current_dir_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let cwd = io.currentDirPath();
             let shown = toString(cwd);
         "#,
@@ -2538,7 +2538,7 @@ fn test_frontend_accepts_std_io_current_dir_path_bridge() {
 fn test_frontend_accepts_std_io_home_dir_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let home = io.homeDirPath();
             let shown = toString(home);
         "#,
@@ -2565,7 +2565,7 @@ fn test_frontend_accepts_std_io_home_dir_path_bridge() {
 fn test_frontend_accepts_std_io_home_dir_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let home = io.homeDir();
             let shown = home ?? "missing";
         "#,
@@ -2592,7 +2592,7 @@ fn test_frontend_accepts_std_io_home_dir_bridge() {
 fn test_frontend_accepts_std_io_create_dir_all_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let done = io.createDirAll("/tmp/neve-dir");
         "#,
     );
@@ -2618,8 +2618,8 @@ fn test_frontend_accepts_std_io_create_dir_all_bridge() {
 fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let done = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
         "#,
     );
@@ -2645,8 +2645,8 @@ fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
 fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let done = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
         "#,
     );
@@ -2672,7 +2672,7 @@ fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
 fn test_frontend_accepts_std_io_remove_dir_all_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let done = io.removeDirAll("/tmp/neve-dir");
         "#,
     );
@@ -2698,7 +2698,7 @@ fn test_frontend_accepts_std_io_remove_dir_all_bridge() {
 fn test_frontend_accepts_std_io_path_exists_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let exists = io.pathExists("/tmp/file.txt");
         "#,
     );
@@ -2724,7 +2724,7 @@ fn test_frontend_accepts_std_io_path_exists_bridge() {
 fn test_frontend_accepts_std_io_is_dir_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let dir = io.isDir("/tmp");
         "#,
     );
@@ -2750,7 +2750,7 @@ fn test_frontend_accepts_std_io_is_dir_bridge() {
 fn test_frontend_accepts_std_io_is_file_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let file = io.isFile("/tmp/file.txt");
         "#,
     );
@@ -2776,7 +2776,7 @@ fn test_frontend_accepts_std_io_is_file_bridge() {
 fn test_frontend_accepts_std_io_command_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let cmd = io.command("printf", ["neve"]);
             let shown = toString(cmd);
         "#,
@@ -2803,7 +2803,7 @@ fn test_frontend_accepts_std_io_command_bridge() {
 fn test_frontend_accepts_std_io_command_with_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let cmd = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
             let shown = toString(cmd);
         "#,
@@ -2830,7 +2830,7 @@ fn test_frontend_accepts_std_io_command_with_bridge() {
 fn test_frontend_accepts_std_io_exec_command_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let result = io.execCommand(io.command("rustc", ["--version"]));
             let shown = toString(result);
         "#,
@@ -2857,7 +2857,7 @@ fn test_frontend_accepts_std_io_exec_command_bridge() {
 fn test_frontend_accepts_std_io_pipeline_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let pipe = io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]);
             let shown = toString(pipe);
         "#,
@@ -2884,8 +2884,8 @@ fn test_frontend_accepts_std_io_pipeline_bridge() {
 fn test_frontend_accepts_std_io_pipeline_with_redirects_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let pipe = io.pipelineWithRedirects(
                 io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
                 [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
@@ -2915,7 +2915,7 @@ fn test_frontend_accepts_std_io_pipeline_with_redirects_bridge() {
 fn test_frontend_accepts_std_io_exec_pipeline_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let result = io.execPipeline(
                 io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])
             );
@@ -2944,8 +2944,8 @@ fn test_frontend_accepts_std_io_exec_pipeline_bridge() {
 fn test_frontend_accepts_std_io_exec_pipeline_with_redirect_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let result = io.execPipeline(
                 io.pipelineWithRedirects(
                     io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
@@ -2977,8 +2977,8 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirect_bridge() {
 fn test_frontend_accepts_std_io_exec_pipeline_with_redirects_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let result = io.execPipeline(
                 io.pipelineWithRedirects(
                     io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
@@ -3013,8 +3013,8 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirects_bridge() {
 fn test_frontend_accepts_std_io_command_with_redirects_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let cmd = io.commandWithRedirects(
                 io.command("printf", ["neve"]),
                 [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
@@ -3044,8 +3044,8 @@ fn test_frontend_accepts_std_io_command_with_redirects_bridge() {
 fn test_frontend_accepts_std_io_redirect_stdout_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
             let shown = toString(redirect);
         "#,
@@ -3072,8 +3072,8 @@ fn test_frontend_accepts_std_io_redirect_stdout_path_bridge() {
 fn test_frontend_accepts_std_io_redirect_stderr_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
             let shown = toString(redirect);
         "#,
@@ -3100,8 +3100,8 @@ fn test_frontend_accepts_std_io_redirect_stderr_path_bridge() {
 fn test_frontend_accepts_std_io_redirect_stdin_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
             let shown = toString(redirect);
         "#,
@@ -3128,8 +3128,8 @@ fn test_frontend_accepts_std_io_redirect_stdin_path_bridge() {
 fn test_frontend_accepts_std_io_exec_command_with_redirect_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let result = io.execCommand(
                 io.commandWithRedirects(
                     io.command("printf", ["neve"]),
@@ -3161,8 +3161,8 @@ fn test_frontend_accepts_std_io_exec_command_with_redirect_bridge() {
 fn test_frontend_accepts_std_io_exec_command_with_redirects_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let result = io.execCommand(
                 io.commandWithRedirects(
                     io.command("printf", ["neve"]),
@@ -3197,7 +3197,7 @@ fn test_frontend_accepts_std_io_exec_command_with_redirects_bridge() {
 fn test_frontend_accepts_std_io_task_command_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let task = io.taskCommand(io.command("printf", ["neve"]));
             let shown = toString(task);
         "#,
@@ -3224,7 +3224,7 @@ fn test_frontend_accepts_std_io_task_command_bridge() {
 fn test_frontend_accepts_std_io_task_pipeline_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let task = io.taskPipeline(io.pipeline([
                 io.command("printf", ["neve"]),
                 io.command("cat", [])
@@ -3254,7 +3254,7 @@ fn test_frontend_accepts_std_io_task_pipeline_bridge() {
 fn test_frontend_accepts_std_io_await_task_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let task = io.taskCommand(io.command("rustc", ["--version"]));
             let result = io.awaitTask(task);
             let shown = io.processCode(result);
@@ -3282,7 +3282,7 @@ fn test_frontend_accepts_std_io_await_task_bridge() {
 fn test_frontend_accepts_std_io_await_tasks_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let results = io.awaitTasks([
                 io.taskCommand(io.command("printf", ["neve"])),
                 io.taskPipeline(io.pipeline([io.command("printf", ["lang"]), io.command("cat", [])]))
@@ -3312,7 +3312,7 @@ fn test_frontend_accepts_std_io_await_tasks_bridge() {
 fn test_frontend_accepts_std_io_process_success_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let success = io.processSuccess(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
@@ -3338,7 +3338,7 @@ fn test_frontend_accepts_std_io_process_success_bridge() {
 fn test_frontend_accepts_std_io_process_stdout_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let stdout = io.processStdout(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
@@ -3364,7 +3364,7 @@ fn test_frontend_accepts_std_io_process_stdout_bridge() {
 fn test_frontend_accepts_std_io_process_code_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let code = io.processCode(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
@@ -3390,7 +3390,7 @@ fn test_frontend_accepts_std_io_process_code_bridge() {
 fn test_frontend_accepts_std_io_process_stderr_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
+            use std.io = io;
             let stderr = io.processStderr(io.execCommand(io.command("rustc", ["--version"])));
         "#,
     );
@@ -3416,8 +3416,8 @@ fn test_frontend_accepts_std_io_process_stderr_bridge() {
 fn test_frontend_accepts_std_io_path_exists_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let exists = io.pathExistsPath(path.fromString("/tmp/file.txt"));
         "#,
     );
@@ -3443,8 +3443,8 @@ fn test_frontend_accepts_std_io_path_exists_path_bridge() {
 fn test_frontend_accepts_std_io_is_dir_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let dir = io.isDirPath(path.fromString("/tmp"));
         "#,
     );
@@ -3470,8 +3470,8 @@ fn test_frontend_accepts_std_io_is_dir_path_bridge() {
 fn test_frontend_accepts_std_io_is_file_path_bridge() {
     let result = analyze_source(
         r#"
-            import std.io = io;
-            import std.path = path;
+            use std.io = io;
+            use std.path = path;
             let file = io.isFilePath(path.fromString("/tmp/file.txt"));
         "#,
     );
@@ -3497,18 +3497,15 @@ fn test_frontend_accepts_std_io_is_file_path_bridge() {
 fn test_frontend_accepts_std_map_and_set_builtins() {
     let result = analyze_source(
         r#"
-            import std.Map;
-            import std.Set;
-            import std.list = list;
+            use std.Map;
+            use std.Set;
+            use std.list = list;
             let map = Map.insert("a", 1, Map.empty);
             let values = Map.values(map);
             let set = Set.insert(1, Set.empty);
             let value = Map.getWithDefault("a", 0, map) + Set.size(set) + list.sum(values);
         "#,
     );
-    // Filter out known warnings (not errors):
-    // - callable fallback deprecation
-    // - unreachable pattern (binding patterns on literals are conservatively reported)
     let non_warning_diags: Vec<_> = result
         .diagnostics
         .iter()
@@ -3521,5 +3518,45 @@ fn test_frontend_accepts_std_map_and_set_builtins() {
         non_warning_diags.is_empty(),
         "unexpected diagnostics: {:?}",
         non_warning_diags
+    );
+}
+
+// --- Type checker unit tests (M20) ---
+
+#[test]
+fn test_typeck_rejects_duplicate_top_level_let() {
+    let result = analyze_source(
+        r#"
+        let x = 1;
+        let x = 2;
+        "#,
+    );
+    let has_duplicate = result
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("duplicate") || d.message.contains("already defined"));
+    assert!(
+        has_duplicate,
+        "expected duplicate definition error, got {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_typeck_auto_infers_effect_for_io_call() {
+    let result = analyze_source(
+        r#"
+        use std.io = io;
+        let handler = io.onSignal("INT", fn() { io.print("interrupted!"); () });
+        "#,
+    );
+    let has_lambda_error = result
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("in lambda"));
+    assert!(
+        !has_lambda_error,
+        "lambda inside effectful let should be allowed, got {:?}",
+        result.diagnostics
     );
 }

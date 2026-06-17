@@ -19,6 +19,48 @@ pub struct Generator {
     system: String,
 }
 
+/// Systemd service type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceType {
+    Simple,
+    Forking,
+    Oneshot,
+    Notify,
+    Dbus,
+    Idle,
+}
+
+impl std::fmt::Display for ServiceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServiceType::Simple => write!(f, "simple"),
+            ServiceType::Forking => write!(f, "forking"),
+            ServiceType::Oneshot => write!(f, "oneshot"),
+            ServiceType::Notify => write!(f, "notify"),
+            ServiceType::Dbus => write!(f, "dbus"),
+            ServiceType::Idle => write!(f, "idle"),
+        }
+    }
+}
+
+/// Systemd restart policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestartPolicy {
+    No,
+    Always,
+    OnFailure,
+}
+
+impl std::fmt::Display for RestartPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RestartPolicy::No => write!(f, "no"),
+            RestartPolicy::Always => write!(f, "always"),
+            RestartPolicy::OnFailure => write!(f, "on-failure"),
+        }
+    }
+}
+
 /// A systemd service unit definition.
 /// systemd 服务单元定义。
 #[derive(Debug, Clone)]
@@ -28,7 +70,7 @@ pub struct ServiceUnit {
     /// Description. / 描述。
     pub description: String,
     /// Service type (simple, forking, oneshot, etc.). / 服务类型（simple、forking、oneshot 等）。
-    pub service_type: String,
+    pub service_type: ServiceType,
     /// Command to execute. / 要执行的命令。
     pub exec_start: String,
     /// Command to run before exec_start. / 在 exec_start 之前运行的命令。
@@ -44,7 +86,7 @@ pub struct ServiceUnit {
     /// Environment variables. / 环境变量。
     pub environment: Vec<(String, String)>,
     /// Restart policy (always, on-failure, no). / 重启策略（always、on-failure、no）。
-    pub restart: String,
+    pub restart: RestartPolicy,
     /// Dependencies (After=). / 依赖项（After=）。
     pub after: Vec<String>,
     /// Required dependencies (Requires=). / 必需的依赖项（Requires=）。
@@ -200,7 +242,7 @@ impl Generator {
         let mut unit = ServiceUnit {
             name: name.to_string(),
             description: format!("{} service", name),
-            service_type: "simple".to_string(),
+            service_type: ServiceType::Simple,
             exec_start: format!("/usr/bin/{}", name),
             exec_start_pre: None,
             exec_stop: None,
@@ -208,7 +250,7 @@ impl Generator {
             group: None,
             working_directory: None,
             environment: Vec::new(),
-            restart: "on-failure".to_string(),
+            restart: RestartPolicy::OnFailure,
             after: vec!["network.target".to_string()],
             requires: Vec::new(),
             wanted_by: vec!["multi-user.target".to_string()],
@@ -220,7 +262,7 @@ impl Generator {
             "sshd" | "ssh" => {
                 unit.description = "OpenSSH Daemon".to_string();
                 unit.exec_start = "/usr/bin/sshd -D".to_string();
-                unit.restart = "always".to_string();
+                unit.restart = RestartPolicy::Always;
             }
             "docker" => {
                 unit.description = "Docker Application Container Engine".to_string();

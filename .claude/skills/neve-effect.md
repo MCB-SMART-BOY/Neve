@@ -126,4 +126,4 @@ neve check --allow-effects     # Permissive mode — allows effects
 | `std/src/io/mod.rs` | I/O effect implementations |
 | `cli/src/commands/check.rs` | `neve check` purity enforcement |
 | `formal/Neve/Spec/Effects.lean` | EffectEval v4.3 formalization |
-| `docs/project/effect-boundary.md` | Effect boundary design document |
+| `.claude/effect-boundary-design.md` | Effect boundary design document |

@@ -1421,6 +1421,10 @@ impl KeyCtx {
                 escape_string(result.stderr())
             ),
             Value::List(items) => {
+                // SAFETY: Rc::as_ptr returns a stable address for the allocation.
+                // We use it as a lightweight identity hash — the address is unique
+                // per allocation and survives Rc clones (all clones share the same
+                // allocation). This is sound as long as the Rc is not moved in memory.
                 let ptr = Rc::as_ptr(items) as usize;
                 self.key_for_ptr(ptr, |ctx| {
                     let parts: Vec<String> = items.iter().map(|v| ctx.value_key(v)).collect();

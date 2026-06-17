@@ -389,13 +389,19 @@ pub fn instantiate_with_map(ty: &Ty, fresh_var: &mut impl FnMut() -> Ty) -> (Ty,
             for (idx, param_name) in params.iter().enumerate() {
                 let fv = fresh_var();
                 fresh_vars.push(fv.clone());
+                // Always bind by positional index (handles user-written generics
+                // where the body uses Param(idx) references).
+                subst.bind_param(idx as u32, fv.clone());
+                // Additionally, bind by type-variable id when the parameter name
+                // follows the tN convention (handles generalized types where the
+                // body uses Var(id) references). Both paths are independent:
+                // bind_param addresses Param references, extend addresses Var
+                // references. Doing both avoids fragile reliance on naming.
                 if let Some(var_id_str) = param_name.strip_prefix('t')
                     && let Ok(var_id) = var_id_str.parse::<u32>()
                 {
                     subst.extend(var_id, fv);
-                    continue;
                 }
-                subst.bind_param(idx as u32, fv);
             }
             (subst.apply(body), fresh_vars)
         }

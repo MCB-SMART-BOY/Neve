@@ -381,12 +381,12 @@ impl Evaluator {
                     .insert(item.id, GlobalDef::Function(fn_def.clone()));
             }
             ItemKind::Enum(enum_def) => {
-                for variant in &enum_def.variants {
+                for (id, name, arity) in enum_def.variant_constructors() {
                     self.variant_ctors.insert(
-                        variant.id,
+                        id,
                         VariantCtor {
-                            name: variant.name.clone(),
-                            arity: variant.fields.len(),
+                            name: name.to_string(),
+                            arity,
                         },
                     );
                 }
@@ -773,6 +773,7 @@ impl Evaluator {
         };
 
         for item in items.iter() {
+            self.check_signals()?;
             let bindings = self
                 .match_pattern(&generator.pattern, item)
                 .ok_or(EvalError::PatternMatchFailed)?;
@@ -919,6 +920,9 @@ impl Evaluator {
     }
 
     fn eval_binary(&mut self, op: BinOp, left: Value, right: Value) -> Result<Value, EvalError> {
+        // Force thunks so arithmetic/comparison arms don't see Value::Thunk.
+        let left = self.force_value(&left)?;
+        let right = self.force_value(&right)?;
         match op {
             BinOp::Add => match (&left, &right) {
                 (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
@@ -1072,7 +1076,9 @@ impl Evaluator {
         }
     }
 
-    fn eval_unary(&self, op: UnaryOp, val: Value) -> Result<Value, EvalError> {
+    fn eval_unary(&mut self, op: UnaryOp, val: Value) -> Result<Value, EvalError> {
+        // Force thunks so the match arms don't see Value::Thunk.
+        let val = self.force_value(&val)?;
         match op {
             UnaryOp::Neg => match val {
                 Value::Int(n) => Ok(Value::Int(-n)),
@@ -1527,6 +1533,7 @@ impl Evaluator {
 
         let mut results = Vec::with_capacity(items.len());
         for item in items.iter() {
+            self.check_signals()?;
             results.push(self.apply(func.clone(), vec![item.clone()])?);
         }
         Ok(Value::List(Rc::new(results)))
@@ -1540,6 +1547,7 @@ impl Evaluator {
 
         let mut results = Vec::with_capacity(items.len());
         for item in items.iter() {
+            self.check_signals()?;
             if let Value::Bool(true) = self.apply(pred.clone(), vec![item.clone()])? {
                 results.push(item.clone());
             }
@@ -1559,6 +1567,7 @@ impl Evaluator {
         };
         let mut acc = init.clone();
         for item in items.iter() {
+            self.check_signals()?;
             acc = self.apply(func.clone(), vec![acc, item.clone()])?;
         }
         Ok(acc)
@@ -1571,6 +1580,7 @@ impl Evaluator {
         };
         let mut results = Vec::new();
         for item in items.iter() {
+            self.check_signals()?;
             let mapped = self.apply(func.clone(), vec![item.clone()])?;
             match mapped {
                 Value::List(inner) => results.extend(inner.iter().cloned()),
@@ -2504,6 +2514,7 @@ impl Evaluator {
         };
 
         for item in items.iter() {
+            self.check_signals()?;
             if let Value::Bool(false) = self.apply(pred.clone(), vec![item.clone()])? {
                 return Ok(Value::Bool(false));
             }
@@ -2518,6 +2529,7 @@ impl Evaluator {
         };
 
         for item in items.iter() {
+            self.check_signals()?;
             if let Value::Bool(true) = self.apply(pred.clone(), vec![item.clone()])? {
                 return Ok(Value::Bool(true));
             }
@@ -2538,6 +2550,7 @@ impl Evaluator {
         };
         let mut items = Vec::new();
         loop {
+            self.check_signals()?;
             match self.stream_next(&stream) {
                 Ok(Some(v)) => items.push(v),
                 Ok(None) => break,
@@ -2565,6 +2578,7 @@ impl Evaluator {
             }
         };
         loop {
+            self.check_signals()?;
             match self.stream_next(&stream) {
                 Ok(Some(v)) => {
                     self.apply(callback.clone(), vec![v])?;

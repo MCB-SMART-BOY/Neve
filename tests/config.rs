@@ -255,12 +255,12 @@ fn test_module_load_supports_language_imports_via_frontend_hir() {
     fs::create_dir_all(&dir).unwrap();
 
     let helpers = dir.join("helpers.neve");
-    fs::write(&helpers, r#"pub fn packages(seed) = ["git", "vim"];"#).unwrap();
+    fs::write(&helpers, r#"fn packages(seed) = ["git", "vim"];"#).unwrap();
 
     let main = dir.join("main.neve");
     fs::write(
         &main,
-        r#"import helpers (packages);
+        r#"use helpers (packages);
 
 let module = #{
     packages = packages(0)

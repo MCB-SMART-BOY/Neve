@@ -4,7 +4,7 @@
 
 <h1>Neve Language Specification</h1>
 
-<p><em>语言规范 v3.0 — 含形式化语义 (Lean-verified)</em></p>
+<p><em>语言规范 v4.0 — 含形式化语义 (Lean-verified)</em></p>
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -79,7 +79,7 @@
    -- can be nested --
 --
 
-& line comment (v3.0)
+& line comment (v4.0)
 ```
 
 ### Literals
@@ -455,7 +455,7 @@ x.foo(y)
 | `&& \|\|` | Logical and/or |
 | `!` | Logical not |
 | `++` | Concatenation |
-| `//` | Record merge |
+| `&` | Record merge |
 | `??` | Default value |
 | `?.` | Safe access |
 | `\|>` | Pipe |
@@ -475,7 +475,7 @@ x.foo(y)
 10. `||`
 11. `??`
 12. `|>`
-13. `//`
+13. `&`
 
 
 | 操作符 | 意思 |
@@ -487,7 +487,7 @@ x.foo(y)
 | `&& \|\|` | 逻辑与/或 |
 | `!` | 逻辑非 |
 | `++` | 拼接 |
-| `//` | 记录合并 |
+| `&` | 记录合并 |
 | `??` | 默认值 |
 | `?.` | 安全访问 |
 | `\|>` | 管道 |
@@ -507,7 +507,7 @@ x.foo(y)
 10. `||`
 11. `??`
 12. `|>`
-13. `//`
+13. `&`
 
 
 ## 8. Modules / 模块
@@ -552,8 +552,8 @@ Neve 在编译期区分纯函数和副作用函数。
 
 ### Effect Annotation / 副作用注解
 
-Functions that perform host effects (I/O, process execution, network) must be annotated with `effect`.
-执行宿主机副作用（I/O、进程执行、网络）的函数必须用 `effect` 注解。
+Effectfulness is auto-inferred by the type checker. The `effect` keyword is accepted for backward compatibility but is not required.
+副作用性由类型检查器自动推断。`effect` 关键字仅为向后兼容而接受，并非必需。
 
 ```neve
 -- Pure function: no effects allowed / 纯函数：不允许副作用
@@ -622,7 +622,7 @@ in the current parser or runtime. Tracked as `#[ignore]` golden tests in
 | Gap | Status | Issue |
 |-----|--------|-------|
 | Unicode `\u{...}` in char literals | ✅ Done | Resolved (v3.18+), lexer supports `\u{XXXXXX}` |
-| `effect` on impl methods | ⚠️ Syntax | Syntax clarification needed |
+| `effect` on impl methods | ✅ N/A | effect auto-inferred in v4.0 |
 | `crate::` import prefix | ✅ Done | Resolved (v3.5), parser supports `crate.path` |
 | Multi-line `-- ... --` comments | ✅ Done | Resolved (v3.5), lexer supports `-- -- open -- -- close` |
 | Shebang stripping | ⚠️ CLI | Handled by CLI, not parser |

@@ -58,8 +58,8 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 - `skills/run-neve/` — smoke-test driver
 - `hooks/` — pre-commit, verify-skills, check-regressions
 - `forward-plan.md` — current status and Phase A→D roadmap
-- `audit-report.md` — design audit findings (73% resolved)
+- `audit-report.md` — design audit findings (100% resolved, 62/62 ✅)
 
 ## Current Status
 
-v3.19.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade B+ (31/62 fixed, see .claude/audit-report.md). Phase B complete, Phase D complete. Next: C6 formatter comments, H5 enum generics
+v4.0.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade B+ → A- (62/62 fixed). All Phases complete. Next: v4.0 release preparation.

@@ -81,7 +81,7 @@ fn pipeline_execution_source() -> String {
 
 #[test]
 fn test_eval_import_std_list_module() {
-    let source = "import std.list; let xs = list.range(1, 4); let n = list.len(xs);";
+    let source = "use std.list; let xs = list.range(1, 4); let n = list.len(xs);";
     match eval_with_std(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(3)),
         other => panic!("expected int, got {:?}", other),
@@ -90,7 +90,7 @@ fn test_eval_import_std_list_module() {
 
 #[test]
 fn test_eval_hir_std_item_import() {
-    let source = "import std.list (len); let result = len([1, 2, 3, 4]);";
+    let source = "use std.list (len); let result = len([1, 2, 3, 4]);";
     match eval_checked_hir(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(4)),
         other => panic!("expected int, got {:?}", other),
@@ -99,7 +99,7 @@ fn test_eval_hir_std_item_import() {
 
 #[test]
 fn test_eval_hir_std_module_import() {
-    let source = "import std.list = listOps; let result = listOps.len([1, 2]);";
+    let source = "use std.list = listOps; let result = listOps.len([1, 2]);";
     match eval_checked_hir(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(2)),
         other => panic!("expected int, got {:?}", other),
@@ -108,7 +108,7 @@ fn test_eval_hir_std_module_import() {
 
 #[test]
 fn test_eval_hir_std_glob_import() {
-    let source = "import std.list (*); let result = len([1, 2, 3]);";
+    let source = "use std.list (*); let result = len([1, 2, 3]);";
     match eval_checked_hir(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(3)),
         other => panic!("expected int, got {:?}", other),
@@ -118,7 +118,7 @@ fn test_eval_hir_std_glob_import() {
 #[test]
 fn test_eval_hir_std_option_builtins() {
     let source = r#"
-        import std.option = option;
+        use std.option = option;
         let a = option.some(41)? + 1;
         let b = option.none ?? 5;
         let result = a + b;
@@ -132,7 +132,7 @@ fn test_eval_hir_std_option_builtins() {
 #[test]
 fn test_eval_hir_builtin_option_match_patterns() {
     let source = r#"
-        import std.option = option;
+        use std.option = option;
         let result = match option.some(41) {
             Some(value) -> value,
             None -> 0
@@ -147,7 +147,7 @@ fn test_eval_hir_builtin_option_match_patterns() {
 #[test]
 fn test_eval_hir_std_result_builtins() {
     let source = r#"
-        import std.result = result;
+        use std.result = result;
         let a = result.ok(41)? + 1;
         let resultValue = result.unwrap_err(result.err("boom"));
         let answer = if resultValue == "boom" -> a else 0;
@@ -161,7 +161,7 @@ fn test_eval_hir_std_result_builtins() {
 #[test]
 fn test_eval_hir_builtin_result_match_patterns() {
     let source = r#"
-        import std.result = result;
+        use std.result = result;
         let answer = match result.err("boom") {
             Ok(value) -> value,
             Err(message) -> if message == "boom" -> 1 else 0
@@ -176,7 +176,7 @@ fn test_eval_hir_builtin_result_match_patterns() {
 #[test]
 fn test_eval_hir_std_path_builtins() {
     let source = r#"
-        import std.path = path;
+        use std.path = path;
         let parent = path.parent("/tmp/file.txt") ?? "/";
         let result = if path.is_absolute("/tmp/file.txt") -> parent else "nope";
     "#;
@@ -189,7 +189,7 @@ fn test_eval_hir_std_path_builtins() {
 #[test]
 fn test_eval_hir_std_path_from_string_exposes_path_runtime_value() {
     let source = r#"
-        import std.path = path;
+        use std.path = path;
         let p = path.fromString("/tmp/file.txt");
         let result = if typeOf(p) == "Path" -> toString(p) else "nope";
     "#;
@@ -202,7 +202,7 @@ fn test_eval_hir_std_path_from_string_exposes_path_runtime_value() {
 #[test]
 fn test_eval_hir_std_typed_path_adapters() {
     let source = r#"
-        import std.path = path;
+        use std.path = path;
         let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
         let name = path.filenamePath(nested) ?? "missing";
         let ext = path.extensionPath(nested) ?? "missing";
@@ -217,7 +217,7 @@ fn test_eval_hir_std_typed_path_adapters() {
 #[test]
 fn test_eval_hir_std_io_builtins() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let digest = io.hashString("abc");
     "#;
     match eval_checked_hir(source) {
@@ -233,7 +233,7 @@ fn test_eval_hir_std_io_builtins() {
 fn test_eval_hir_std_io_current_system_bridge() {
     let expected = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         io.currentSystem()
     "#;
     match eval_checked_hir(source) {
@@ -249,7 +249,7 @@ fn test_eval_hir_std_io_current_dir_string_bridge() {
         .to_string_lossy()
         .into_owned();
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         io.currentDir()
     "#;
     match eval_checked_hir(source) {
@@ -267,7 +267,7 @@ fn test_eval_hir_std_io_get_env_bridge() {
     );
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         io.getEnv("{missing}") ?? "missing"
     "#
     );
@@ -287,7 +287,7 @@ fn test_eval_hir_std_fetch_path_bridge() {
     let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.fetch = fetch;
+        use std.fetch = fetch;
         fetch.path("{escaped}").hash
     "#
     );
@@ -308,7 +308,7 @@ fn test_eval_hir_std_fetch_path_with_hash_bridge() {
     let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.fetch = fetch;
+        use std.fetch = fetch;
         fetch.pathWithHash("{escaped}", "{expected}").hash
     "#
     );
@@ -324,7 +324,7 @@ fn test_eval_hir_std_fetch_url_with_hash_bridge() {
     let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
     let source = format!(
         r#"
-        import std.fetch = fetch;
+        use std.fetch = fetch;
         fetch.urlWithHash("{url}", "{expected_hash}").hash
     "#
     );
@@ -343,7 +343,7 @@ fn test_eval_hir_std_fetch_url_bridge() {
     let (url, expected_hash, server) = start_local_http_fixture(b"fetch-url-content");
     let source = format!(
         r#"
-        import std.fetch = fetch;
+        use std.fetch = fetch;
         fetch.url("{url}").hash
     "#
     );
@@ -363,7 +363,7 @@ fn test_eval_hir_std_fetch_git_bridge() {
     let escaped = repo_path.replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.fetch = fetch;
+        use std.fetch = fetch;
         fetch.git("{escaped}", "main").hash
     "#
     );
@@ -380,7 +380,7 @@ fn test_eval_hir_std_fetch_git_with_hash_bridge() {
     let escaped = repo_path.replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.fetch = fetch;
+        use std.fetch = fetch;
         fetch.gitWithHash("{escaped}", "main", "{expected_hash}").hash
     "#
     );
@@ -399,7 +399,7 @@ fn test_eval_hir_std_io_read_file_bridge() {
     let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         io.readFile("{escaped}")
     "#
     );
@@ -420,8 +420,8 @@ fn test_eval_hir_std_io_read_dir_bridge() {
     let escaped = dir.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.list = list;
+        use std.io = io;
+        use std.list = list;
         list.sort(io.readDir("{escaped}"))
     "#
     );
@@ -451,7 +451,7 @@ fn test_eval_hir_std_io_hash_file_bridge() {
     let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         io.hashFile("{escaped}")
     "#
     );
@@ -472,8 +472,8 @@ fn test_eval_hir_std_io_hash_file_path_bridge() {
     let escaped = file_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         io.hashFilePath(path.fromString("{escaped}"))
     "#
     );
@@ -496,8 +496,8 @@ fn test_eval_hir_std_io_read_file_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let content = io.readFilePath(path.fromString("{escaped}"));
     "#
     );
@@ -520,8 +520,8 @@ fn test_eval_hir_std_io_read_file_bytes_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let bytes = io.readFileBytesPath(path.fromString("{escaped}"));
         let shown = if typeOf(bytes) == "Bytes" -> toString(bytes) else "nope";
     "#
@@ -547,9 +547,9 @@ fn test_eval_hir_std_io_read_dir_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
-        import std.list = list;
+        use std.io = io;
+        use std.path = path;
+        use std.list = list;
         let entries = io.readDirPath(path.fromString("{escaped}"));
         list.sort(entries)
     "#
@@ -586,9 +586,9 @@ fn test_eval_hir_std_io_read_dir_entry_paths_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
-        import std.list = list;
+        use std.io = io;
+        use std.path = path;
+        use std.list = list;
         list.sort(io.readDirEntryPaths(path.fromString("{escaped}")))
     "#
     );
@@ -622,8 +622,8 @@ fn test_eval_hir_std_io_write_file_bytes_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let src = path.fromString("{escaped_src}");
         let dst = path.fromString("{escaped_dst}");
         let bytes = io.readFileBytesPath(src);
@@ -650,8 +650,8 @@ fn test_eval_hir_std_io_write_file_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let dst = path.fromString("{escaped_dst}");
         let done = io.writeFilePath(dst, "hello-path");
         io.readFilePath(dst)
@@ -675,7 +675,7 @@ fn test_eval_hir_std_io_write_file_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         let done = io.writeFile("{escaped_dst}", "hello");
         io.readFile("{escaped_dst}")
     "#
@@ -699,8 +699,8 @@ fn test_eval_hir_std_io_append_file_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let dst = path.fromString("{escaped_dst}");
         let done = io.appendFilePath(dst, "-path");
         io.readFilePath(dst)
@@ -725,7 +725,7 @@ fn test_eval_hir_std_io_append_file_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         let done = io.appendFile("{escaped_dst}", "-path");
         io.readFile("{escaped_dst}")
     "#
@@ -766,8 +766,8 @@ fn test_eval_hir_std_io_append_file_bytes_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let init = io.readFileBytesPath(path.fromString("{escaped_init}"));
         let append = io.readFileBytesPath(path.fromString("{escaped_append}"));
         let expected = io.readFileBytesPath(path.fromString("{escaped_expected}"));
@@ -792,7 +792,7 @@ fn test_eval_hir_std_io_current_dir_path_bridge() {
         .to_string_lossy()
         .to_string();
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cwd = io.currentDirPath();
         let shown = if typeOf(cwd) == "Path" -> toString(cwd) else "nope";
     "#;
@@ -806,7 +806,7 @@ fn test_eval_hir_std_io_current_dir_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_home_dir_path_bridge() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         io.homeDirPath()
     "#;
 
@@ -824,7 +824,7 @@ fn test_eval_hir_std_io_home_dir_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_home_dir_bridge() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         io.homeDir()
     "#;
 
@@ -846,7 +846,7 @@ fn test_eval_hir_std_io_create_dir_all_bridge() {
     let escaped = target.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         let target = "{escaped}";
         let done = io.createDirAll(target);
         io.pathExists(target) && io.isDir(target)
@@ -866,8 +866,8 @@ fn test_eval_hir_std_io_create_dir_all_path_bridge() {
     let escaped = target.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{escaped}");
         let done = io.createDirAllPath(target);
         io.pathExistsPath(target) && io.isDirPath(target)
@@ -888,8 +888,8 @@ fn test_eval_hir_std_io_remove_dir_all_path_bridge() {
     let escaped = target.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{escaped}");
         let done = io.removeDirAllPath(target);
         !io.pathExistsPath(target)
@@ -909,7 +909,7 @@ fn test_eval_hir_std_io_remove_dir_all_bridge() {
     let escaped = target.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         let target = "{escaped}";
         let created = io.createDirAll(target);
         let done = io.removeDirAll(target);
@@ -931,7 +931,7 @@ fn test_eval_hir_std_io_path_exists_bridge() {
     let escaped = file.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         io.pathExists("{escaped}")
     "#
     );
@@ -950,7 +950,7 @@ fn test_eval_hir_std_io_is_dir_bridge() {
     let escaped = dir.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         io.isDir("{escaped}")
     "#
     );
@@ -969,7 +969,7 @@ fn test_eval_hir_std_io_is_file_bridge() {
     let escaped = file.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
+        use std.io = io;
         io.isFile("{escaped}")
     "#
     );
@@ -983,7 +983,7 @@ fn test_eval_hir_std_io_is_file_bridge() {
 #[test]
 fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.command("printf", ["neve"]);
         let shown = if typeOf(cmd) == "Command" -> toString(cmd) else "nope";
     "#;
@@ -997,7 +997,7 @@ fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
 #[test]
 fn test_eval_hir_std_io_command_with_bridge_exposes_configured_command_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
         let shown = if typeOf(cmd) == "Command" -> toString(cmd) else "nope";
     "#;
@@ -1013,7 +1013,7 @@ fn test_eval_hir_std_io_command_with_bridge_exposes_configured_command_runtime_v
 #[test]
 fn test_eval_hir_std_io_pipeline_bridge_exposes_pipeline_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let pipe = io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]);
         let shown = if typeOf(pipe) == "Pipeline" -> toString(pipe) else "nope";
     "#;
@@ -1027,8 +1027,8 @@ fn test_eval_hir_std_io_pipeline_bridge_exposes_pipeline_runtime_value() {
 #[test]
 fn test_eval_hir_std_io_pipeline_with_redirects_bridge_exposes_pipeline_runtime_value() {
     let source = r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let pipe = io.pipelineWithRedirects(
             io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
             [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
@@ -1058,8 +1058,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_bridge_exposes_process_resul
     let source = if cfg!(windows) {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execPipeline(
             io.pipelineWithRedirects(
@@ -1082,8 +1082,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_bridge_exposes_process_resul
     } else {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execPipeline(
             io.pipelineWithRedirects(
@@ -1114,8 +1114,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_bridge_exposes_process_resul
 #[test]
 fn test_eval_hir_std_io_redirect_stdout_path_bridge_exposes_redirect_runtime_value() {
     let source = r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
         let shown = if typeOf(redirect) == "Redirect" -> toString(redirect) else "nope";
     "#;
@@ -1129,8 +1129,8 @@ fn test_eval_hir_std_io_redirect_stdout_path_bridge_exposes_redirect_runtime_val
 #[test]
 fn test_eval_hir_std_io_redirect_stderr_path_bridge_exposes_redirect_runtime_value() {
     let source = r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
         let shown = if typeOf(redirect) == "Redirect" -> toString(redirect) else "nope";
     "#;
@@ -1144,8 +1144,8 @@ fn test_eval_hir_std_io_redirect_stderr_path_bridge_exposes_redirect_runtime_val
 #[test]
 fn test_eval_hir_std_io_redirect_stdin_path_bridge_exposes_redirect_runtime_value() {
     let source = r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
         let shown = if typeOf(redirect) == "Redirect" -> toString(redirect) else "nope";
     "#;
@@ -1163,8 +1163,8 @@ fn test_eval_hir_std_io_exec_command_with_redirect_writes_stdout_to_file() {
     let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
@@ -1195,8 +1195,8 @@ fn test_eval_hir_std_io_exec_command_with_stderr_redirect_writes_stderr_to_file(
     let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
@@ -1229,8 +1229,8 @@ fn test_eval_hir_std_io_exec_command_with_stdin_redirect_reads_stdin_from_file()
     let source = if cfg!(windows) {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
@@ -1248,8 +1248,8 @@ fn test_eval_hir_std_io_exec_command_with_stdin_redirect_reads_stdin_from_file()
     } else {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
@@ -1283,8 +1283,8 @@ fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_pa
     let source = if cfg!(windows) {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let input = path.fromString("{stdin_path_source}");
         let output = path.fromString("{stdout_path_source}");
         let result = io.execCommand(
@@ -1305,8 +1305,8 @@ fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_pa
     } else {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let input = path.fromString("{stdin_path_source}");
         let output = path.fromString("{stdout_path_source}");
         let result = io.execCommand(
@@ -1341,8 +1341,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file(
     let source = if cfg!(windows) {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execPipeline(
             io.pipelineWithRedirects(
@@ -1363,8 +1363,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file(
     } else {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let target = path.fromString("{redirect_path_source}");
         let result = io.execPipeline(
             io.pipelineWithRedirects(
@@ -1401,8 +1401,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_p
     let source = if cfg!(windows) {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let input = path.fromString("{stdin_path_source}");
         let output = path.fromString("{stdout_path_source}");
         let result = io.execPipeline(
@@ -1426,8 +1426,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_p
     } else {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let input = path.fromString("{stdin_path_source}");
         let output = path.fromString("{stdout_path_source}");
         let result = io.execPipeline(
@@ -1459,7 +1459,7 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_p
 #[test]
 fn test_eval_hir_std_io_pipeline_rejects_empty_pipeline() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let pipe = io.pipeline([]);
     "#;
 
@@ -1479,8 +1479,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_rejects_final_stage_stdout_c
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let output = path.fromString("{stdout_path_source}");
         let result = io.execPipeline(
             io.pipelineWithRedirects(
@@ -1514,8 +1514,8 @@ fn test_eval_hir_std_io_pipeline_with_redirects_rejects_final_stage_stdout_confl
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let output = path.fromString("{stdout_path_source}");
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
@@ -1547,8 +1547,8 @@ fn test_eval_hir_std_io_exec_pipeline_rejects_non_final_stage_stdout_redirect() 
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let out = path.fromString("{stdout_path_source}");
         let result = io.execPipeline(
             io.pipeline([
@@ -1578,8 +1578,8 @@ fn test_eval_hir_std_io_pipeline_with_redirects_rejects_boundary_stdin_conflict(
     let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let input = path.fromString("{stdin_path_source}");
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
@@ -1603,8 +1603,8 @@ fn test_eval_hir_std_io_pipeline_with_redirects_rejects_boundary_stdin_conflict(
 #[test]
 fn test_eval_hir_std_io_command_with_redirects_bridge_exposes_command_runtime_value() {
     let source = r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let cmd = io.commandWithRedirects(
             io.command("printf", ["neve"]),
             [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
@@ -1626,8 +1626,8 @@ fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
     let source = if cfg!(windows) {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let err = path.fromString("{stderr_path_source}");
         let result = io.execPipeline(
             io.pipeline([
@@ -1650,8 +1650,8 @@ fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
     } else {
         format!(
             r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let err = path.fromString("{stderr_path_source}");
         let result = io.execPipeline(
             io.pipeline([
@@ -1682,7 +1682,7 @@ fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
 #[test]
 fn test_eval_hir_std_io_task_command_bridge_exposes_task_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let task = io.taskCommand(io.command("printf", ["neve"]));
         let shown = if typeOf(task) == "Task" -> toString(task) else "nope";
     "#;
@@ -1696,7 +1696,7 @@ fn test_eval_hir_std_io_task_command_bridge_exposes_task_runtime_value() {
 #[test]
 fn test_eval_hir_std_io_task_pipeline_bridge_exposes_task_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let task = io.taskPipeline(io.pipeline([
             io.command("printf", ["neve"]),
             io.command("cat", [])
@@ -1713,7 +1713,7 @@ fn test_eval_hir_std_io_task_pipeline_bridge_exposes_task_runtime_value() {
 #[test]
 fn test_eval_hir_std_io_await_task_bridge_exposes_process_result_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let task = io.taskCommand(io.command("rustc", ["--version"]));
         let result = io.awaitTask(task);
         let shown = if typeOf(result) == "ProcessResult" -> toString(result) else "nope";
@@ -1728,7 +1728,7 @@ fn test_eval_hir_std_io_await_task_bridge_exposes_process_result_runtime_value()
 #[test]
 fn test_eval_hir_std_io_await_tasks_bridge_exposes_process_result_list() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let results = io.awaitTasks([
             io.taskCommand(io.command("printf", ["neve"])),
             io.taskPipeline(io.pipeline([
@@ -1755,7 +1755,7 @@ fn test_eval_hir_std_io_await_tasks_bridge_exposes_process_result_list() {
 #[test]
 fn test_eval_hir_std_io_await_pipeline_task_matches_exec_pipeline() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let pipeline = io.pipeline([
             io.command("printf", ["neve"]),
             io.command("cat", [])
@@ -1782,8 +1782,8 @@ fn test_eval_hir_std_io_exec_pipeline_honors_embedded_pipeline_redirects() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
                 io.command("printf", ["neve"]),
@@ -1805,7 +1805,7 @@ fn test_eval_hir_std_io_exec_pipeline_honors_embedded_pipeline_redirects() {
 #[test]
 fn test_eval_hir_std_io_exec_matches_canonical_process_projection() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let migrated = io.execCommand(io.command("rustc", ["--version"]));
         let canonical = io.execCommand(io.command("rustc", ["--version"]));
         let same =
@@ -1835,7 +1835,7 @@ fn test_eval_hir_std_io_explicit_shell_command_matches_canonical_process_project
 #[test]
 fn test_eval_hir_std_io_exec_with_matches_canonical_process_projection() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let migrated =
             io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
         let canonical =
@@ -1857,7 +1857,7 @@ fn test_eval_hir_std_io_exec_with_matches_canonical_process_projection() {
 #[test]
 fn test_eval_hir_std_io_exec_command_bridge_exposes_process_result_runtime_value() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.command("rustc", ["--version"]);
         let result = io.execCommand(cmd);
         let shown = if typeOf(result) == "ProcessResult" -> toString(result) else "nope";
@@ -1872,7 +1872,7 @@ fn test_eval_hir_std_io_exec_command_bridge_exposes_process_result_runtime_value
 #[test]
 fn test_eval_hir_std_io_process_success_bridge() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.command("rustc", ["--version"]);
         let result = io.execCommand(cmd);
         let success = io.processSuccess(result);
@@ -1887,7 +1887,7 @@ fn test_eval_hir_std_io_process_success_bridge() {
 #[test]
 fn test_eval_hir_std_io_process_stdout_bridge() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.command("rustc", ["--version"]);
         let result = io.execCommand(cmd);
         let stdout = io.processStdout(result);
@@ -1902,7 +1902,7 @@ fn test_eval_hir_std_io_process_stdout_bridge() {
 #[test]
 fn test_eval_hir_std_io_process_code_bridge() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.command("rustc", ["--version"]);
         let result = io.execCommand(cmd);
         let code = io.processCode(result);
@@ -1917,7 +1917,7 @@ fn test_eval_hir_std_io_process_code_bridge() {
 #[test]
 fn test_eval_hir_std_io_process_stderr_bridge() {
     let source = r#"
-        import std.io = io;
+        use std.io = io;
         let cmd = io.command("rustc", ["--version"]);
         let result = io.execCommand(cmd);
         let stderr = io.processStderr(result);
@@ -1941,8 +1941,8 @@ fn test_eval_hir_std_io_path_exists_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let exists = io.pathExistsPath(path.fromString("{escaped}"));
     "#
     );
@@ -1965,8 +1965,8 @@ fn test_eval_hir_std_io_is_dir_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let dir = io.isDirPath(path.fromString("{escaped}"));
     "#
     );
@@ -1989,8 +1989,8 @@ fn test_eval_hir_std_io_is_file_path_bridge() {
 
     let source = format!(
         r#"
-        import std.io = io;
-        import std.path = path;
+        use std.io = io;
+        use std.path = path;
         let file = io.isFilePath(path.fromString("{escaped}"));
     "#
     );
@@ -2004,9 +2004,9 @@ fn test_eval_hir_std_io_is_file_path_bridge() {
 #[test]
 fn test_eval_hir_std_map_and_set_builtins() {
     let source = r#"
-        import std.Map;
-        import std.Set;
-        import std.list = list;
+        use std.Map;
+        use std.Set;
+        use std.list = list;
         let map = Map.insert("a", 41, Map.empty);
         let set = Set.insert(1, Set.empty);
         let result = Map.getWithDefault("a", 0, map) + Set.size(set) + list.sum(Map.values(map));
@@ -2020,7 +2020,7 @@ fn test_eval_hir_std_map_and_set_builtins() {
 #[test]
 fn test_eval_hir_higher_order_list_builtins() {
     let source = r#"
-        import std.list = list;
+        use std.list = list;
         fn inc(x) = x + 1;
         fn isEven(x) = x % 2 == 0;
         let mapped = list.map(inc, [1, 2, 3]);
@@ -2037,7 +2037,7 @@ fn test_eval_hir_higher_order_list_builtins() {
 
 #[test]
 fn test_eval_import_std_root() {
-    let source = "import std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
+    let source = "use std; let xs = std.list.range(1, 3); let n = std.list.len(xs);";
     match eval_with_std(source) {
         Ok(Value::Int(n)) => assert_eq!(n, int(2)),
         other => panic!("expected int, got {:?}", other),
@@ -3732,7 +3732,7 @@ fn test_eval_path_lit_absolute() {
 fn test_eval_hir_std_math_conversion_bridges() {
     let result = eval_checked_hir(
         r#"
-            import std.math = math;
+            use std.math = math;
             let x = (math.toInt(true), math.toFloat("1.5"));
         "#,
     );
@@ -3750,7 +3750,7 @@ fn test_eval_hir_std_math_conversion_bridges() {
 fn test_eval_hir_std_math_float_predicates() {
     let result = eval_checked_hir(
         r#"
-            import std.math = math;
+            use std.math = math;
             let x = (math.isNan(math.nan), math.isInf(math.inf));
         "#,
     );
@@ -3768,7 +3768,7 @@ fn test_eval_hir_std_math_float_predicates() {
 fn test_eval_hir_std_math_rounding_bridges() {
     let result = eval_checked_hir(
         r#"
-            import std.math = math;
+            use std.math = math;
             let x = (math.floor(1.9), math.ceil(1.1), math.round(1.6));
         "#,
     );
@@ -3787,7 +3787,7 @@ fn test_eval_hir_std_math_rounding_bridges() {
 fn test_eval_hir_std_math_unary_float_transforms() {
     let result = eval_checked_hir(
         r#"
-            import std.math = math;
+            use std.math = math;
             let x = (math.sqrt(9.0), math.log(1.0), math.log10(1000.0), math.exp(0.0));
         "#,
     );
@@ -3807,7 +3807,7 @@ fn test_eval_hir_std_math_unary_float_transforms() {
 fn test_eval_hir_std_math_trigonometric_bridges() {
     let result = eval_checked_hir(
         r#"
-            import std.math = math;
+            use std.math = math;
             let x = (math.sin(0.0), math.cos(0.0), math.tan(0.0));
         "#,
     );
@@ -3819,5 +3819,35 @@ fn test_eval_hir_std_math_trigonometric_bridges() {
             assert_eq!(items[2], Value::Float(0.0));
         }
         other => panic!("expected Tuple, got {:?}", other),
+    }
+}
+
+// --- M8: Thunk forcing in binary/comparison ops ---
+
+#[test]
+fn test_eval_binary_op_forces_thunk() {
+    let result = eval_checked_hir(
+        r#"
+        let x = force(~(40 + 2));
+        let y = x + 8;
+        "#,
+    );
+    match result {
+        Ok(Value::Int(v)) => assert_eq!(v, int(50)),
+        other => panic!("expected Int(50), got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_comparison_op_forces_thunk() {
+    let result = eval_checked_hir(
+        r#"
+        let x = force(~(3 * 7));
+        x == 21
+        "#,
+    );
+    match result {
+        Ok(Value::Bool(v)) => assert!(v),
+        other => panic!("expected Bool(true), got {:?}", other),
     }
 }

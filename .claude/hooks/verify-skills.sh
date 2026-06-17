@@ -47,7 +47,7 @@ check_count "typeck tests"   '#\[test\]' tests/typeck.rs 280
 # --- neve-eval.md claims ---
 check_file "eval.rs"         crates/neve-eval/src/eval.rs
 check_file "value.rs"        crates/neve-eval/src/value.rs
-check_file "ast_eval.rs"     crates/neve-eval/src/ast_eval.rs
+# ast_eval.rs removed in Phase D — all evaluation now through canonical HIR pipeline
 
 # --- neve-std.md claims ---
 check_file "std io.rs"       crates/neve-std/src/io/mod.rs

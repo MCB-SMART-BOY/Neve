@@ -19,7 +19,7 @@ neve lsp --check
 
 Open any `.neve` file in Helix — syntax highlighting, auto-completion, and diagnostics work out of the box.
 
-## Supported LSP Methods (20 total)
+## Supported LSP Methods (23 total)
 
 ### Text Document Features
 
@@ -30,7 +30,7 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/didSave` | ✅ | Re-parse on save |
 | `textDocument/didClose` | ✅ | Clear diagnostics on close |
 | `textDocument/hover` | ✅ | Type info + definition text + builtin docs (22 functions) |
-| `textDocument/completion` | ✅ | Keywords, stdlib (81 fns), types (14), methods (54, type-aware), imports, document symbols |
+| `textDocument/completion` | ✅ | Keywords, stdlib (101 fns), types (14), methods (54, type-aware), imports, document symbols |
 | `textDocument/completionItem/resolve` | ✅ | Documentation for 24 functions |
 | `textDocument/signatureHelp` | ✅ | User-defined + 60+ builtin function signatures |
 | `textDocument/definition` | ✅ | Go-to-definition via scope-aware symbol index |
@@ -93,7 +93,7 @@ Syntax definition in `editors/neve.sublime-syntax`.
 
 | Category | Count | Example |
 |----------|-------|---------|
-| Keywords | 13 | `let`, `fn`, `if`, `match`, `struct`, `enum`, `trait`, `impl` |
+| Keywords | 12 | `let`, `fn`, `if`, `match`, `trait`, `impl` (v4.0: `struct`/`enum` are legacy) |
 | Stdlib IO | 55 | `io.readFile`, `io.streamMap`, `io.cancel` |
 | Stdlib List | 16 | `list.map`, `list.fold`, `list.zip` |
 | Stdlib String | 12 | `string.split`, `string.trim` |
@@ -156,7 +156,7 @@ Source Text → Parser (AST) → Lowering (HIR) → Type Check → ModuleSemanti
 cargo build -p neve
 
 # Test LSP crate
-cargo test -p neve-lsp          # 13 unit tests
+cargo test -p neve-lsp          # 20 unit tests
 
 # Test LSP integration
 cargo test --test lsp            # 142 integration tests

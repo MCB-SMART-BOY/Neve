@@ -7,6 +7,7 @@ pub mod check;
 mod diagnostics;
 pub mod doc;
 pub mod eval;
+pub mod explain;
 pub mod fmt;
 pub mod info;
 pub mod init;

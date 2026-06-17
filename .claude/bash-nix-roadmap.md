@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Neve v3.19.0 已经具备系统脚本和构建系统的基础能力：
+Neve v4.0.0 已经具备系统脚本和构建系统的基础能力：
 
 | 能力 | Bash | Neve | Nix |
 |------|------|------|-----|
@@ -50,7 +50,7 @@ Neve v3.19.0 已经具备系统脚本和构建系统的基础能力：
 - [x] `io.args()` 结构化解析：返回 `(List<String>, Record)` 元组；`-v`→Bool、`-j8`→Int、`-f out`→String、`-10`→位置参数、`--` 分隔
 - [x] 内置 CLI 参数解析：`io.args()` 本身即解析器，无需额外 API
   ```neve
-  let (files, #{ v, j = 4 }) = io.args();  // 解构即解析
+  let (files, { v, j = 4 }) = io.args();  // 解构即解析
   ```
 
 **受益：** Neve 脚本比 Bash 更安全、更可读、更可维护。
@@ -89,7 +89,7 @@ Neve v3.19.0 已经具备系统脚本和构建系统的基础能力：
 ## 优先级建议
 
 ```
-Phase 1 (completed: v3.6-v3.12)  ← 现在开始
+Phase 1 (completed: v3.6-v3.12)
   └─ Effect 类型系统 v2
      耗时：2-3 轮
 
@@ -97,7 +97,7 @@ Phase 2 (completed: v3.12-v3.17)
   └─ 脚本体验：chmod/symlink/tempDir/walk/参数解析
      耗时：3-4 轮
 
-Phase 3 (in progress: v3.19-v4.0)
+Phase 3 ✅ (completed: v3.19-v4.0)
   └─ 构建系统：derivation 语法、并行、缓存
      耗时：4-5 轮
 

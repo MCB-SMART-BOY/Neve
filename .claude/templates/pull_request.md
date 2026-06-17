@@ -18,8 +18,8 @@
 - [ ] New tests added in the appropriate file
 - [ ] `docs/project/feature-matrix.md` updated if capability changed
 - [ ] `docs/project/changelog.md` updated if user-facing change
-- [ ] `AGENTS.md` priority list updated if needed
-- [ ] No new `neve_eval::compat` usage (deprecated path)
+- [ ] `CLAUDE.md` updated if needed
+- [ ] All evaluation goes through canonical HIR pipeline
 
 ## Affected Crates
 <!-- List the crates modified by this PR -->

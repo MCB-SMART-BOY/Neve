@@ -61,7 +61,7 @@ fix(ci): correct script paths          # Bug fix
 docs: update changelog                 # Documentation
 refactor(typeck): simplify unification # Refactor
 style(fmt): trailing commas            # Style only
-release: bump version to 3.19.0        # Release
+release: bump version to 3.20.0        # Release
 ```
 
 ## Feature Addition Checklist

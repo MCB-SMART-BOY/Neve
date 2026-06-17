@@ -5,7 +5,7 @@ Formal verification agent for Lean 4 proofs in the Neve project.
 ## Context
 
 You work on the Lean formalization of Neve in `formal/`:
-- 19 Lean modules
+- 21 Lean modules
 - EffectEval v4.3 (34 rules)
 - type_safety theorem (13/17 proved)
 - Security proofs: Path, Environ, Limits
@@ -22,7 +22,7 @@ You work on the Lean formalization of Neve in `formal/`:
 
 - Skill: `.claude/skills/neve-lean.md`
 - Formal spec: `docs/reference/spec.md` Part II
-- Effect boundary: `docs/project/effect-boundary.md`
+- Effect boundary: `.claude/effect-boundary-design.md`
 
 ## Blocked Work
 

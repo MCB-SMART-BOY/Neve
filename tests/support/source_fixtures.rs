@@ -15,7 +15,7 @@ pub fn shell_projection_source(final_binding: Option<&str>) -> String {
 
     format!(
         r#"
-        import std.io as io;
+        use std.io = io;
         let migrated = io.execCommand(io.command("{program}", ["{flag}", "rustc --version"]));
         let canonical = io.execCommand(io.command("{program}", ["{flag}", "rustc --version"]));
         let same =
@@ -45,7 +45,7 @@ pub fn pipeline_execution_source(final_binding: Option<&str>) -> String {
 
     format!(
         r#"
-        import std.io as io;
+        use std.io = io;
         let result = io.execPipeline(io.pipeline([
             io.command("{producer_program}", ["{producer_flag}", "{producer_cmd}"]),
             io.command("{consumer_program}", ["{consumer_flag}", "{consumer_cmd}"])

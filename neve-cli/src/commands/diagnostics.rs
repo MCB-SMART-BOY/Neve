@@ -57,11 +57,66 @@ impl SourceAttributedDiagnosticsEntry for SessionLoadedDiagnostics {
 }
 
 /// Emit diagnostics attributed to one source name and source text.
+/// Returns the count of errors and warnings emitted.
 /// 发射归属到单个源码名称与源码文本的诊断。
+/// 返回发出的错误和警告计数。
 pub(super) fn emit_source_diagnostics(source_name: &str, source: &str, diagnostics: &[Diagnostic]) {
     for diagnostic in diagnostics {
         emit(source, source_name, diagnostic);
     }
+}
+
+/// Emit a Rust-style diagnostic summary line.
+/// 发射 Rust 风格的诊断摘要行。
+///
+/// Prints something like:
+/// `error: could not compile `file.neve` due to 3 previous errors`
+/// or `warning: 2 warnings emitted`
+#[allow(dead_code)]
+pub(super) fn emit_diagnostic_summary(
+    error_count: usize,
+    warning_count: usize,
+    filename: Option<&str>,
+) {
+    if error_count > 0 {
+        if let Some(name) = filename {
+            eprintln!(
+                "error: could not compile `{}` due to {} previous error{}",
+                name,
+                error_count,
+                if error_count == 1 { "" } else { "s" }
+            );
+        } else {
+            eprintln!(
+                "error: {} error{} found",
+                error_count,
+                if error_count == 1 { "" } else { "s" }
+            );
+        }
+    }
+    if warning_count > 0 {
+        eprintln!(
+            "warning: {} warning{} emitted",
+            warning_count,
+            if warning_count == 1 { "" } else { "s" }
+        );
+    }
+}
+
+/// Count errors and warnings in a diagnostic slice.
+/// 统计诊断切片中的错误和警告数量。
+#[allow(dead_code)]
+pub(super) fn count_diagnostics(diagnostics: &[Diagnostic]) -> (usize, usize) {
+    let mut errors = 0;
+    let mut warnings = 0;
+    for diag in diagnostics {
+        match diag.severity {
+            neve_diagnostic::Severity::Error => errors += 1,
+            neve_diagnostic::Severity::Warning => warnings += 1,
+            _ => {}
+        }
+    }
+    (errors, warnings)
 }
 
 fn emit_source_attributed_entries<T: SourceAttributedDiagnosticsEntry>(entries: &[T]) {

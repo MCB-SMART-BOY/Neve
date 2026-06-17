@@ -17,9 +17,7 @@ pub const STMT_STARTS: &[TokenKind] = &[
     TokenKind::Enum,   // enum - 枚举定义
     TokenKind::Trait,  // trait - 特征定义
     TokenKind::Impl,   // impl - 实现块
-    TokenKind::Import, // import - 导入语句
     TokenKind::Use,    // use - 导入(v3.0)
-    TokenKind::Pub,    // pub - 公开可见性
 ];
 
 /// Tokens that typically end a statement.
@@ -45,9 +43,7 @@ pub const SYNC_TOKENS: &[TokenKind] = &[
     TokenKind::Enum,
     TokenKind::Trait,
     TokenKind::Impl,
-    TokenKind::Import,
     TokenKind::Use,
-    TokenKind::Pub,
     TokenKind::Eof,
 ];
 

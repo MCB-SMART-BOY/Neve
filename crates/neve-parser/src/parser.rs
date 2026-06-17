@@ -114,7 +114,7 @@ impl Parser {
     /// 项包括：let 绑定、函数、类型别名、结构体、枚举、特征、impl 块和导入。
     fn parse_item(&mut self) -> Option<Item> {
         let start = self.current_span();
-        let is_pub = self.eat(TokenKind::Pub);
+        let is_pub = false; // v4.0: all public
 
         let kind = match self.current_kind() {
             TokenKind::Let => {
@@ -137,14 +137,14 @@ impl Parser {
                 self.advance();
                 Some(ItemKind::Impl(self.parse_impl_def()))
             }
-            TokenKind::Import | TokenKind::Use => {
+            TokenKind::Use => {
                 self.advance();
                 Some(ItemKind::Import(self.parse_import_def(is_pub)))
             }
             TokenKind::Ident(_) => self.parse_ident_item(is_pub),
             _ => {
                 if is_pub {
-                    self.error("expected item after `pub`");
+                    self.error_with_code("expected item after `pub`", ErrorCode::ExpectedExpression);
                 }
                 if self.is_start_of_pattern() {
                     Some(ItemKind::Let(self.parse_let_def(is_pub)))
@@ -185,9 +185,8 @@ impl Parser {
         let visibility = if is_pub {
             Visibility::Public
         } else {
-            Visibility::Private
+            Visibility::Public // v4.0: all items are public by default
         };
-
         // Check for generics: name<T>
         if self.eat(TokenKind::Lt) {
             let generics = self.parse_generics_inline();
@@ -201,7 +200,7 @@ impl Parser {
                 } else {
                     None
                 };
-                let effect = self.eat(TokenKind::Effect);
+                let effect = false; // v4.0: auto-inferred by typeck
                 if self.eat(TokenKind::Eq) {
                     let body = self.parse_expr();
                     self.eat(TokenKind::Semicolon);
@@ -230,7 +229,7 @@ impl Parser {
             } else {
                 None
             };
-            let effect = self.eat(TokenKind::Effect);
+            let effect = false;
             if self.eat(TokenKind::Eq) {
                 let body = self.parse_expr();
                 self.eat(TokenKind::Semicolon);
@@ -355,7 +354,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
             pattern,
             ty,
@@ -382,8 +381,8 @@ impl Parser {
             None
         };
 
-        // Parse optional effect annotation
-        let effect = self.eat(TokenKind::Effect);
+        // Parse optional effect annotation (v4.0: auto-inferred by typeck)
+        let effect = false;
 
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
@@ -393,7 +392,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
             name,
             generics,
@@ -421,7 +420,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
             name,
             generics,
@@ -441,7 +440,7 @@ impl Parser {
         let visibility = if is_pub {
             Visibility::Public
         } else {
-            Visibility::Private
+            Visibility::Public // v4.0: all public
         };
 
         if self.eat(TokenKind::Eq) {
@@ -589,7 +588,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
             name,
             generics,
@@ -615,7 +614,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
             name,
             generics,
@@ -651,7 +650,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
             name,
             generics,
@@ -761,7 +760,7 @@ impl Parser {
 
         // Parse optional alias (v4.0: `=`, legacy: `as`)
         // 解析可选的别名（v4.0: `=`, 旧: `as`）
-        let alias = if self.eat(TokenKind::Eq) || self.eat(TokenKind::As) {
+        let alias = if self.eat(TokenKind::Eq) {
             Some(self.parse_ident())
         } else {
             None
@@ -777,7 +776,7 @@ impl Parser {
             visibility: if is_pub {
                 Visibility::Public
             } else {
-                Visibility::Private
+                Visibility::Public // v4.0: all public
             },
         }
     }
@@ -845,7 +844,7 @@ impl Parser {
             }
 
             let start = self.current_span();
-            let is_lazy = self.eat(TokenKind::Lazy);
+            let is_lazy = self.eat(TokenKind::Tilde);
             let pattern = self.parse_pattern();
             // Type annotation is optional - inferred if not provided
             // 类型注解是可选的 - 如果未提供则推断
@@ -888,7 +887,7 @@ impl Parser {
             let ty = self.parse_type();
             // Parse optional default value
             // 解析可选的默认值
-            let _effect = self.eat(TokenKind::Effect);
+            // effect auto-inferred
             let default = if self.eat(TokenKind::Eq) {
                 Some(self.parse_expr())
             } else {
@@ -994,10 +993,8 @@ impl Parser {
             None
         };
 
-        // Parse optional default implementation
-        // 解析可选的默认实现
-        // Parse optional effect annotation
-        let effect = self.eat(TokenKind::Effect);
+        // Parse optional effect annotation (v4.0: auto-inferred by typeck)
+        let effect = false;
 
         let default = if self.eat(TokenKind::Eq) {
             Some(self.parse_expr())
@@ -1036,8 +1033,8 @@ impl Parser {
             None
         };
 
-        // Parse optional effect annotation
-        let effect = self.eat(TokenKind::Effect);
+        // Parse optional effect annotation (v4.0: auto-inferred by typeck)
+        let effect = false;
 
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
@@ -1079,7 +1076,7 @@ impl Parser {
 
         // Parse default: `type Item = Int`
         // 解析默认值：`type Item = Int`
-        let _effect = self.eat(TokenKind::Effect);
+        // effect auto-inferred
         let default = if self.eat(TokenKind::Eq) {
             Some(self.parse_type())
         } else {
@@ -1129,7 +1126,7 @@ impl Parser {
                 Ident::new(name, span)
             }
             _ => {
-                self.error("expected identifier");
+                self.error_with_code("expected identifier", ErrorCode::ExpectedIdentifier);
                 Ident::new("", span)
             }
         }
@@ -1448,7 +1445,7 @@ impl Parser {
                     // Tuple index: expr.0
                     // 元组索引：expr.0
                     let n = int_to_u32(n).unwrap_or_else(|| {
-                        self.error("tuple index out of range");
+                        self.error_with_code("tuple index out of range", ErrorCode::InvalidTupleIndex);
                         0
                     });
                     self.advance();
@@ -1622,7 +1619,7 @@ impl Parser {
             TokenKind::Pipe => self.parse_lambda_pipe(),
             // Lazy expression (v4.0: ~expr, legacy: lazy expr)
             // 惰性表达式（v4.0: ~expr, 旧: lazy expr）
-            TokenKind::Tilde | TokenKind::Lazy => {
+            TokenKind::Tilde => {
                 self.advance();
                 let expr = self.parse_expr();
                 let span = start.merge(expr.span);
@@ -1638,7 +1635,7 @@ impl Parser {
                 Expr::new(ExprKind::PathLit(p), start)
             }
             _ => {
-                self.error("expected expression");
+                self.error_with_code("expected expression", ErrorCode::ExpectedExpression);
                 self.recover_expr()
             }
         }
@@ -2138,10 +2135,8 @@ impl Parser {
         self.advance(); // if
 
         let condition = self.parse_expr();
-        // Accept `->` (v4.0) or `then` (legacy)
-        if !self.eat(TokenKind::Arrow) {
-            self.expect(TokenKind::Then);
-        }
+        // Accept `->` (v4.0)
+        self.expect(TokenKind::Arrow);
         let then_branch = self.parse_expr();
         self.expect(TokenKind::Else);
         let else_branch = self.parse_expr();
@@ -2349,7 +2344,7 @@ impl Parser {
                     let expr = self.parse_expr();
                     parts.push(StringPart::Expr(expr));
                     if !self.eat(TokenKind::InterpolationEnd) {
-                        self.error("expected `}` to close interpolation");
+                        self.error_with_code("expected `}` to close interpolation", ErrorCode::UnclosedDelimiter);
                     }
                 }
                 TokenKind::InterpolatedEnd => {
@@ -2693,7 +2688,7 @@ impl Parser {
                 Pattern::new(PatternKind::Record { fields, rest }, span)
             }
             _ => {
-                self.error("expected pattern");
+                self.error_with_code("expected pattern", ErrorCode::ExpectedPattern);
                 // Advance to prevent infinite loop on unexpected tokens
                 // 前进以防止在意外 token 上无限循环
                 self.advance();
@@ -2813,7 +2808,7 @@ impl Parser {
                 Type::new(TypeKind::Record(fields), span)
             }
             _ => {
-                self.error("expected type");
+                self.error_with_code("expected type", ErrorCode::ExpectedType);
                 Type::new(TypeKind::Infer, start)
             }
         }
@@ -2892,19 +2887,80 @@ impl Parser {
     /// 如果 token 不匹配则报告错误。
     fn expect(&mut self, kind: TokenKind) {
         if !self.eat(kind.clone()) {
-            self.error(&format!("expected {:?}", kind));
+            let code = self.expect_token_code(&kind);
+            self.error_with_code(&format!("expected {:?}", kind), code);
         }
     }
 
-    /// Report a parse error at the current position.
-    /// 在当前位置报告解析错误。
+    /// Map a token kind to the appropriate error code when `expect()` fails.
+    /// 当 `expect()` 失败时将 token 类型映射到适当的错误代码。
+    fn expect_token_code(&self, kind: &TokenKind) -> ErrorCode {
+        match kind {
+            TokenKind::Semicolon => ErrorCode::MissingSemicolon,
+            TokenKind::Ident(_) => ErrorCode::ExpectedIdentifier,
+            TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                ErrorCode::UnclosedDelimiter
+            }
+            _ => ErrorCode::UnexpectedToken,
+        }
+    }
+
+    /// Report a parse error at the current position (fallback, uses E0100).
+    /// 在当前位置报告解析错误（回退，使用 E0100）。
     fn error(&mut self, message: &str) {
+        self.error_with_code(message, ErrorCode::UnexpectedToken);
+    }
+
+    /// Report a parse error with a specific error code.
+    /// 使用特定的错误代码报告解析错误。
+    fn error_with_code(&mut self, message: &str, code: ErrorCode) {
         let span = self.current_span();
-        self.diagnostics.push(
-            Diagnostic::error(DiagnosticKind::Parser, span, message)
-                .with_code(ErrorCode::UnexpectedToken)
-                .with_label(Label::new(span, "here")),
-        );
+        let mut diag = Diagnostic::error(DiagnosticKind::Parser, span, message)
+            .with_code(code)
+            .with_label(Label::new(span, "here"));
+
+        // Add context-specific help for common errors
+        match code {
+            ErrorCode::MissingSemicolon => {
+                diag = diag.with_help("add a `;` at the end of this statement");
+            }
+            ErrorCode::UnclosedDelimiter => {
+                diag = diag.with_help("add the matching closing delimiter");
+            }
+            ErrorCode::ExpectedExpression => {
+                diag = diag.with_help("add an expression after this");
+            }
+            ErrorCode::ExpectedIdentifier => {
+                diag = diag.with_help("an identifier (name) is required here");
+            }
+            _ => {}
+        }
+
+        self.diagnostics.push(diag);
+    }
+
+    /// Expect a token with a specific error code (for use when the generic
+    /// `expect_token_code` mapping is insufficient).
+    /// 使用特定的错误代码期望一个 token。
+    #[allow(dead_code)]
+    fn expect_with_code(&mut self, kind: TokenKind, code: ErrorCode) {
+        if !self.eat(kind.clone()) {
+            self.error_with_code(&format!("expected {:?}", kind), code);
+        }
+    }
+
+    /// Expect a semicolon (reports E0105 MissingSemicolon).
+    /// 期望一个分号（报告 E0105）。
+    #[allow(dead_code)]
+    fn expect_semicolon(&mut self) {
+        self.expect_with_code(TokenKind::Semicolon, ErrorCode::MissingSemicolon);
+    }
+
+    /// Expect an expression (reports E0101 ExpectedExpression).
+    /// 期望一个表达式（报告 E0101）。
+    #[allow(dead_code)]
+    fn expect_expr(&mut self) {
+        self.error_with_code("expected expression", ErrorCode::ExpectedExpression);
     }
 
     // ========== Error Recovery 错误恢复 ==========
@@ -3027,7 +3083,8 @@ impl Parser {
         if self.eat(kind.clone()) {
             true
         } else {
-            self.error(&format!("expected {:?}", kind));
+            let code = self.expect_token_code(&kind);
+            self.error_with_code(&format!("expected {:?}", kind), code);
             match recovery {
                 RecoveryMode::Statement => self.synchronize(),
                 RecoveryMode::Expression => {
@@ -3168,7 +3225,7 @@ impl<T> Iterator for List<T> {
 fn greet(name) = `Hello, {name}!`;
 
 fn factorial(n) = {
-    if n <= 1 then 1
+    if n <= 1 -> 1
     else n * factorial(n - 1)
 };
 

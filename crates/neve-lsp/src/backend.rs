@@ -5,6 +5,7 @@
 //! 实现 Neve 的语言服务器协议。
 
 use dashmap::DashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -27,6 +28,12 @@ pub struct Backend {
     client: Client,
     /// Open documents. / 打开的文档。
     documents: DashMap<String, Document>,
+    /// Monotonic counter for debouncing did_change diagnostics.
+    /// 单调计数器，用于 debounce did_change 诊断。
+    change_generation: AtomicU64,
+    /// Pending content changes keyed by URI, debounced with change_generation.
+    /// 待处理的文档内容变更。
+    pending_changes: DashMap<String, String>,
 }
 
 impl Backend {
@@ -36,6 +43,8 @@ impl Backend {
         Self {
             client,
             documents: DashMap::new(),
+            change_generation: AtomicU64::new(0),
+            pending_changes: DashMap::new(),
         }
     }
 
@@ -200,12 +209,34 @@ impl LanguageServer for Backend {
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.to_string();
 
-        if let Some(mut doc) = self.documents.get_mut(&uri)
-            && let Some(change) = params.content_changes.into_iter().next()
-        {
-            doc.update(change.text);
-            self.publish_diagnostics(&params.text_document.uri, &doc)
-                .await;
+        if let Some(change) = params.content_changes.into_iter().next() {
+            // Debounce: bump the generation counter before sleeping so newer
+            // changes that arrive during the sleep will see a higher counter.
+            self.change_generation.fetch_add(1, Ordering::Release);
+            let generation = self.change_generation.load(Ordering::Acquire);
+
+            // Store the incoming text so the last writer wins after the quiet period.
+            self.pending_changes.insert(uri.clone(), change.text);
+
+            // Wait for a quiet period (300 ms) before re-analysing.
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+            // If a newer change arrived while we were sleeping, skip this one.
+            if self.change_generation.load(Ordering::Acquire) != generation {
+                return;
+            }
+
+            // Apply the winning content and publish diagnostics.
+            if let Some((_, content)) = self.pending_changes.remove(&uri) {
+                if let Some(mut doc) = self.documents.get_mut(&uri) {
+                    doc.update(content);
+                }
+                // Re-fetch the doc immutably for diagnostics.
+                if let Some(doc) = self.documents.get(&uri) {
+                    self.publish_diagnostics(&params.text_document.uri, &doc)
+                        .await;
+                }
+            }
         }
     }
 
@@ -229,6 +260,17 @@ impl LanguageServer for Backend {
         self.client
             .publish_diagnostics(params.text_document.uri, vec![], None)
             .await;
+    }
+
+    async fn did_change_configuration(&self, _params: DidChangeConfigurationParams) {
+        // Stub: configuration changes (e.g. editor settings) are not yet
+        // applied dynamically. Restart the server to pick up new settings.
+    }
+
+    async fn did_change_watched_files(&self, _params: DidChangeWatchedFilesParams) {
+        // Stub: file watcher events are not yet processed.
+        // A full implementation would invalidate cached module analyses
+        // for changed files and re-publish diagnostics.
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -1073,9 +1115,17 @@ impl LanguageServer for Backend {
             .diagnostics
             .iter()
             .filter_map(|d| {
-                if d.message.contains("parse") || d.message.contains("type") {
+                let source = d.source.as_deref().unwrap_or("neve");
+                // Only offer actions for neve diagnostics (parse / type / eval).
+                if source.starts_with("neve") {
+                    // Trim the message to a reasonable title length.
+                    let short = if d.message.len() > 80 {
+                        format!("{}…", &d.message[..77])
+                    } else {
+                        d.message.clone()
+                    };
                     Some(CodeActionOrCommand::CodeAction(CodeAction {
-                        title: "Neve: Show problem details".to_string(),
+                        title: format!("Neve: {short}"),
                         kind: Some(CodeActionKind::QUICKFIX),
                         diagnostics: Some(vec![d.clone()]),
                         edit: None,
@@ -1181,9 +1231,7 @@ impl Backend {
                 "Implementation",
                 "impl ${1:Trait} for ${2:Type} {\n\t${3:items}\n};",
             ),
-            ("import", "Import statement", "import ${1:module};"),
-            ("pub", "Public visibility", "pub "),
-            ("lazy", "Lazy evaluation", "lazy ${1:expr}"),
+            ("use", "Use statement", "use ${1:module};"),
             ("true", "Boolean true", "true"),
             ("false", "Boolean false", "false"),
         ];
@@ -2323,7 +2371,7 @@ fn build_inlay_hints(doc: &Document) -> Vec<InlayHint> {
                 // Show type hint for let bindings: `let x: <Type> = ...`
                 // 为 let 绑定显示类型提示：`let x: <Type> = ...`
                 if let Some(ty) = semantics.expr_type(def.value.span) {
-                    let type_str = format_type_hint(ty);
+                    let type_str = format_type_hint(ty, Some(&semantics.global_names));
                     if !type_str.is_empty() && type_str != "()" {
                         let end: usize = def.value.span.start.into();
                         let (line, col) = doc.position_at(end);
@@ -2344,7 +2392,7 @@ fn build_inlay_hints(doc: &Document) -> Vec<InlayHint> {
                 // Show return type hint: `fn name(...): <ReturnType>`
                 // 显示返回类型提示：`fn name(...): <ReturnType>`
                 if let Some(ty) = semantics.expr_type(def.body.span) {
-                    let type_str = format_type_hint(ty);
+                    let type_str = format_type_hint(ty, Some(&semantics.global_names));
                     if !type_str.is_empty() && type_str != "()" {
                         // Place hint at end of the parameter list
                         // 将提示放在参数列表的末尾
@@ -2391,7 +2439,7 @@ fn collect_expr_inlay_hints(
     match &expr.kind {
         ExprKind::Let { value, body, .. } => {
             if let Some(ty) = semantics.expr_type(value.span) {
-                let type_str = format_type_hint(ty);
+                let type_str = format_type_hint(ty, Some(&semantics.global_names));
                 if !type_str.is_empty() && type_str != "()" {
                     let end: usize = value.span.start.into();
                     let (line, col) = doc.position_at(end);
@@ -2425,7 +2473,10 @@ fn collect_expr_inlay_hints(
 }
 
 /// Format a type for inlay hint display.
-fn format_type_hint(ty: &neve_hir::Ty) -> String {
+fn format_type_hint(
+    ty: &neve_hir::Ty,
+    names: Option<&std::collections::HashMap<neve_hir::DefId, String>>,
+) -> String {
     use neve_hir::TyKind;
     match &ty.kind {
         TyKind::String => "String".to_string(),
@@ -2435,27 +2486,35 @@ fn format_type_hint(ty: &neve_hir::Ty) -> String {
         TyKind::Char => "Char".to_string(),
         TyKind::Unit => "()".to_string(),
         TyKind::Named(_, args) => {
-            // For now, just use the TypeKind::Named representation
-            // 目前只使用 TyKind::Named 的表示形式
             if args.is_empty() {
-                def_id_to_name_hint(ty)
+                def_id_to_name_hint(ty, names)
             } else {
-                let args_str: Vec<String> = args.iter().map(format_type_hint).collect();
-                format!("{}<{}>", def_id_to_name_hint(ty), args_str.join(", "))
+                let args_str: Vec<String> =
+                    args.iter().map(|t| format_type_hint(t, names)).collect();
+                format!(
+                    "{}<{}>",
+                    def_id_to_name_hint(ty, names),
+                    args_str.join(", ")
+                )
             }
         }
         TyKind::Fn(params, ret) => {
-            let params_str: Vec<String> = params.iter().map(format_type_hint).collect();
-            format!("fn({}) -> {}", params_str.join(", "), format_type_hint(ret))
+            let params_str: Vec<String> =
+                params.iter().map(|t| format_type_hint(t, names)).collect();
+            format!(
+                "fn({}) -> {}",
+                params_str.join(", "),
+                format_type_hint(ret, names)
+            )
         }
         TyKind::Tuple(types) => {
-            let types_str: Vec<String> = types.iter().map(format_type_hint).collect();
+            let types_str: Vec<String> = types.iter().map(|t| format_type_hint(t, names)).collect();
             format!("({})", types_str.join(", "))
         }
         TyKind::Record(fields) | TyKind::DynamicRecord(fields) => {
             let fields_str: Vec<String> = fields
                 .iter()
-                .map(|(name, ty)| format!("{}: {}", name, format_type_hint(ty)))
+                .map(|(name, ty)| format!("{}: {}", name, format_type_hint(ty, names)))
                 .collect();
             format!("#{{ {} }}", fields_str.join(", "))
         }
@@ -2463,9 +2522,19 @@ fn format_type_hint(ty: &neve_hir::Ty) -> String {
     }
 }
 
-fn def_id_to_name_hint(_ty: &neve_hir::Ty) -> String {
-    // Simplified: just return a placeholder for named types.
-    // In a full implementation, use the module registry to resolve DefIds.
+fn def_id_to_name_hint(
+    ty: &neve_hir::Ty,
+    names: Option<&std::collections::HashMap<neve_hir::DefId, String>>,
+) -> String {
+    use neve_hir::TyKind;
+    // Resolve the DefId from a Named type to its canonical name.
+    if let TyKind::Named(def_id, _) = &ty.kind
+        && let Some(names) = names
+        && let Some(name) = names.get(def_id)
+    {
+        return name.clone();
+    }
+    // Fall back to "T" when the names map is unavailable or the DefId is unknown.
     "T".to_string()
 }
 
@@ -2481,14 +2550,14 @@ fn get_import_completions(doc: &Document, pos: Position) -> Option<Vec<Completio
     let line_text = &doc.content[line_offset..doc.content.len().min(line_offset + 200)];
     let trimmed = line_text.trim();
 
-    if !trimmed.starts_with("import ") {
+    if !trimmed.starts_with("use ") {
         return None;
     }
 
     // Extract the current import path being typed.
     // 提取当前正在输入的导入路径。
-    let after_import = &trimmed[7..]; // after "import "
-    let prefix = after_import.trim_end_matches(';');
+    let after_use = &trimmed[7..]; // after "use "
+    let prefix = after_use.trim_end_matches(';');
 
     // Find .neve files in the workspace relative to the current file.
     // 查找工作区中相对于当前文件的 .neve 文件。

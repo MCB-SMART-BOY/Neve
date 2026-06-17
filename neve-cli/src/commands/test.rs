@@ -4,6 +4,8 @@ use crate::output;
 use std::path::Path;
 use std::process::Command;
 
+/// Discover and run all Neve test files under `dir` through the canonical HIR pipeline.
+/// 发现并运行 `dir` 下所有 Neve 测试文件（通过 canonical HIR 管线）。
 pub fn run(dir: &str, verbose: bool) -> Result<(), String> {
     let root = Path::new(dir);
     if !root.is_dir() {

@@ -4,7 +4,7 @@ use crate::{
     commands::{diagnostics, module_graph},
     output,
 };
-use neve_eval::{EvaluableModuleRef, Evaluator, Value};
+use neve_eval::{EvaluableModuleRef, Evaluator, Value, eval_error_to_diagnostic};
 use neve_frontend::{FrontendDriver, ProgramAnalysis, ProgramParsedModule};
 use neve_std::stdlib;
 use std::collections::HashMap;
@@ -42,6 +42,8 @@ fn discover_flake_input_roots(_start_dir: &Path) -> HashMap<String, PathBuf> {
     HashMap::new()
 }
 
+/// Run a Neve source file through the canonical HIR pipeline and print the result.
+/// 通过 canonical HIR 管线运行 Neve 源文件并打印结果。
 pub fn run(file: &str, verbose: bool) -> Result<(), String> {
     let path = Path::new(file);
     let value = run_value(path, verbose)?;
@@ -117,5 +119,9 @@ fn eval_modules_via_hir(analysis: &ProgramAnalysis) -> Result<Value, String> {
                 .map(|entry| EvaluableModuleRef::new(&entry.module, &entry.method_resolutions)),
             analysis.root_module_id(),
         )
-        .map_err(|e| format!("eval error: {e:?}"))
+        .map_err(|e| {
+            let diag = eval_error_to_diagnostic(&e, neve_common::Span::DUMMY);
+            neve_diagnostic::emit("", "<runtime>", &diag);
+            format!("eval error: {}", e)
+        })
 }

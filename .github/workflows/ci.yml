@@ -48,9 +48,34 @@ jobs:
         run: cargo fmt --all -- --check
         if: matrix.os == 'ubuntu-latest'
 
+      - name: Run doc tests (L9)
+        run: cargo test --doc --workspace
+        if: matrix.os == 'ubuntu-latest'
+
       - name: Run clippy (all workspace crates)
         run: cargo clippy --workspace --all-targets -- -D warnings
         if: matrix.os == 'ubuntu-latest'
+
+  # MSRV verification (L9)
+  msrv:
+    name: MSRV Check (1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust MSRV
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.85"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-msrv
+          cache-on-failure: true
+
+      - name: Check MSRV
+        run: cargo check -p neve
 
   # Security audit for dependency vulnerabilities
   # 依赖安全审计
@@ -73,8 +98,11 @@ jobs:
         run: cargo install cargo-audit
 
       - name: Run security audit
+        # NOTE(L8): continue-on-error is intentional — audit warnings from
+        # unmaintained or yanked dependencies should be reviewed but do not
+        # necessarily indicate exploitable vulnerabilities in our usage.
         run: cargo audit
-        continue-on-error: true  # Don't fail CI on audit warnings, just report
+        continue-on-error: true
 
   build-check:
     name: Build check on ${{ matrix.target }}

@@ -164,9 +164,9 @@ Extension in `editors/vscode/` — TextMate grammar + LSP client + publish scrip
 | File | What |
 |------|------|
 | `lsp/src/lib.rs` | Server initialization + connection loop |
-| `lsp/src/handlers.rs` | All 20 LSP method handlers |
-| `lsp/src/completion.rs` | Completion logic + scoring |
-| `lsp/src/hover.rs` | Type-aware hover |
-| `lsp/src/analysis.rs` | Integration with neve-frontend pipeline |
-| `lsp/src/documents.rs` | Document store — open/changed/saved |
-| `lsp/src/commands.rs` | `neve lsp --check` health diagnostics |
+| `lsp/src/backend.rs` | All 23 LSP method handlers |
+| `lsp/src/capabilities.rs` | Server capability registration |
+| `lsp/src/document.rs` | Document store — open/changed/saved |
+| `lsp/src/semantic_tokens.rs` | Semantic token encoding |
+| `lsp/src/symbol_index.rs` | Workspace symbol indexing |
+| `lsp/src/stdlib_completion/` | Standard library completions |

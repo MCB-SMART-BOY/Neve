@@ -64,26 +64,20 @@ pub enum TokenKind {
     // ===== Keywords 关键字 =====
     Let,       // let - 变量绑定
     Fn,        // fn - 函数
-    Type,      // type - 类型别名
+    Type,      // type - 类型
     Struct,    // struct - 结构体
     Enum,      // enum - 枚举
     Trait,     // trait - 特征
     Impl,      // impl - 实现
-    Pub,       // pub - 公开
-    Import,    // import - 导入
-    Use,       // use - 导入(v3.0)
-    As,        // as - 重命名
+    Use,       // use - 导入
     SelfLower, // self - 自身
     Super,     // super - 父模块
     Crate,     // crate - 当前 crate
     If,        // if - 条件
-    Then,      // then - 条件成立时
     Else,      // else - 否则
     Match,     // match - 模式匹配
-    Lazy,      // lazy - 惰性求值
     True,      // true - 真
     False,     // false - 假
-    Effect,    // effect - 副作用注解
 
     // ===== Delimiters 分隔符 =====
     LParen,     // ( - 左圆括号
@@ -140,10 +134,8 @@ pub enum TokenKind {
 
 impl TokenKind {
     /// Returns true if this token is a keyword.
-    /// 判断是否为关键字。
+    /// v4.0 canonical: 12 keywords.
     pub fn is_keyword(&self) -> bool {
-        // v4.0 canonical keywords: 12 keywords
-        // Legacy (still parsed but not counted): struct enum import pub then as lazy effect super crate
         matches!(
             self,
             TokenKind::Let
@@ -162,7 +154,6 @@ impl TokenKind {
     }
 
     /// Returns the keyword for an identifier, if any.
-    /// 如果标识符是关键字，返回对应的 TokenKind。
     pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         match s {
             "let" => Some(TokenKind::Let),
@@ -172,21 +163,15 @@ impl TokenKind {
             "enum" => Some(TokenKind::Enum),
             "trait" => Some(TokenKind::Trait),
             "impl" => Some(TokenKind::Impl),
-            "pub" => Some(TokenKind::Pub),
-            "import" => Some(TokenKind::Import),
             "use" => Some(TokenKind::Use),
-            "as" => Some(TokenKind::As),
             "self" => Some(TokenKind::SelfLower),
             "super" => Some(TokenKind::Super),
             "crate" => Some(TokenKind::Crate),
             "if" => Some(TokenKind::If),
-            "then" => Some(TokenKind::Then),
             "else" => Some(TokenKind::Else),
             "match" => Some(TokenKind::Match),
-            "lazy" => Some(TokenKind::Lazy),
             "true" => Some(TokenKind::True),
             "false" => Some(TokenKind::False),
-            "effect" => Some(TokenKind::Effect),
             _ => None,
         }
     }

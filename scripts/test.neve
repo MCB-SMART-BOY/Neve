@@ -1,12 +1,12 @@
 #!/usr/bin/env neve run
 -- Neve test runner / Neve 测试运行器
 -- Usage: neve run scripts/test.neve [--clippy]
-import std.io as io;
+use std.io = io;
 
 let runStep = fn(name, cmd) {
     io.print("  [" ++ name ++ "] ... ");
     let result = io.execCommand(cmd);
-    if io.processSuccess(result) then {
+    if io.processSuccess(result) -> {
         io.println("OK");
         true
     } else {
@@ -26,12 +26,12 @@ let ok_test = ok_check && runStep("test", io.command("cargo", ["test", "--worksp
 
 -- Step 3: Check formatting (always run, warn on failure)
 let ok_fmt = runStep("fmt", io.command("cargo", ["fmt", "--all", "--", "--check"]));
-if !ok_fmt then {
+if !ok_fmt -> {
     io.println("  Run 'cargo fmt --all' to fix formatting");
 } else {};
 
 io.println("");
-if ok_test then {
+if ok_test -> {
     io.println("=== All checks passed ===");
     0
 } else 1

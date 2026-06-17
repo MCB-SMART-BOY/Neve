@@ -624,6 +624,39 @@ pub(crate) fn analyze_match(
             }
         }
 
+        TyKind::DynamicRecord(_) | TyKind::SafeRecordBase(_) => {
+            // Dynamic/safe records may carry extra fields beyond those declared.
+            // Only wildcard / variable patterns are truly exhaustive.
+            for arm in arms {
+                if arm.guard.is_some() {
+                    result.push_guarded_ignored();
+                    continue;
+                }
+                if result.coverage_complete_at.is_some() {
+                    result.push_redundant(
+                        result.coverage_complete_at.unwrap(),
+                        RedundancyReason::CoveredByPreviousArms,
+                    );
+                    continue;
+                }
+                let is_complete = matches!(
+                    &arm.pattern.kind,
+                    PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)
+                );
+                if is_complete {
+                    result.push_useful();
+                    result.coverage_complete_at = Some(arm.span);
+                } else {
+                    result.push_useful();
+                }
+            }
+            if result.coverage_complete_at.is_none() {
+                result
+                    .missing_patterns
+                    .push("wildcard or variable binding".to_string());
+            }
+        }
+
         _ => {
             result.arm_usefulness = vec![ArmUsefulness::NotAnalyzed; arms.len()];
         }

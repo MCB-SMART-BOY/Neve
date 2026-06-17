@@ -47,7 +47,7 @@ Each module below includes its role, core types, and a good entry file.
 | `neve-syntax` | AST definitions used by parser/formatter/LSP | AST 定义，供解析器/格式化器/LSP 使用 | `crates/neve-syntax/src/lib.rs` |
 | `neve-parser` | Recursive descent parser with recovery | 递归下降解析器（含错误恢复） | `crates/neve-parser/src/parser.rs` |
 | `neve-hir` | Name resolution + HIR lowering | 名称解析与 HIR 降级 | `crates/neve-hir/src/resolve.rs` |
-| `neve-typeck` | HM inference + traits | HM 推断与 Trait 系统 | `crates/neve-typeck/src/check.rs` |
+| `neve-typeck` | HM inference + traits | HM 推断与 Trait 系统 | `crates/neve-typeck/src/check/mod.rs` |
 | `neve-eval` | Tree-walk evaluator + lazy runtime | 树遍历求值器 + 惰性运行时 | `crates/neve-eval/src/eval.rs` (canonical HIR evaluator) |
 | `neve-std` | Standard library modules | 标准库模块 | `crates/neve-std/src/lib.rs` |
 | `neve-frontend` | Frontend pipeline (parse → lower → typeck) | 前端管线（解析 → 降级 → 类型检查） | `crates/neve-frontend/src/lib.rs` |
@@ -89,7 +89,7 @@ Key files: `crates/neve-hir/src/resolve.rs`, `crates/neve-hir/src/module_loader.
 ### neve-typeck / 类型检查
 Runs HM inference, trait resolution, and emits rich diagnostics.
 执行 HM 推断、Trait 解析，并输出丰富诊断。
-Key files: `crates/neve-typeck/src/check.rs`, `crates/neve-typeck/src/traits.rs`.
+Key files: `crates/neve-typeck/src/check/mod.rs`, `crates/neve-typeck/src/traits.rs`.
 
 ### neve-eval / 求值器
 Tree-walking evaluator with lazy thunks and builtin primitives.

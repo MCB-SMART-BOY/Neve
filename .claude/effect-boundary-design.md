@@ -5,7 +5,7 @@
 **版本**: v1.1
 **日期**: 2026-05-12
 **状态**: 当前前沿 (G4 决策门)
-**关联**: [语言路线图](./language-roadmap.md) · [语义收敛计划](./semantic-convergence-plan.md) · [功能矩阵](./feature-matrix.md)
+**关联**: [前向计划](./forward-plan.md) · [开发计划](../../.claude/forward-plan.md) · [功能矩阵](../docs/project/feature-matrix.md)
 
 </div>
 

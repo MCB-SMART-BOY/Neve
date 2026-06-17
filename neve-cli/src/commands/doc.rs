@@ -21,8 +21,6 @@ const DOC_INSTALL: &str = include_str!("../../../docs/user/install.md");
 const DOC_ARCHITECTURE: &str = include_str!("../../../docs/contributor/architecture.md");
 const DOC_ONBOARDING: &str = include_str!("../../../docs/contributor/onboarding.md");
 const DOC_CONTRIBUTING: &str = include_str!("../../../docs/contributor/contributing.md");
-const DOC_BOOTSTRAP: &str = include_str!("../../../docs/contributor/bootstrap.md");
-const DOC_LANGUAGE_ROADMAP: &str = include_str!("../../../docs/project/language-roadmap.md");
 const DOC_FEATURE_MATRIX: &str = include_str!("../../../docs/project/feature-matrix.md");
 const DOC_CHANGELOG: &str = include_str!("../../../docs/project/changelog.md");
 
@@ -55,21 +53,6 @@ const TOPICS: &[(&str, &str, &str)] = &[
         "contributing",
         DOC_CONTRIBUTING,
         "Contributor guide / 贡献指南",
-    ),
-    (
-        "bootstrap",
-        DOC_BOOTSTRAP,
-        "Bootstrap examples / bootstrap 示例",
-    ),
-    (
-        "roadmap",
-        DOC_LANGUAGE_ROADMAP,
-        "Language roadmap / 语言路线图",
-    ),
-    (
-        "language-roadmap",
-        DOC_LANGUAGE_ROADMAP,
-        "Language completion roadmap / 语言完备化路线图",
     ),
     (
         "feature-matrix",
@@ -108,13 +91,10 @@ fn resolve_topic(input: &str) -> Option<&'static str> {
         ("onboard", "onboarding"),
         ("contrib", "contributing"),
         ("contributors", "contributing"),
-        ("boot", "bootstrap"),
         ("matrix", "feature-matrix"),
         ("features", "feature-matrix"),
         ("status", "feature-matrix"),
-        ("project", "roadmap"),
         ("contribute", "contributing"),
-        ("lang-roadmap", "language-roadmap"),
         ("change", "changelog"),
         ("changes", "changelog"),
         ("install", "install"),
@@ -189,8 +169,6 @@ pub fn list() -> Result<(), String> {
     content.push_str("## Project / 项目现状\n\n");
     content.push_str("```\n");
     content.push_str("neve doc feature-matrix   Real support matrix / 真实功能矩阵\n");
-    content.push_str("neve doc roadmap          Product roadmap / 项目路线图\n");
-    content.push_str("neve doc language-roadmap Language completion roadmap / 语言完备化路线图\n");
     content.push_str("neve doc changelog        Released changes / 更新日志\n");
     content.push_str("```\n\n");
     content.push_str("## Contributor / 贡献者\n\n");
@@ -198,7 +176,6 @@ pub fn list() -> Result<(), String> {
     content.push_str("neve doc contributing     Contributor guide / 贡献指南\n");
     content.push_str("neve doc onboarding       Codebase onboarding / 贡献者入门\n");
     content.push_str("neve doc architecture     Internal architecture / 内部架构\n");
-    content.push_str("neve doc bootstrap        Bootstrap examples / bootstrap 示例\n");
     content.push_str("```\n");
 
     println!("{}", skin.term_text(&content));

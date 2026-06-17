@@ -539,7 +539,7 @@ impl FrontendSession {
             || trimmed.starts_with("enum ")
             || trimmed.starts_with("trait ")
             || trimmed.starts_with("impl ")
-            || trimmed.starts_with("import ")
+            || trimmed.starts_with("use ")
             || trimmed.starts_with("pub ");
 
         if is_item {

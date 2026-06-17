@@ -67,7 +67,7 @@ fn test_fn_no_params() {
 }
 #[test]
 fn test_fn_effect() {
-    assert_idempotent("fn run() -> Unit effect = print(\"hello\");");
+    assert_idempotent("fn run() -> Unit = print(\"hello\");");
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_match_multi() {
 
 #[test]
 fn test_import() {
-    assert_idempotent("import std.io as io;");
+    assert_idempotent("use std.io = io;");
 }
 #[test]
 fn test_enum() {
@@ -136,7 +136,7 @@ fn test_complex_record() {
 
 #[test]
 fn test_lazy_expression() {
-    assert_idempotent("let x = lazy 1 + 2;");
+    assert_idempotent("let x = ~(1 + 2);");
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn test_generic_fn() {
 
 #[test]
 fn test_if_else_chain() {
-    assert_idempotent("let x = if a > 0 then 1 else if a < 0 then -1 else 0;");
+    assert_idempotent("let x = if a > 0 -> 1 else if a < 0 -> -1 else 0;");
 }
 
 #[test]

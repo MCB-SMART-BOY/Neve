@@ -16,7 +16,7 @@
 
 </div>
 
-**当前状态**: v4.0 语法 — v3.19.0, E2E 541 测试, 12 规范关键字, Formatter 幂等性 37/37, Stream<T> 14 APIs ✅, LSP 20 methods ✅, Phase B/D 完成 ✅, AST 兼容路径已移除。详见 [稳定性分级](reference/stability.md) · [生态设计](project/ecosystem-design.md) · [Stream<T> 设计](project/stream-design.md)。
+**当前状态**: v4.0 语法 — v4.0.0。详见 [前向计划](../.claude/forward-plan.md) 和 [稳定性分级](reference/stability.md)。
 
 Welcome to the Neve documentation hub. For **developer reference** (per-crate APIs,
 architecture, integration points), see `.claude/skills/` — one skill per crate,
@@ -32,7 +32,7 @@ kept in sync with the actual code.
 - New user / 初次上手: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
 - Language reference / 语言参考: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
 - Contributor / 贡献者: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
-- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/language-roadmap.md](project/language-roadmap.md), [project/changelog.md](project/changelog.md)
+- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/changelog.md](project/changelog.md), [前向计划](../.claude/forward-plan.md)
 - Stability / 稳定性: [reference/stability.md](reference/stability.md)
 - **Developer skills** / 开发者技能: [`.claude/skills/`](../.claude/skills/) — per-crate architecture, APIs, key files
 
@@ -55,8 +55,8 @@ kept in sync with the actual code.
 ### I want to understand project reality / 我想看项目真实完成度
 
 - [project/feature-matrix.md](project/feature-matrix.md): real support matrix
-- [project/bash-nix-roadmap.md](project/bash-nix-roadmap.md): Bash/Nix replacement roadmap
-- [project/language-roadmap.md](project/language-roadmap.md): language completion roadmap
+- [../.claude/bash-nix-roadmap.md](../.claude/bash-nix-roadmap.md): Bash/Nix replacement roadmap
+- [前向计划](../.claude/forward-plan.md): language completion roadmap
 - [project/changelog.md](project/changelog.md): released changes only
 
 ### I want to contribute / 我想参与开发
@@ -64,7 +64,7 @@ kept in sync with the actual code.
 - [contributor/contributing.md](contributor/contributing.md): setup, workflow, style
 - [contributor/onboarding.md](contributor/onboarding.md): codebase reading order
 - [contributor/architecture.md](contributor/architecture.md): crate responsibilities and pipeline
-- [contributor/bootstrap.md](contributor/bootstrap.md): bootstrap package examples now kept under `examples/bootstrap/`
+- [.claude/bootstrap-guide.md](../.claude/bootstrap-guide.md): bootstrap guide (formerly `docs/contributor/bootstrap.md`)
 
 ---
 

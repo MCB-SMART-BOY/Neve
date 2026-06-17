@@ -122,14 +122,15 @@ mod tests {
     #[test]
     fn collect_imports_preserves_prefix_kind_and_visibility() {
         let source = r#"
-            pub import std.list (map);
-            import self.utils as utils;
+            use std.list (map);
+            use self.utils = utils;
         "#;
         let (file, diagnostics) = parse(source);
         assert!(diagnostics.is_empty());
 
         let imports = collect_imports(&file);
         assert_eq!(imports.len(), 2);
+        // v4.0: all imports are public by default
         assert!(imports[0].is_pub);
         assert!(matches!(imports[0].kind, ImportKind::Items(_)));
         assert!(matches!(
@@ -138,7 +139,7 @@ mod tests {
         ));
         assert_eq!(imports[0].path, vec!["std", "list"]);
 
-        assert!(!imports[1].is_pub);
+        assert!(imports[1].is_pub);
         assert!(matches!(imports[1].kind, ImportKind::Module));
         assert!(matches!(imports[1].prefix, crate::ImportPathPrefix::Self_));
         assert_eq!(imports[1].alias.as_deref(), Some("utils"));
@@ -147,7 +148,7 @@ mod tests {
     #[test]
     fn lower_module_includes_public_defs_and_reexports() {
         let source = r#"
-            pub fn local() = 1;
+            fn local() = 1;
             fn hidden() = 2;
         "#;
         let (file, diagnostics) = parse(source);
@@ -165,7 +166,8 @@ mod tests {
         assert!(lowered.items.contains_key("local"));
         assert!(lowered.items.contains_key("hidden"));
         assert_eq!(lowered.exports.get("external"), Some(&DefId(42)));
+        // v4.0: all items are public by default
         assert!(lowered.exports.contains_key("local"));
-        assert!(!lowered.exports.contains_key("hidden"));
+        assert!(lowered.exports.contains_key("hidden"));
     }
 }

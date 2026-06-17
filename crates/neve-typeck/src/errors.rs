@@ -701,6 +701,7 @@ pub fn unused_variable(name: &str, span: Span) -> Diagnostic {
         span,
         format!("unused variable: `{}`", name),
     )
+    .with_code(ErrorCode::UnusedVariable)
     .with_label(Label::new(span, "this variable is never used"))
     .with_help(format!(
         "if this is intentional, prefix the name with an underscore: `_{}`",
@@ -714,11 +715,141 @@ pub fn redundant_annotation(inferred: &Ty, span: Span) -> Diagnostic {
     let ty_str = format_type(inferred);
 
     Diagnostic::warning(DiagnosticKind::Type, span, "redundant type annotation")
+        .with_code(ErrorCode::RedundantAnnotation)
         .with_label(Label::new(
             span,
             format!("type `{}` can be inferred", ty_str),
         ))
         .with_help("consider removing the type annotation")
+}
+
+/// Create an error for return type mismatch.
+/// 创建返回类型不匹配的错误。
+pub fn return_type_mismatch(
+    expected: &Ty,
+    found: &Ty,
+    return_span: Span,
+    fn_sig_span: Option<Span>,
+) -> Diagnostic {
+    let expected_str = format_type(expected);
+    let found_str = format_type(found);
+
+    let mut diag = Diagnostic::error(
+        DiagnosticKind::Type,
+        return_span,
+        format!(
+            "return type mismatch: expected `{}`, found `{}`",
+            expected_str, found_str
+        ),
+    )
+    .with_code(ErrorCode::ReturnTypeMismatch)
+    .with_label(Label::new(
+        return_span,
+        format!("this returns `{}`", found_str),
+    ));
+
+    if let Some(sig_span) = fn_sig_span {
+        diag = diag.with_label(Label::new(
+            sig_span,
+            format!("expected `{}` because of this return type", expected_str),
+        ));
+    }
+
+    diag.with_note("the return type must match the function's declared return type")
+        .with_help("change the return type or the function signature to match")
+}
+
+/// Create an error for argument type mismatch.
+/// 创建实参类型不匹配的错误。
+pub fn argument_type_mismatch(
+    param_name: &str,
+    expected: &Ty,
+    found: &Ty,
+    arg_span: Span,
+    param_span: Option<Span>,
+) -> Diagnostic {
+    let expected_str = format_type(expected);
+    let found_str = format_type(found);
+
+    let mut diag = Diagnostic::error(
+        DiagnosticKind::Type,
+        arg_span,
+        format!(
+            "argument type mismatch for `{}`: expected `{}`, found `{}`",
+            param_name, expected_str, found_str
+        ),
+    )
+    .with_code(ErrorCode::ArgumentTypeMismatch)
+    .with_label(Label::new(
+        arg_span,
+        format!("this argument has type `{}`", found_str),
+    ));
+
+    if let Some(ps) = param_span {
+        diag = diag.with_label(Label::new(
+            ps,
+            format!("parameter `{}` declared with type `{}`", param_name, expected_str),
+        ));
+    }
+
+    diag.with_note("the argument type must match the parameter's declared type")
+        .with_help("change the argument type or add a type conversion")
+}
+
+/// Create an error for trait not implemented.
+/// 创建 trait 未实现的错误。
+pub fn trait_not_implemented(
+    trait_name: &str,
+    ty: &Ty,
+    span: Span,
+) -> Diagnostic {
+    let ty_str = format_type(ty);
+
+    Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("trait `{}` is not implemented for `{}`", trait_name, ty_str),
+    )
+    .with_code(ErrorCode::TraitNotImplemented)
+    .with_label(Label::new(
+        span,
+        format!("type `{}` does not implement `{}`", ty_str, trait_name),
+    ))
+    .with_note("the type must implement all required methods of the trait")
+    .with_help(format!(
+        "add an `impl {} for {}` block with the required methods",
+        trait_name, ty_str
+    ))
+}
+
+/// Create an error for unbound type.
+/// 创建未绑定类型的错误。
+pub fn unbound_type(name: &str, span: Span, similar: Option<&str>) -> Diagnostic {
+    let mut diag = Diagnostic::error(
+        DiagnosticKind::Type,
+        span,
+        format!("cannot find type `{}` in this scope", name),
+    )
+    .with_code(ErrorCode::UnboundType)
+    .with_label(Label::new(span, "not found in this scope"));
+
+    if let Some(similar_name) = similar {
+        diag = diag.with_help(format!("did you mean `{}`?", similar_name));
+    } else {
+        diag = diag.with_help("check the spelling or import the type with `use`");
+    }
+
+    diag
+}
+
+/// Create an error for cannot infer type.
+/// 创建无法推断类型的错误。
+pub fn cannot_infer_type(span: Span, context: &str) -> Diagnostic {
+    Diagnostic::error(DiagnosticKind::Type, span, "cannot infer type")
+        .with_code(ErrorCode::CannotInferType)
+        .with_label(Label::new(span, "type cannot be determined"))
+        .with_note(format!("the type must be known in {}", context))
+        .with_help("add an explicit type annotation to help the compiler")
 }
 
 /// Find the most similar name to a given name from a list of candidates.

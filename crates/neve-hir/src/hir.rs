@@ -494,6 +494,16 @@ pub struct EnumDef {
     pub variants: Vec<VariantDef>,
 }
 
+impl EnumDef {
+    /// Return an iterator over variant constructors (DefId, name, arity).
+    /// Shared by eval and typeck to avoid duplicating variant collection logic.
+    pub fn variant_constructors(&self) -> impl Iterator<Item = (DefId, &str, usize)> + '_ {
+        self.variants
+            .iter()
+            .map(|v| (v.id, v.name.as_str(), v.fields.len()))
+    }
+}
+
 /// Enum variant definition.
 /// 枚举变体定义。
 #[derive(Debug, Clone)]

@@ -120,7 +120,7 @@ fn sum(list) = match list {
 | Pipe | `x \|> f \|> g` |
 | Interpolation | `` `Hello {name}` `` |
 | Match | `match x { p -> e }` |
-| Comment | `-- text --` |
+| Comment | `-- text --` or `& text` (v4.0) |
 
 ## Next / 接下来
 

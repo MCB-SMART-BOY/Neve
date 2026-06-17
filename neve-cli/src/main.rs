@@ -121,6 +121,12 @@ enum Commands {
         dir: String,
     },
 
+    /// Print extended documentation for an error code. / 打印错误代码的扩展文档。
+    Explain {
+        /// The error code to explain (e.g., E0200, E0300).
+        code: String,
+    },
+
     /// Print version information. / 打印版本信息。
     Version,
 
@@ -366,6 +372,7 @@ fn main() {
             }
         }
         Commands::Repl => commands::repl::run(),
+        Commands::Explain { code } => commands::explain::run(&code),
         Commands::Doc { topic, list } => {
             if list || topic.is_none() {
                 commands::doc::list()
@@ -375,8 +382,8 @@ fn main() {
         }
         Commands::Init { dir } => commands::init::run(&dir),
         Commands::Version => {
+            // Match the output of `--version` (clap).
             println!("neve {}", env!("CARGO_PKG_VERSION"));
-            println!("https://github.com/MCB-SMART-BOY/Neve");
             Ok(())
         }
         Commands::Info { package, platform } => {

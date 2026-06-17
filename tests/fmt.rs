@@ -12,7 +12,7 @@ fn format_code(source: &str) -> String {
     let ast = parser.parse_file();
 
     let formatter = Formatter::new(FormatConfig::default());
-    formatter.format(&ast)
+    formatter.format(&ast).expect("formatter should succeed")
 }
 
 // FormatConfig tests
@@ -87,8 +87,8 @@ fn test_format_list() {
 
 #[test]
 fn test_format_if() {
-    let formatted = format_code("let x = if true then 1 else 2;");
-    assert!(formatted.contains("if true then"));
+    let formatted = format_code("let x = if true -> 1 else 2;");
+    assert!(formatted.contains("if true ->"));
 }
 
 #[test]
@@ -150,7 +150,7 @@ fn test_idempotent_list() {
 
 #[test]
 fn test_idempotent_if_else() {
-    assert_idempotent("let x = if true then 1 else 2;\n");
+    assert_idempotent("let x = if true -> 1 else 2;\n");
 }
 
 #[test]
@@ -190,12 +190,12 @@ fn test_idempotent_trait() {
 
 #[test]
 fn test_idempotent_import() {
-    assert_idempotent("import std.io as io;\n");
+    assert_idempotent("use std.io = io;\n");
 }
 
 #[test]
 fn test_idempotent_effect_fn() {
-    assert_idempotent("fn run() -> Unit effect = { () };\n");
+    assert_idempotent("fn run() -> Unit = { () };\n");
 }
 
 #[test]

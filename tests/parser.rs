@@ -1166,43 +1166,43 @@ fn test_impl_generic() {
 
 #[test]
 fn test_import_simple() {
-    let (_, diags) = parse("import std.list;");
+    let (_, diags) = parse("use std.list;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_import_items() {
-    let (_, diags) = parse("import std.list (map, filter, fold);");
+    let (_, diags) = parse("use std.list (map, filter, fold);");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_import_aliased() {
-    let (_, diags) = parse("import std.list = L;");
+    let (_, diags) = parse("use std.list = L;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_import_relative() {
-    let (_, diags) = parse("import self.utils;");
+    let (_, diags) = parse("use self.utils;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_import_parent() {
-    let (_, diags) = parse("import super.common;");
+    let (_, diags) = parse("use super.common;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_pub_function() {
-    let (_, diags) = parse("pub fn add(x: Int, y: Int) -> Int = x + y;");
+    let (_, diags) = parse("fn add(x: Int, y: Int) -> Int = x + y;");
     assert!(diags.is_empty());
 }
 
 #[test]
 fn test_pub_let() {
-    let (_, diags) = parse("pub let VERSION = \"1.0.0\";");
+    let (_, diags) = parse("let VERSION = \"1.0.0\";");
     assert!(diags.is_empty());
 }
 
@@ -1534,14 +1534,15 @@ fn test_pipeline_heavy() {
 // ============================================================================
 
 #[test]
-fn test_parse_fn_with_effect() {
-    // effect keyword is auto-inferred in v4.0; parser still accepts legacy `effect` keyword
-    let (file, diags) = parse("fn read() -> String effect = io.readFile(\"/x\");");
+fn test_parse_fn_effect_auto_inferred() {
+    // v4.0: effect keyword removed, auto-inferred by typeck
+    let (file, diags) = parse("fn read() -> String = io.readFile(\"/x\");");
     assert!(diags.is_empty(), "unexpected parse errors: {:?}", diags);
     assert_eq!(file.items.len(), 1);
     match &file.items[0].kind {
         neve_syntax::ItemKind::Fn(def) => {
-            assert!(def.effect, "expected effect=true with legacy keyword")
+            // effect is always false in parser (auto-inferred later by typeck)
+            assert!(!def.effect, "parser no longer sets effect flag")
         }
         _ => panic!("expected Fn item"),
     }
@@ -1559,14 +1560,14 @@ fn test_parse_fn_without_effect() {
 
 #[test]
 fn test_parse_import_std_module() {
-    let (file, diags) = parse("import std.io = io;");
+    let (file, diags) = parse("use std.io = io;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
 
 #[test]
 fn test_parse_import_std_items() {
-    let (file, diags) = parse("import std.list (map, filter);");
+    let (file, diags) = parse("use std.list (map, filter);");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -1785,21 +1786,22 @@ fn test_parse_self_expression() {
 
 #[test]
 fn test_parse_import_glob() {
-    let (file, diags) = parse("import std.list (*);");
+    let (file, diags) = parse("use std.list (*);");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
 
 #[test]
 fn test_parse_import_crate() {
-    let (file, diags) = parse("import crate.utils;");
+    let (file, diags) = parse("use crate.utils;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
 
 #[test]
-fn test_parse_pub_import() {
-    let (file, diags) = parse("pub import std.io;");
+fn test_parse_use_import() {
+    // v4.0: all definitions are public by default, `use` is canonical
+    let (file, diags) = parse("use std.io;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }
@@ -1825,10 +1827,8 @@ fn test_parse_multiline_comment() {
 // --- Shebang ---
 
 #[test]
-// Shebang stripping is handled by the CLI before parsing, not by the parser itself.
-// This test documents the expected behavior but lives here for visibility.
-#[ignore]
 fn test_parse_shebang() {
+    // The parser now strips shebang lines internally.
     let (file, diags) = parse("#!/usr/bin/env neve\nlet x = 1;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);

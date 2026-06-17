@@ -26,7 +26,7 @@
 ```neve
 use std.list;                      -- list.map, list.filter 都能用
 use std.list (map, filter, fold);  -- 只导入这三个
-use std.string as Str;             -- Str.len("hi")
+use std.string = Str;              -- Str.len("hi")
 use std.Map;
 use std.Set;
 ```
@@ -183,7 +183,7 @@ string.lines(s: String) -> List<String>
 
 
 ```neve
-enum Option<T> { Some(T), None }
+type Option<T> = | Some(T) | None
 
 option.some<A>(x: A) -> Option<A>
 option.none -> Option<A>
@@ -195,7 +195,7 @@ option.unwrap_or<A>(opt: Option<A>, default: A) -> A
 
 
 ```neve
-enum Option<T> { Some(T), None }
+type Option<T> = | Some(T) | None
 
 option.some<A>(x: A) -> Option<A>
 option.none -> Option<A>
@@ -210,7 +210,7 @@ option.unwrap_or<A>(opt: Option<A>, default: A) -> A
 
 
 ```neve
-enum Result<T, E> { Ok(T), Err(E) }
+type Result<T, E> = | Ok(T) | Err(E)
 
 result.ok<T, E>(x: T) -> Result<T, E>
 result.err<T, E>(e: E) -> Result<T, E>
@@ -222,7 +222,7 @@ result.unwrap_err<T, E>(res: Result<T, E>) -> E
 
 
 ```neve
-enum Result<T, E> { Ok(T), Err(E) }
+type Result<T, E> = | Ok(T) | Err(E)
 
 result.ok<T, E>(x: T) -> Result<T, E>
 result.err<T, E>(e: E) -> Result<T, E>
@@ -321,11 +321,11 @@ io.currentDir() -> String
 io.currentDirPath() -> Path
 io.homeDirPath() -> Option<Path>
 io.command(program: String, args: List<String>) -> Command
-io.commandWith(opts: #{
+io.commandWith(opts: {
   program: String,
   args?: List<String>,
   cwd?: String,
-  env?: #{ ...String },
+  env?: { ...String },
   stdin?: String
 }) -> Command
 io.commandWithRedirects(command: Command, redirects: List<Redirect>) -> Command
@@ -421,11 +421,11 @@ io.currentDir() -> String
 io.currentDirPath() -> Path
 io.homeDirPath() -> Option<Path>
 io.command(program: String, args: List<String>) -> Command
-io.commandWith(opts: #{
+io.commandWith(opts: {
   program: String,
   args?: List<String>,
   cwd?: String,
-  env?: #{ ...String },
+  env?: { ...String },
   stdin?: String
 }) -> Command
 io.commandWithRedirects(command: Command, redirects: List<Redirect>) -> Command
@@ -612,7 +612,7 @@ Set.isDisjoint(left: Set<A>, right: Set<A>) -> Bool
 
 
 ```neve
-derivation #{
+derivation {
     name: String,
     system: String,
     builder: String,
@@ -623,12 +623,12 @@ derivation #{
 ```
 
 ```neve
-fetch.path(path: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.pathWithHash(path: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.url(url: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.urlWithHash(url: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.git(url: String, rev: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.gitWithHash(url: String, rev: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.path(path: String) -> { path: String, hash: String, cached: Bool }
+fetch.pathWithHash(path: String, hash: String) -> { path: String, hash: String, cached: Bool }
+fetch.url(url: String) -> { path: String, hash: String, cached: Bool }
+fetch.urlWithHash(url: String, hash: String) -> { path: String, hash: String, cached: Bool }
+fetch.git(url: String, rev: String) -> { path: String, hash: String, cached: Bool }
+fetch.gitWithHash(url: String, rev: String, hash: String) -> { path: String, hash: String, cached: Bool }
 ```
 
 Note: Fetch helpers are impure and can access local filesystem/network. Prefer
@@ -636,7 +636,7 @@ Note: Fetch helpers are impure and can access local filesystem/network. Prefer
 
 
 ```neve
-derivation #{
+derivation {
     name: String,
     system: String,
     builder: String,
@@ -647,12 +647,12 @@ derivation #{
 ```
 
 ```neve
-fetch.path(path: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.pathWithHash(path: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.url(url: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.urlWithHash(url: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.git(url: String, rev: String) -> #{ path: String, hash: String, cached: Bool }
-fetch.gitWithHash(url: String, rev: String, hash: String) -> #{ path: String, hash: String, cached: Bool }
+fetch.path(path: String) -> { path: String, hash: String, cached: Bool }
+fetch.pathWithHash(path: String, hash: String) -> { path: String, hash: String, cached: Bool }
+fetch.url(url: String) -> { path: String, hash: String, cached: Bool }
+fetch.urlWithHash(url: String, hash: String) -> { path: String, hash: String, cached: Bool }
+fetch.git(url: String, rev: String) -> { path: String, hash: String, cached: Bool }
+fetch.gitWithHash(url: String, rev: String, hash: String) -> { path: String, hash: String, cached: Bool }
 ```
 
 注意：fetch 函数是带副作用的，可能访问本地文件系统或网络。为了可复现构建，优先使用带 `WithHash` 的版本。

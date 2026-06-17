@@ -660,8 +660,15 @@ impl Sandbox {
             clone_flags |= CloneFlags::CLONE_NEWNET;
         }
 
-        // Fork a child process
-        // fork 子进程
+        // Fork a child process for sandbox isolation.
+        // SAFETY(H7): fork() in a multi-threaded Rust program is inherently
+        // risky — if another thread holds a lock at the moment of fork, the
+        // child inherits a locked state it can never unlock (deadlock risk).
+        // Mitigation: (1) the builder thread pool is quiesced before this
+        // call, (2) the child only performs syscall-heavy namespace setup and
+        // does not allocate or acquire new locks, (3) we never return from the
+        // child branch — we either exec or exit. A future improvement would
+        // be to use clone(2) directly or a subreaper process.
         match unsafe { fork() } {
             Ok(ForkResult::Parent { child }) => {
                 // Wait for the child

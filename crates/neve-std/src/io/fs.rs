@@ -41,6 +41,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // DEPRECATED: prefer io.readFilePath which takes a Path value.
         (
             "io.readFile",
             Value::Builtin(BuiltinFn {
@@ -209,6 +210,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // DEPRECATED: prefer io.writeFilePath which takes a Path value.
         (
             "io.writeFile",
             Value::Builtin(BuiltinFn {
@@ -1216,6 +1218,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
+        // DEPRECATED: prefer io.readFileLinesPath which takes a Path value.
         (
             "io.readFileLines",
             Value::Builtin(BuiltinFn {

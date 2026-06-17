@@ -381,7 +381,10 @@ impl<R: Read> NarReader<R> {
 
         // Read data
         // 读取数据
-        let mut data = vec![0u8; len as usize];
+        let data_len = usize::try_from(len).map_err(|_| {
+            NarError::InvalidFormat(format!("data length {len} exceeds addressable memory"))
+        })?;
+        let mut data = vec![0u8; data_len];
         self.reader.read_exact(&mut data)?;
         self.bytes_read += len;
 

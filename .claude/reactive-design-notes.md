@@ -32,13 +32,13 @@ Neve 有 effect system、有 Task<T>、有 timeout。缺的是把它们串起来
 
 ```neve
 -- 文件变了
-let changes = watchFile(./config.toml) effect;
+let changes = watchFile(./config.toml);
 
 -- 定时触发
-let tick = every(30.seconds) effect;
+let tick = every(30.seconds);
 
 -- 进程退出
-let exits = watchProcess(myApp) effect;
+let exits = watchProcess(myApp);
 ```
 
 这三个是最急的。HTTP health check 放第二期。
@@ -47,11 +47,11 @@ let exits = watchProcess(myApp) effect;
 
 ```neve
 -- 这些全是 pure
-let important = changes.filter(fn(c) { c.kind == Write });
+let important = changes.filter(|c| { c.kind == Write });
 let deduped  = important.debounce(500.millis);
 
 -- 只有这里才是 effect
-deduped.forEach(fn(_) { reload() }) effect;
+deduped.forEach(|_| { reload() });
 ```
 
 ### 第二层：钩子 & 反应（后续）
@@ -60,18 +60,18 @@ deduped.forEach(fn(_) { reload() }) effect;
 
 ```neve
 -- before: 可以拦截和修改
-before write ./config.toml effect = fn(content: String) -> Result<String, String> {
+before write ./config.toml = |content: String| -> Result<String, String> {
     if !validToml(content) { Err("bad config") }
     else { Ok(content) }
 };
 
 -- after: 纯粹副作用，不能拦截
-after write ./config.toml effect = {
+after write ./config.toml = {
     reloadService();
 };
 
 -- around: 完全包围，能做回滚
-around write ./config.toml effect = fn(inner, content) {
+around write ./config.toml = |inner, content| {
     let backup = io.readFile(./config.toml);  -- 先备份
     inner(content);                            -- 执行写入
     if !checkHealth() { io.writeFile(./config.toml, backup); }  -- 不行就回滚
@@ -82,7 +82,7 @@ around write ./config.toml effect = fn(inner, content) {
 
 ```neve
 scope {
-    before write ./config.toml effect = validate;
+    before write ./config.toml = validate;
     -- 只在 scope 内有效
 };
 -- 出来就没了
@@ -93,7 +93,7 @@ scope {
 "在 5 分钟内、重试 3 次、指数退避" —— 这是运维里最常见的句式。
 
 ```neve
-ensure service.healthy within 5.minutes effect
+ensure service.healthy within 5.minutes
     retry 3 times backoff exponential(1.second, 2.0, 30.seconds)
     onViolation { notifyPagerDuty("service down") }
     onTimeout   { notifySlack("health check stuck?") };
@@ -103,12 +103,12 @@ ensure service.healthy within 5.minutes effect
 
 ```neve
 -- ensure 本质上是这个的简写：
-let check = every(1.second) effect.map(fn(_) { http.get("/health").status == 200 });
+let check = every(1.second).map(|_| { http.get("/health").status == 200 });
 let deadline = now() + 5.minutes;
 loop {
     if check.current() { break; }           -- 健康了，退出
     if now() > deadline { onTimeout(); }     -- 超时了
-} effect;
+};
 ```
 
 ### 第四层：状态机 & 级联（长期目标）
@@ -146,9 +146,9 @@ cascade service.stop() {
 
 | 数据库里的 | 在 Neve 里 |
 |-----------|-----------|
-| `BEFORE INSERT` — 写入前校验 | `before write file effect = fn(x) -> Result<x, Err>` |
-| `AFTER UPDATE` — 更新后级联 | `after write file effect = { reload(); }` |
-| `INSTEAD OF` — 完全替换操作 | `around write file effect = fn(inner, x) { backup(); inner(x); }` |
+| `BEFORE INSERT` — 写入前校验 | `before write file = |x| -> Result<x, Err>` |
+| `AFTER UPDATE` — 更新后级联 | `after write file = { reload(); }` |
+| `INSTEAD OF` — 完全替换操作 | `around write file = |inner, x| { backup(); inner(x); }` |
 | `CHECK (port > 0)` — 值域约束 | `invariant port > 0 && port < 65536` |
 | `ON DELETE CASCADE` — 级联删除 | `cascade service.stop() { drain(); close(); }` |
 | 状态机（应用层） | `transition ServiceState { ... }` |

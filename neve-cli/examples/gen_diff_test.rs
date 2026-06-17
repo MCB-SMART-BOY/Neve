@@ -338,7 +338,7 @@ fn generate_effects_tests(n: usize, seed: u64) -> Vec<EffectTest> {
                 src: "let r = io.execCommand(io.command(\"true\", [])); toString(io.processSuccess(r))".into(),
                 expected: "true".into() }),
             _ => tests.push(EffectTest { name: "env-check".into(),
-                src: "let r = io.execCommand(io.command(\"env\", [])); let out = io.processStdout(r); if out == \"\" then \"empty\" else \"has-env\"".into(),
+                src: "let r = io.execCommand(io.command(\"env\", [])); let out = io.processStdout(r); if out == \"\" -> \"empty\" else \"has-env\"".into(),
                 expected: "has-env".into() }),
         }
     }

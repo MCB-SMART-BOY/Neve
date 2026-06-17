@@ -17,14 +17,14 @@ fn test_frontend_driver_analyzes_multi_module_program() {
         root,
         &["math"],
         r#"
-            pub fn add(x, y) = x + y;
+            fn add(x, y) = x + y;
         "#,
     );
     create_test_module(
         root,
         &["main"],
         r#"
-            import math (add);
+            use math (add);
             fn compute() = add(1, 2);
         "#,
     );
@@ -61,14 +61,14 @@ fn test_frontend_driver_preserves_parse_diagnostics_per_module() {
         root,
         &["bad"],
         r#"
-            pub fn broken(x) =
+            fn broken(x) =
         "#,
     );
     create_test_module(
         root,
         &["main"],
         r#"
-            import bad (broken);
+            use bad (broken);
             fn run() = 1;
         "#,
     );
@@ -112,16 +112,16 @@ fn test_frontend_driver_returns_dependency_first_diagnostic_modules() {
         root,
         &["bad_parse"],
         r#"
-            pub fn broken(x) =
+            fn broken(x) =
         "#,
     );
-    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(root, &["bad_type"], "fn bad() = 1 + true;");
     create_test_module(
         root,
         &["main"],
         r#"
-            import bad_parse;
-            import bad_type;
+            use bad_parse;
+            use bad_type;
             fn run() = 1;
         "#,
     );
@@ -157,7 +157,7 @@ fn test_frontend_driver_returns_dependency_first_diagnostic_modules() {
         parse_entry.diagnostics
     );
     assert!(
-        parse_entry.source.contains("pub fn broken"),
+        parse_entry.source.contains("fn broken"),
         "expected diagnostic source text, got {:?}",
         parse_entry.source
     );
@@ -185,24 +185,24 @@ fn test_frontend_driver_returns_only_parser_diagnostic_modules_in_dependency_ord
         root,
         &["bad_parse_a"],
         r#"
-            pub fn broken_a(x) =
+            fn broken_a(x) =
         "#,
     );
-    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(root, &["bad_type"], "fn bad() = 1 + true;");
     create_test_module(
         root,
         &["bad_parse_b"],
         r#"
-            pub fn broken_b(x) =
+            fn broken_b(x) =
         "#,
     );
     create_test_module(
         root,
         &["main"],
         r#"
-            import bad_parse_a;
-            import bad_type;
-            import bad_parse_b;
+            use bad_parse_a;
+            use bad_type;
+            use bad_parse_b;
             fn run() = 1;
         "#,
     );
@@ -240,20 +240,20 @@ fn test_frontend_driver_returns_only_parse_clean_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
 
-    create_test_module(root, &["util"], "pub fn inc(x) = x + 1;");
+    create_test_module(root, &["util"], "fn inc(x) = x + 1;");
     create_test_module(
         root,
         &["bad_parse"],
         r#"
-            pub fn broken(x) =
+            fn broken(x) =
         "#,
     );
     create_test_module(
         root,
         &["main"],
         r#"
-            import util (inc);
-            import bad_parse;
+            use util (inc);
+            use bad_parse;
             fn run() = inc(1);
         "#,
     );
@@ -283,14 +283,14 @@ fn test_frontend_driver_returns_only_lowered_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
 
-    create_test_module(root, &["util"], "pub fn inc(x) = x + 1;");
-    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(root, &["util"], "fn inc(x) = x + 1;");
+    create_test_module(root, &["bad_type"], "fn bad() = 1 + true;");
     create_test_module(
         root,
         &["warn_only"],
         r#"
-            import std.option as option;
-            pub fn warned() = match option.some(1) {
+            use std.option = option;
+            fn warned() = match option.some(1) {
                 Some(_) -> 1,
                 Some(inner) -> inner,
                 None -> 0
@@ -301,17 +301,17 @@ fn test_frontend_driver_returns_only_lowered_modules_in_dependency_order() {
         root,
         &["bad_parse"],
         r#"
-            pub fn broken(x) =
+            fn broken(x) =
         "#,
     );
     create_test_module(
         root,
         &["main"],
         r#"
-            import util (inc);
-            import bad_type;
-            import warn_only;
-            import bad_parse;
+            use util (inc);
+            use bad_type;
+            use warn_only;
+            use bad_parse;
             fn run() = inc(1);
         "#,
     );
@@ -388,16 +388,16 @@ fn test_frontend_driver_diagnostic_stats_distinguish_errors_and_warnings() {
         root,
         &["bad_parse"],
         r#"
-            pub fn broken(x) =
+            fn broken(x) =
         "#,
     );
-    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(root, &["bad_type"], "fn bad() = 1 + true;");
     create_test_module(
         root,
         &["warn_only"],
         r#"
-            import std.option as option;
-            pub fn warned() = match option.some(1) {
+            use std.option = option;
+            fn warned() = match option.some(1) {
                 Some(_) -> 1,
                 Some(inner) -> inner,
                 None -> 0
@@ -408,9 +408,9 @@ fn test_frontend_driver_diagnostic_stats_distinguish_errors_and_warnings() {
         root,
         &["main"],
         r#"
-            import bad_parse;
-            import bad_type;
-            import warn_only;
+            use bad_parse;
+            use bad_type;
+            use warn_only;
             fn run() = 1;
         "#,
     );
@@ -457,16 +457,16 @@ fn test_frontend_driver_blocking_diagnostic_messages_preserve_order_and_exclude_
         root,
         &["bad_parse"],
         r#"
-            pub fn broken(x) =
+            fn broken(x) =
         "#,
     );
-    create_test_module(root, &["bad_type"], "pub fn bad() = 1 + true;");
+    create_test_module(root, &["bad_type"], "fn bad() = 1 + true;");
     create_test_module(
         root,
         &["warn_only"],
         r#"
-            import std.option as option;
-            pub fn warned() = match option.some(1) {
+            use std.option = option;
+            fn warned() = match option.some(1) {
                 Some(_) -> 1,
                 Some(inner) -> inner,
                 None -> 0
@@ -477,9 +477,9 @@ fn test_frontend_driver_blocking_diagnostic_messages_preserve_order_and_exclude_
         root,
         &["main"],
         r#"
-            import bad_parse;
-            import bad_type;
-            import warn_only;
+            use bad_parse;
+            use bad_type;
+            use warn_only;
             fn run() = 1;
         "#,
     );
@@ -538,14 +538,14 @@ fn test_frontend_driver_returns_only_evaluable_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
 
-    create_test_module(root, &["util"], "pub fn inc(x) = x + 1;");
-    create_test_module(root, &["broken"], "pub fn bad() = 1 + true;");
+    create_test_module(root, &["util"], "fn inc(x) = x + 1;");
+    create_test_module(root, &["broken"], "fn bad() = 1 + true;");
     create_test_module(
         root,
         &["main"],
         r#"
-            import util (inc);
-            import broken (bad);
+            use util (inc);
+            use broken (bad);
             fn compute() = inc(1);
         "#,
     );

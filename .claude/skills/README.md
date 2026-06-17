@@ -1,6 +1,6 @@
 # Neve Language Development Skills
 
-A comprehensive skill suite for developing the Neve functional programming language (v3.19.0).
+A comprehensive skill suite for developing the Neve functional programming language (v4.0.0).
 
 ## Available Skills
 
@@ -14,6 +14,8 @@ A comprehensive skill suite for developing the Neve functional programming langu
 | [neve-std](neve-std.md) | Standard library (I/O, Stream<T>, List) | neve-std |
 | [neve-lsp](neve-lsp.md) | Language Server Protocol | neve-lsp |
 | [neve-test](neve-test.md) | Testing strategy + 541 E2E tests | tests/ |
+| [neve-diagnostic](neve-diagnostic.md) | Compiler error system (53 codes) | neve-diagnostic |
+| [neve-fmt](neve-fmt.md) | Code formatter | neve-fmt |
 | [neve-effect](neve-effect.md) | Effect system (EffectEval v4.3) | neve-typeck, neve-eval |
 | [neve-lean](neve-lean.md) | Formal verification (Lean 4) | formal/ |
 
@@ -89,7 +91,7 @@ Source Code (.neve)
 | `neve-config` | System configuration (generation-based) |
 | `neve-derive` | Derivation model + hashing |
 
-## Current Status (v3.19.0)
+## Current Status (v4.0.0)
 
 | Metric | Value |
 |--------|-------|
@@ -100,7 +102,7 @@ Source Code (.neve)
 | Stream<T> APIs | 14 (Phase A-C) |
 | LSP Methods | 20 |
 | EffectEval Rules | 34 (v4.3) |
-| Lean Modules | 19 |
+| Lean Modules | 21 |
 | Keywords | 12 (v4.0) |
 
 ## Decisions (2026-06-03)

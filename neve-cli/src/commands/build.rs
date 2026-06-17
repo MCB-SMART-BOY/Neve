@@ -922,7 +922,7 @@ mod tests {
         write_module(
             root,
             "helpers.neve",
-            r#"pub fn mk(name) = #{
+            r#"fn mk(name) = #{
     name = name,
     version = "1.0.0",
     build = "echo build"
@@ -931,7 +931,7 @@ mod tests {
         write_module(
             root,
             "default.neve",
-            r#"import helpers (mk);
+            r#"use helpers (mk);
 let package = mk("demo");
 "#,
         );
@@ -951,7 +951,7 @@ let package = mk("demo");
         write_module(
             root,
             "helpers.neve",
-            r#"pub fn pkg(name) = #{
+            r#"fn pkg(name) = #{
     name = name,
     version = "3.1.0",
     build = "echo flake"
@@ -961,7 +961,7 @@ let package = mk("demo");
             root,
             "flake.neve",
             &format!(
-                r#"import helpers (pkg);
+                r#"use helpers (pkg);
 
 let flake = #{{
     outputs = fn(inputs) #{{

@@ -36,6 +36,13 @@ use neve_syntax::SourceFile;
 /// A tuple containing the parsed source file and any diagnostics.
 /// 返回一个元组，包含解析后的源文件和所有诊断信息。
 pub fn parse(source: &str) -> (SourceFile, Vec<Diagnostic>) {
+    // Strip shebang line if present so that executable Neve scripts starting
+    // with #!/usr/bin/env neve parse correctly.
+    let source = if source.starts_with("#!") {
+        source.find('\n').map_or("", |i| &source[i + 1..])
+    } else {
+        source
+    };
     let lexer = Lexer::new(source);
     let (tokens, mut diagnostics) = lexer.tokenize();
 

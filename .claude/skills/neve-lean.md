@@ -23,7 +23,7 @@ formal/
     │   └── Limits.lean        ← Buffer size limits (H-1, H-2)
     └── Refinement/            ← Rust ↔ Lean bridge (scaffolded)
 
-    ← 19 modules total, lake build clean  →
+    ← 21 modules total, lake build clean  →
 ```
 
 ## Proof Dependency Graph

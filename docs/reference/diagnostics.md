@@ -59,7 +59,7 @@
 - Description: invalid number literal
 - 描述：数字字面量格式不合法
 
-## Parser Errors (E0100 - E0105) / 语法错误 (E0100 - E0105)
+## Parser Errors (E0100 - E0107) / 语法错误 (E0100 - E0107)
 
 <a name="E0100"></a>
 ### E0100 — Unexpected token / 意外的 token
@@ -95,7 +95,17 @@
 - 描述：语句缺少分号结束
 - 建议：在语句末尾补上 `;`
 
-## Type Errors (E0200 - E0224) / 类型错误 (E0200 - E0224)
+<a name="E0106"></a>
+### E0106 — Expected identifier / 需要标识符
+- Description: expected an identifier
+- 描述：这里应该是一个标识符（名称）
+
+<a name="E0107"></a>
+### E0107 — Invalid tuple index / 无效元组索引
+- Description: invalid tuple index
+- 描述：元组索引无效（可能过大）
+
+## Type Errors (E0200 - E0226) / 类型错误 (E0200 - E0226)
 
 <a name="E0200"></a>
 ### E0200 — Type mismatch / 类型不匹配
@@ -226,9 +236,9 @@
 <a name="E0222"></a>
 ### E0222 — Private access / 私有访问
 - Description: cannot access private binding
-- Suggestion: make the binding public with `pub` or access it from within the same module
+- Suggestion: ensure the binding is accessible from the calling module
 - 描述：无法访问私有绑定
-- 建议：使用 `pub` 导出或在同一模块内访问
+- 建议：确保绑定可从调用模块访问
 
 <a name="E0223"></a>
 ### E0223 — Cyclic dependency / 循环依赖
@@ -244,7 +254,21 @@
 - 描述：当前接收者类型上无法解析该方法调用
 - 建议：为接收者类型实现该方法，或定义匹配的 callable fallback
 
-## Eval Errors (E0300 - E0302) / 求值错误 (E0300 - E0302)
+<a name="E0225"></a>
+### E0225 — Unused variable / 未使用变量
+- Description: unused variable (warning)
+- Suggestion: prefix the variable name with an underscore to suppress this warning
+- 描述：存在未使用的变量（警告）
+- 建议：在变量名前加下划线以抑制此警告
+
+<a name="E0226"></a>
+### E0226 — Redundant annotation / 冗余标注
+- Description: redundant type annotation (warning)
+- Suggestion: remove the unnecessary type annotation
+- 描述：类型标注可以推断，无需显式标注（警告）
+- 建议：移除不必要的类型标注
+
+## Eval Errors (E0300 - E0306) / 求值错误 (E0300 - E0306)
 
 <a name="E0300"></a>
 ### E0300 — Division by zero / 除以零
@@ -260,3 +284,54 @@
 ### E0302 — Pattern match failed / 模式匹配失败
 - Description: pattern matching failed
 - 描述：模式匹配失败
+
+<a name="E0303"></a>
+### E0303 — Runtime type error / 运行时类型错误
+- Description: runtime type error
+- Suggestion: add a type annotation or guard to narrow the type
+- 描述：运行时发生了类型错误
+- 建议：添加类型标注或运行时守卫来缩小类型
+
+<a name="E0304"></a>
+### E0304 — Not a function (eval) / 非函数（求值）
+- Description: expected a function at runtime
+- Suggestion: check that the call target is a function
+- 描述：运行时期望函数，但调用目标不是函数
+- 建议：检查调用目标是否为函数
+
+<a name="E0305"></a>
+### E0305 — Wrong arity (eval) / 参数数量错误（求值）
+- Description: wrong number of arguments at runtime
+- Suggestion: check the function definition for the expected number of arguments
+- 描述：运行时实参与形参数量不匹配
+- 建议：检查函数定义的参数数量
+
+<a name="E0306"></a>
+### E0306 — Unbound variable (eval) / 未绑定变量（求值）
+- Description: unbound variable at runtime
+- Suggestion: define the variable before using it
+- 描述：运行时访问了未绑定的变量
+- 建议：在使用变量之前定义它
+
+## Module Errors (E0400 - E0402) / 模块错误 (E0400 - E0402)
+
+<a name="E0400"></a>
+### E0400 — Module not found / 模块未找到
+- Description: module not found
+- Suggestion: check the module name or add it as a dependency
+- 描述：找不到指定的模块
+- 建议：检查模块名称或将其添加为依赖
+
+<a name="E0401"></a>
+### E0401 — Module parse error / 模块解析错误
+- Description: parse error in imported module
+- Suggestion: fix the parse errors in the imported module first
+- 描述：导入的模块中存在解析错误
+- 建议：先修复导入模块中的解析错误
+
+<a name="E0402"></a>
+### E0402 — Circular import / 循环导入
+- Description: circular import detected
+- Suggestion: break the import cycle by restructuring the modules
+- 描述：检测到循环导入
+- 建议：通过重构模块结构打破循环导入

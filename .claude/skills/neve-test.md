@@ -58,12 +58,8 @@ fn run(source: &str) -> Result<Value, EvalError> {
     neve_eval::Evaluator::new().eval_module(&typed)
 }
 
-fn run_ast(source: &str) -> Result<Value, EvalError> {
-    // Deprecated path — still tested for parity
-    #[allow(deprecated)]
-    neve_eval::Evaluator::new()
-        .eval_source(source)
-}
+// Every eval path goes through the canonical HIR pipeline.
+// The AST compat path was fully removed in v4.0 (Phase D).
 ```
 
 ## E2E Coverage (541 tests)

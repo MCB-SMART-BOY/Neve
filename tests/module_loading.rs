@@ -273,9 +273,9 @@ fn test_super_import() {
         &["mylib", "submod", "worker"],
         r#"
 
-            import super.config (DEBUG);
+            use super.config (DEBUG);
 
-            pub fn run() = if DEBUG then "debug" else "release";
+            fn run() = if DEBUG -> "debug" else "release";
         "#,
     );
 
