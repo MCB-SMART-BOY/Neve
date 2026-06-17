@@ -143,12 +143,6 @@ impl Parser {
             }
             TokenKind::Ident(_) => self.parse_ident_item(is_pub),
             _ => {
-                if is_pub {
-                    self.error_with_code(
-                        "expected item after `pub`",
-                        ErrorCode::ExpectedExpression,
-                    );
-                }
                 if self.is_start_of_pattern() {
                     Some(ItemKind::Let(self.parse_let_def(is_pub)))
                 } else {
@@ -182,14 +176,10 @@ impl Parser {
     ///
     /// Looks ahead to determine if this is a function definition or let binding.
     /// 向前查看以确定是函数定义还是 let 绑定。
-    fn parse_ident_item(&mut self, is_pub: bool) -> Option<ItemKind> {
+    fn parse_ident_item(&mut self, _is_pub: bool) -> Option<ItemKind> {
         let saved = self.pos;
         let name = self.parse_ident();
-        let visibility = if is_pub {
-            Visibility::Public
-        } else {
-            Visibility::Public // v4.0: all items are public by default
-        };
+        let visibility = Visibility::Public; // v4.0: all public
         // Check for generics: name<T>
         if self.eat(TokenKind::Lt) {
             let generics = self.parse_generics_inline();
@@ -341,7 +331,7 @@ impl Parser {
     ///
     /// Syntax: `[let] pattern [: type] = expr[;]`
     /// 语法：`[let] 模式 [: 类型] = 表达式[;]`
-    fn parse_let_def(&mut self, is_pub: bool) -> LetDef {
+    fn parse_let_def(&mut self, _is_pub: bool) -> LetDef {
         let _ = self.eat(TokenKind::Let);
         let pattern = self.parse_pattern();
         let ty = if self.eat(TokenKind::Colon) {
@@ -354,11 +344,7 @@ impl Parser {
         self.eat(TokenKind::Semicolon);
 
         LetDef {
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
             pattern,
             ty,
             value,
@@ -370,7 +356,7 @@ impl Parser {
     ///
     /// Syntax: `[fn] name[<generics>](params) [-> return_type] = body[;]`
     /// 语法：`[fn] 名称[<泛型>](参数) [-> 返回类型] = 函数体[;]`
-    fn parse_fn_def(&mut self, is_pub: bool) -> FnDef {
+    fn parse_fn_def(&mut self, _is_pub: bool) -> FnDef {
         let _ = self.eat(TokenKind::Fn);
         let name = self.parse_ident();
         let generics = self.parse_generics();
@@ -392,11 +378,7 @@ impl Parser {
         self.eat(TokenKind::Semicolon);
 
         FnDef {
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
             name,
             generics,
             params,
@@ -412,7 +394,7 @@ impl Parser {
     /// Syntax: `type Name[<generics>] = Type;`
     /// 语法：`type 名称[<泛型>] = 类型;`
     #[allow(dead_code)]
-    fn parse_type_alias(&mut self, is_pub: bool) -> TypeAlias {
+    fn parse_type_alias(&mut self, _is_pub: bool) -> TypeAlias {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::Eq);
@@ -420,11 +402,7 @@ impl Parser {
         self.eat(TokenKind::Semicolon);
 
         TypeAlias {
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
             name,
             generics,
             ty,
@@ -437,14 +415,10 @@ impl Parser {
     /// Handles type aliases, struct definitions, and enum definitions
     /// from a single `type` (or `struct`/`enum` for backward compat) keyword.
     /// 从单个 `type` 关键字（或向后兼容的 `struct`/`enum`）处理类型别名、结构体和枚举定义。
-    fn parse_type_decl(&mut self, is_pub: bool) -> ItemKind {
+    fn parse_type_decl(&mut self, _is_pub: bool) -> ItemKind {
         let name = self.parse_ident();
         let generics = self.parse_generics();
-        let visibility = if is_pub {
-            Visibility::Public
-        } else {
-            Visibility::Public // v4.0: all public
-        };
+        let visibility = Visibility::Public; // v4.0: all public
 
         if self.eat(TokenKind::Eq) {
             if self.eat(TokenKind::LBrace) {
@@ -579,7 +553,7 @@ impl Parser {
     /// Syntax: `struct Name[<generics>] { fields };`
     /// 语法：`struct 名称[<泛型>] { 字段列表 };`
     #[allow(dead_code)]
-    fn parse_struct_def(&mut self, is_pub: bool) -> StructDef {
+    fn parse_struct_def(&mut self, _is_pub: bool) -> StructDef {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LBrace);
@@ -588,11 +562,7 @@ impl Parser {
         self.eat(TokenKind::Semicolon);
 
         StructDef {
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
             name,
             generics,
             fields,
@@ -605,7 +575,7 @@ impl Parser {
     /// Syntax: `enum Name[<generics>] { variants };`
     /// 语法：`enum 名称[<泛型>] { 变体列表 };`
     #[allow(dead_code)]
-    fn parse_enum_def(&mut self, is_pub: bool) -> EnumDef {
+    fn parse_enum_def(&mut self, _is_pub: bool) -> EnumDef {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LBrace);
@@ -614,11 +584,7 @@ impl Parser {
         self.eat(TokenKind::Semicolon);
 
         EnumDef {
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
             name,
             generics,
             variants,
@@ -630,7 +596,7 @@ impl Parser {
     ///
     /// Syntax: `trait Name[<generics>] { items };`
     /// 语法：`trait 名称[<泛型>] { 方法和关联类型 };`
-    fn parse_trait_def(&mut self, is_pub: bool) -> TraitDef {
+    fn parse_trait_def(&mut self, _is_pub: bool) -> TraitDef {
         let name = self.parse_ident();
         let generics = self.parse_generics();
         self.expect(TokenKind::LBrace);
@@ -650,11 +616,7 @@ impl Parser {
         self.eat(TokenKind::Semicolon);
 
         TraitDef {
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
             name,
             generics,
             items,
@@ -709,7 +671,7 @@ impl Parser {
     ///
     /// Syntax: `import [prefix.]path[.(items)] [as alias];`
     /// 语法：`import [前缀.]路径[.(导入项)] [as 别名];`
-    fn parse_import_def(&mut self, is_pub: bool) -> ImportDef {
+    fn parse_import_def(&mut self, _is_pub: bool) -> ImportDef {
         // Parse optional path prefix (self, super, crate)
         // 解析可选的路径前缀（self、super、crate）
         let prefix = match self.current().kind {
@@ -776,11 +738,7 @@ impl Parser {
             path,
             items,
             alias,
-            visibility: if is_pub {
-                Visibility::Public
-            } else {
-                Visibility::Public // v4.0: all public
-            },
+            visibility: Visibility::Public, // v4.0: all public
         }
     }
 
