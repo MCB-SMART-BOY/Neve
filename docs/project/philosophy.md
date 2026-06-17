@@ -72,9 +72,9 @@ No side effects. No mutable state. Same input → same output. Always.
 
 ### 5. Simplicity / 简洁
 
-A minimal set of keywords (v4.0: 12 canonical keywords, down from 17 in v3.0).
+A minimal set of keywords (v4.0: 12 canonical keywords, down from 21 in v1.x).
 
-精简的关键字集合（v4.0: 12 个规范关键字，v3.0 时为 17 个）。
+精简的关键字集合（v4.0: 12 个规范关键字，v1.x 时为 21 个）。
 
 ```
 let  fn   type  trait  impl  use
@@ -102,23 +102,25 @@ Do one thing well. Compose. Text is universal.
 
 | Area / 领域 | Status | Notes / 说明 |
 |------------|--------|-------------|
-| Language core / 语言核心 | ⚠️ Broad but not fully converged | 语法表面较广，但 parser/lowering/typeck/eval 仍未完全收敛 |
-| Runtime / 运行时 | ⚠️ Partially converged | AST 与 HIR 运行时并存，效果边界仍未正式划清 |
-| Toolchain / 工具链 | ⚠️ Usable but uneven | REPL、formatter、diagnostics、LSP 已有基础，但语义一致性还在补 |
-| Package system / 包管理 | 🚧 In progress | Fetch/store/derive/builder integration / 获取、存储、派生、构建整合 |
-| OS integration / 系统集成 | ⚠️ Prototype | System configuration modules exist in prototype form / 系统配置模块已有原型 |
+| Language core / 语言核心 | ✅ Converged | v4.0 syntax canonical, parser/lowering/typeck/eval 全链路闭环 |
+| Runtime / 运行时 | ✅ HIR canonical | AST compat path removed, all eval goes through HIR |
+| Toolchain / 工具链 | ✅ Usable | REPL, formatter, diagnostics, LSP (20 methods), all CI green |
+| Package system / 包管理 | ✅ Implemented | Fetch/store/derive/builder/registry, binary cache with narinfo signing |
+| OS integration / 系统集成 | ⚠️ Linux-only | System configuration and sandbox are Linux-native; Docker backend for macOS |
 
 ### Focus Now / 当前重点
 
-- Module loader polish, LSP enhancements, diagnostics UX
-- Package system integration (derivation/store/builder)
-- 模块加载打磨、LSP 增强、诊断体验优化
-- 包管理集成（derivation/store/builder）
+- Registry public launch (`registry.neve.dev`)
+- Cross-platform sandbox improvements
+- Standard library expansion
+- 注册表公开发布（`registry.neve.dev`）
+- 跨平台沙箱改进
+- 标准库扩展
 
 ### Future / 未来
 
-- System configuration, macros, binary cache, HKT, Neve OS
-- 系统配置、宏、二进制缓存、高阶类型、Neve OS
+- HKT, macros, Neve OS, decentralized package federation
+- 高阶类型、宏、Neve OS、去中心化包联邦
 
 ## The Name / 名字由来
 

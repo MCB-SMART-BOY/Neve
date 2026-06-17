@@ -97,15 +97,15 @@ identity<T>(x: T) -> T = x
 ## Step 5: Pattern Matching (1 min) / 第五步：模式匹配（1 分钟）
 
 ```neve
-fn describe(opt) = match opt {
+describe(opt) = match opt {
     Some(x) -> `Got: {x}`,
     None    -> "Nothing",
-};
+}
 
-fn sum(list) = match list {
+sum(xs) = match xs {
     []       -> 0,
     [h, ..t] -> h + sum(t),
-};
+}
 ```
 
 ## Cheat Sheet / 语法速查

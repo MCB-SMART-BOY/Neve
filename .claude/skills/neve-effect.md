@@ -59,10 +59,10 @@ pure function
     ├── calls io.readFile      → EffectSet::IO     ← propagated to caller
     └── calls io.spawn         → EffectSet::Async  ← propagated to caller
 
-Caller must also be annotated (effect auto-inferred in v3.0).
+Caller must also be annotated (effect auto-inferred in v4.0).
 ```
 
-## EffectEval v4.3 (Lean Formalization)
+## EffectEval 34 Rules (Lean Formalization)
 
 34 rules across 7 categories:
 

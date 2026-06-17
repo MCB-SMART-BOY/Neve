@@ -72,7 +72,7 @@ peek_char()
 
 ### Resolved gaps
 - Unicode `\u{...}` escapes: ✅ Done (v3.18+)
-- Shebang handling: ⚠️ Handled by CLI, not parser (tracked at `tests/parser.rs:1829`)
+- Shebang handling: ✅ Done (M22) — handled by parser
 
 ## Parser Design (neve-parser)
 
@@ -178,4 +178,4 @@ pub enum ExprKind {
 
 - **Golden tests**: Parse source, compare formatted AST output to `.txt` baseline
 - **Integration tests**: `tests/parser.rs` — 220+ tests covering all syntax forms
-- **Remaining gap**: Shebang at parser level (handled by CLI; tracked as `#[ignore]`)
+- **All parser gaps resolved.** Shebang now handled at parser level.

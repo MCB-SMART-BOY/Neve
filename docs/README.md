@@ -4,8 +4,6 @@
 
 <h1>Neve Documentation Hub</h1>
 
-<p><em>文档中心</em></p>
-
 <p>
   <strong><a href="../README.md">Home</a></strong> ·
   <strong><a href="./">Docs</a></strong> ·
@@ -16,61 +14,57 @@
 
 </div>
 
-**当前状态**: v4.0 语法 — v4.0.0。详见 [前向计划](../.claude/forward-plan.md) 和 [稳定性分级](reference/stability.md)。
+**Current version: v4.0.1**. 12 canonical keywords, 50+ diagnostic codes, 539 E2E tests (539 pass), 20 LSP methods. Install via `cargo install neve` or pre-built binaries. Published on crates.io. All CI green.
 
 Welcome to the Neve documentation hub. For **developer reference** (per-crate APIs,
 architecture, integration points), see `.claude/skills/` — one skill per crate,
 kept in sync with the actual code.
 
-欢迎来到 Neve 文档中心。**开发者参考**（per-crate API、架构、集成点）请见
-`.claude/skills/` — 每个 crate 一个 skill，与实际代码保持同步。
+---
+
+## Start Here
+
+- New user: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
+- Language reference: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
+- Contributor: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
+- Project status: [project/feature-matrix.md](project/feature-matrix.md), [project/changelog.md](project/changelog.md)
+- Stability: [reference/stability.md](reference/stability.md)
+- **Developer skills**: [`.claude/skills/`](../.claude/skills/) — per-crate architecture, APIs, key files
 
 ---
 
-## Start Here / 从这里开始
+## By Audience
 
-- New user / 初次上手: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
-- Language reference / 语言参考: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
-- Contributor / 贡献者: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
-- Project status / 项目现状: [project/feature-matrix.md](project/feature-matrix.md), [project/changelog.md](project/changelog.md), [前向计划](../.claude/forward-plan.md)
-- Stability / 稳定性: [reference/stability.md](reference/stability.md)
-- **Developer skills** / 开发者技能: [`.claude/skills/`](../.claude/skills/) — per-crate architecture, APIs, key files
-
----
-
-## By Audience / 按读者角色
-
-### I want to use Neve / 我想直接开始用
+### I want to use Neve
 
 - [user/install.md](user/install.md): installation, platform notes, binary cache setup
 - [user/quickstart.md](user/quickstart.md): quickest path to first expression and file
 - [user/tutorial.md](user/tutorial.md): learn the language surface systematically
 
-### I want exact language truth / 我想看严格定义
+### I want exact language truth
 
 - [reference/spec.md](reference/spec.md): syntax and semantic rules
 - [reference/api.md](reference/api.md): standard library reference
 - [reference/diagnostics.md](reference/diagnostics.md): diagnostic code index
 
-### I want to understand project reality / 我想看项目真实完成度
+### I want to understand project reality
 
 - [project/feature-matrix.md](project/feature-matrix.md): real support matrix
-- [../.claude/bash-nix-roadmap.md](../.claude/bash-nix-roadmap.md): Bash/Nix replacement roadmap
-- [前向计划](../.claude/forward-plan.md): language completion roadmap
+- [project/ecosystem-design.md](project/ecosystem-design.md): flake, store, builder, registry
 - [project/changelog.md](project/changelog.md): released changes only
+- [../.claude/forward-plan.md](../.claude/forward-plan.md): language completion roadmap
 
-### I want to contribute / 我想参与开发
+### I want to contribute
 
 - [contributor/contributing.md](contributor/contributing.md): setup, workflow, style
 - [contributor/onboarding.md](contributor/onboarding.md): codebase reading order
 - [contributor/architecture.md](contributor/architecture.md): crate responsibilities and pipeline
-- [.claude/bootstrap-guide.md](../.claude/bootstrap-guide.md): bootstrap guide (formerly `docs/contributor/bootstrap.md`)
 
 ---
 
-## CLI Docs / CLI 文档入口
+## CLI Docs
 
-```neve
+```bash
 neve doc index
 neve doc quickstart
 neve doc spec
@@ -80,7 +74,6 @@ neve doc feature-matrix
 ```
 
 For command behavior, use `neve --help`.
-命令行为请直接看 `neve --help`。
 
 ---
 

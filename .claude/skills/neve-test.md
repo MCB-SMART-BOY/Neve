@@ -4,7 +4,7 @@
 
 ```
            ┌──────────┐
-           │ E2E      │  541 tests — full pipeline smoke
+           │ E2E      │  541 tests (all pass) — full pipeline smoke
            │ (smoke)  │  tests/end_to_end.rs
            ├──────────┤
            │ Inte-    │  ~600 tests — subsystem validation

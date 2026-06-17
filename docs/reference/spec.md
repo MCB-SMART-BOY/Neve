@@ -219,7 +219,7 @@ Bytes                           -- 二进制数据
 ## 5. Definitions / 定义
 
 
-Top-level `let`/`fn`/`;` are **optional** in v3.0. `struct`/`enum` → `type`.
+Top-level `let`/`fn`/`;` are **optional** in v4.0. `struct`/`enum` → `type`.
 
 ```neve
 -- Type alias
@@ -250,7 +250,7 @@ readConfig(path: String) -> String = io.readFile(path)
 ```
 
 
-顶层 `let`/`fn`/`;` 在 v3.0 中是**可选的**。`struct`/`enum` → `type`。
+顶层 `let`/`fn`/`;` 在 v4.0 中是**可选的**。`struct`/`enum` → `type`。
 
 ```neve
 -- 类型别名
@@ -292,7 +292,7 @@ let (a, b) = (1, 2);
 let { x, y } = point;
 ```
 
-### Records (v3.0)
+### Records (v4.0)
 
 ```neve
 { x = 0, y = 0 }
@@ -309,7 +309,7 @@ config & override     -- merge
 [x * 2 | x <- xs, x > 0]    -- comprehension
 ```
 
-### Closures / Lambdas (v3.0)
+### Closures / Lambdas (v4.0)
 
 ```neve
 |x| x + 1

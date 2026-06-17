@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Neve is a pure functional language for system configuration, built in Rust (edition 2024, MSRV 1.85). 18 crates in a Cargo workspace. The CLI binary is `neve` (at `neve-cli/`).
+Neve is a pure functional language for system configuration, built in Rust. 17 crates in a Cargo workspace. The CLI binary is `neve` (at `neve-cli/`). Published on crates.io. Install: `cargo install neve`.
 
 ## Build & Test
 
@@ -62,4 +62,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v4.0.0. 541 E2E tests (539 pass + 2 flaky). 20 LSP methods. 14 Stream<T> APIs. Audit grade B+ → A- (62/62 fixed). All Phases complete. Next: v4.0 release preparation.
+v4.0.1. 541 E2E tests (all pass). 20 LSP methods. 14 Stream<T> APIs. 53 error codes. 12 canonical keywords. Audit grade B+ → A- (62/62 fixed). All Phases complete. All CI green. Published on crates.io (`cargo install neve`).

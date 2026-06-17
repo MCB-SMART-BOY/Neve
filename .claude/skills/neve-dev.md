@@ -92,7 +92,7 @@ Every new effectful builtin:
 | Phase | Status | Key Deliverable |
 |-------|--------|----------------|
 | Syntax v4.0 | ✅ | 12 keywords, `if->`, `use=`, `~expr`, effect auto |
-| Phase 5 (Ecosystem) | 🔄 95% | Flake/lock/store, Registry v1 |
+| Phase 5 (Ecosystem) | ✅ | Flake/lock/store, Registry v1, crates.io |
 | Phase 4 (Shell) | ✅ | Stream<T> 14 APIs, Task, TTY |
 | Phase 3 (Runtime) | ✅ | Path/Bytes/Command/ProcessResult |
 | Phase 2 (Type) | ✅ | Exhaustive match, trait dispatch |

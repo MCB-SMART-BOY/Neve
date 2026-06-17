@@ -38,6 +38,14 @@
 
 ## Quick Install / 快速安装
 
+### Via Cargo (all platforms) / 通过 Cargo 安装（全平台）
+
+```bash
+cargo install neve
+```
+
+Requires Rust 1.85+. This is the recommended method for developers.
+
 ### Linux / macOS Script / Linux / macOS 脚本安装
 
 ```bash

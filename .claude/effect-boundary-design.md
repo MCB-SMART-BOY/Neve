@@ -2,9 +2,9 @@
 
 <div align="center">
 
-**版本**: v1.1
-**日期**: 2026-05-12
-**状态**: 当前前沿 (G4 决策门)
+**版本**: v1.2
+**日期**: 2026-06-17
+**状态**: 实现完成 (v4.0.1)
 **关联**: [前向计划](./forward-plan.md) · [开发计划](../../.claude/forward-plan.md) · [功能矩阵](../docs/project/feature-matrix.md)
 
 </div>
@@ -507,7 +507,11 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 
 ## 11. 变更记录 / Changelog
 
-### 11.1 v1.1 (2026-05-12)
+### 11.1 v1.2 (2026-06-17)
+- v4.0.1 发布：所有效果操作已实现，crates.io 已发布
+- 所有安全审计闭合（H-1, H-2, M-1, M-4）
+
+### 11.0 v1.1 (2026-05-12)
 - 新增 Stream<T> 效果分类 (G 组，14 个 API)
 - 更新统计数字
 - 更新类型层次图

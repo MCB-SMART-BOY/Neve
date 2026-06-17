@@ -65,7 +65,7 @@ check_count "lean modules"   '\.lean$' <(find formal -name '*.lean' 2>/dev/null 
 
 # --- neve-test.md claims ---
 check_file "e2e tests"       tests/end_to_end.rs
-check_count "e2e test count" '#\[test\]' tests/end_to_end.rs 500
+check_count "e2e test count" '#\[test\]' tests/end_to_end.rs 540
 
 echo ""
 echo "=== Result: $PASS passed, $FAIL failed ==="

@@ -359,7 +359,7 @@ io.resetTerminal(fd: Int) -> Unit
 io.jobs() -> List<Int>
 io.waitAnyJob() -> Int
 
--- Stream<T> APIs (Phase 4, 14 APIs)
+-- Stream<T> APIs (14 APIs, Phase 4 complete)
 io.streamList(list: List<T>) -> Stream<T>
 io.streamLines(path: Path) -> Stream<String>
 io.streamCommand(cmd: Command) -> Stream<String>
@@ -375,7 +375,7 @@ io.streamForEach(s: Stream<T>, f: T -> Unit) -> Unit
 io.streamFold(s: Stream<T>, init: A, f: A -> T -> A) -> A
 io.streamWithTimeout(s: Stream<T>, ms: Int) -> Stream<Option<T>>
 
--- Short I/O aliases (v3.19+): read, write, exec, cmd, run, sh, env, pwd, home, ok, stdout, stderr, code, ls, exists
+-- Short I/O aliases (v4.0+): read, write, exec, cmd, run, sh, env, pwd, home, ok, stdout, stderr, code, ls, exists
 ```
 
 ## Bytes Module (std.bytes)

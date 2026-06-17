@@ -46,7 +46,7 @@ See `docs/reference/stability.md` for full tier definitions.
 ## Developer Reference
 
 For crate-level architecture, APIs, key files, and integration points:
-- **Pipeline**: `.claude/skills/neve-parser.md` `.claude/skills/neve-hir.md` `.claude/skills/neve-typeck.md` `.claude/skills/neve-eval.md`
+- **Pipeline**: `.claude/skills/neve-parser.md` `.claude/skills/neve-hir.md` `.claude/skills/neve-typeck.md` `.claude/skills/neve-eval.md` `.claude/skills/neve-frontend.md`
 - **Stdlib**: `.claude/skills/neve-std.md`
 - **Tooling**: `.claude/skills/neve-lsp.md` `.claude/skills/neve-test.md`
 - **Formal**: `.claude/skills/neve-lean.md`

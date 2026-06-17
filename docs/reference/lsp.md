@@ -19,7 +19,7 @@ neve lsp --check
 
 Open any `.neve` file in Helix — syntax highlighting, auto-completion, and diagnostics work out of the box.
 
-## Supported LSP Methods (23 total)
+## Supported LSP Methods (20 total)
 
 ### Text Document Features
 
@@ -159,7 +159,7 @@ cargo build -p neve
 cargo test -p neve-lsp          # 20 unit tests
 
 # Test LSP integration
-cargo test --test lsp            # 142 integration tests
+cargo test --test lsp            # LSP integration tests
 
 # Health check
 cargo run -p neve -- lsp --check  # 7 automated checks

@@ -4,9 +4,9 @@
 
 <h1>Neve Feature Matrix</h1>
 
-<p><em>真实功能支持矩阵（v0）</em></p>
+<p><em>真实功能支持矩阵（v4.0）</em></p>
 
-> **📢 2026-05: Syntax v3.0 overhaul complete.** `let`/`fn`/`;` now optional, `import` → `use`, `struct`/`enum` → `type`, `fn(x)` → `|x|`, `#{ }` → `{ }`, `//` → `&`. The lexer still accepts legacy keywords for backward compatibility. This matrix reflects semantic support, not syntax surface alone.
+> **2026-06: v4.0 syntax canonical.** 12 keywords, `let`/`fn`/`;` optional, `use` not `import`, `|x|` not `fn(x)`, `{ }` records, `&` line comments, `if -> else` not `then/else`, `~` not `lazy`, `pub` removed. Legacy keywords still accepted by lexer. This matrix reflects semantic support, not syntax surface alone.
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -59,7 +59,7 @@
 5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete) ✅。**
 6. **LSP 20 methods implemented ✅ (CodeLens)，补全评分排序，模块↔flake 集成。**
 7. **Registry v1 API 完整 (8 endpoints) ✅，RegistryClient 已接入 install/search。**
-8. **Phase 6 (Syntax Overhaul v3.0) ✅ 已完成 — 22→12 关键字，`let`/`fn`/`;` 可选，`|` lambda，`{}` 记录，`&` 注释。**
+8. **v4.0 syntax is canonical — 12 keywords, `let`/`fn`/`;` optional, `|` lambda, `{}` records, `&` comments, `pub` removed.**
 
 ## 语言高风险特性矩阵 / High-Risk Language Features
 
@@ -114,7 +114,7 @@
 | 字符串拼接 | `"a" + "b"` |
 | 管道语法 | `a |> f` 等价于 `f(a)` |
 | 输出 | `print` / `println` 全局可用 |
-| 效果系统 | v4.0: auto-inferred, no keyword needed；fn / impl fn / lambda 全覆盖 |
+| 效果系统 | v4.0: auto-inferred, no keyword needed; function/impl/lambda全覆盖 |
 | REPL | 历史持久化、Tab 补全、`:save` / `:cd`、智能输入完成 |
 | 事件系统 | `Event<T>`、`io.every(ms)`、`io.watchFile(p)`、`io.eventNext(e)` |
 | 反应式 | `Live<T>`、`io.reactive(e)`、`io.liveNext(l)` |

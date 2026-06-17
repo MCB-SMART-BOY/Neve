@@ -2,14 +2,14 @@
 
 ## Crate: `neve-diagnostic`
 
-Diagnostic and error reporting for Neve using ariadne. 53 error codes across 5 categories.
+Diagnostic and error reporting for Neve using ariadne. 55 error codes across 5 categories.
 
 ## Architecture
 
 ```
 ErrorCode (codes.rs)       Diagnostic (diagnostic.rs)       emit() / explain() (lib.rs)
 ─────────────────────       ─────────────────────────       ─────────────────────────
-53 variants                severity + kind + code            ariadne Report → stderr
+55 variants                severity + kind + code            ariadne Report → stderr
 extended_explanation()     message + span + labels           lookup_error_code()
 suggestion()               notes + help
 doc_url()
@@ -50,7 +50,7 @@ neve_diagnostic::lookup_error_code(code_str: &str) -> Option<ErrorCode>
 
 | File | Content |
 |------|---------|
-| `crates/neve-diagnostic/src/codes.rs` | ErrorCode enum (53 variants), lookup_error_code() |
+| `crates/neve-diagnostic/src/codes.rs` | ErrorCode enum (55 variants), lookup_error_code() |
 | `crates/neve-diagnostic/src/diagnostic.rs` | Diagnostic struct, Severity, DiagnosticKind, Label |
 | `crates/neve-diagnostic/src/lib.rs` | emit(), explain() |
 | `docs/reference/diagnostics.md` | Human-readable error code docs |

@@ -90,7 +90,7 @@ cat > "$TMPDIR/v3.neve" <<'EOF'
 add(x: Int, y: Int) = x + y
 use std.list
 double = |n| n * 2
-r = { name = "neve", version = "3.18" }
+r = { name = "neve", version = "4.0" }
 result = add(double(21), 0) & r
 p = ./config.neve
 EOF

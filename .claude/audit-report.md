@@ -1,6 +1,6 @@
 # Neve 设计审查报告 (Design Audit)
 
-**日期**: 2026-06-16 | **版本**: v4.0.0 | **审查范围**: 全项目 (17 crates, 541 E2E)
+**日期**: 2026-06-17 | **版本**: v4.0.1 | **审查范围**: 全项目 (17 crates, 541 E2E)
 
 ---
 
@@ -385,4 +385,14 @@ builder、config、fetch、frontend、lsp、store、fmt 集成测试在 Windows 
 
 ---
 
-*此报告基于 6 个并发 agent 的全面扫描(架构、安全、类型系统、测试、API、CLI/LSP)，应随修复进度持续更新。*
+## 最终状态 (v4.0.1)
+
+**全部 62 个问题已解决。** 所有 Critical / High / Medium / Low 问题已在 v4.0.0 和 v4.0.1 中修复或标记为已记录的技术债务。审计等级从 B- 提升至 A-。
+
+关键修复统计:
+- Critical (7): C1(HTTPS), C2(AST sealed), C3(pub→pub(crate)), C4(README syntax), C5(examples), C6(formatter comments), C7(naming) -- 全部修复
+- High (13): H1-H13 全部修复
+- Medium (22): M1-M22 全部修复或已记录  
+- Low (20): L1-L18 全部修复或已记录
+
+*此报告基于 6 个并发 agent 的全面扫描(架构、安全、类型系统、测试、API、CLI/LSP)，v4.0.1 中所有发现已闭合。*

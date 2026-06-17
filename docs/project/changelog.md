@@ -21,17 +21,27 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
-## [3.19.0] - 2026-06-16
+## [4.0.1] - 2026-06-17
 
 ### Changed
-- **Keyword simplification: 17 → 12**: `then` replaced by `->` arrow, `as` replaced by `=` in imports, `lazy` replaced by `~` prefix, `effect` made optional (auto-inferred), `pub` removed (all public by default). Legacy keywords still accepted for backward compatibility.
+- **Docs refresh**: All 17 documentation files synchronized to v4.0.1 — version numbers, syntax examples, status claims, and links updated throughout.
+- **Version bump**: Workspace version 4.0.0 → 4.0.1.
+
+### Fixed
+- **Clippy**: All clippy warnings resolved across workspace (identical branches, unused `is_pub`).
+- **Formatting**: `cargo fmt --all` applied across entire workspace.
+
+## [4.0.0] - 2026-06-16
+
+### Changed
+- **v4.0 syntax is canonical**: `let`/`fn`/`;` optional at top level, `use` not `import`, `if -> else` not `then/else`, `~` not `lazy`, `{ }` records, `&` line comments, `pub` removed (all public by default). 12 canonical keywords (+6 legacy aliases = 22 total accepted by lexer).
 - **Phase D complete**: AST compatibility path (`ast_eval.rs`, `AstClosure`, `AstEnv`) fully removed (~3500 lines). All evaluation goes through canonical HIR pipeline.
 - **Phase B gap closure: 12/12**: All 12 E2E gap tests now pass. Phase B complete.
 - **Generic identity inference**: Functions without explicit generics (`id = |x| x`) now get polymorphic types via `generalize` + `instantiate` fix.
 - **Dependency cleanup**: Removed 6 unused crate dependencies. Normalized workspace references for tar, flate2, xz2, tempfile, nix.
 
 ### Fixed
-- **Parser**: v3.0 bare enum pipe syntax (`type Foo = | Red | Green | Blue`) now supported.
+- **Parser**: Bare enum pipe syntax (`type Foo = | Red | Green | Blue`) now supported.
 - **Typeck**: Multi-call-site polymorphism via `instantiate` fix for `generalize`-generated `Forall` types.
 - **Typeck**: `types_match` now compares type arguments (fixes `List[Int]` == `List[String]` in impl lookup).
 - **Typeck**: Occurs check added to dynamic/safe record field constraints (infinite type prevention).
@@ -46,7 +56,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **API**: 12 types sealed (`pub` → `pub(crate)`/private); `CacheStats` renamed to `HirCacheStats`.
 - **reqwest**: TLS feature restored (was overwritten by crate-level `features = ["blocking"]`).
 - **NAR**: Path traversal test replaced with proper roundtrip test.
-- **Docs**: 20+ files synchronized to v4.0/v3.19.0 syntax and current state.
+- **Docs**: 20+ files synchronized to v4.0 syntax and current state.
 - **Eval**: Thunk forcing in binary/comparison operations.
 - **Eval**: Signal check points in long-running builtins — `map`, `fold`, `filter`, `flatMap`, `all`, `any`, generators, `streamCollect`, `streamForEach`.
 - **Typeck**: Effect auto-inference pre-pass — `in_effectful_fn` now set before body inference so nested lambdas inherit correct context.

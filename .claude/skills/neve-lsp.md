@@ -164,7 +164,7 @@ Extension in `editors/vscode/` — TextMate grammar + LSP client + publish scrip
 | File | What |
 |------|------|
 | `lsp/src/lib.rs` | Server initialization + connection loop |
-| `lsp/src/backend.rs` | All 23 LSP method handlers |
+| `lsp/src/backend.rs` | All 21 LSP method handlers |
 | `lsp/src/capabilities.rs` | Server capability registration |
 | `lsp/src/document.rs` | Document store — open/changed/saved |
 | `lsp/src/semantic_tokens.rs` | Semantic token encoding |
