@@ -7,9 +7,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-neve-derive.workspace = true
-neve-store.workspace = true
-neve-fetch.workspace = true
+neve-derive = { version = "4.0.1", path = "../neve-derive" }
+neve-store = { version = "4.0.1", path = "../neve-store" }
+neve-fetch = { version = "4.0.1", path = "../neve-fetch" }
 thiserror.workspace = true
 tempfile.workspace = true
 serde.workspace = true

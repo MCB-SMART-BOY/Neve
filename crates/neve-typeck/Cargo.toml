@@ -7,9 +7,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common.workspace = true
-neve-hir.workspace = true
-neve-diagnostic.workspace = true
+neve-common = { version = "4.0.1", path = "../neve-common" }
+neve-hir = { version = "4.0.1", path = "../neve-hir" }
+neve-diagnostic = { version = "4.0.1", path = "../neve-diagnostic" }
 
 [dev-dependencies]
-neve-parser.workspace = true
+neve-parser = { version = "4.0.1", path = "../neve-parser" }

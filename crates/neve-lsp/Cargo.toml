@@ -7,15 +7,15 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common.workspace = true
-neve-diagnostic.workspace = true
-neve-hir.workspace = true
-neve-lexer.workspace = true
-neve-syntax.workspace = true
-neve-frontend.workspace = true
-neve-fmt.workspace = true
-neve-parser.workspace = true
-neve-typeck.workspace = true
+neve-common = { version = "4.0.1", path = "../neve-common" }
+neve-diagnostic = { version = "4.0.1", path = "../neve-diagnostic" }
+neve-hir = { version = "4.0.1", path = "../neve-hir" }
+neve-lexer = { version = "4.0.1", path = "../neve-lexer" }
+neve-syntax = { version = "4.0.1", path = "../neve-syntax" }
+neve-frontend = { version = "4.0.1", path = "../neve-frontend" }
+neve-fmt = { version = "4.0.1", path = "../neve-fmt" }
+neve-parser = { version = "4.0.1", path = "../neve-parser" }
+neve-typeck = { version = "4.0.1", path = "../neve-typeck" }
 
 tower-lsp.workspace = true
 tokio.workspace = true

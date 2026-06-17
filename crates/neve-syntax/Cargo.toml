@@ -7,4 +7,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common.workspace = true
+neve-common = { version = "4.0.1", path = "../neve-common" }
