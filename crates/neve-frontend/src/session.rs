@@ -431,7 +431,7 @@ impl fmt::Display for SessionError {
                 )
             }
             SessionError::ModuleLoad(err) => write!(f, "module load error: {err}"),
-            SessionError::ImportResolution(err) => write!(f, "import resolution error: {err}"),
+            SessionError::ImportResolution(err) => write!(f, "use resolution error: {err}"),
             SessionError::Context(err) => write!(f, "{err}"),
         }
     }

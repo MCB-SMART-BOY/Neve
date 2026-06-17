@@ -86,7 +86,7 @@ fn test_frontend_session_resolves_imported_bindings_and_module_aliases() {
 
     let resolved = session
         .resolve_ast_imports(&ast, &[])
-        .expect("import resolution should succeed");
+        .expect("use resolution should succeed");
 
     assert!(
         resolved.bindings.iter().any(|(name, _)| name == "add"),

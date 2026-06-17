@@ -38,8 +38,7 @@ fn prepare_source(expr: &str) -> String {
         || trimmed.starts_with("enum ")
         || trimmed.starts_with("trait ")
         || trimmed.starts_with("impl ")
-        || trimmed.starts_with("import ")
-        || trimmed.starts_with("pub ");
+        || trimmed.starts_with("use ");
 
     if is_item {
         if trimmed.ends_with(';') {
