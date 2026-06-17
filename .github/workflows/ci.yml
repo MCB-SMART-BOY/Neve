@@ -34,7 +34,7 @@ jobs:
           cache-on-failure: true
 
       - name: Build
-        run: cargo build --verbose -p neve
+        run: cargo build --verbose -p n3v3
 
       - name: Run tests (Unix)
         if: matrix.os != 'windows-latest'
@@ -126,11 +126,11 @@ jobs:
 
       - name: Check build (native)
         if: ${{ !matrix.cross }}
-        run: cargo check --target ${{ matrix.target }} -p neve
+        run: cargo check --target ${{ matrix.target }} -p n3v3
 
       - name: Check build (cross)
         if: matrix.cross
-        run: cross check --target ${{ matrix.target }} -p neve
+        run: cross check --target ${{ matrix.target }} -p n3v3
 
   # Differential testing: Rust vs Lean spec
   # 差分测试：比对 Rust 求值器与 Lean 规范
@@ -164,7 +164,7 @@ jobs:
           restore-keys: lake-${{ runner.os }}-
 
       - name: Build Rust (neve CLI)
-        run: cargo build -p neve --release
+        run: cargo build -p n3v3 --release
 
       - name: Build Lean (lake)
         run: |
@@ -174,7 +174,7 @@ jobs:
       - name: Run differential tests
         run: |
           export PATH="$PWD/target/release:$PATH"
-          cargo run -p neve --release -- run scripts/diff-test.neve -- -n 100 -d 4
+          cargo run -p n3v3 --release -- run scripts/diff-test.neve -- -n 100 -d 4
 
   # 轻量级 Bug Hunt：每次 push/PR 运行安全边界攻击测试
   # Lightweight Bug Hunt: security boundary attacks on every push/PR
@@ -195,12 +195,12 @@ jobs:
           cache-on-failure: true
 
       - name: Build Rust (neve CLI, release)
-        run: cargo build -p neve --release
+        run: cargo build -p n3v3 --release
 
       - name: Run bug hunt (security boundary attacks)
         run: |
           export PATH="$PWD/target/release:$PATH"
-          cargo run -p neve --release -- run scripts/bug-hunt.neve
+          cargo run -p n3v3 --release -- run scripts/bug-hunt.neve
 
       - name: Report
         run: |
