@@ -22,50 +22,97 @@ const DOC_CHANGELOG: &str = include_str!("../../docs/project/changelog.md");
 
 const TOPICS: &[(&str, &str, &str)] = &[
     ("index", DOC_INDEX, "Documentation hub / 文档首页"),
-    ("quickstart", DOC_QUICKSTART, "5-minute quick start / 5 分钟快速上手"),
+    (
+        "quickstart",
+        DOC_QUICKSTART,
+        "5-minute quick start / 5 分钟快速上手",
+    ),
     ("tutorial", DOC_TUTORIAL, "Complete tutorial / 完整教程"),
     ("spec", DOC_SPEC, "Language spec / 语言规范"),
     ("api", DOC_API, "Standard library API / 标准库 API"),
-    ("diagnostics", DOC_DIAGNOSTICS, "Diagnostic codes / 诊断错误码"),
+    (
+        "diagnostics",
+        DOC_DIAGNOSTICS,
+        "Diagnostic codes / 诊断错误码",
+    ),
     ("philosophy", DOC_PHILOSOPHY, "Design philosophy / 设计哲学"),
     ("install", DOC_INSTALL, "Installation guide / 安装指南"),
     ("architecture", DOC_ARCHITECTURE, "Architecture / 内部架构"),
-    ("onboarding", DOC_ONBOARDING, "Contributor onboarding / 贡献者入门"),
-    ("contributing", DOC_CONTRIBUTING, "Contributor guide / 贡献指南"),
-    ("feature-matrix", DOC_FEATURE_MATRIX, "Feature support matrix / 功能支持矩阵"),
+    (
+        "onboarding",
+        DOC_ONBOARDING,
+        "Contributor onboarding / 贡献者入门",
+    ),
+    (
+        "contributing",
+        DOC_CONTRIBUTING,
+        "Contributor guide / 贡献指南",
+    ),
+    (
+        "feature-matrix",
+        DOC_FEATURE_MATRIX,
+        "Feature support matrix / 功能支持矩阵",
+    ),
     ("changelog", DOC_CHANGELOG, "Changelog / 更新日志"),
 ];
 
 fn resolve_topic(input: &str) -> Option<&'static str> {
     let topic = input.trim().to_lowercase().replace('_', "-");
     let aliases: &[(&str, &str)] = &[
-        ("qs", "quickstart"), ("docs", "index"), ("home", "index"),
-        ("quick", "quickstart"), ("start", "quickstart"), ("learn", "tutorial"),
-        ("ref", "spec"), ("reference", "spec"), ("stdlib", "api"),
-        ("errors", "diagnostics"), ("diag", "diagnostics"), ("design", "philosophy"),
-        ("guide", "tutorial"), ("arch", "architecture"), ("onboard", "onboarding"),
-        ("contrib", "contributing"), ("matrix", "feature-matrix"),
-        ("features", "feature-matrix"), ("status", "feature-matrix"),
-        ("change", "changelog"), ("changes", "changelog"),
-        ("install", "install"), ("contrib", "contributing"),
+        ("qs", "quickstart"),
+        ("docs", "index"),
+        ("home", "index"),
+        ("quick", "quickstart"),
+        ("start", "quickstart"),
+        ("learn", "tutorial"),
+        ("ref", "spec"),
+        ("reference", "spec"),
+        ("stdlib", "api"),
+        ("errors", "diagnostics"),
+        ("diag", "diagnostics"),
+        ("design", "philosophy"),
+        ("guide", "tutorial"),
+        ("arch", "architecture"),
+        ("onboard", "onboarding"),
+        ("contrib", "contributing"),
+        ("matrix", "feature-matrix"),
+        ("features", "feature-matrix"),
+        ("status", "feature-matrix"),
+        ("change", "changelog"),
+        ("changes", "changelog"),
+        ("install", "install"),
+        ("contrib", "contributing"),
     ];
-    for (alias, target) in aliases { if topic == *alias { return Some(target); } }
-    for (name, _, _) in TOPICS { if *name == topic { return Some(name); } }
+    for (alias, target) in aliases {
+        if topic == *alias {
+            return Some(target);
+        }
+    }
+    for (name, _, _) in TOPICS {
+        if *name == topic {
+            return Some(name);
+        }
+    }
     None
 }
 
 fn create_skin() -> MadSkin {
     let mut skin = MadSkin::default();
     skin.bold.set_fg(termimad::crossterm::style::Color::Cyan);
-    skin.italic.set_fg(termimad::crossterm::style::Color::Magenta);
-    skin.inline_code.set_fg(termimad::crossterm::style::Color::Green);
-    skin.code_block.set_fg(termimad::crossterm::style::Color::Green);
+    skin.italic
+        .set_fg(termimad::crossterm::style::Color::Magenta);
+    skin.inline_code
+        .set_fg(termimad::crossterm::style::Color::Green);
+    skin.code_block
+        .set_fg(termimad::crossterm::style::Color::Green);
     skin
 }
 
 pub fn list() -> Result<(), String> {
     let skin = create_skin();
-    let mut content = String::from("# NEVE DOCUMENTATION\n\n## Usage\n\n```\nneve doc <topic>\nneve doc --list\n```\n\n## Topics\n\n```\n");
+    let mut content = String::from(
+        "# NEVE DOCUMENTATION\n\n## Usage\n\n```\nneve doc <topic>\nneve doc --list\n```\n\n## Topics\n\n```\n",
+    );
     for (name, _, desc) in TOPICS {
         content.push_str(&format!("  {:14} - {}\n", name, desc));
     }
@@ -75,13 +122,18 @@ pub fn list() -> Result<(), String> {
 }
 
 pub fn view(topic: &str) -> Result<(), String> {
-    if matches!(topic, "list" | "help" | "topics") { return list(); }
+    if matches!(topic, "list" | "help" | "topics") {
+        return list();
+    }
     let resolved = resolve_topic(topic);
-    let (_, content, _) = TOPICS.iter()
+    let (_, content, _) = TOPICS
+        .iter()
         .find(|(n, _, _)| Some(*n) == resolved)
         .ok_or_else(|| {
             let mut msg = format!("Unknown topic: {}\n\nAvailable:\n", topic);
-            for (name, _, desc) in TOPICS { msg.push_str(&format!("  {:12} - {}\n", name, desc)); }
+            for (name, _, desc) in TOPICS {
+                msg.push_str(&format!("  {:12} - {}\n", name, desc));
+            }
             msg
         })?;
 
@@ -99,16 +151,29 @@ fn clean_markdown(content: &str) -> String {
     let mut in_code_block = false;
     for raw in content.lines() {
         let line = raw.trim_end();
-        if line.starts_with("```") { in_code_block = !in_code_block; }
+        if line.starts_with("```") {
+            in_code_block = !in_code_block;
+        }
         if !in_code_block {
             let cleaned = line
-                .replace("<div align=\"center\">", "").replace("</div>", "")
-                .replace("<br>", "").replace("<strong>", "**")
-                .replace("</strong>", "**").replace("<em>", "*")
+                .replace("<div align=\"center\">", "")
+                .replace("</div>", "")
+                .replace("<br>", "")
+                .replace("<strong>", "**")
+                .replace("</strong>", "**")
+                .replace("<em>", "*")
                 .replace("</em>", "*");
-            if cleaned.starts_with("<img") || cleaned.starts_with("<a name=") || cleaned.starts_with("<a href=") || cleaned.starts_with("<p>") { continue; }
+            if cleaned.starts_with("<img")
+                || cleaned.starts_with("<a name=")
+                || cleaned.starts_with("<a href=")
+                || cleaned.starts_with("<p>")
+            {
+                continue;
+            }
             out.push(cleaned.to_string());
-        } else { out.push(line.to_string()); }
+        } else {
+            out.push(line.to_string());
+        }
     }
     out.join("\n")
 }
@@ -116,9 +181,12 @@ fn clean_markdown(content: &str) -> String {
 fn try_pager(content: &str) -> Result<(), String> {
     for pager in &["less", "more"] {
         if let Ok(mut child) = std::process::Command::new(pager)
-            .stdin(std::process::Stdio::piped()).spawn()
+            .stdin(std::process::Stdio::piped())
+            .spawn()
         {
-            if let Some(mut stdin) = child.stdin.take() { let _ = stdin.write_all(content.as_bytes()); }
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(content.as_bytes());
+            }
             let _ = child.wait();
             return Ok(());
         }
