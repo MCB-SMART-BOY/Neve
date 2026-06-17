@@ -20,8 +20,9 @@ fn lex_with_errors(source: &str) -> (Vec<TokenKind>, usize) {
 
 #[test]
 fn test_keywords() {
+    // v4.0 canonical keywords: let fn if else match (then removed)
     assert_eq!(
-        lex("let fn if then else match"),
+        lex("let fn if else match"),
         vec![
             TokenKind::Let,
             TokenKind::Fn,
