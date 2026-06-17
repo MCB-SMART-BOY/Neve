@@ -7,6 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common = { version = "4.0.2", path = "../neve-common" }
-neve-diagnostic = { version = "4.0.2", path = "../neve-diagnostic" }
+neve-common = { version = "4.0.3", path = "../neve-common" }
+neve-diagnostic = { version = "4.0.3", path = "../neve-diagnostic" }
 logos.workspace = true

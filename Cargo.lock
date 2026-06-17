@@ -1360,7 +1360,7 @@ dependencies = [
 
 [[package]]
 name = "n3v3"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "clap",
  "libc",
@@ -1391,7 +1391,7 @@ dependencies = [
 
 [[package]]
 name = "neve-builder"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "libc",
  "neve-derive",
@@ -1406,7 +1406,7 @@ dependencies = [
 
 [[package]]
 name = "neve-common"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "libc",
  "num-bigint",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "neve-config"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-builder",
  "neve-derive",
@@ -1432,7 +1432,7 @@ dependencies = [
 
 [[package]]
 name = "neve-derive"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "blake3",
  "serde",
@@ -1442,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "neve-diagnostic"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "ariadne",
  "neve-common",
@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "neve-eval"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "libc",
  "neve-common",
@@ -1464,7 +1464,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fetch"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "flate2",
  "git2",
@@ -1478,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "neve-fmt"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-diagnostic",
  "neve-parser",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "neve-frontend"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1499,7 +1499,7 @@ dependencies = [
 
 [[package]]
 name = "neve-hir"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1509,7 +1509,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lexer"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "logos",
  "neve-common",
@@ -1518,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "neve-lsp"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "async-trait",
  "dashmap 6.2.1",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "neve-parser"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1549,7 +1549,7 @@ dependencies = [
 
 [[package]]
 name = "neve-std"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "glob",
  "libc",
@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "neve-store"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1582,14 +1582,14 @@ dependencies = [
 
 [[package]]
 name = "neve-syntax"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-common",
 ]
 
 [[package]]
 name = "neve-typeck"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-common",
  "neve-diagnostic",
@@ -1599,7 +1599,7 @@ dependencies = [
 
 [[package]]
 name = "neve-workspace"
-version = "4.0.2"
+version = "4.0.3"
 dependencies = [
  "neve-builder",
  "neve-common",

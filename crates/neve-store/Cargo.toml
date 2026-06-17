@@ -7,8 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-derive = { version = "4.0.2", path = "../neve-derive" }
-neve-fetch = { version = "4.0.2", path = "../neve-fetch" }
+neve-derive = { version = "4.0.3", path = "../neve-derive" }
+neve-fetch = { version = "4.0.3", path = "../neve-fetch" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

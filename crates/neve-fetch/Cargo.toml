@@ -7,7 +7,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-neve-derive = { version = "4.0.2", path = "../neve-derive" }
+neve-derive = { version = "4.0.3", path = "../neve-derive" }
 thiserror.workspace = true
 reqwest = { workspace = true }
 git2.workspace = true

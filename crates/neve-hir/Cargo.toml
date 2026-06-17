@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-neve-common = { version = "4.0.2", path = "../neve-common" }
-neve-syntax = { version = "4.0.2", path = "../neve-syntax" }
-neve-diagnostic = { version = "4.0.2", path = "../neve-diagnostic" }
-neve-parser = { version = "4.0.2", path = "../neve-parser" }
+neve-common = { version = "4.0.3", path = "../neve-common" }
+neve-syntax = { version = "4.0.3", path = "../neve-syntax" }
+neve-diagnostic = { version = "4.0.3", path = "../neve-diagnostic" }
+neve-parser = { version = "4.0.3", path = "../neve-parser" }
