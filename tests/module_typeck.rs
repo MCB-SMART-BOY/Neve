@@ -46,16 +46,18 @@ fn test_typeck_imported_function() {
 
     let mut global_types = std::collections::HashMap::new();
     let mut global_spans = std::collections::HashMap::new();
+    let mut global_fn_bounds = std::collections::HashMap::new();
     for module_id in loader.load_order() {
         let module = loader.hir_module(*module_id).unwrap();
-        let (types, spans) = TypeChecker::collect_signatures(module);
+        let (types, spans, bounds) = TypeChecker::collect_signatures(module);
         global_types.extend(types);
         global_spans.extend(spans);
+        global_fn_bounds.extend(bounds);
     }
 
     for module_id in loader.load_order() {
         let module = loader.hir_module(*module_id).unwrap();
-        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
+        let mut checker = TypeChecker::with_global_env(global_types.clone(), global_spans.clone(), global_fn_bounds.clone());
         checker.check(module);
         let diagnostics = checker.diagnostics();
         assert!(
@@ -93,11 +95,13 @@ fn test_module_typeck_formats_imported_named_types_readably() {
 
     let mut global_types = std::collections::HashMap::new();
     let mut global_spans = std::collections::HashMap::new();
+    let mut global_fn_bounds = std::collections::HashMap::new();
     for module_id in loader.load_order() {
         let module = loader.hir_module(*module_id).unwrap();
-        let (types, spans) = TypeChecker::collect_signatures(module);
+        let (types, spans, bounds) = TypeChecker::collect_signatures(module);
         global_types.extend(types);
         global_spans.extend(spans);
+        global_fn_bounds.extend(bounds);
     }
 
     let modules: Vec<_> = loader
@@ -109,7 +113,7 @@ fn test_module_typeck_formats_imported_named_types_readably() {
         .hir_module(*loader.load_order().last().unwrap())
         .unwrap();
 
-    let mut checker = TypeChecker::with_global_env(global_types, global_spans);
+    let mut checker = TypeChecker::with_global_env(global_types, global_spans, global_fn_bounds);
     checker.check(main_module);
     let diagnostics =
         rewrite_diagnostics_with_module_set(checker.diagnostics(), modules.iter().copied());

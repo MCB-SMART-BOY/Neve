@@ -715,7 +715,7 @@ impl FrontendSession {
     /// Return dependency-first loaded module entries with HIR and semantic results.
     /// 返回带 HIR 与语义结果的依赖优先已加载模块条目。
     pub fn loaded_modules_in_order(&self) -> Vec<SessionLoadedModule> {
-        let (global_types, global_spans) = self.collect_loaded_global_env();
+        let (global_types, global_spans, global_fn_bounds) = self.collect_loaded_global_env();
         let type_names = self.collect_type_names(None);
         let mut entries = Vec::new();
 
@@ -743,7 +743,7 @@ impl FrontendSession {
             };
 
             let mut checker =
-                TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
+                TypeChecker::with_global_env(global_types.clone(), global_spans.clone(), global_fn_bounds.clone());
             checker.check(module);
             let semantics = collect_module_semantics(&checker);
             let diagnostics =
@@ -1283,20 +1283,28 @@ impl FrontendSession {
         Ok(resolved)
     }
 
-    fn collect_loaded_global_env(&self) -> (HashMap<DefId, Ty>, HashMap<DefId, neve_common::Span>) {
+    fn collect_loaded_global_env(
+        &self,
+    ) -> (
+        HashMap<DefId, Ty>,
+        HashMap<DefId, neve_common::Span>,
+        HashMap<DefId, Vec<(u32, neve_typeck::TraitBound)>>,
+    ) {
         let mut global_types = HashMap::new();
         let mut global_spans = HashMap::new();
+        let mut global_fn_bounds = HashMap::new();
 
         for module_id in self.loader.load_order() {
             let Some(module) = self.loader.hir_module(*module_id) else {
                 continue;
             };
-            let (types, spans) = TypeChecker::collect_signatures(module);
+            let (types, spans, bounds) = TypeChecker::collect_signatures(module);
             global_types.extend(types);
             global_spans.extend(spans);
+            global_fn_bounds.extend(bounds);
         }
 
-        (global_types, global_spans)
+        (global_types, global_spans, global_fn_bounds)
     }
 
     fn collect_type_names(&self, current_module: Option<&Module>) -> HashMap<DefId, String> {

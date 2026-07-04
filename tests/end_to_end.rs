@@ -205,6 +205,44 @@ fn test_end_to_end_enum_match_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_trait_bound_enforced() {
+    // Verify that trait bounds on generic parameters are checked.
+    // This should produce a type error because Int does not implement Show.
+    let analysis = analyze_source(
+        "
+        trait Show { fn show(self) -> String; };
+        fn display<T: Show>(x: T) -> String = show(x);
+        let x = display(42);
+        ",
+    );
+    let has_trait_error = analysis
+        .diagnostics
+        .iter()
+        .any(|d| d.message.contains("does not implement trait"));
+    assert!(
+        has_trait_error,
+        "expected trait bound violation, got diagnostics: {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_end_to_end_generic_enum_pattern() {
+    // Verify that generic enums preserve type arguments in pattern matching.
+    assert_runtime_parity(
+        "
+        enum Result<A, E> { Ok(A), Err(E) };
+        let r = Ok(42);
+        let x = match r {
+            Ok(v) -> v,
+            Err(_) -> 0,
+        };
+        ",
+        Value::Int(int(42)),
+    );
+}
+
+#[test]
 fn test_end_to_end_recursive_fibonacci_runtime_parity() {
     assert_runtime_parity(
         "

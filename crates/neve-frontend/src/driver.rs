@@ -456,11 +456,13 @@ impl FrontendDriver {
 
         let mut global_types = HashMap::new();
         let mut global_spans = HashMap::new();
+        let mut global_fn_bounds = HashMap::new();
         for module_id in loader.load_order() {
             if let Some(module) = loader.hir_module(*module_id) {
-                let (types, spans) = TypeChecker::collect_signatures(module);
+                let (types, spans, bounds) = TypeChecker::collect_signatures(module);
                 global_types.extend(types);
                 global_spans.extend(spans);
+                global_fn_bounds.extend(bounds);
             }
         }
 
@@ -490,7 +492,7 @@ impl FrontendDriver {
             };
 
             let mut checker =
-                TypeChecker::with_global_env(global_types.clone(), global_spans.clone());
+                TypeChecker::with_global_env(global_types.clone(), global_spans.clone(), global_fn_bounds.clone());
             checker.check(module);
             let semantics = collect_module_semantics(&checker);
             let diagnostics =

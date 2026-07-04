@@ -16,15 +16,11 @@ use neve_common::Span;
 use neve_hir::{DefId, GenericParam, ImplDef, TraitDef, Ty, TyKind};
 use std::collections::HashMap;
 
-/// A trait ID for internal tracking.
-/// 用于内部跟踪的特征 ID。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TraitId(pub u32);
-
-/// An implementation ID.
-/// 实现 ID。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ImplId(pub u32);
+/// Trait and impl identifiers are now `DefId` from `neve_hir` directly.
+/// This ensures consistency across module boundaries since DefIds
+/// are assigned during HIR lowering and are shared.
+/// 特征和实现的标识符现在直接使用 neve_hir 的 DefId，
+/// 这确保了跨模块的一致性，因为 DefId 在 HIR 降层时分配且是共享的。
 
 /// Information about a registered trait.
 /// 已注册特征的信息。
@@ -85,7 +81,7 @@ pub struct AssocTypeResolution {
 #[derive(Debug, Clone)]
 pub struct TraitBound {
     /// The trait being bounded on. / 被约束的特征。
-    pub trait_id: TraitId,
+    pub trait_id: DefId,
     /// Type arguments to the trait. / 特征的类型参数。
     pub args: Vec<Ty>,
 }
@@ -112,7 +108,7 @@ pub struct ImplInfo {
 /// 带有类型参数的特征引用。
 #[derive(Debug, Clone)]
 pub struct TraitRef {
-    pub trait_id: TraitId,
+    pub trait_id: DefId,
     pub args: Vec<Ty>,
 }
 
@@ -132,19 +128,15 @@ pub struct ImplMethod {
 #[derive(Debug, Default)]
 pub struct TraitResolver {
     /// Registered traits. / 已注册的特征。
-    traits: HashMap<TraitId, TraitInfo>,
+    traits: HashMap<DefId, TraitInfo>,
     /// Trait name to ID mapping. / 特征名称到 ID 的映射。
-    trait_names: HashMap<String, TraitId>,
+    trait_names: HashMap<String, DefId>,
     /// Registered impls. / 已注册的实现。
-    impls: HashMap<ImplId, ImplInfo>,
+    impls: HashMap<DefId, ImplInfo>,
     /// Trait impls by trait ID. / 按特征 ID 索引的实现。
-    trait_impls: HashMap<TraitId, Vec<ImplId>>,
+    trait_impls: HashMap<DefId, Vec<DefId>>,
     /// Inherent impls by type (simplified: using type name string). / 按类型索引的固有实现。
-    inherent_impls: HashMap<String, Vec<ImplId>>,
-    /// Next trait ID. / 下一个特征 ID。
-    next_trait_id: u32,
-    /// Next impl ID. / 下一个实现 ID。
-    next_impl_id: u32,
+    inherent_impls: HashMap<String, Vec<DefId>>,
 }
 
 impl TraitResolver {
@@ -154,9 +146,8 @@ impl TraitResolver {
 
     /// Register a trait definition.
     /// 注册特征定义。
-    pub fn register_trait(&mut self, def_id: DefId, def: &TraitDef) -> TraitId {
-        let trait_id = TraitId(self.next_trait_id);
-        self.next_trait_id += 1;
+    /// Returns the DefId (same as input) for use in bounds lookup.
+    pub fn register_trait(&mut self, def_id: DefId, def: &TraitDef) -> DefId {
 
         let methods: Vec<TraitMethod> = def
             .items
@@ -192,18 +183,16 @@ impl TraitResolver {
             assoc_types,
         };
 
-        self.traits.insert(trait_id, info);
-        self.trait_names.insert(def.name.clone(), trait_id);
-        self.trait_impls.insert(trait_id, Vec::new());
+        self.traits.insert(def_id, info);
+        self.trait_names.insert(def.name.clone(), def_id);
+        self.trait_impls.insert(def_id, Vec::new());
 
-        trait_id
+        def_id
     }
 
     /// Register an impl block.
     /// 注册实现块。
-    pub fn register_impl(&mut self, def_id: DefId, def: &ImplDef) -> ImplId {
-        let impl_id = ImplId(self.next_impl_id);
-        self.next_impl_id += 1;
+    pub fn register_impl(&mut self, def_id: DefId, def: &ImplDef) -> DefId {
 
         let trait_ref = def
             .trait_ref
@@ -242,12 +231,12 @@ impl TraitResolver {
             assoc_types,
         };
 
-        self.impls.insert(impl_id, info);
+        self.impls.insert(def_id, info);
 
         // Register with the appropriate index
-        if let Some(trait_ref) = trait_ref {
+        if let Some(trait_ref) = &trait_ref {
             if let Some(impls) = self.trait_impls.get_mut(&trait_ref.trait_id) {
-                impls.push(impl_id);
+                impls.push(def_id);
             }
         } else {
             // Inherent impl
@@ -255,10 +244,10 @@ impl TraitResolver {
             self.inherent_impls
                 .entry(type_key)
                 .or_default()
-                .push(impl_id);
+                .push(def_id);
         }
 
-        impl_id
+        def_id
     }
 
     /// Resolve a type to a trait reference.
@@ -266,14 +255,12 @@ impl TraitResolver {
     fn resolve_trait_ref(&self, ty: &Ty) -> Option<TraitRef> {
         match &ty.kind {
             TyKind::Named(def_id, args) => {
-                // Try to find a trait with this def_id
-                for (trait_id, info) in &self.traits {
-                    if info.def_id == *def_id {
-                        return Some(TraitRef {
-                            trait_id: *trait_id,
-                            args: args.clone(),
-                        });
-                    }
+                // Direct lookup by DefId since trait IDs are now DefIds.
+                if self.traits.contains_key(def_id) {
+                    return Some(TraitRef {
+                        trait_id: *def_id,
+                        args: args.clone(),
+                    });
                 }
                 None
             }
@@ -317,25 +304,25 @@ impl TraitResolver {
 
     /// Look up a trait by name.
     /// 按名称查找特征。
-    pub fn lookup_trait(&self, name: &str) -> Option<TraitId> {
+    pub fn lookup_trait(&self, name: &str) -> Option<DefId> {
         self.trait_names.get(name).copied()
     }
 
     /// Get trait info by ID.
     /// 按 ID 获取特征信息。
-    pub fn get_trait(&self, id: TraitId) -> Option<&TraitInfo> {
+    pub fn get_trait(&self, id: DefId) -> Option<&TraitInfo> {
         self.traits.get(&id)
     }
 
     /// Get impl info by ID.
     /// 按 ID 获取实现信息。
-    pub fn get_impl(&self, id: ImplId) -> Option<&ImplInfo> {
+    pub fn get_impl(&self, id: DefId) -> Option<&ImplInfo> {
         self.impls.get(&id)
     }
 
     /// Find implementations of a trait for a specific type.
     /// 为特定类型查找特征的实现。
-    pub fn find_trait_impl(&self, trait_id: TraitId, self_ty: &Ty) -> Option<ImplId> {
+    pub fn find_trait_impl(&self, trait_id: DefId, self_ty: &Ty) -> Option<DefId> {
         let impls = self.trait_impls.get(&trait_id)?;
 
         for impl_id in impls {
@@ -351,7 +338,7 @@ impl TraitResolver {
 
     /// Find inherent impls for a type.
     /// 查找类型的固有实现。
-    pub fn find_inherent_impls(&self, self_ty: &Ty) -> Vec<ImplId> {
+    pub fn find_inherent_impls(&self, self_ty: &Ty) -> Vec<DefId> {
         let key = self.type_key(self_ty);
         self.inherent_impls.get(&key).cloned().unwrap_or_default()
     }
@@ -463,7 +450,7 @@ impl TraitResolver {
 
     /// Check that an impl provides all required trait methods.
     /// 检查实现是否提供了所有必需的特征方法。
-    pub fn check_impl_completeness(&self, impl_id: ImplId) -> Vec<String> {
+    pub fn check_impl_completeness(&self, impl_id: DefId) -> Vec<String> {
         let mut missing = Vec::new();
 
         if let Some(info) = self.impls.get(&impl_id)
@@ -486,13 +473,13 @@ impl TraitResolver {
 
     /// Get all traits.
     /// 获取所有特征。
-    pub fn all_traits(&self) -> impl Iterator<Item = (&TraitId, &TraitInfo)> {
+    pub fn all_traits(&self) -> impl Iterator<Item = (&DefId, &TraitInfo)> {
         self.traits.iter()
     }
 
     /// Get all impls for a trait.
     /// 获取特征的所有实现。
-    pub fn impls_for_trait(&self, trait_id: TraitId) -> Vec<&ImplInfo> {
+    pub fn impls_for_trait(&self, trait_id: DefId) -> Vec<&ImplInfo> {
         self.trait_impls
             .get(&trait_id)
             .map(|impl_ids| {
@@ -506,13 +493,13 @@ impl TraitResolver {
 
     /// Get all impl IDs for a trait.
     /// 获取特征的所有实现 ID。
-    pub fn impl_ids_for_trait(&self, trait_id: TraitId) -> Vec<ImplId> {
+    pub fn impl_ids_for_trait(&self, trait_id: DefId) -> Vec<DefId> {
         self.trait_impls.get(&trait_id).cloned().unwrap_or_default()
     }
 
     /// Get an impl info by ID.
     /// 按 ID 获取实现信息。
-    pub fn impl_info(&self, impl_id: ImplId) -> Option<&ImplInfo> {
+    pub fn impl_info(&self, impl_id: DefId) -> Option<&ImplInfo> {
         self.impls.get(&impl_id)
     }
 
@@ -520,7 +507,7 @@ impl TraitResolver {
     /// 用规范化后的类型替换实现块里已存储的关联类型解析结果。
     pub fn normalize_impl_assoc_types(
         &mut self,
-        impl_id: ImplId,
+        impl_id: DefId,
         assoc_types: &HashMap<String, Ty>,
     ) {
         if let Some(info) = self.impls.get_mut(&impl_id) {
@@ -547,7 +534,7 @@ impl TraitResolver {
     /// 用规范化后的签名替换实现块中单个方法的已存储签名。
     pub fn normalize_impl_method_signature(
         &mut self,
-        impl_id: ImplId,
+        impl_id: DefId,
         method_def_id: DefId,
         params: Vec<Ty>,
         return_ty: Ty,
@@ -570,7 +557,7 @@ impl TraitResolver {
     pub fn resolve_assoc_type(
         &self,
         self_ty: &Ty,
-        trait_id: TraitId,
+        trait_id: DefId,
         assoc_type_name: &str,
     ) -> Option<Ty> {
         // Find the impl for this type and trait
@@ -597,7 +584,7 @@ impl TraitResolver {
 
     /// Get all associated types defined by a trait.
     /// 获取特征定义的所有关联类型。
-    pub fn trait_assoc_types(&self, trait_id: TraitId) -> Vec<&AssocType> {
+    pub fn trait_assoc_types(&self, trait_id: DefId) -> Vec<&AssocType> {
         self.traits
             .get(&trait_id)
             .map(|info| info.assoc_types.iter().collect())
@@ -606,7 +593,7 @@ impl TraitResolver {
 
     /// Check that an impl provides all required associated types.
     /// 检查实现是否提供了所有必需的关联类型。
-    pub fn check_impl_assoc_types(&self, impl_id: ImplId) -> Vec<String> {
+    pub fn check_impl_assoc_types(&self, impl_id: DefId) -> Vec<String> {
         let mut missing = Vec::new();
 
         if let Some(info) = self.impls.get(&impl_id)
@@ -631,7 +618,7 @@ impl TraitResolver {
 
     /// Get the full completeness check for an impl (methods + associated types).
     /// 获取实现的完整性检查（方法 + 关联类型）。
-    pub fn check_impl_full_completeness(&self, impl_id: ImplId) -> ImplCompleteness {
+    pub fn check_impl_full_completeness(&self, impl_id: DefId) -> ImplCompleteness {
         ImplCompleteness {
             missing_methods: self.check_impl_completeness(impl_id),
             missing_assoc_types: self.check_impl_assoc_types(impl_id),
@@ -657,7 +644,7 @@ impl ImplCompleteness {
 /// 方法调用解析的结果。
 #[derive(Debug, Clone)]
 pub struct MethodResolution {
-    pub impl_id: ImplId,
+    pub impl_id: DefId,
     pub method_def_id: DefId,
     pub method_name: String,
     pub self_ty: Ty,

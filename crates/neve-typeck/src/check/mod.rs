@@ -17,7 +17,7 @@ use crate::errors::{
 use crate::infer::InferContext;
 use crate::pattern_analysis::{PatternAnalysisContext, analyze_match};
 use crate::traits::{
-    ImplId, ImplInfo, TraitBound, TraitConstraint, TraitId, TraitInfo, TraitResolver,
+    ImplInfo, TraitBound, TraitConstraint, TraitInfo, TraitResolver,
 };
 use crate::unify::{
     Substitution, free_type_vars, generalize, instantiate_with_map, occurs_check, unify,
@@ -157,9 +157,6 @@ pub struct TypeChecker {
     /// Track defined names to detect duplicates within a module.
     /// 跟踪已定义的名称以检测模块内的重复定义。
     defined_names: std::collections::HashSet<String>,
-    /// Map from def_id to trait_id.
-    /// 定义 ID 到特征 ID 的映射。
-    trait_ids: HashMap<DefId, TraitId>,
     /// Struct type definitions. / 结构体类型定义。
     structs: HashMap<DefId, StructInfo>,
     /// Enum type definitions. / 枚举类型定义。
@@ -203,7 +200,6 @@ impl TypeChecker {
             local_definitions: HashMap::new(),
             expr_types: HashMap::new(),
             trait_resolver: TraitResolver::new(),
-            trait_ids: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
             variants: HashMap::new(),
@@ -227,15 +223,17 @@ impl TypeChecker {
         self
     }
 
-    /// Create a type checker with preloaded global signatures.
-    /// 使用预加载的全局签名创建类型检查器。
+    /// Create a type checker with preloaded global signatures and trait bounds.
+    /// 使用预加载的全局签名和特征约束创建类型检查器。
     pub fn with_global_env(
         globals: HashMap<DefId, Ty>,
         global_spans: HashMap<DefId, Span>,
+        fn_bounds: HashMap<DefId, Vec<(u32, TraitBound)>>,
     ) -> Self {
         Self {
             globals,
             global_spans,
+            fn_bounds,
             ..Self::new()
         }
     }
@@ -249,14 +247,20 @@ impl TypeChecker {
         }
     }
 
-    /// Collect global signatures from a module without checking bodies.
-    /// 在不检查函数体的情况下收集模块的全局签名。
-    pub fn collect_signatures(module: &Module) -> (HashMap<DefId, Ty>, HashMap<DefId, Span>) {
+    /// Collect global signatures and trait bounds from a module without checking bodies.
+    /// 在不检查函数体的情况下收集模块的全局签名和特征约束。
+    pub fn collect_signatures(
+        module: &Module,
+    ) -> (
+        HashMap<DefId, Ty>,
+        HashMap<DefId, Span>,
+        HashMap<DefId, Vec<(u32, TraitBound)>>,
+    ) {
         let mut checker = TypeChecker::new();
         for item in &module.items {
             checker.collect_item(item);
         }
-        (checker.globals, checker.global_spans)
+        (checker.globals, checker.global_spans, checker.fn_bounds)
     }
 
     /// Type check a module.
@@ -450,7 +454,7 @@ impl TypeChecker {
 
     fn canonicalize_trait_impl_signatures(
         &mut self,
-        impl_id: ImplId,
+        impl_id: DefId,
         impl_info: &ImplInfo,
         assoc_types: &HashMap<String, Ty>,
     ) {
@@ -2076,8 +2080,7 @@ impl TypeChecker {
     }
 
     fn collect_trait(&mut self, def_id: DefId, trait_def: &TraitDef) {
-        let trait_id = self.trait_resolver.register_trait(def_id, trait_def);
-        self.trait_ids.insert(def_id, trait_id);
+        self.trait_resolver.register_trait(def_id, trait_def);
     }
 
     fn collect_impl(&mut self, def_id: DefId, impl_def: &ImplDef) {
@@ -2804,8 +2807,7 @@ impl TypeChecker {
 
         if let Some(trait_ref) = &impl_def.trait_ref
             && let TyKind::Named(def_id, _) = trait_ref.kind
-            && let Some(trait_id) = self.trait_ids.get(&def_id).copied()
-            && let Some(trait_info) = self.trait_resolver.get_trait(trait_id)
+            && let Some(trait_info) = self.trait_resolver.get_trait(def_id)
         {
             let defaults: Vec<(String, Ty)> = trait_info
                 .assoc_types
@@ -3586,8 +3588,19 @@ impl TypeChecker {
                 if let Some(variant) = self.variants.get(def_id) {
                     let enum_id = variant.enum_id;
                     let fields = variant.fields.clone();
+                    // Use the enum's own generic arguments so that generic
+                    // enums (e.g. `Result[A, E]`) unify correctly during
+                    // pattern matching.
+                    let generic_args = self
+                        .globals
+                        .get(&enum_id)
+                        .and_then(|ty| match &ty.kind {
+                            TyKind::Named(_, args) if !args.is_empty() => Some(args.clone()),
+                            _ => None,
+                        })
+                        .unwrap_or_default();
                     let enum_ty = Ty {
-                        kind: TyKind::Named(enum_id, Vec::new()),
+                        kind: TyKind::Named(enum_id, generic_args),
                         span: pattern.span,
                     };
                     self.unify(&enum_ty, expected, pattern.span);

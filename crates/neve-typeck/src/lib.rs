@@ -34,8 +34,8 @@ pub use builtin_types::{
 pub use check::TypeChecker;
 pub use errors::format_type;
 pub use traits::{
-    ConstraintSolver, ImplId, ImplInfo, ImplMethod, MethodResolution, TraitBound, TraitConstraint,
-    TraitId, TraitInfo, TraitMethod, TraitResolver, UnsatisfiedConstraint,
+    ConstraintSolver, ImplInfo, ImplMethod, MethodResolution, TraitBound, TraitConstraint,
+    TraitInfo, TraitMethod, TraitResolver, UnsatisfiedConstraint,
 };
 
 use neve_diagnostic::Diagnostic;
