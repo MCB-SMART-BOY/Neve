@@ -369,6 +369,10 @@ impl<R: Read> NarReader<R> {
         String::from_utf8(bytes).map_err(|e| NarError::InvalidFormat(e.to_string()))
     }
 
+    /// Maximum size for a single NAR data element (10 MB).
+    /// Prevents OOM on maliciously crafted archives with inflated length fields.
+    const MAX_NAR_ELEMENT_SIZE: u64 = 10 * 1024 * 1024;
+
     /// Read length-prefixed bytes with padding.
     /// 读取带填充的长度前缀字节。
     fn read_bytes(&mut self) -> Result<Vec<u8>, NarError> {
@@ -378,6 +382,13 @@ impl<R: Read> NarReader<R> {
         self.reader.read_exact(&mut len_buf)?;
         let len = u64::from_le_bytes(len_buf);
         self.bytes_read += 8;
+
+        // Guard against maliciously large length fields that would OOM
+        if len > Self::MAX_NAR_ELEMENT_SIZE {
+            return Err(NarError::InvalidFormat(format!(
+                "element size {len} exceeds maximum {}", Self::MAX_NAR_ELEMENT_SIZE
+            )));
+        }
 
         // Read data
         // 读取数据

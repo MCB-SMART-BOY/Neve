@@ -1283,6 +1283,7 @@ impl FrontendSession {
         Ok(resolved)
     }
 
+    #[allow(clippy::type_complexity)]
     fn collect_loaded_global_env(
         &self,
     ) -> (

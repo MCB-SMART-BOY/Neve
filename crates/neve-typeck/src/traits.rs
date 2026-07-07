@@ -21,7 +21,7 @@ use std::collections::HashMap;
 /// are assigned during HIR lowering and are shared.
 /// 特征和实现的标识符现在直接使用 neve_hir 的 DefId，
 /// 这确保了跨模块的一致性，因为 DefId 在 HIR 降层时分配且是共享的。
-
+///
 /// Information about a registered trait.
 /// 已注册特征的信息。
 #[derive(Debug, Clone)]

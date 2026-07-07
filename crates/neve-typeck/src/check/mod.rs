@@ -249,6 +249,7 @@ impl TypeChecker {
 
     /// Collect global signatures and trait bounds from a module without checking bodies.
     /// 在不检查函数体的情况下收集模块的全局签名和特征约束。
+    #[allow(clippy::type_complexity)]
     pub fn collect_signatures(
         module: &Module,
     ) -> (
