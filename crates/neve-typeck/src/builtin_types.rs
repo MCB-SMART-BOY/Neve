@@ -2,23 +2,18 @@
 //! 共享的内置类型 ID 与构造辅助函数。
 
 use neve_common::Span;
+pub use neve_hir::{
+    BUILTIN_BYTES_TYPE_ID as BYTES_TYPE_ID, BUILTIN_COMMAND_TYPE_ID as COMMAND_TYPE_ID,
+    BUILTIN_EVENT_TYPE_ID as EVENT_TYPE_ID, BUILTIN_LIST_TYPE_ID as LIST_TYPE_ID,
+    BUILTIN_LIVE_TYPE_ID as LIVE_TYPE_ID, BUILTIN_MAP_TYPE_ID as MAP_TYPE_ID,
+    BUILTIN_OPTION_TYPE_ID as OPTION_TYPE_ID, BUILTIN_PATH_TYPE_ID as PATH_TYPE_ID,
+    BUILTIN_PIPELINE_TYPE_ID as PIPELINE_TYPE_ID,
+    BUILTIN_PROCESS_RESULT_TYPE_ID as PROCESS_RESULT_TYPE_ID,
+    BUILTIN_REDIRECT_TYPE_ID as REDIRECT_TYPE_ID, BUILTIN_RESULT_TYPE_ID as RESULT_TYPE_ID,
+    BUILTIN_SET_TYPE_ID as SET_TYPE_ID, BUILTIN_STREAM_TYPE_ID as STREAM_TYPE_ID,
+    BUILTIN_TASK_TYPE_ID as TASK_TYPE_ID,
+};
 use neve_hir::{DefId, Ty, TyKind};
-
-pub const LIST_TYPE_ID: DefId = DefId(u32::MAX);
-pub const OPTION_TYPE_ID: DefId = DefId(u32::MAX - 1);
-pub const RESULT_TYPE_ID: DefId = DefId(u32::MAX - 2);
-pub const MAP_TYPE_ID: DefId = DefId(u32::MAX - 3);
-pub const SET_TYPE_ID: DefId = DefId(u32::MAX - 4);
-pub const PATH_TYPE_ID: DefId = DefId(u32::MAX - 5);
-pub const BYTES_TYPE_ID: DefId = DefId(u32::MAX - 6);
-pub const COMMAND_TYPE_ID: DefId = DefId(u32::MAX - 7);
-pub const PROCESS_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 8);
-pub const PIPELINE_TYPE_ID: DefId = DefId(u32::MAX - 9);
-pub const REDIRECT_TYPE_ID: DefId = DefId(u32::MAX - 10);
-pub const TASK_TYPE_ID: DefId = DefId(u32::MAX - 11);
-pub const EVENT_TYPE_ID: DefId = DefId(u32::MAX - 12);
-pub const LIVE_TYPE_ID: DefId = DefId(u32::MAX - 13);
-pub const STREAM_TYPE_ID: DefId = DefId(u32::MAX - 14);
 
 pub fn builtin_list(elem: Ty, span: Span) -> Ty {
     Ty {

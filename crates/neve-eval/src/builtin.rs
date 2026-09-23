@@ -878,7 +878,8 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                         Value::Closure { .. } => "Function",
                         Value::Builtin(_) => "Function",
                         Value::BuiltinFn(_, _) => "Function",
-                        Value::VariantCtor { .. } => "Function",
+                        Value::VariantCtor { .. } | Value::VariantCtorWithId { .. } => "Function",
+                        Value::VariantWithId { name, .. } => name.as_str(),
                         Value::Variant(tag, _) => tag.as_str(),
                         Value::Some(_) => "Some",
                         Value::None => "None",
@@ -915,10 +916,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                     if args[0] == args[1] {
                         Ok(Value::Unit)
                     } else {
-                        Err(format!(
-                            "assertion failed: {:?} != {:?}",
-                            &args[0], &args[1]
-                        ))
+                        Err(format!("assertion failed: {:?} != {:?}", args[0], args[1]))
                     }
                 },
             }),
@@ -1923,6 +1921,14 @@ pub(crate) fn format_value(v: &Value) -> String {
         Value::Builtin(f) => format!("<builtin:{}>", f.name),
         Value::BuiltinFn(name, _) => format!("<builtin:{name}>"),
         Value::VariantCtor { name, arity } => format!("<variant:{}:{}>", name, arity),
+        Value::VariantCtorWithId { name, arity, .. } => format!("<variant:{}:{}>", name, arity),
+        Value::VariantWithId { name, payload, .. } => {
+            if matches!(**payload, Value::Unit) {
+                name.clone()
+            } else {
+                format!("{}({})", name, format_value(payload))
+            }
+        }
         Value::Variant(tag, payload) => {
             if matches!(**payload, Value::Unit) {
                 tag.clone()

@@ -190,6 +190,28 @@ fn test_document_builds_semantic_hover_for_generic_function() {
 }
 
 #[test]
+fn test_document_hover_maps_function_after_top_level_destructuring() {
+    let doc = Document::new(
+        "file:///test.neve".to_string(),
+        "let (text, count) = (\"text\", 2); fn foo(x: Int) -> Int = x;".to_string(),
+    );
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("foo")
+        .and_then(|defs| defs.first())
+        .expect("function definition should be indexed");
+    let hover = doc
+        .definition_hovers
+        .get(&symbol.def_span)
+        .expect("semantic hover should exist");
+
+    assert_eq!(hover, "fn foo: (Int) -> Int");
+}
+
+#[test]
 fn test_document_hover_uses_local_type_names() {
     let doc = Document::new(
         "file:///test.neve".to_string(),

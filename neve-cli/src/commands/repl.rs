@@ -831,6 +831,9 @@ fn format_repl_value(value: &Value) -> String {
         Value::Some(v) => format!("Some({})", format_repl_value(v)),
         Value::Ok(v) => format!("Ok({})", format_repl_value(v)),
         Value::Err(e) => format!("Err({})", format_repl_value(e)),
+        Value::VariantWithId { name, payload, .. } => {
+            format!("{}({})", name, format_repl_value(payload))
+        }
         Value::Variant(name, payload) => format!("{}({})", name, format_repl_value(payload)),
         Value::List(items) => {
             let items_str: Vec<String> = items.iter().map(format_repl_value).collect();
@@ -886,6 +889,7 @@ fn format_repl_value(value: &Value) -> String {
         Value::BuiltinFn(n, _) => format!("<builtin {}>", n),
         Value::Closure { .. } => "<function>".to_string(),
         Value::VariantCtor { name, .. } => format!("<constructor {}>", name),
+        Value::VariantCtorWithId { name, .. } => format!("<constructor {}>", name),
     }
 }
 #[cfg(test)]
@@ -1039,7 +1043,16 @@ mod tests {
             Value::Builtin(builtin) => fn_repl_ty(builtin.arity),
             Value::BuiltinFn(_, _) => named_repl_ty(REPL_FN_TYPE_ID, Vec::new()),
             Value::Closure { params, .. } => fn_repl_ty(params.len()),
-            Value::VariantCtor { arity, .. } => fn_repl_ty(*arity),
+            Value::VariantCtor { arity, .. } | Value::VariantCtorWithId { arity, .. } => {
+                fn_repl_ty(*arity)
+            }
+            Value::VariantWithId { name, payload, .. } => match name.as_str() {
+                "Some" => builtin_option(type_from_value(payload), Span::DUMMY),
+                "None" => builtin_option(unknown_ty(), Span::DUMMY),
+                "Ok" => builtin_result(type_from_value(payload), unknown_ty(), Span::DUMMY),
+                "Err" => builtin_result(unknown_ty(), type_from_value(payload), Span::DUMMY),
+                _ => unknown_ty(),
+            },
             Value::Variant(name, payload) => match name.as_str() {
                 "Some" => builtin_option(type_from_value(payload), Span::DUMMY),
                 "None" => builtin_option(unknown_ty(), Span::DUMMY),

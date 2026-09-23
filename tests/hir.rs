@@ -136,7 +136,7 @@ fn test_lower_lambda() {
 
     match &hir.items[0].kind {
         ItemKind::Fn(fn_def) => match &fn_def.body.kind {
-            ExprKind::Lambda(params, _) => {
+            ExprKind::Lambda { params, .. } => {
                 assert_eq!(params.len(), 1);
             }
             other => panic!("expected Lambda, got {:?}", other),
@@ -156,9 +156,30 @@ fn test_lower_lambda_preserves_explicit_param_types() {
 
     match &hir.items[0].kind {
         ItemKind::Fn(fn_def) => match &fn_def.body.kind {
-            ExprKind::Lambda(params, _) => {
+            ExprKind::Lambda { params, .. } => {
                 assert_eq!(params.len(), 1);
                 assert!(matches!(params[0].ty.kind, TyKind::Int));
+            }
+            other => panic!("expected Lambda, got {:?}", other),
+        },
+        _ => panic!("expected function"),
+    }
+}
+
+#[test]
+fn test_lower_lambda_preserves_explicit_return_type() {
+    let source = "let f = |x: Int| -> Int { x + 1 };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {:?}", diagnostics);
+
+    let hir = lower(&ast);
+    match &hir.items[0].kind {
+        ItemKind::Fn(fn_def) => match &fn_def.body.kind {
+            ExprKind::Lambda { return_ty, .. } => {
+                assert!(matches!(
+                    return_ty.as_ref().map(|ty| &ty.kind),
+                    Some(TyKind::Int)
+                ));
             }
             other => panic!("expected Lambda, got {:?}", other),
         },
@@ -345,7 +366,10 @@ fn test_lower_self_and_assoc_type_use_sites() {
     match &hir.items[0].kind {
         ItemKind::Trait(trait_def) => {
             assert_eq!(trait_def.items.len(), 1);
-            assert!(matches!(trait_def.items[0].params[0].kind, TyKind::Unknown));
+            assert!(matches!(
+                trait_def.items[0].params[0].ty.kind,
+                TyKind::Unknown
+            ));
             assert!(matches!(
                 trait_def.items[0].return_ty.kind,
                 TyKind::SelfAssoc(ref name) if name == "Item"

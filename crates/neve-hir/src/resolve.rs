@@ -6,7 +6,7 @@ use crate::{
     GenericParam, ImplDef, ImplItem, Import, ImportKind, ImportPathPrefix, Item, ItemKind, Literal,
     LocalId, MatchArm, Module, ModuleId, ModuleLoader, Param, Pattern, PatternKind, Stmt, StmtKind,
     StringPart, StructDef, TraitDef, TraitItem, Ty, TyKind, TypeAlias, UnaryOp, VariantDef,
-    builtin_constructor_id,
+    builtin_constructor_id, builtin_type_id,
 };
 use neve_common::Span;
 use neve_syntax::{self as ast, SourceFile};
@@ -38,7 +38,7 @@ impl StdBuiltinImportBindings {
 /// 返回规范的 std builtin 根模块集合。
 pub fn std_builtin_root_modules() -> &'static [&'static str] {
     const ROOT_MODULES: &[&str] = &[
-        "fetch", "io", "list", "Map", "math", "option", "path", "result", "Set", "string",
+        "bytes", "fetch", "io", "list", "Map", "math", "option", "path", "result", "Set", "string",
     ];
     ROOT_MODULES
 }
@@ -46,6 +46,15 @@ pub fn std_builtin_root_modules() -> &'static [&'static str] {
 /// Return the exported builtin names for a std module prefix.
 /// 返回给定 std 模块前缀导出的 builtin 名称。
 pub fn std_builtin_exports(module_prefix: &str) -> Option<&'static [&'static str]> {
+    const BYTES: &[&str] = &[
+        "len",
+        "isEmpty",
+        "concat",
+        "fromString",
+        "toString",
+        "toList",
+        "fromList",
+    ];
     const FETCH: &[&str] = &[
         "git",
         "gitWithHash",
@@ -179,6 +188,7 @@ pub fn std_builtin_exports(module_prefix: &str) -> Option<&'static [&'static str
     ];
 
     match module_prefix {
+        "bytes" => Some(BYTES),
         "fetch" => Some(FETCH),
         "io" => Some(IO),
         "list" => Some(LIST),
@@ -267,13 +277,14 @@ pub fn resolve_std_builtin_import(import: &ast::ImportDef) -> Option<StdBuiltinI
 }
 
 fn ast_std_builtin_module_prefix(import: &ast::ImportDef) -> Option<&str> {
-    if import.path.len() == 2
-        && import.path.first().map(|segment| segment.name.as_str()) == Some("std")
+    if import.path.len() != 2
+        || import.path.first().map(|segment| segment.name.as_str()) != Some("std")
     {
-        Some(import.path[1].name.as_str())
-    } else {
-        None
+        return None;
     }
+
+    let prefix = import.path[1].name.as_str();
+    std_builtin_exports(prefix).is_some().then_some(prefix)
 }
 
 fn ast_is_std_root_builtin_import(import: &ast::ImportDef) -> bool {
@@ -516,13 +527,19 @@ impl Resolver {
             self.collect_item(item);
         }
 
-        // Third pass: lower all items
-        // 第三遍：降级所有项
-        let mut items: Vec<_> = file
-            .items
-            .iter()
-            .filter_map(|item| self.lower_item(item))
-            .collect();
+        // Third pass: lower all items. Destructuring top-level lets expand
+        // into one evaluated source binding plus one projection per name.
+        // 第三遍：降级所有项。顶层解构 let 展开为一次求值的源绑定和每个名称的投影。
+        let mut items = Vec::new();
+        for item in &file.items {
+            if let ast::ItemKind::Let(def) = &item.kind
+                && !Self::is_simple_top_level_let(&def.pattern)
+            {
+                items.extend(self.lower_top_level_let(item, def));
+            } else if let Some(lowered) = self.lower_item(item) {
+                items.push(lowered);
+            }
+        }
         if let Some(expr) = &file.tail_expr {
             items.push(self.lower_tail_expr(expr));
         }
@@ -590,7 +607,6 @@ impl Resolver {
             }
         }
     }
-
     /// Collect exported items based on visibility.
     /// 根据可见性收集导出的项。
     fn collect_exports(&self, file: &SourceFile) -> Option<Vec<String>> {
@@ -599,9 +615,7 @@ impl Resolver {
         for item in &file.items {
             match &item.kind {
                 ast::ItemKind::Let(def) if def.visibility == ast::Visibility::Public => {
-                    if let Some(name) = self.pattern_name(&def.pattern) {
-                        exports.push(name);
-                    }
+                    exports.extend(Self::pattern_names(&def.pattern));
                 }
                 ast::ItemKind::Fn(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
@@ -611,8 +625,6 @@ impl Resolver {
                 }
                 ast::ItemKind::Enum(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
-                    // Also export variants
-                    // 同时导出变体
                     for variant in &def.variants {
                         exports.push(variant.name.name.clone());
                     }
@@ -823,7 +835,7 @@ impl Resolver {
     fn collect_item(&mut self, item: &ast::Item) {
         match &item.kind {
             ast::ItemKind::Let(def) => {
-                if let Some(name) = self.pattern_name(&def.pattern) {
+                for name in Self::pattern_names(&def.pattern) {
                     let id = self
                         .globals
                         .get(&name)
@@ -907,21 +919,81 @@ impl Resolver {
         }
     }
 
-    /// Extract the name from a pattern (if it's a simple variable pattern).
-    /// 从模式中提取名称（如果是简单的变量模式）。
+    /// Extract the name from a simple top-level pattern.
+    /// 从简单的顶层模式中提取名称。
     fn pattern_name(&self, pattern: &ast::Pattern) -> Option<String> {
         match &pattern.kind {
-            ast::PatternKind::Var(ident) => Some(ident.name.clone()),
+            ast::PatternKind::Var(ident) if ident.name != "_" => Some(ident.name.clone()),
             _ => None,
         }
     }
 
-    fn std_builtin_module_prefix(path: &[String]) -> Option<String> {
-        if path.len() == 2 && path.first().map(|segment| segment.as_str()) == Some("std") {
-            Some(path[1].clone())
-        } else {
-            None
+    fn is_simple_top_level_let(pattern: &ast::Pattern) -> bool {
+        matches!(&pattern.kind, ast::PatternKind::Var(ident) if ident.name != "_")
+    }
+
+    fn pattern_names(pattern: &ast::Pattern) -> Vec<String> {
+        fn visit(pattern: &ast::Pattern, names: &mut Vec<String>, seen: &mut HashSet<String>) {
+            match &pattern.kind {
+                ast::PatternKind::Var(ident) => {
+                    if ident.name != "_" && seen.insert(ident.name.clone()) {
+                        names.push(ident.name.clone());
+                    }
+                }
+                ast::PatternKind::Binding { name, pattern } => {
+                    if name.name != "_" && seen.insert(name.name.clone()) {
+                        names.push(name.name.clone());
+                    }
+                    visit(pattern, names, seen);
+                }
+                ast::PatternKind::Tuple(patterns)
+                | ast::PatternKind::List(patterns)
+                | ast::PatternKind::Or(patterns) => {
+                    for pattern in patterns {
+                        visit(pattern, names, seen);
+                    }
+                }
+                ast::PatternKind::ListRest { init, rest, tail } => {
+                    for pattern in init {
+                        visit(pattern, names, seen);
+                    }
+                    if let Some(pattern) = rest {
+                        visit(pattern, names, seen);
+                    }
+                    for pattern in tail {
+                        visit(pattern, names, seen);
+                    }
+                }
+                ast::PatternKind::Record { fields, .. } => {
+                    for field in fields {
+                        if let Some(pattern) = &field.pattern {
+                            visit(pattern, names, seen);
+                        } else if field.name.name != "_" && seen.insert(field.name.name.clone()) {
+                            names.push(field.name.name.clone());
+                        }
+                    }
+                }
+                ast::PatternKind::Constructor { args, .. } => {
+                    for pattern in args {
+                        visit(pattern, names, seen);
+                    }
+                }
+                ast::PatternKind::Wildcard | ast::PatternKind::Literal(_) => {}
+            }
         }
+
+        let mut names = Vec::new();
+        visit(pattern, &mut names, &mut HashSet::new());
+        names
+    }
+
+    fn std_builtin_module_prefix(path: &[String]) -> Option<String> {
+        if path.len() != 2 || path.first().map(|segment| segment.as_str()) != Some("std") {
+            return None;
+        }
+
+        let prefix = path[1].clone();
+        std_builtin_exports(&prefix).is_some().then_some(prefix)
     }
 
     fn try_register_std_import(&mut self, import: &Import) -> bool {
@@ -1054,19 +1126,195 @@ impl Resolver {
     // === Second pass: lower items ===
     // === 第二遍：降级项 ===
 
+    fn lower_top_level_let(&mut self, item: &ast::Item, def: &ast::LetDef) -> Vec<Item> {
+        let source_id = self.fresh_def_id();
+        let source_body = self.lower_top_level_let_value(&def.value);
+        let source_ty = def
+            .ty
+            .as_ref()
+            .map(|ty| self.lower_type(ty))
+            .unwrap_or_else(|| Self::unknown_ty(item.span));
+        let mut items = vec![Item {
+            id: source_id,
+            kind: ItemKind::Fn(FnDef {
+                name: format!("__neve_pattern_value_{}", source_id.0),
+                generics: Vec::new(),
+                params: Vec::new(),
+                return_ty: source_ty,
+                effectful: false,
+                body: source_body,
+            }),
+            span: item.span,
+        }];
+
+        let names = Self::pattern_names(&def.pattern);
+        if names.is_empty() {
+            return items;
+        }
+
+        self.push_scope();
+        let pattern = self.lower_pattern(&def.pattern);
+        let mut bindings = HashMap::new();
+        Self::collect_pattern_bindings(&pattern, &mut bindings);
+        self.pop_scope();
+
+        for name in names {
+            let Some(id) = self.lookup_global(&name) else {
+                continue;
+            };
+            let Some(local_id) = bindings.get(&name).copied() else {
+                continue;
+            };
+            let projected_pattern = Self::project_pattern(&pattern, local_id);
+            items.push(self.lower_top_level_projection(
+                item.span,
+                id,
+                name,
+                source_id,
+                projected_pattern,
+                local_id,
+            ));
+        }
+        items
+    }
+
+    fn lower_top_level_let_value(&mut self, value: &ast::Expr) -> Expr {
+        self.push_scope();
+        let lowered = self.lower_expr(value);
+        self.pop_scope();
+        lowered
+    }
+    fn project_pattern(pattern: &Pattern, target: LocalId) -> Pattern {
+        let kind = match &pattern.kind {
+            PatternKind::Wildcard | PatternKind::Literal(_) => pattern.kind.clone(),
+            PatternKind::Var(id, name) => {
+                if *id == target {
+                    PatternKind::Var(*id, name.clone())
+                } else {
+                    PatternKind::Wildcard
+                }
+            }
+            PatternKind::Binding(id, name, inner) => {
+                let inner = Self::project_pattern(inner, target);
+                if *id == target {
+                    PatternKind::Binding(*id, name.clone(), Box::new(inner))
+                } else {
+                    inner.kind
+                }
+            }
+            PatternKind::Tuple(patterns) => PatternKind::Tuple(
+                patterns
+                    .iter()
+                    .map(|pattern| Self::project_pattern(pattern, target))
+                    .collect(),
+            ),
+            PatternKind::List(patterns) => PatternKind::List(
+                patterns
+                    .iter()
+                    .map(|pattern| Self::project_pattern(pattern, target))
+                    .collect(),
+            ),
+            PatternKind::ListRest { init, rest, tail } => PatternKind::ListRest {
+                init: init
+                    .iter()
+                    .map(|pattern| Self::project_pattern(pattern, target))
+                    .collect(),
+                rest: rest
+                    .as_ref()
+                    .map(|pattern| Box::new(Self::project_pattern(pattern, target))),
+                tail: tail
+                    .iter()
+                    .map(|pattern| Self::project_pattern(pattern, target))
+                    .collect(),
+            },
+            PatternKind::Record { fields, rest } => PatternKind::Record {
+                fields: fields
+                    .iter()
+                    .map(|(name, pattern)| (name.clone(), Self::project_pattern(pattern, target)))
+                    .collect(),
+                rest: *rest,
+            },
+            PatternKind::Constructor(id, patterns) => PatternKind::Constructor(
+                *id,
+                patterns
+                    .iter()
+                    .map(|pattern| Self::project_pattern(pattern, target))
+                    .collect(),
+            ),
+            PatternKind::Or(patterns) => PatternKind::Or(
+                patterns
+                    .iter()
+                    .map(|pattern| Self::project_pattern(pattern, target))
+                    .collect(),
+            ),
+        };
+        Pattern {
+            kind,
+            span: pattern.span,
+        }
+    }
+
+    fn lower_top_level_projection(
+        &self,
+        span: Span,
+        id: DefId,
+        name: String,
+        source_id: DefId,
+        pattern: Pattern,
+        local_id: LocalId,
+    ) -> Item {
+        let source = Expr {
+            kind: ExprKind::Global(source_id),
+            ty: Self::unknown_ty(span),
+            span,
+        };
+        let binding = Expr {
+            kind: ExprKind::Var(local_id),
+            ty: Self::unknown_ty(span),
+            span,
+        };
+        let body = Expr {
+            kind: ExprKind::Let {
+                pattern,
+                ty: None,
+                value: Box::new(source),
+                body: Box::new(binding),
+            },
+            ty: Self::unknown_ty(span),
+            span,
+        };
+        Item {
+            id,
+            kind: ItemKind::Fn(FnDef {
+                name,
+                generics: Vec::new(),
+                params: Vec::new(),
+                return_ty: Self::unknown_ty(span),
+                effectful: false,
+                body,
+            }),
+            span,
+        }
+    }
+
     /// Lower an AST item to HIR.
     /// 将 AST 项降级为 HIR。
     fn lower_item(&mut self, item: &ast::Item) -> Option<Item> {
         match &item.kind {
             ast::ItemKind::Let(def) => {
-                // Top-level let becomes a function with no parameters
-                // 顶层 let 变成没有参数的函数
+                // Top-level let becomes a function with no parameters.
+                // 顶层 let 变成没有参数的函数。
                 let name = self.pattern_name(&def.pattern)?;
                 let id = self.lookup_global(&name)?;
 
                 self.push_scope();
                 let body = self.lower_expr(&def.value);
                 self.pop_scope();
+                let return_ty = def
+                    .ty
+                    .as_ref()
+                    .map(|ty| self.lower_type(ty))
+                    .unwrap_or_else(|| Self::unknown_ty(item.span));
 
                 Some(Item {
                     id,
@@ -1074,7 +1322,7 @@ impl Resolver {
                         name,
                         generics: Vec::new(),
                         params: Vec::new(),
-                        return_ty: Self::unknown_ty(item.span),
+                        return_ty,
                         effectful: false, // auto-inferred by typeck from body
                         body,
                     }),
@@ -1121,11 +1369,7 @@ impl Resolver {
                 let fields = def
                     .fields
                     .iter()
-                    .map(|f| FieldDef {
-                        name: f.name.name.clone(),
-                        ty: self.lower_type(&f.ty),
-                        span: f.span,
-                    })
+                    .map(|field| self.lower_field(field))
                     .collect();
                 self.pop_generic_scope();
 
@@ -1149,19 +1393,26 @@ impl Resolver {
                     .map(|v| {
                         let variant_id =
                             self.lookup_global(&v.name.name).unwrap_or(DefId(u32::MAX));
-                        let fields = match &v.kind {
-                            ast::VariantKind::Unit => Vec::new(),
+                        let (fields, record_fields) = match &v.kind {
+                            ast::VariantKind::Unit => (Vec::new(), None),
                             ast::VariantKind::Tuple(types) => {
-                                types.iter().map(|t| self.lower_type(t)).collect()
+                                (types.iter().map(|t| self.lower_type(t)).collect(), None)
                             }
                             ast::VariantKind::Record(field_defs) => {
-                                field_defs.iter().map(|f| self.lower_type(&f.ty)).collect()
+                                let record_fields: Vec<FieldDef> = field_defs
+                                    .iter()
+                                    .map(|field| self.lower_field(field))
+                                    .collect();
+                                let fields =
+                                    record_fields.iter().map(|field| field.ty.clone()).collect();
+                                (fields, Some(record_fields))
                             }
                         };
                         VariantDef {
                             id: variant_id,
                             name: v.name.name.clone(),
                             fields,
+                            record_fields,
                             span: v.span,
                         }
                     })
@@ -1292,10 +1543,40 @@ impl Resolver {
             .collect()
     }
 
+    fn lower_field(&mut self, field: &ast::FieldDef) -> FieldDef {
+        FieldDef {
+            name: field.name.name.clone(),
+            ty: self.lower_type(&field.ty),
+            default: field.default.as_ref().map(|expr| self.lower_expr(expr)),
+            span: field.span,
+        }
+    }
+
     /// Lower a function parameter.
     /// 降级函数参数。
     fn lower_param(&mut self, param: &ast::Param) -> Param {
         self.lower_param_parts(&param.pattern, Some(&param.ty), param.span)
+    }
+
+    fn first_pattern_binding(pattern: &Pattern) -> Option<(LocalId, String)> {
+        match &pattern.kind {
+            PatternKind::Var(id, name) | PatternKind::Binding(id, name, _) => {
+                Some((*id, name.clone()))
+            }
+            PatternKind::Tuple(patterns)
+            | PatternKind::List(patterns)
+            | PatternKind::Constructor(_, patterns)
+            | PatternKind::Or(patterns) => patterns.iter().find_map(Self::first_pattern_binding),
+            PatternKind::ListRest { init, rest, tail } => init
+                .iter()
+                .chain(rest.iter().map(Box::as_ref))
+                .chain(tail.iter())
+                .find_map(Self::first_pattern_binding),
+            PatternKind::Record { fields, .. } => fields
+                .iter()
+                .find_map(|(_, pattern)| Self::first_pattern_binding(pattern)),
+            PatternKind::Wildcard | PatternKind::Literal(_) => None,
+        }
     }
 
     fn lower_param_parts(
@@ -1304,15 +1585,20 @@ impl Resolver {
         ty: Option<&ast::Type>,
         span: Span,
     ) -> Param {
-        let name = self
-            .pattern_name(pattern)
-            .unwrap_or_else(|| "_".to_string());
-        let id = self.define_local(name.clone());
+        let pattern = self.lower_pattern(pattern);
+        let (id, name) = Self::first_pattern_binding(&pattern)
+            .unwrap_or_else(|| (self.fresh_local_id(), "_".to_string()));
         let ty = ty
             .map(|ty| self.lower_type(ty))
             .unwrap_or_else(|| Self::unknown_ty(span));
 
-        Param { id, name, ty, span }
+        Param {
+            id,
+            name,
+            pattern,
+            ty,
+            span,
+        }
     }
 
     /// Lower a trait item (method declaration).
@@ -1322,7 +1608,11 @@ impl Resolver {
         self.push_bound_generic_scope(&item.generics);
 
         let generics = self.lower_generics(&item.generics);
-        let params = item.params.iter().map(|p| self.lower_type(&p.ty)).collect();
+        let params = item
+            .params
+            .iter()
+            .map(|param| self.lower_param(param))
+            .collect();
         let return_ty = item
             .return_type
             .as_ref()
@@ -1571,15 +1861,24 @@ impl Resolver {
                 ExprKind::Binary(BinOp::Merge, Box::new(base_expr), Box::new(update_expr))
             }
 
-            ast::ExprKind::Lambda { params, body } => {
+            ast::ExprKind::Lambda {
+                params,
+                return_type,
+                body,
+            } => {
                 self.push_scope();
                 let params: Vec<Param> = params
                     .iter()
                     .map(|p| self.lower_param_parts(&p.pattern, p.ty.as_ref(), p.span))
                     .collect();
+                let return_ty = return_type.as_ref().map(|ty| self.lower_type(ty));
                 let body = self.lower_expr(body);
                 self.pop_scope();
-                ExprKind::Lambda(params, Box::new(body))
+                ExprKind::Lambda {
+                    params,
+                    body: Box::new(body),
+                    return_ty,
+                }
             }
 
             ast::ExprKind::Call { func, args } => {
@@ -1592,12 +1891,27 @@ impl Resolver {
                 receiver,
                 method,
                 args,
-            } => ExprKind::MethodCall {
-                receiver: Box::new(self.lower_expr(receiver)),
-                method: method.name.clone(),
-                target: Box::new(self.lower_name_expr(&method.name, span)),
-                args: args.iter().map(|e| self.lower_expr(e)).collect(),
-            },
+            } => {
+                let args = args.iter().map(|e| self.lower_expr(e)).collect();
+
+                if let ast::ExprKind::Var(module) = &receiver.kind
+                    && let Some(module_prefix) = self.imported_builtin_modules.get(&module.name)
+                {
+                    let target = Expr {
+                        kind: ExprKind::Builtin(format!("{module_prefix}.{}", method.name)),
+                        ty: Self::unknown_ty(span),
+                        span,
+                    };
+                    ExprKind::Call(Box::new(target), args)
+                } else {
+                    ExprKind::MethodCall {
+                        receiver: Box::new(self.lower_expr(receiver)),
+                        method: method.name.clone(),
+                        target: Box::new(self.lower_name_expr(&method.name, span)),
+                        args,
+                    }
+                }
+            }
 
             ast::ExprKind::Field { base, field } => {
                 let base = self.lower_expr(base);
@@ -1618,18 +1932,12 @@ impl Resolver {
             }
 
             ast::ExprKind::Index { base, index } => {
-                // Desugar index to a function call: base[index] -> index(base, index)
-                // 将索引解糖为函数调用：base[index] -> index(base, index)
                 let base = self.lower_expr(base);
                 let index = self.lower_expr(index);
-                // Use sentinel DefId for builtin index operation, resolved at eval time
-                // 使用哨兵 DefId 表示内置索引操作，在求值时解析
-                let index_fn = Expr {
-                    kind: ExprKind::Global(DefId(u32::MAX)),
-                    ty: Self::unknown_ty(span),
-                    span,
-                };
-                ExprKind::Call(Box::new(index_fn), vec![base, index])
+                ExprKind::Index {
+                    base: Box::new(base),
+                    index: Box::new(index),
+                }
             }
 
             ast::ExprKind::Binary { op, left, right } => {
@@ -1842,7 +2150,7 @@ impl Resolver {
                     Self::collect_pattern_bindings(pattern, bindings);
                 }
             }
-            PatternKind::Record(fields) => {
+            PatternKind::Record { fields, .. } => {
                 for (_, pattern) in fields {
                     Self::collect_pattern_bindings(pattern, bindings);
                 }
@@ -1927,7 +2235,7 @@ impl Resolver {
                 PatternKind::ListRest { init, rest, tail }
             }
 
-            ast::PatternKind::Record { fields, .. } => {
+            ast::PatternKind::Record { fields, rest } => {
                 let fields = fields
                     .iter()
                     .map(|f| {
@@ -1955,7 +2263,10 @@ impl Resolver {
                         (f.name.name.clone(), pattern)
                     })
                     .collect();
-                PatternKind::Record(fields)
+                PatternKind::Record {
+                    fields,
+                    rest: *rest,
+                }
             }
 
             ast::PatternKind::Constructor { path, args } => {
@@ -2021,24 +2332,37 @@ impl Resolver {
         let span = ty.span;
         let kind = match &ty.kind {
             ast::TypeKind::Named { path, args } => {
-                if path.len() == 1 && args.is_empty() {
+                if path.len() == 1 {
                     let name = &path[0].name;
-                    match name.as_str() {
-                        "Int" => TyKind::Int,
-                        "Float" => TyKind::Float,
-                        "Bool" => TyKind::Bool,
-                        "Char" => TyKind::Char,
-                        "String" => TyKind::String,
-                        "Unit" => TyKind::Unit,
-                        "Self" => TyKind::SelfType,
-                        _ => {
-                            if let Some(param_idx) = self.lookup_generic(name) {
-                                TyKind::Param(param_idx, name.clone())
-                            } else if let Some(def_id) = self.lookup_global(name) {
-                                TyKind::Named(def_id, Vec::new())
-                            } else {
-                                TyKind::Unknown
+                    if args.is_empty() {
+                        match name.as_str() {
+                            "Int" => TyKind::Int,
+                            "Float" => TyKind::Float,
+                            "Bool" => TyKind::Bool,
+                            "Char" => TyKind::Char,
+                            "String" => TyKind::String,
+                            "Unit" => TyKind::Unit,
+                            "Self" => TyKind::SelfType,
+                            _ => {
+                                if let Some(param_idx) = self.lookup_generic(name) {
+                                    TyKind::Param(param_idx, name.clone())
+                                } else if let Some(def_id) =
+                                    self.lookup_global(name).or_else(|| builtin_type_id(name))
+                                {
+                                    TyKind::Named(def_id, Vec::new())
+                                } else {
+                                    TyKind::Unknown
+                                }
                             }
+                        }
+                    } else {
+                        let lowered_args = args.iter().map(|arg| self.lower_type(arg)).collect();
+                        if let Some(def_id) =
+                            self.lookup_global(name).or_else(|| builtin_type_id(name))
+                        {
+                            TyKind::Named(def_id, lowered_args)
+                        } else {
+                            TyKind::Unknown
                         }
                     }
                 } else if path.len() == 2 && args.is_empty() && path[0].name == "Self" {

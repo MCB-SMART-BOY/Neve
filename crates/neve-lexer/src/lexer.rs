@@ -25,14 +25,17 @@ enum LexerMode {
 /// Converts source code into a sequence of tokens.
 /// 将源代码转换为 token 序列。
 pub struct Lexer<'src> {
+    /// Original source used for line-oriented comment detection.
+    /// 用于行注释检测的原始源码。
+    source: &'src str,
     /// Character iterator with position info
     /// 带位置信息的字符迭代器
     chars: std::iter::Peekable<std::str::CharIndices<'src>>,
     /// Current position in source
     /// 当前在源码中的位置
     pos: usize,
-    /// Collected diagnostics (errors/warnings)
-    /// 收集的诊断信息（错误/警告）
+    /// Collected diagnostics (errors and warnings)
+    /// 收集的诊断信息（错误和警告）
     diagnostics: Vec<Diagnostic>,
     /// Stack of lexer modes for handling nested contexts
     /// 词法分析器模式栈，用于处理嵌套上下文
@@ -44,6 +47,7 @@ impl<'src> Lexer<'src> {
     /// 为给定的源代码创建新的词法分析器。
     pub fn new(source: &'src str) -> Self {
         Self {
+            source,
             chars: source.char_indices().peekable(),
             pos: 0,
             diagnostics: Vec::new(),
@@ -134,13 +138,20 @@ impl<'src> Lexer<'src> {
 
         let start = self.pos;
 
+        if self.is_line_start(start)
+            && self.peek_char() == Some('&')
+            && self.peek_nth(1) != Some('&')
+        {
+            self.advance();
+            self.skip_line_comment();
+            return self.next_token_normal();
+        }
+
         // Check for end of file - 检查是否到达文件末尾
         let Some((_pos, ch)) = self.advance() else {
             return Token::new(TokenKind::Eof, Span::from_usize(start, start));
         };
-
         let kind = match ch {
-            // Single character tokens - 单字符 token
             '(' => TokenKind::LParen,
             ')' => TokenKind::RParen,
             '[' => TokenKind::LBracket,
@@ -378,6 +389,14 @@ impl<'src> Lexer<'src> {
                 break;
             }
         }
+    }
+    /// Return whether a byte position is at the start of a logical line.
+    /// 判断字节位置是否位于逻辑行起始处。
+    fn is_line_start(&self, position: usize) -> bool {
+        self.source[..position].rsplit_once('\n').map_or_else(
+            || self.source[..position].chars().all(char::is_whitespace),
+            |(_, line)| line.chars().all(char::is_whitespace),
+        )
     }
 
     /// Skip a line comment (-- to end of line).

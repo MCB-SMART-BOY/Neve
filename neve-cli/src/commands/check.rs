@@ -214,7 +214,7 @@ fn walk_expr(expr: &neve_hir::Expr, out: &mut Vec<(String, neve_common::Span)>) 
                 walk_expr(item, out);
             }
         }
-        ExprKind::Lambda(_, body) => walk_expr(body, out),
+        ExprKind::Lambda { body, .. } => walk_expr(body, out),
         ExprKind::Lazy(inner) => walk_expr(inner, out),
         ExprKind::Interpolated(parts) => {
             for part in parts {

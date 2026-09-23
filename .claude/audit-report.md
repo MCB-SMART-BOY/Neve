@@ -387,12 +387,8 @@ builder、config、fetch、frontend、lsp、store、fmt 集成测试在 Windows 
 
 ## 最终状态 (v4.0.1)
 
-**全部 62 个问题已解决。** 所有 Critical / High / Medium / Low 问题已在 v4.0.0 和 v4.0.1 中修复或标记为已记录的技术债务。审计等级从 B- 提升至 A-。
+**Current status (2026-09-23):** The historical “62 findings resolved” statement is not a current verification result. Core parser/HIR/typeck/eval checks pass, but the AST/HIR follow-up audit still has open boundaries: comment trivia preservation, AST enum sealing, tree-sitter native generation, record-variant semantics, duplicate variant identity, top-level refutable `let`, and tooling mappings.
 
-关键修复统计:
-- Critical (7): C1(HTTPS), C2(AST sealed), C3(pub→pub(crate)), C4(README syntax), C5(examples), C6(formatter comments), C7(naming) -- 全部修复
-- High (13): H1-H13 全部修复
-- Medium (22): M1-M22 全部修复或已记录  
-- Low (20): L1-L18 全部修复或已记录
+The release fixes documented above remain historical evidence. New changes MUST be validated against the current source and targeted behavior, not this ledger alone.
 
-*此报告基于 6 个并发 agent 的全面扫描(架构、安全、类型系统、测试、API、CLI/LSP)，v4.0.1 中所有发现已闭合。*
+**Follow-up review (2026-09-23):** `Cargo.lock` was refreshed and `git2` was upgraded to `0.21.0` for current RustSec advisories. The canonical pipeline now has 2,690 passing workspace tests; the custom enum coalesce evaluator regression is fixed and covered. Remaining AST/HIR review findings are short-circuit evaluation, declaration-order-independent effect inference, effect traversal in guards/comprehensions, `std.<module>.<item>` lowering, lazy parameter preservation, and evaluator environment restoration after errors.

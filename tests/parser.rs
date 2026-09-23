@@ -1,6 +1,7 @@
 //! Integration tests for neve-parser crate.
 
 use neve_parser::parse;
+use neve_syntax::{BinOp, ExprKind, ItemKind, PatternKind, TypeKind};
 
 // ============================================================================
 // Basic Parsing Tests
@@ -446,6 +447,20 @@ fn test_method_chain() {
     assert!(diags.is_empty());
 }
 
+#[test]
+fn test_method_call_preserves_receiver() {
+    let (file, diags) = parse("let x = obj.method(1);");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    assert!(matches!(
+        &file.items[0].kind,
+        ItemKind::Let(def)
+            if matches!(
+                def.value.kind,
+                ExprKind::MethodCall { .. }
+            )
+    ));
+}
+
 // ============================================================================
 // Edge Cases - Pipe Operator
 // ============================================================================
@@ -847,6 +862,12 @@ fn test_lambda_with_types() {
 }
 
 #[test]
+fn test_lambda_with_explicit_return_type() {
+    let (_, diags) = parse("let f = |x: Int| -> Int { x + 1 };");
+    assert!(diags.is_empty());
+}
+
+#[test]
 fn test_lambda_block_body() {
     let (_, diags) = parse(
         r#"
@@ -857,6 +878,49 @@ fn test_lambda_block_body() {
     "#,
     );
     assert!(diags.is_empty());
+}
+
+#[test]
+fn test_canonical_block_implicit_bindings() {
+    let (file, diags) = parse(
+        r#"
+        let result = {
+            a = 10
+            b = 20
+            a + b
+        };
+    "#,
+    );
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::Block { stmts, expr } = &def.value.kind else {
+        panic!("expected block expression");
+    };
+    assert_eq!(stmts.len(), 2);
+    assert!(expr.is_some());
+}
+
+#[test]
+fn test_canonical_block_constructor_binding() {
+    let (file, diags) = parse(
+        r#"
+        let result = {
+            Some(value) = Some(1)
+            value
+        };
+    "#,
+    );
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::Block { stmts, expr } = &def.value.kind else {
+        panic!("expected block expression");
+    };
+    assert_eq!(stmts.len(), 1);
+    assert!(expr.is_some());
 }
 
 #[test]
@@ -909,6 +973,50 @@ fn test_record_update() {
 fn test_record_update_multiple() {
     let (_, diags) = parse("let r2 = #{ r | x = 10, y = 20 };");
     assert!(diags.is_empty());
+}
+
+#[test]
+fn test_canonical_record_shorthand_and_update() {
+    let (file, diags) = parse("let r = { name }; let r2 = { r | name = \"neve\" };");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    assert!(matches!(
+        &file.items[0].kind,
+        ItemKind::Let(def) if matches!(def.value.kind, ExprKind::Record(_))
+    ));
+    assert!(matches!(
+        &file.items[1].kind,
+        ItemKind::Let(def) if matches!(def.value.kind, ExprKind::RecordUpdate { .. })
+    ));
+}
+
+#[test]
+fn test_top_level_record_expression_is_not_implicit_let() {
+    let (file, diags) = parse("{ x = 1 }");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    assert!(matches!(
+        file.tail_expr.map(|expr| expr.kind),
+        Some(ExprKind::Record(_))
+    ));
+}
+
+#[test]
+fn test_canonical_record_pattern_and_type() {
+    let (file, diags) =
+        parse("let { x, y } = point; fn show(r: { name: String }) -> { name: String } = r;");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    assert!(matches!(
+        &file.items[0].kind,
+        ItemKind::Let(def) if matches!(def.pattern.kind, PatternKind::Record { .. })
+    ));
+    assert!(matches!(
+        &file.items[1].kind,
+        ItemKind::Fn(def)
+            if matches!(def.params[0].ty.kind, TypeKind::Record(_))
+                && matches!(
+                    def.return_type.as_ref().map(|ty| &ty.kind),
+                    Some(TypeKind::Record(_))
+                )
+    ));
 }
 
 #[test]
@@ -984,8 +1092,35 @@ fn test_list_comprehension_with_filter() {
 
 #[test]
 fn test_list_comprehension_multiple_generators() {
-    let (_, diags) = parse("let pairs = [(x, y) | x <- xs, y <- ys];");
-    assert!(diags.is_empty());
+    let (file, diags) = parse("let pairs = [(x, y) | x <- xs, y <- ys];");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::ListComp { generators, .. } = &def.value.kind else {
+        panic!("expected list comprehension");
+    };
+    assert_eq!(generators.len(), 2);
+    assert!(
+        generators
+            .iter()
+            .all(|generator| generator.condition.is_none())
+    );
+}
+
+#[test]
+fn test_list_comprehension_filter_before_next_generator() {
+    let (file, diags) = parse("let values = [x | x <- xs, x > 0, y <- ys];");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::ListComp { generators, .. } = &def.value.kind else {
+        panic!("expected list comprehension");
+    };
+    assert_eq!(generators.len(), 2);
+    assert!(generators[0].condition.is_some());
+    assert!(generators[1].condition.is_none());
 }
 
 #[test]
@@ -1023,6 +1158,22 @@ fn test_unary_minus() {
 }
 
 #[test]
+fn test_unary_binds_tighter_than_power() {
+    let (file, diags) = parse("let x = -2 ^ 2;");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::Unary { operand, .. } = &def.value.kind else {
+        panic!("expected unary expression at root");
+    };
+    assert!(matches!(
+        operand.kind,
+        ExprKind::Binary { op: BinOp::Pow, .. }
+    ));
+}
+
+#[test]
 fn test_unary_not() {
     let (_, diags) = parse("let x = !true;");
     assert!(diags.is_empty());
@@ -1038,6 +1189,30 @@ fn test_optional_chaining() {
 fn test_null_coalescing() {
     let (_, diags) = parse("let x = value ?? default;");
     assert!(diags.is_empty());
+}
+
+#[test]
+fn test_merge_has_lower_precedence_than_pipe() {
+    let (file, diags) = parse("let x = a |> b & c;");
+    assert!(diags.is_empty(), "parse errors: {:?}", diags);
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::Binary {
+        op: BinOp::Merge,
+        left,
+        ..
+    } = &def.value.kind
+    else {
+        panic!("expected merge at expression root");
+    };
+    assert!(matches!(
+        left.kind,
+        ExprKind::Binary {
+            op: BinOp::Pipe,
+            ..
+        }
+    ));
 }
 
 #[test]

@@ -2174,7 +2174,7 @@ fn find_receiver_type_name(doc: &Document, dot_offset: usize) -> Option<String> 
 
     // Convert Ty to a user-friendly type name.
     // 将 Ty 转换为用户友好的类型名称。
-    Some(type_to_name(ty, semantics))
+    type_to_name(ty, semantics)
 }
 
 /// Walk the AST to find the expression whose span ends just before the dot offset.
@@ -2318,33 +2318,34 @@ fn expr_ending_at(expr: &neve_syntax::Expr, dot_offset: usize) -> Option<Span> {
 }
 
 /// Convert a Ty to a human-readable type name for method filtering.
-fn type_to_name(ty: &neve_hir::Ty, semantics: &neve_frontend::ModuleSemantics) -> String {
+fn type_to_name(ty: &neve_hir::Ty, semantics: &neve_frontend::ModuleSemantics) -> Option<String> {
     use neve_hir::TyKind;
 
     match &ty.kind {
-        TyKind::String => "String".to_string(),
-        TyKind::Int => "Int".to_string(),
-        TyKind::Float => "Float".to_string(),
-        TyKind::Bool => "Bool".to_string(),
-        TyKind::Char => "Char".to_string(),
-        TyKind::Unit => "Unit".to_string(),
-        TyKind::Named(def_id, _args) => def_id_to_name(*def_id, semantics),
+        TyKind::String => Some("String".to_string()),
+        TyKind::Int => Some("Int".to_string()),
+        TyKind::Float => Some("Float".to_string()),
+        TyKind::Bool => Some("Bool".to_string()),
+        TyKind::Char => Some("Char".to_string()),
+        TyKind::Unit => Some("Unit".to_string()),
+        TyKind::Named(def_id, _args) => neve_typeck::builtin_type_name(*def_id)
+            .map(str::to_string)
+            .or_else(|| def_id_to_name(*def_id, semantics)),
         TyKind::Record(_) | TyKind::DynamicRecord(_) | TyKind::SafeRecordBase(_) => {
-            "Record".to_string()
+            Some("Record".to_string())
         }
-        TyKind::Fn(..) => "Fn".to_string(),
-        TyKind::Tuple(_) => "Tuple".to_string(),
-        _ => String::new(),
+        TyKind::Fn(..) => Some("Fn".to_string()),
+        TyKind::Tuple(_) => Some("Tuple".to_string()),
+        _ => None,
     }
 }
 
 /// Resolve a DefId to a human-readable name using the module semantics.
-fn def_id_to_name(def_id: neve_hir::DefId, semantics: &neve_frontend::ModuleSemantics) -> String {
-    semantics
-        .global_names
-        .get(&def_id)
-        .cloned()
-        .unwrap_or_default()
+fn def_id_to_name(
+    def_id: neve_hir::DefId,
+    semantics: &neve_frontend::ModuleSemantics,
+) -> Option<String> {
+    semantics.global_names.get(&def_id).cloned()
 }
 
 // =============================================================================

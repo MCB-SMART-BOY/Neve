@@ -742,8 +742,11 @@ impl FrontendSession {
                 continue;
             };
 
-            let mut checker =
-                TypeChecker::with_global_env(global_types.clone(), global_spans.clone(), global_fn_bounds.clone());
+            let mut checker = TypeChecker::with_global_env(
+                global_types.clone(),
+                global_spans.clone(),
+                global_fn_bounds.clone(),
+            );
             checker.check(module);
             let semantics = collect_module_semantics(&checker);
             let diagnostics =

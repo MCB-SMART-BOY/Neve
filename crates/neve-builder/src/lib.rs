@@ -208,14 +208,10 @@ impl Builder {
         let mut outputs = HashMap::new();
 
         for (name, output) in &drv.outputs {
-            if let Some(ref path) = output.path {
-                if self.store.path_exists(path) {
-                    outputs.insert(name.clone(), path.clone());
-                } else {
-                    return None;
-                }
+            let path = output.path.as_ref()?;
+            if self.store.path_exists(path) {
+                outputs.insert(name.clone(), path.clone());
             } else {
-                // Content-addressed output, can't check ahead of time
                 return None;
             }
         }

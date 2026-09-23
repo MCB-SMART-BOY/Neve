@@ -176,6 +176,40 @@ fn test_end_to_end_record_field_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_top_level_tuple_pattern_runtime_parity() {
+    assert_runtime_parity(
+        "
+        (a, b) = (1, 2);
+        a + b
+        ",
+        Value::Int(int(3)),
+    );
+}
+
+#[test]
+fn test_end_to_end_record_update_extension_runtime_parity() {
+    assert_runtime_parity(
+        "
+        let base = { x = 1 };
+        let extended = { base | y = 2 };
+        extended.y
+        ",
+        Value::Int(int(2)),
+    );
+}
+
+#[test]
+fn test_end_to_end_enum_value_equality_runtime_parity() {
+    assert_runtime_parity(
+        "
+        enum Option { Some(Int), None };
+        Some(1) == Some(1)
+        ",
+        Value::Bool(true),
+    );
+}
+
+#[test]
 fn test_end_to_end_list_match_runtime_parity() {
     assert_runtime_parity(
         "
@@ -4389,6 +4423,20 @@ let x = {
     );
 }
 
+#[test]
+fn test_canonical_block_implicit_bindings_runtime_parity() {
+    assert_runtime_parity(
+        r#"
+let result = {
+    a = 10
+    b = 20
+    a + b
+};
+"#,
+        Value::Int(int(30)),
+    );
+}
+
 // ============================================================================
 // Stream<T> basic tests / 流基本测试
 // ============================================================================
@@ -7232,7 +7280,7 @@ fn test_record_spread_with_stream_field_preserved() {
 fn test_stream_param_in_generic_fn_with_annotation() {
     let source = r#"
     use std.io = io;
-    fn processAndCollect(items: Stream) = {
+    fn processAndCollect(items: Stream<Int>) = {
         let result = io.streamCollect(items);
         result
     };

@@ -157,7 +157,7 @@ impl Formatter {
         if def.fields.is_empty() {
             p.write(";");
         } else {
-            p.write(" {");
+            p.write("{");
             p.newline();
             p.indent();
             for field in &def.fields {
@@ -175,24 +175,26 @@ impl Formatter {
     /// Format an enum definition.
     /// 格式化枚举定义。
     fn format_enum(&self, p: &mut Printer, def: &EnumDef) {
-        // v4.0: pub removed, all items are public by default
+        // v4.0: enums use the pipe form `type Name = | A | B`.
+        // v4.0：枚举使用管道形式 `type Name = | A | B`。
         p.write("type ");
         p.write(&def.name.name);
         self.format_generics(p, &def.generics);
         p.write(" = ");
-        p.write(" {");
-        p.newline();
-        p.indent();
 
-        for variant in &def.variants {
-            p.write("| ");
+        for (index, variant) in def.variants.iter().enumerate() {
+            if index > 0 {
+                p.write(" | ");
+            } else {
+                p.write("| ");
+            }
             p.write(&variant.name.name);
             match &variant.kind {
                 VariantKind::Unit => {}
                 VariantKind::Tuple(types) => {
                     p.write("(");
-                    for (i, ty) in types.iter().enumerate() {
-                        if i > 0 {
+                    for (type_index, ty) in types.iter().enumerate() {
+                        if type_index > 0 {
                             p.write(", ");
                         }
                         self.format_type(p, ty);
@@ -200,9 +202,9 @@ impl Formatter {
                     p.write(")");
                 }
                 VariantKind::Record(fields) => {
-                    p.write(" #{ ");
-                    for (i, field) in fields.iter().enumerate() {
-                        if i > 0 {
+                    p.write(" { ");
+                    for (field_index, field) in fields.iter().enumerate() {
+                        if field_index > 0 {
                             p.write(", ");
                         }
                         self.format_field_def(p, field);
@@ -210,11 +212,9 @@ impl Formatter {
                     p.write(" }");
                 }
             }
-            p.newline();
         }
 
-        p.dedent();
-        p.write("}");
+        p.write(";");
         p.newline();
     }
 
@@ -608,7 +608,11 @@ impl Formatter {
             }
 
             // Lambda / Lambda 表达式
-            ExprKind::Lambda { params, body } => {
+            ExprKind::Lambda {
+                params,
+                return_type,
+                body,
+            } => {
                 p.write("|");
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
@@ -616,7 +620,12 @@ impl Formatter {
                     }
                     self.format_lambda_param(p, param);
                 }
-                p.write("| ");
+                p.write("|");
+                if let Some(return_type) = return_type {
+                    p.write(" -> ");
+                    self.format_type(p, return_type);
+                }
+                p.write(" ");
                 self.format_expr(p, body);
             }
 

@@ -369,7 +369,7 @@ impl SymbolIndex {
                     self.add_named_reference(part.name.clone(), part.span, false, resolved);
                 }
             }
-            ExprKind::Lambda { params, body } => {
+            ExprKind::Lambda { params, body, .. } => {
                 self.push_scope();
                 for param in params {
                     self.index_pattern(&param.pattern, true);

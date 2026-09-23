@@ -6,7 +6,7 @@ set -euo pipefail
 
 BIN="${CARGO_TARGET_DIR:-./target}/${1:-debug}/neve"
 if [ ! -x "$BIN" ]; then
-  cargo build -p neve ${1:+--release}
+  cargo build -p n3v3 ${1:+--release}
   BIN="${CARGO_TARGET_DIR:-./target}/${1:-debug}/neve"
 fi
 
@@ -91,7 +91,7 @@ add(x: Int, y: Int) = x + y
 use std.list
 double = |n| n * 2
 r = { name = "neve", version = "4.0" }
-result = add(double(21), 0) & r
+result = r & { version = "4.1" }
 p = ./config.neve
 EOF
 out=$($BIN check "$TMPDIR/v3.neve" 2>&1) || fail "v3 syntax check: $out"

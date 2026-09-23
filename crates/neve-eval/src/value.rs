@@ -484,9 +484,30 @@ pub enum Value {
     ),
     /// Enum/variant constructor / 枚举变体构造器
     VariantCtor { name: String, arity: usize },
+    /// User-defined variant constructor carrying its HIR identity.
+    /// 携带 HIR 构造器身份的用户定义变体构造器。
+    VariantCtorWithId {
+        /// HIR constructor definition ID. / HIR 构造器定义 ID。
+        def_id: neve_hir::DefId,
+        /// Constructor name. / 构造器名称。
+        name: String,
+        /// Constructor arity. / 构造器参数数量。
+        arity: usize,
+    },
 
     // ===== Algebraic data types 代数数据类型 =====
-    /// Variant/enum value (tag, payload) / 变体/枚举值（标签，载荷）
+    /// User-defined variant value carrying its HIR constructor identity.
+    /// 携带 HIR 构造器身份的用户定义变体值。
+    VariantWithId {
+        /// HIR constructor definition ID. / HIR 构造器定义 ID。
+        def_id: neve_hir::DefId,
+        /// Constructor name. / 构造器名称。
+        name: String,
+        /// Constructor payload. / 构造器载荷。
+        payload: Box<Value>,
+    },
+    /// Legacy variant value without a constructor identity.
+    /// 不带构造器身份的兼容变体值。
     Variant(String, Box<Value>),
     /// Option::Some / 可选值 Some
     Some(Box<Value>),
@@ -713,6 +734,16 @@ impl fmt::Debug for Value {
             Value::Builtin(b) => write!(f, "<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => write!(f, "<builtin:{}>", name),
             Value::VariantCtor { name, arity } => write!(f, "<variant:{}:{}>", name, arity),
+            Value::VariantCtorWithId { name, arity, .. } => {
+                write!(f, "<variant:{}:{}>", name, arity)
+            }
+            Value::VariantWithId { name, payload, .. } => {
+                if matches!(**payload, Value::Unit) {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}({:?})", name, payload)
+                }
+            }
             Value::Variant(tag, payload) => {
                 if matches!(**payload, Value::Unit) {
                     write!(f, "{}", tag)
@@ -733,6 +764,18 @@ impl fmt::Debug for Value {
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (
+                Value::VariantWithId {
+                    def_id: x_id,
+                    payload: x,
+                    ..
+                },
+                Value::VariantWithId {
+                    def_id: y_id,
+                    payload: y,
+                    ..
+                },
+            ) => x_id == y_id && x == y,
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
@@ -1499,6 +1542,30 @@ impl KeyCtx {
             Value::BuiltinFn(name, _) => format!("BuiltinFn({})", escape_string(name)),
             Value::VariantCtor { name, arity } => {
                 format!("VariantCtor({},{arity})", escape_string(name))
+            }
+            Value::VariantCtorWithId {
+                def_id,
+                name,
+                arity,
+            } => {
+                format!(
+                    "VariantCtorWithId({},{},{})",
+                    def_id.0,
+                    escape_string(name),
+                    arity
+                )
+            }
+            Value::VariantWithId {
+                def_id,
+                name,
+                payload,
+            } => {
+                format!(
+                    "VariantWithId({},{},{})",
+                    def_id.0,
+                    escape_string(name),
+                    self.value_key(payload)
+                )
             }
             Value::Variant(tag, payload) => {
                 format!(

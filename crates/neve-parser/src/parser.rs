@@ -141,6 +141,30 @@ impl Parser {
                 self.advance();
                 Some(ItemKind::Import(self.parse_import_def(is_pub)))
             }
+            TokenKind::Ident(name) if name == "pub" => {
+                // Legacy visibility marker; v4 items are public by default.
+                self.advance();
+                self.parse_item().map(|item| item.kind)
+            }
+            TokenKind::Ident(name) if name == "effect" => {
+                // Legacy effect marker; type checking now infers effectfulness.
+                self.advance();
+                if self.eat(TokenKind::Fn) {
+                    let mut function = self.parse_fn_def(is_pub);
+                    function.effect = true;
+                    Some(ItemKind::Fn(function))
+                } else {
+                    self.error_with_code(
+                        "expected `fn` after `effect`",
+                        ErrorCode::UnexpectedToken,
+                    );
+                    None
+                }
+            }
+            TokenKind::Ident(name) if name == "import" => {
+                self.advance();
+                Some(ItemKind::Import(self.parse_import_def(is_pub)))
+            }
             TokenKind::Ident(_) => self.parse_ident_item(is_pub),
             _ => {
                 if self.is_start_of_pattern() {
@@ -162,15 +186,38 @@ impl Parser {
 
     // ========== Item Definitions 项定义 ==========
 
-    /// Check if the current token could start a pattern.
-    /// 检查当前 token 是否可能开始一个模式。
+    /// Check whether a delimited form is an implicit destructuring let.
+    /// 检查定界形式是否是隐式解构 let。
     fn is_start_of_pattern(&self) -> bool {
-        matches!(
+        if !matches!(
             self.current_kind(),
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace
-        )
-    }
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace | TokenKind::HashLBrace
+        ) {
+            return false;
+        }
 
+        let mut closing = Vec::new();
+        for index in self.pos..self.tokens.len() {
+            match self.tokens[index].kind.clone() {
+                TokenKind::LParen => closing.push(TokenKind::RParen),
+                TokenKind::LBracket => closing.push(TokenKind::RBracket),
+                TokenKind::LBrace | TokenKind::HashLBrace => closing.push(TokenKind::RBrace),
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    if closing.pop() != Some(self.tokens[index].kind.clone()) {
+                        return false;
+                    }
+                    if closing.is_empty() {
+                        return matches!(
+                            self.tokens.get(index + 1).map(|token| &token.kind),
+                            Some(TokenKind::Eq) | Some(TokenKind::Colon)
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
     /// Parse an identifier-based item (v3.0: keyword-less `fn`/`let`).
     /// 解析基于标识符的项（v3.0：无关键字 `fn`/`let`）。
     ///
@@ -178,6 +225,7 @@ impl Parser {
     /// 向前查看以确定是函数定义还是 let 绑定。
     fn parse_ident_item(&mut self, _is_pub: bool) -> Option<ItemKind> {
         let saved = self.pos;
+        let saved_diagnostics = self.diagnostics.len();
         let name = self.parse_ident();
         let visibility = Visibility::Public; // v4.0: all public
         // Check for generics: name<T>
@@ -208,8 +256,10 @@ impl Parser {
                     }));
                 }
             }
-            // Not a fn def, backtrack
+            // Not a fn def, backtrack without leaking speculative diagnostics.
+            // 不是函数定义，回退且不泄漏试探性诊断。
             self.pos = saved;
+            self.diagnostics.truncate(saved_diagnostics);
             return None;
         }
 
@@ -236,8 +286,10 @@ impl Parser {
                     body,
                 }));
             }
-            // Not a fn def, backtrack
+            // Not a fn def, backtrack without leaking speculative diagnostics.
+            // 不是函数定义，回退且不泄漏试探性诊断。
             self.pos = saved;
+            self.diagnostics.truncate(saved_diagnostics);
             return None;
         }
 
@@ -268,13 +320,17 @@ impl Parser {
                     value,
                 }));
             }
-            // Not a let binding, backtrack
+            // Not a let binding, backtrack without leaking speculative diagnostics.
+            // 不是 let 绑定，回退且不泄漏试探性诊断。
             self.pos = saved;
+            self.diagnostics.truncate(saved_diagnostics);
             return None;
         }
 
-        // Not a recognizable item form
+        // Not a recognizable item form.
+        // 不是可识别的项形式。
         self.pos = saved;
+        self.diagnostics.truncate(saved_diagnostics);
         None
     }
 
@@ -370,8 +426,8 @@ impl Parser {
             None
         };
 
-        // Parse optional effect annotation (v4.0: auto-inferred by typeck)
-        let effect = false;
+        // Parse optional effect annotation (legacy syntax: `effect`).
+        let effect = self.eat_legacy_effect_annotation();
 
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
@@ -388,6 +444,14 @@ impl Parser {
         }
     }
 
+    fn eat_legacy_effect_annotation(&mut self) -> bool {
+        if matches!(self.current_kind(), TokenKind::Ident(name) if name == "effect") {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
     /// Parse a type alias definition.
     /// 解析类型别名定义。
     ///
@@ -633,9 +697,11 @@ impl Parser {
         let generics = self.parse_generics();
         let first_type = self.parse_type();
 
-        // Check for trait implementation: `impl Trait for Type`
-        // 检查是否为特征实现：`impl Trait for Type`
-        let (trait_, target) = if self.eat(TokenKind::Ident("for".to_string())) {
+        let (trait_, target) = if matches!(
+            self.current_kind(),
+            TokenKind::Ident(name) if name == "for"
+        ) {
+            self.advance();
             (Some(first_type), self.parse_type())
         } else {
             (None, first_type)
@@ -726,6 +792,12 @@ impl Parser {
         // Parse optional alias (v4.0: `=`, legacy: `as`)
         // 解析可选的别名（v4.0: `=`, 旧: `as`）
         let alias = if self.eat(TokenKind::Eq) {
+            Some(self.parse_ident())
+        } else if matches!(
+            self.current_kind(),
+            TokenKind::Ident(name) if name == "as"
+        ) {
+            self.advance();
             Some(self.parse_ident())
         } else {
             None
@@ -909,9 +981,11 @@ impl Parser {
                 }
                 self.expect(TokenKind::RParen);
                 VariantKind::Tuple(types)
-            } else if self.eat(TokenKind::HashLBrace) {
-                // Record variant: Variant #{ field: Type }
-                // 记录变体：Variant #{ 字段: 类型 }
+            } else if self.eat(TokenKind::HashLBrace) || self.eat(TokenKind::LBrace) {
+                // Record variant: Variant { field: Type }.
+                // Legacy `#{ ... }` remains accepted for compatibility.
+                // 记录变体：Variant { 字段: 类型 }。
+                // 旧语法 `#{ ... }` 继续为兼容性保留。
                 let fields = self.parse_field_defs();
                 self.expect(TokenKind::RBrace);
                 VariantKind::Record(fields)
@@ -954,8 +1028,8 @@ impl Parser {
             None
         };
 
-        // Parse optional effect annotation (v4.0: auto-inferred by typeck)
-        let effect = false;
+        // Parse optional effect annotation (legacy syntax: `effect`).
+        let effect = self.eat_legacy_effect_annotation();
 
         let default = if self.eat(TokenKind::Eq) {
             Some(self.parse_expr())
@@ -994,8 +1068,8 @@ impl Parser {
             None
         };
 
-        // Parse optional effect annotation (v4.0: auto-inferred by typeck)
-        let effect = false;
+        // Parse optional effect annotation (legacy syntax: `effect`).
+        let effect = self.eat_legacy_effect_annotation();
 
         self.expect(TokenKind::Eq);
         let body = self.parse_expr();
@@ -1099,36 +1173,38 @@ impl Parser {
     // 表达式使用运算符优先级爬升法解析。
     //
     // Precedence (lowest to highest) 优先级（从低到高）:
-    // 1. Pipe: |>              管道
-    // 2. Merge: //             合并
+    // 1. Merge: & (legacy //) 合并
+    // 2. Pipe: |>              管道
     // 3. Coalesce: ??          空值合并
     // 4. Or: ||                逻辑或
     // 5. And: &&               逻辑与
     // 6. Comparison: == != < <= > >=  比较
-    // 7. Concat: ++            连接
-    // 8. Additive: + -         加减
+    // 7. Concat: ++             连接
+    // 8. Additive: + -          加减
     // 9. Multiplicative: * / % 乘除取模
-    // 10. Power: ^             幂运算
-    // 11. Unary: ! -           一元运算
-    // 12. Postfix: . [] ()     后缀运算
+    // 10. Unary: ! -            一元运算
+    // 11. Power: ^              幂运算
+    // 12. Postfix: . [] ()      后缀运算
+    //
+    // Unary binds tighter than power: `-2 ^ 2` is `-(2 ^ 2)`.
 
     /// Parse an expression.
     /// 解析表达式。
     fn parse_expr(&mut self) -> Expr {
-        self.parse_pipe_expr()
+        self.parse_merge_expr()
     }
 
-    /// Parse pipe expression: expr |> expr
-    /// 解析管道表达式：expr |> expr
-    fn parse_pipe_expr(&mut self) -> Expr {
-        let mut left = self.parse_merge_expr();
+    /// Parse merge expression: expr & expr (legacy `//` also accepted).
+    /// 解析合并表达式：expr & expr（旧语法 `//` 也接受）。
+    fn parse_merge_expr(&mut self) -> Expr {
+        let mut left = self.parse_pipe_expr();
 
-        while self.eat(TokenKind::PipeGt) {
-            let right = self.parse_merge_expr();
+        while self.eat(TokenKind::Amp) || self.eat(TokenKind::SlashSlash) {
+            let right = self.parse_pipe_expr();
             let span = left.span.merge(right.span);
             left = Expr::new(
                 ExprKind::Binary {
-                    op: BinOp::Pipe,
+                    op: BinOp::Merge,
                     left: Box::new(left),
                     right: Box::new(right),
                 },
@@ -1139,17 +1215,17 @@ impl Parser {
         left
     }
 
-    /// Parse merge expression: expr // expr  or  expr & expr (v3.0)
-    /// 解析合并表达式：expr // expr 或 expr & expr (v3.0)
-    fn parse_merge_expr(&mut self) -> Expr {
+    /// Parse pipe expression: expr |> expr
+    /// 解析管道表达式：expr |> expr
+    fn parse_pipe_expr(&mut self) -> Expr {
         let mut left = self.parse_coalesce_expr();
 
-        while self.eat(TokenKind::SlashSlash) || self.eat(TokenKind::Amp) {
+        while self.eat(TokenKind::PipeGt) {
             let right = self.parse_coalesce_expr();
             let span = left.span.merge(right.span);
             left = Expr::new(
                 ExprKind::Binary {
-                    op: BinOp::Merge,
+                    op: BinOp::Pipe,
                     left: Box::new(left),
                     right: Box::new(right),
                 },
@@ -1304,7 +1380,7 @@ impl Parser {
     /// Parse multiplicative expression: expr (* | / | %) expr
     /// 解析乘法表达式：expr (* | / | %) expr
     fn parse_multiplicative_expr(&mut self) -> Expr {
-        let mut left = self.parse_power_expr();
+        let mut left = self.parse_unary_expr();
 
         loop {
             let op = match self.current_kind() {
@@ -1314,7 +1390,7 @@ impl Parser {
                 _ => break,
             };
             self.advance();
-            let right = self.parse_power_expr();
+            let right = self.parse_unary_expr();
             let span = left.span.merge(right.span);
             left = Expr::new(
                 ExprKind::Binary {
@@ -1332,12 +1408,12 @@ impl Parser {
     /// Parse power expression: expr ^ expr (right associative)
     /// 解析幂表达式：expr ^ expr（右结合）
     fn parse_power_expr(&mut self) -> Expr {
-        let left = self.parse_unary_expr();
+        let left = self.parse_postfix_expr();
 
         if self.eat(TokenKind::Caret) {
             // Right associative: 2^3^4 = 2^(3^4)
             // 右结合：2^3^4 = 2^(3^4)
-            let right = self.parse_power_expr();
+            let right = self.parse_unary_expr();
             let span = left.span.merge(right.span);
             Expr::new(
                 ExprKind::Binary {
@@ -1352,13 +1428,11 @@ impl Parser {
         }
     }
 
-    /// Parse unary expression: (! | -) expr
-    /// 解析一元表达式：(! | -) expr
+    /// Parse unary expression: (! | -) unary | power.
+    /// 解析一元表达式：(! | -) unary | 幂表达式。
     fn parse_unary_expr(&mut self) -> Expr {
         let start = self.current_span();
 
-        // Logical not: !expr
-        // 逻辑非：!expr
         if self.eat(TokenKind::Bang) {
             let operand = self.parse_unary_expr();
             let span = start.merge(operand.span);
@@ -1371,8 +1445,6 @@ impl Parser {
             );
         }
 
-        // Negation: -expr
-        // 取负：-expr
         if self.eat(TokenKind::Minus) {
             let operand = self.parse_unary_expr();
             let span = start.merge(operand.span);
@@ -1385,7 +1457,7 @@ impl Parser {
             );
         }
 
-        self.parse_postfix_expr()
+        self.parse_power_expr()
     }
 
     /// Parse postfix expression: expr (. | ?. | [] | () | ?)
@@ -1490,15 +1562,23 @@ impl Parser {
                     },
                     span,
                 );
-            } else if self.check(TokenKind::HashLBrace) {
-                // Function call with record argument: func #{ ... }
-                // 带记录参数的函数调用：func #{ ... }
-                let record = self.parse_record();
-                let span = expr.span.merge(record.span);
+            } else if self.check(TokenKind::HashLBrace)
+                || (self.check(TokenKind::LBrace) && self.brace_starts_record_argument())
+            {
+                // Function call with a record argument: `func { ... }`.
+                // Legacy `func #{ ... }` remains accepted for compatibility.
+                // 带记录/代码块参数的函数调用：`func { ... }`。
+                // 旧语法 `func #{ ... }` 继续为兼容性保留。
+                let argument = if self.check(TokenKind::HashLBrace) {
+                    self.parse_record()
+                } else {
+                    self.parse_brace_expr()
+                };
+                let span = expr.span.merge(argument.span);
                 expr = Expr::new(
                     ExprKind::Call {
                         func: Box::new(expr),
-                        args: vec![record],
+                        args: vec![argument],
                     },
                     span,
                 );
@@ -1544,10 +1624,17 @@ impl Parser {
                 self.advance();
                 Expr::new(ExprKind::Bool(false), start)
             }
+            // Legacy lazy prefix: `lazy expr`.
+            // 旧惰性前缀：`lazy expr`。
+            TokenKind::Ident(name) if name == "lazy" => {
+                self.advance();
+                let expr = self.parse_expr();
+                let span = start.merge(expr.span);
+                Expr::new(ExprKind::Lazy(Box::new(expr)), span)
+            }
             // Identifier or path
             // 标识符或路径
             TokenKind::Ident(_) => self.parse_ident_expr(),
-            // Handle 'self' as a variable expression in method bodies
             // 在方法体中将 'self' 作为变量表达式处理
             TokenKind::SelfLower => {
                 self.advance();
@@ -1611,9 +1698,12 @@ impl Parser {
         let start = self.current_span();
         let first = self.parse_ident();
 
-        // Check for path: a.b.c
-        // 检查是否为路径：a.b.c
-        if self.check(TokenKind::Dot) {
+        // Keep a dotted name as a path unless the complete dotted name is
+        // immediately called. The latter must stay in postfix parsing so
+        // `x.foo()` becomes a MethodCall rather than Call(Path(...)).
+        // 除非完整点链紧接调用，否则保留点名为路径。后者必须交给后缀解析，
+        // 使 `x.foo()` 生成 MethodCall，而不是 Call(Path(...))。
+        if self.check(TokenKind::Dot) && !self.dotted_path_is_called() {
             let mut path = vec![first];
             while self.eat(TokenKind::Dot) {
                 if let TokenKind::Ident(_) = self.current_kind() {
@@ -1627,6 +1717,34 @@ impl Parser {
         } else {
             Expr::new(ExprKind::Var(first.clone()), first.span)
         }
+    }
+
+    /// Return whether the remaining dotted name ends in a call.
+    /// 判断剩余点链是否以调用开始。
+    fn dotted_path_is_called(&self) -> bool {
+        let mut cursor = self.pos;
+        let mut saw_dot = false;
+
+        while matches!(
+            self.tokens.get(cursor).map(|token| &token.kind),
+            Some(TokenKind::Dot)
+        ) {
+            saw_dot = true;
+            cursor += 1;
+            if !matches!(
+                self.tokens.get(cursor).map(|token| &token.kind),
+                Some(TokenKind::Ident(_))
+            ) {
+                return false;
+            }
+            cursor += 1;
+        }
+
+        saw_dot
+            && matches!(
+                self.tokens.get(cursor).map(|token| &token.kind),
+                Some(TokenKind::LParen)
+            )
     }
 
     /// Parse a parenthesized expression or tuple.
@@ -1738,14 +1856,16 @@ impl Parser {
 
             let iter = self.parse_expr();
 
-            // Optional condition
-            // 可选的条件
-            let condition = if self.eat(TokenKind::Comma) {
-                if matches!(self.current_kind(), TokenKind::Ident(_)) {
-                    Some(self.parse_expr())
-                } else {
-                    None
-                }
+            // A comma separates either a filter or the next generator.
+            // Distinguish them by looking for a top-level `<-` after the
+            // candidate pattern. This keeps `x <- xs, y <- ys` from being
+            // parsed as the filter expression `y < -ys`.
+            // 逗号后可能是过滤条件，也可能是下一个生成器。通过查找候选模式
+            // 后的顶层 `<-` 区分，避免把 `x <- xs, y <- ys` 解析成
+            // `y < -ys` 过滤表达式。
+            let condition = if self.check(TokenKind::Comma) && !self.comma_starts_generator() {
+                self.advance();
+                Some(self.parse_expr())
             } else {
                 None
             };
@@ -1758,7 +1878,7 @@ impl Parser {
                 span: start.merge(end),
             });
 
-            if !self.check(TokenKind::Comma) {
+            if !self.eat(TokenKind::Comma) {
                 break;
             }
         }
@@ -1766,11 +1886,53 @@ impl Parser {
         generators
     }
 
+    /// Check whether the current comma introduces another generator.
+    /// 检查当前逗号是否引入另一个生成器。
+    fn comma_starts_generator(&self) -> bool {
+        if !self.check(TokenKind::Comma) {
+            return false;
+        }
+
+        let mut cursor = self.pos + 1;
+        let mut delimiters = Vec::new();
+
+        while let Some(token) = self.tokens.get(cursor) {
+            match &token.kind {
+                TokenKind::LParen => delimiters.push(TokenKind::RParen),
+                TokenKind::LBracket => delimiters.push(TokenKind::RBracket),
+                TokenKind::LBrace | TokenKind::HashLBrace => delimiters.push(TokenKind::RBrace),
+                TokenKind::RBracket if delimiters.is_empty() => return false,
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    if delimiters.pop() != Some(token.kind.clone()) {
+                        return false;
+                    }
+                }
+                TokenKind::Comma if delimiters.is_empty() => return false,
+                TokenKind::Lt
+                    if delimiters.is_empty()
+                        && matches!(
+                            self.tokens.get(cursor + 1).map(|next| &next.kind),
+                            Some(TokenKind::Minus)
+                        ) =>
+                {
+                    return true;
+                }
+                TokenKind::Eof => return false,
+                _ => {}
+            }
+            cursor += 1;
+        }
+
+        false
+    }
+
     /// Parse a record literal or record update.
     /// 解析记录字面量或记录更新。
     ///
-    /// Syntax: `#{ field = value, ... }` or `#{ base | field = value }`
-    /// 语法：`#{ 字段 = 值, ... }` 或 `#{ 基础 | 字段 = 值 }`
+    /// Syntax: `{ field = value, ... }` or `{ base | field = value }`.
+    /// Legacy syntax `#{ ... }` is parsed by the same AST constructors.
+    /// 语法：`{ 字段 = 值, ... }` 或 `{ 基础 | 字段 = 值 }`。
+    /// 旧语法 `#{ ... }` 使用相同的 AST 构造。
     fn parse_record(&mut self) -> Expr {
         let start = self.current_span();
         self.advance(); // #{
@@ -1867,6 +2029,28 @@ impl Parser {
         fields
     }
 
+    /// Check whether a brace after a callable starts a record argument.
+    /// 检查可调用表达式后的大括号是否开始记录参数。
+    fn brace_starts_record_argument(&self) -> bool {
+        let Some(first) = self.tokens.get(self.pos + 1) else {
+            return false;
+        };
+        if matches!(first.kind, TokenKind::RBrace) {
+            return true;
+        }
+        if !matches!(first.kind, TokenKind::Ident(_)) {
+            return false;
+        }
+
+        matches!(
+            self.tokens.get(self.pos + 2).map(|token| &token.kind),
+            Some(TokenKind::Eq)
+                | Some(TokenKind::Comma)
+                | Some(TokenKind::Pipe)
+                | Some(TokenKind::RBrace)
+        )
+    }
+
     /// Parse a brace-delimited expression: record or block (v3.0).
     /// 解析大括号表达式：记录或块（v3.0）。
     ///
@@ -1889,21 +2073,16 @@ impl Parser {
             );
         }
 
-        // Look ahead to decide: record or block?
-        // A record needs either `=` (explicit field) or `,` (multi-field).
-        // Single `{ ident }` without `=` or `,` is a block (backward compat).
-        // 向前查看以决定：记录还是块？
-        // 记录需要 `=`（显式字段）或 `,`（多字段）。
-        // 单个 `{ ident }` 无 `=` 或 `,` 是块（向后兼容）。
+        // Try the record parser speculatively. This is necessary because a
+        // block may begin with an unkeyworded binding such as `a = 1`.
+        // 先试探性地运行记录解析器。因为块也可以从 `a = 1` 这样的无关键字
+        // 绑定开始，所以仅凭首个 token 无法区分二者。
         let saved = self.pos;
-        let looks_like_record = match self.current_kind() {
-            TokenKind::Ident(_) => {
-                self.advance();
-                matches!(self.current_kind(), TokenKind::Eq | TokenKind::Comma)
-            }
-            _ => false,
-        };
+        let saved_diagnostics = self.diagnostics.len();
+        let _ = self.parse_record_brace();
+        let looks_like_record = self.check(TokenKind::RBrace);
         self.pos = saved;
+        self.diagnostics.truncate(saved_diagnostics);
 
         if looks_like_record {
             let mut record = self.parse_record_brace();
@@ -1928,10 +2107,23 @@ impl Parser {
         let start = self.current_span();
         let first_ident = self.parse_ident();
 
+        if self.eat(TokenKind::Pipe) {
+            let base = Expr::new(ExprKind::Var(first_ident.clone()), first_ident.span);
+            let fields = self.parse_record_fields();
+            return Expr::new(
+                ExprKind::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                start,
+            );
+        }
+
         let first_value = if self.eat(TokenKind::Eq) {
             Some(self.parse_expr())
         } else {
-            // Shorthand: `{ x }` is equivalent to `{ x = x }`
+            // Shorthand: `{ x }` is equivalent to `{ x = x }`.
+            // 简写：`{ x }` 等价于 `{ x = x }`。
             None
         };
 
@@ -1962,6 +2154,18 @@ impl Parser {
         Expr::new(ExprKind::Record(fields), start)
     }
 
+    /// Check whether the current tokens start a keyword-less binding.
+    /// 检查当前 token 是否以无关键字绑定开始。
+    fn is_implicit_let_start(&mut self) -> bool {
+        let saved_pos = self.pos;
+        let saved_diagnostics = self.diagnostics.len();
+        let _ = self.parse_pattern();
+        let is_binding = self.check(TokenKind::Eq) || self.check(TokenKind::Colon);
+        self.pos = saved_pos;
+        self.diagnostics.truncate(saved_diagnostics);
+        is_binding
+    }
+
     /// Parse block statements after `{` has been consumed.
     /// 在 `{` 已被消耗后解析块语句。
     fn parse_block_after_brace(&mut self) -> Expr {
@@ -1970,9 +2174,9 @@ impl Parser {
         let mut final_expr = None;
 
         while !self.check(TokenKind::RBrace) && !self.at_end() {
-            if self.check(TokenKind::Let) {
+            if self.check(TokenKind::Let) || self.is_implicit_let_start() {
                 let stmt_start = self.current_span();
-                self.advance();
+                self.eat(TokenKind::Let);
                 let pattern = self.parse_pattern();
                 let ty = if self.eat(TokenKind::Colon) {
                     Some(self.parse_type())
@@ -1984,7 +2188,12 @@ impl Parser {
                     continue;
                 }
                 let value = self.parse_expr();
-                self.expect_recover(TokenKind::Semicolon, RecoveryMode::Statement);
+                // v4 allows statement terminators to be omitted between
+                // adjacent bindings; the next binding is recognized by
+                // `is_implicit_let_start`.
+                // v4 允许相邻绑定省略语句终止符；下一个绑定由
+                // `is_implicit_let_start` 识别。
+                self.eat(TokenKind::Semicolon);
                 let stmt_end = self.previous_span();
                 stmts.push(Stmt {
                     kind: StmtKind::Let { pattern, ty, value },
@@ -2099,8 +2308,14 @@ impl Parser {
         self.advance(); // if
 
         let condition = self.parse_expr();
-        // Accept `->` (v4.0)
-        self.expect(TokenKind::Arrow);
+        // Accept canonical `->` and legacy `then`.
+        if !self.eat(TokenKind::Arrow)
+            && !matches!(self.current_kind(), TokenKind::Ident(name) if name == "then")
+        {
+            self.expect(TokenKind::Arrow);
+        } else if matches!(self.current_kind(), TokenKind::Ident(name) if name == "then") {
+            self.advance();
+        }
         let then_branch = self.parse_expr();
         self.expect(TokenKind::Else);
         let else_branch = self.parse_expr();
@@ -2180,17 +2395,47 @@ impl Parser {
         self.expect(TokenKind::LParen);
         let params = self.parse_lambda_params();
         self.expect(TokenKind::RParen);
+        let return_type = self.parse_optional_lambda_return_type();
 
-        let body = self.parse_expr();
+        let body = self.parse_lambda_body();
         let span = start.merge(body.span);
 
         Expr::new(
             ExprKind::Lambda {
                 params,
+                return_type,
                 body: Box::new(body),
             },
             span,
         )
+    }
+
+    /// Parse an optional lambda return annotation.
+    /// 解析可选的 lambda 返回类型注解。
+    fn parse_optional_lambda_return_type(&mut self) -> Option<Type> {
+        if self.eat(TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        }
+    }
+
+    /// Parse a lambda body, treating a leading brace as a block.
+    /// 解析 lambda 函数体；以左大括号开头时按代码块处理。
+    fn parse_lambda_body(&mut self) -> Expr {
+        if !self.check(TokenKind::LBrace) {
+            return self.parse_expr();
+        }
+
+        let start = self.current_span();
+        self.advance();
+        let previous_recovery = self.recovery_mode;
+        self.recovery_mode = RecoveryMode::Delimiter(DelimiterKind::Brace);
+        let mut block = self.parse_block_after_brace();
+        self.expect(TokenKind::RBrace);
+        self.recovery_mode = previous_recovery;
+        block.span = start.merge(self.previous_span());
+        block
     }
 
     /// Parse lambda parameters.
@@ -2225,20 +2470,19 @@ impl Parser {
         params
     }
 
-    /// Parse a pipe-style lambda expression (v3.0): `|params| body`
-    /// 解析管道式 lambda 表达式（v3.0）：`|参数| 函数体`
     fn parse_lambda_pipe(&mut self) -> Expr {
         let start = self.current_span();
         self.advance(); // consume first |
 
         let params = self.parse_lambda_params_pipe();
-
-        let body = self.parse_expr();
+        let return_type = self.parse_optional_lambda_return_type();
+        let body = self.parse_lambda_body();
         let span = start.merge(body.span);
 
         Expr::new(
             ExprKind::Lambda {
                 params,
+                return_type,
                 body: Box::new(body),
             },
             span,
@@ -2616,9 +2860,11 @@ impl Parser {
                     Pattern::new(PatternKind::List(init), span)
                 }
             }
-            // Record pattern: #{ field, field = pattern, .. }
-            // 记录模式：#{ 字段, 字段 = 模式, .. }
-            TokenKind::HashLBrace => {
+            // Record pattern: `{ field, field = pattern, .. }`.
+            // Legacy `#{ ... }` remains accepted for compatibility.
+            // 记录模式：`{ 字段, 字段 = 模式, ..`。
+            // 旧语法 `#{ ... }` 继续为兼容性保留。
+            TokenKind::HashLBrace | TokenKind::LBrace => {
                 self.advance();
                 let mut fields = Vec::new();
                 let mut rest = false;
@@ -2747,9 +2993,11 @@ impl Parser {
                     first
                 }
             }
-            // Record type: #{ field: Type, ... }
-            // 记录类型：#{ 字段: 类型, ... }
-            TokenKind::HashLBrace => {
+            // Record type: `{ field: Type, ... }`.
+            // Legacy `#{ ... }` remains accepted for compatibility.
+            // 记录类型：`{ 字段: 类型, ... }`。
+            // 旧语法 `#{ ... }` 继续为兼容性保留。
+            TokenKind::HashLBrace | TokenKind::LBrace => {
                 self.advance();
                 let mut fields = Vec::new();
 

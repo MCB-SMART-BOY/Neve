@@ -3,11 +3,12 @@
 ## Current State
 
 ```
-v4.0.4  |  541 E2E tests (all pass)  |  21 LSP methods  |  55 error codes
-14 Stream<T> APIs  |  34 EffectEval rules  |  21 Lean modules  |  12 keywords
-Design Audit: ✅ 62/62 (100%)  |  All Phases: ✅  |  Grade: B- → A-
-All decision gates cleared. All CI green. Published on crates.io.
+v4.0.4 | canonical HIR pipeline | parser/HIR/typeck/eval audit in progress
+Core parser, HIR, typeck, eval, LSP and smoke checks pass locally.
 ```
+
+The historical release and audit numbers below are preserved as release history,
+not as a claim that every AST/HIR boundary is currently closed.
 
 ## v4.0 Exit Criteria
 
@@ -89,8 +90,9 @@ The 12 gaps, ordered by impact:
 ## Immediate Priority
 
 ```
-✅ Audit (62/62)  ✅ Phase A  ✅ Phase B  ✅ Phase C  ✅ Phase D
-v4.0.4 released on crates.io. All CI green. Next: v4.1 feature development.
+✅ Core parser/HIR/typeck/eval checks
+⚠️ AST/HIR follow-up audit: semantic and tooling boundaries remain
+[OK] Global quality gates: gitleaks/trivy/cargo audit/cargo deny pass; AST/HIR review risks remain
 ```
 
 ## Risk Register

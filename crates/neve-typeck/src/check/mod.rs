@@ -16,9 +16,7 @@ use crate::errors::{
 };
 use crate::infer::InferContext;
 use crate::pattern_analysis::{PatternAnalysisContext, analyze_match};
-use crate::traits::{
-    ImplInfo, TraitBound, TraitConstraint, TraitInfo, TraitResolver,
-};
+use crate::traits::{ImplInfo, TraitBound, TraitConstraint, TraitInfo, TraitResolver};
 use crate::unify::{
     Substitution, free_type_vars, generalize, instantiate_with_map, occurs_check, unify,
 };
@@ -165,6 +163,10 @@ pub struct TypeChecker {
     variants: HashMap<DefId, VariantInfo>,
     /// Type alias definitions. / 类型别名定义。
     type_aliases: HashMap<DefId, TypeAliasInfo>,
+    /// Alias definitions currently being expanded, preventing recursive loops.
+    /// 当前正在展开的别名定义，防止递归别名导致无限循环。
+    type_alias_expansion: HashSet<DefId>,
+
     /// Collected diagnostics.
     /// 收集的诊断信息。
     diagnostics: Vec<Diagnostic>,
@@ -200,6 +202,7 @@ impl TypeChecker {
             local_definitions: HashMap::new(),
             expr_types: HashMap::new(),
             trait_resolver: TraitResolver::new(),
+            type_alias_expansion: HashSet::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
             variants: HashMap::new(),
@@ -1409,13 +1412,16 @@ impl TypeChecker {
         self.subst.apply(ty)
     }
 
-    fn enum_has_variants(&self, def_id: DefId, required: &[&str]) -> bool {
+    fn enum_has_shape(&self, def_id: DefId, expected: &[(&str, usize)]) -> bool {
         let Some(info) = self.enums.get(&def_id) else {
             return false;
         };
-        required
-            .iter()
-            .all(|name| info.variants.contains_key(*name))
+        info.variants.len() == expected.len()
+            && expected.iter().all(|(name, arity)| {
+                info.variants
+                    .get(*name)
+                    .is_some_and(|fields| fields.len() == *arity)
+            })
     }
 
     fn try_payload_type(&self, def_id: DefId, variant_name: &str, span: Span) -> Option<Ty> {
@@ -1453,7 +1459,7 @@ impl TypeChecker {
             }
             TyKind::Named(def_id, _)
                 if mode.allows_enum_option()
-                    && self.enum_has_variants(def_id, &["Some", "None"]) =>
+                    && self.enum_has_shape(def_id, &[("Some", 1), ("None", 0)]) =>
             {
                 OptionalFlowResolution::Known(
                     self.try_payload_type(def_id, "Some", span)
@@ -1461,7 +1467,8 @@ impl TypeChecker {
                 )
             }
             TyKind::Named(def_id, _)
-                if mode.allows_result() && self.enum_has_variants(def_id, &["Ok", "Err"]) =>
+                if mode.allows_result()
+                    && self.enum_has_shape(def_id, &[("Ok", 1), ("Err", 1)]) =>
             {
                 OptionalFlowResolution::Known(
                     self.try_payload_type(def_id, "Ok", span)
@@ -1797,6 +1804,10 @@ impl TypeChecker {
             ExprKind::Field(base, _) => self.collect_effectful_calls(base, out),
             ExprKind::SafeField { base, .. } => self.collect_effectful_calls(base, out),
             ExprKind::TupleIndex(base, _) => self.collect_effectful_calls(base, out),
+            ExprKind::Index { base, index } => {
+                self.collect_effectful_calls(base, out);
+                self.collect_effectful_calls(index, out);
+            }
             ExprKind::Try(inner) => self.collect_effectful_calls(inner, out),
             ExprKind::Coalesce { value, default } => {
                 self.collect_effectful_calls(value, out);
@@ -1818,7 +1829,7 @@ impl TypeChecker {
                     self.collect_effectful_calls(item, out);
                 }
             }
-            ExprKind::Lambda(_, body) => self.collect_effectful_calls(body, out),
+            ExprKind::Lambda { body, .. } => self.collect_effectful_calls(body, out),
             ExprKind::Lazy(inner) => self.collect_effectful_calls(inner, out),
             ExprKind::Interpolated(parts) => {
                 for part in parts {
@@ -2246,6 +2257,11 @@ impl TypeChecker {
             },
             TyKind::Named(id, args) => {
                 let resolved_args: Vec<Ty> = args.iter().map(|a| self.resolve_type(a)).collect();
+                if let Some(expanded) = self.expand_type_alias(*id, &resolved_args) {
+                    let resolved = self.resolve_type(&expanded);
+                    self.type_alias_expansion.remove(id);
+                    return resolved;
+                }
                 Ty {
                     kind: TyKind::Named(*id, resolved_args),
                     span: ty.span,
@@ -2270,6 +2286,19 @@ impl TypeChecker {
         }
     }
 
+    fn expand_type_alias(&mut self, id: DefId, args: &[Ty]) -> Option<Ty> {
+        let target = self.type_aliases.get(&id)?.target.clone();
+        if !self.type_alias_expansion.insert(id) {
+            return None;
+        }
+
+        let mut substitution = Substitution::new();
+        for (index, arg) in args.iter().enumerate() {
+            substitution.bind_param(index as u32, arg.clone());
+        }
+        Some(substitution.apply(&target))
+    }
+
     // ===== Second pass: check bodies 第二遍：检查函数体 =====
 
     fn check_item(&mut self, item: &Item) {
@@ -2287,41 +2316,29 @@ impl TypeChecker {
         // Pre-pass: scan the body for effectful calls so that the effect context
         // is correct during body inference (nested lambdas need it).
         let body_is_effectful = self.body_has_effectful_calls(&fn_def.body);
-
         // Track whether we're inside an effectful function
         // so that nested lambdas inherit the effect context.
         let prev_effectful = self.in_effectful_fn;
         self.in_effectful_fn = fn_def.effectful || body_is_effectful;
 
-        // Create fresh type variables for generic parameters
+        // Create fresh type variables for generic parameters.
         let mut generic_vars: HashMap<String, Ty> = HashMap::new();
-        for (idx, param) in fn_def.generics.iter().enumerate() {
+        for param in &fn_def.generics {
             let var = self.fresh_var();
-            generic_vars.insert(param.name.clone(), var.clone());
-            self.subst.bind_param(idx as u32, var);
+            generic_vars.insert(param.name.clone(), var);
         }
 
-        // Bind parameter types (resolving generic references)
-        // Parameters are considered used by default (they're part of the function signature)
+        // Bind parameter types (resolving generic references) and check every
+        // destructuring pattern against its complete argument type.
+        // 绑定参数类型（解析泛型引用），并按完整参数类型检查解构模式。
         let mut param_tys = Vec::with_capacity(fn_def.params.len());
         for param in &fn_def.params {
             let ty = self.resolve_type_with_generics(&param.ty, &generic_vars);
             param_tys.push(ty.clone());
-            self.local_definitions.insert(param.id, ty.clone());
-            self.locals.insert(
-                param.id,
-                LocalInfo {
-                    ty,
-                    name: param.name.clone(),
-                    span: param.span,
-                    used: true, // Parameters are always "used"
-                },
-            );
+            self.check_pattern(&param.pattern, &ty);
         }
-
         // Infer body type
         let body_ty = self.infer_expr(&fn_def.body);
-
         // Unify with declared return type
         let ret_ty = self.resolve_type_with_generics(&fn_def.return_ty, &generic_vars);
         if !self.unify(&body_ty, &ret_ty, fn_def.body.span) {
@@ -2431,16 +2448,7 @@ impl TypeChecker {
                     )
                 };
             param_tys.push(ty.clone());
-            self.local_definitions.insert(param.id, ty.clone());
-            self.locals.insert(
-                param.id,
-                LocalInfo {
-                    ty,
-                    name: param.name.clone(),
-                    span: param.span,
-                    used: true,
-                },
-            );
+            self.check_pattern(&param.pattern, &ty);
         }
 
         let body_ty = self.infer_expr(&item.body);
@@ -2670,6 +2678,17 @@ impl TypeChecker {
                         )
                     })
                     .collect();
+                if let Some(expanded) = self.expand_type_alias(*id, &resolved_args) {
+                    let resolved = self.resolve_type_with_context(
+                        &expanded,
+                        generics,
+                        self_ty,
+                        assoc_types,
+                        recording_mode,
+                    );
+                    self.type_alias_expansion.remove(id);
+                    return resolved;
+                }
                 Ty {
                     kind: TyKind::Named(*id, resolved_args),
                     span: ty.span,
@@ -2913,7 +2932,11 @@ impl TypeChecker {
                 }
             }
 
-            ExprKind::Lambda(params, body) => {
+            ExprKind::Lambda {
+                params,
+                body,
+                return_ty,
+            } => {
                 if !self.repl_mode && !self.in_effectful_fn {
                     let mut calls = Vec::new();
                     self.collect_effectful_calls(body, &mut calls);
@@ -2925,35 +2948,37 @@ impl TypeChecker {
                     }
                 }
 
-                // Bind parameter types
+                // Bind parameter types and destructuring bindings.
                 let param_tys: Vec<Ty> = params
                     .iter()
                     .map(|p| {
                         let ty = self.resolve_type(&p.ty);
-                        self.local_definitions.insert(p.id, ty.clone());
-                        self.locals.insert(
-                            p.id,
-                            LocalInfo {
-                                ty: ty.clone(),
-                                name: p.name.clone(),
-                                span: p.span,
-                                used: true, // Lambda params considered used
-                            },
-                        );
+                        self.check_pattern(&p.pattern, &ty);
                         ty
                     })
                     .collect();
 
-                // Infer body
+                // Infer body and enforce an explicit return annotation.
                 let body_ty = self.infer_expr(body);
+                let result_ty = if let Some(declared) = return_ty {
+                    let declared = self.resolve_type(declared);
+                    self.unify(&body_ty, &declared, body.span);
+                    self.apply(&declared)
+                } else {
+                    body_ty
+                };
 
-                // Remove locals
-                for p in params {
-                    self.locals.remove(&p.id);
+                // Remove every local introduced by parameter patterns.
+                for param in params {
+                    let mut binding_ids = Vec::new();
+                    Self::pattern_binding_ids(&param.pattern, &mut binding_ids);
+                    for local_id in binding_ids {
+                        self.locals.remove(&local_id);
+                    }
                 }
 
                 Ty {
-                    kind: TyKind::Fn(param_tys, Box::new(body_ty)),
+                    kind: TyKind::Fn(param_tys, Box::new(result_ty)),
                     span,
                 }
             }
@@ -3078,6 +3103,22 @@ impl TypeChecker {
                         self.fresh_var()
                     }
                 }
+            }
+            ExprKind::Index { base, index } => {
+                let base_ty = self.infer_expr(base);
+                let index_ty = self.infer_expr(index);
+                self.unify(
+                    &index_ty,
+                    &Ty {
+                        kind: TyKind::Int,
+                        span: index.span,
+                    },
+                    index.span,
+                );
+                let elem_ty = self.fresh_var();
+                let list_ty = builtin_list(elem_ty.clone(), base.span);
+                self.unify(&base_ty, &list_ty, base.span);
+                self.apply(&elem_ty)
             }
 
             ExprKind::Binary(op, left, right) => self.infer_binary(*op, left, right, span),
@@ -3276,11 +3317,7 @@ impl TypeChecker {
                 self.apply(&left_ty)
             }
 
-            // Merge: {..} -> {..} -> {..}
-            BinOp::Merge => {
-                // Both should be records, result is merged record
-                self.apply(&left_ty)
-            }
+            BinOp::Merge => self.merge_record_types(&left_ty, &right_ty, span),
 
             // Pipe: a |> b
             // - If left is Command/Pipeline, right must be Command, result is Pipeline
@@ -3308,6 +3345,42 @@ impl TypeChecker {
                     self.apply(&result_ty)
                 }
             }
+        }
+    }
+
+    fn merge_record_types(&mut self, left: &Ty, right: &Ty, span: Span) -> Ty {
+        let left = self.apply(left);
+        let right = self.apply(right);
+        let Some(left_fields) = Self::record_fields(&left) else {
+            self.error(span, "record merge requires records");
+            return self.fresh_var();
+        };
+        let Some(right_fields) = Self::record_fields(&right) else {
+            self.error(span, "record merge requires records");
+            return self.fresh_var();
+        };
+
+        let mut merged = left_fields.to_vec();
+        for (name, ty) in right_fields {
+            if let Some((_, existing_ty)) = merged.iter_mut().find(|(field, _)| field == name) {
+                *existing_ty = ty.clone();
+            } else {
+                merged.push((name.clone(), ty.clone()));
+            }
+        }
+        Ty {
+            kind: TyKind::DynamicRecord(merged),
+            span,
+        }
+    }
+
+    fn record_fields(ty: &Ty) -> Option<&[(String, Ty)]> {
+        match &ty.kind {
+            TyKind::Record(fields)
+            | TyKind::DynamicRecord(fields)
+            | TyKind::SafeRecordBase(fields) => Some(fields),
+            TyKind::Var(_) | TyKind::Unknown => Some(&[]),
+            _ => None,
         }
     }
 
@@ -3385,7 +3458,7 @@ impl TypeChecker {
                     Self::pattern_binding_ids(pattern, bindings);
                 }
             }
-            PatternKind::Record(fields) => {
+            PatternKind::Record { fields, .. } => {
                 for (_, pattern) in fields {
                     Self::pattern_binding_ids(pattern, bindings);
                 }
@@ -3403,6 +3476,7 @@ impl TypeChecker {
     }
 
     fn check_pattern(&mut self, pattern: &Pattern, expected: &Ty) {
+        let expected = self.apply(expected);
         match &pattern.kind {
             PatternKind::Wildcard => {}
 
@@ -3412,29 +3486,48 @@ impl TypeChecker {
 
             PatternKind::Binding(local_id, name, inner) => {
                 self.define_local(*local_id, name.clone(), expected.clone(), pattern.span);
-                self.check_pattern(inner, expected);
+                self.check_pattern(inner, &expected);
             }
 
             PatternKind::Literal(lit) => {
                 let lit_ty = self.infer_literal(lit);
-                self.unify(&lit_ty, expected, pattern.span);
+                self.unify(&lit_ty, &expected, pattern.span);
             }
 
-            PatternKind::Tuple(patterns) => match &expected.kind {
-                TyKind::Tuple(elem_tys) if elem_tys.len() == patterns.len() => {
-                    for (pat, ty) in patterns.iter().zip(elem_tys.iter()) {
-                        self.check_pattern(pat, ty);
+            PatternKind::Tuple(patterns) => {
+                let element_tys = match &expected.kind {
+                    TyKind::Tuple(element_tys) if element_tys.len() == patterns.len() => {
+                        element_tys.clone()
                     }
+                    TyKind::Var(_) => {
+                        let element_tys = patterns
+                            .iter()
+                            .map(|_| self.fresh_var())
+                            .collect::<Vec<_>>();
+                        self.unify(
+                            &Ty {
+                                kind: TyKind::Tuple(element_tys.clone()),
+                                span: pattern.span,
+                            },
+                            &expected,
+                            pattern.span,
+                        );
+                        element_tys
+                    }
+                    _ => {
+                        self.error(pattern.span, "pattern does not match expected tuple");
+                        return;
+                    }
+                };
+                for (pat, ty) in patterns.iter().zip(element_tys.iter()) {
+                    self.check_pattern(pat, ty);
                 }
-                _ => {
-                    self.error(pattern.span, "pattern does not match expected tuple");
-                }
-            },
+            }
 
             PatternKind::List(patterns) => {
                 let elem_ty = self.fresh_var();
                 let list_ty = builtin_list(elem_ty.clone(), pattern.span);
-                self.unify(&list_ty, expected, pattern.span);
+                self.unify(&list_ty, &expected, pattern.span);
                 for pat in patterns {
                     self.check_pattern(pat, &elem_ty);
                 }
@@ -3443,7 +3536,7 @@ impl TypeChecker {
             PatternKind::ListRest { init, rest, tail } => {
                 let elem_ty = self.fresh_var();
                 let list_ty = builtin_list(elem_ty.clone(), pattern.span);
-                self.unify(&list_ty, expected, pattern.span);
+                self.unify(&list_ty, &expected, pattern.span);
                 for pat in init {
                     self.check_pattern(pat, &elem_ty);
                 }
@@ -3455,30 +3548,46 @@ impl TypeChecker {
                 }
             }
 
-            PatternKind::Record(fields) => {
+            PatternKind::Record { fields, rest } => {
                 let expected_fields = match &expected.kind {
-                    TyKind::Record(field_tys) => Some(field_tys.as_slice()),
-                    TyKind::DynamicRecord(field_tys) => Some(field_tys.as_slice()),
-                    _ => None,
+                    TyKind::Record(field_tys)
+                    | TyKind::DynamicRecord(field_tys)
+                    | TyKind::SafeRecordBase(field_tys) => field_tys.clone(),
+                    TyKind::Var(_) => {
+                        let field_tys = fields
+                            .iter()
+                            .map(|(name, _)| (name.clone(), self.fresh_var()))
+                            .collect::<Vec<_>>();
+                        self.unify(
+                            &Ty {
+                                kind: TyKind::DynamicRecord(field_tys.clone()),
+                                span: pattern.span,
+                            },
+                            &expected,
+                            pattern.span,
+                        );
+                        field_tys
+                    }
+                    _ => {
+                        self.error(pattern.span, "pattern does not match expected record");
+                        return;
+                    }
                 };
 
                 for (name, pat) in fields {
-                    let field_ty = expected_fields.and_then(|fts| {
-                        fts.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone())
-                    });
-
-                    if let Some(ty) = field_ty {
-                        self.check_pattern(pat, &ty);
+                    if let Some((_, field_ty)) = expected_fields
+                        .iter()
+                        .find(|(field_name, _)| field_name == name)
+                    {
+                        self.check_pattern(pat, field_ty);
                     } else {
                         self.error(pattern.span, format!("no field '{}' in record", name));
                     }
                 }
 
-                // Check for missing fields: if the expected type is a concrete Record,
-                // all declared fields should be covered by the pattern.
-                if let TyKind::Record(declared_fields) = &expected.kind {
+                if !rest && let TyKind::Record(declared_fields) = &expected.kind {
                     let pattern_field_names: Vec<&str> =
-                        fields.iter().map(|(n, _)| n.as_str()).collect();
+                        fields.iter().map(|(name, _)| name.as_str()).collect();
                     for (declared_name, _) in declared_fields {
                         if !pattern_field_names.contains(&declared_name.as_str()) {
                             self.error(
@@ -3492,7 +3601,6 @@ impl TypeChecker {
 
             PatternKind::Constructor(def_id, patterns) => {
                 if let Some(name) = builtin_constructor_name(*def_id) {
-                    let expected = self.apply(expected);
                     let option_ctor = matches!(name, "Some" | "None");
                     let result_ctor = matches!(name, "Ok" | "Err");
                     if matches!(expected.kind, TyKind::Named(def_id, _) if option_ctor && is_builtin_result_type(def_id) || result_ctor && is_builtin_option_type(def_id))
@@ -3588,23 +3696,36 @@ impl TypeChecker {
 
                 if let Some(variant) = self.variants.get(def_id) {
                     let enum_id = variant.enum_id;
-                    let fields = variant.fields.clone();
-                    // Use the enum's own generic arguments so that generic
-                    // enums (e.g. `Result[A, E]`) unify correctly during
-                    // pattern matching.
-                    let generic_args = self
+                    let variant_fields = variant.fields.clone();
+                    let declared_args = self
                         .globals
                         .get(&enum_id)
                         .and_then(|ty| match &ty.kind {
-                            TyKind::Named(_, args) if !args.is_empty() => Some(args.clone()),
+                            TyKind::Named(_, args) => Some(args.clone()),
                             _ => None,
                         })
                         .unwrap_or_default();
+                    let generic_args: Vec<Ty> = declared_args
+                        .into_iter()
+                        .map(|arg| match arg.kind {
+                            TyKind::Param(_, _) => self.fresh_var(),
+                            _ => self.apply(&arg),
+                        })
+                        .collect();
                     let enum_ty = Ty {
-                        kind: TyKind::Named(enum_id, generic_args),
+                        kind: TyKind::Named(enum_id, generic_args.clone()),
                         span: pattern.span,
                     };
-                    self.unify(&enum_ty, expected, pattern.span);
+                    self.unify(&enum_ty, &expected, pattern.span);
+
+                    let mut field_subst = Substitution::new();
+                    for (index, arg) in generic_args.iter().enumerate() {
+                        field_subst.bind_param(index as u32, self.apply(arg));
+                    }
+                    let fields: Vec<Ty> = variant_fields
+                        .iter()
+                        .map(|field| field_subst.apply(field))
+                        .collect();
 
                     if fields.len() != patterns.len() {
                         self.error(
@@ -3622,7 +3743,6 @@ impl TypeChecker {
                         self.check_pattern(pat, ty);
                     }
                 } else {
-                    // Unknown constructor — emit error instead of silently passing
                     self.error(pattern.span, "unknown constructor".to_string());
                 }
             }
@@ -3634,7 +3754,7 @@ impl TypeChecker {
 
                 for pattern in patterns {
                     self.locals = saved_locals.clone();
-                    self.check_pattern(pattern, expected);
+                    self.check_pattern(pattern, &expected);
 
                     let signature = Self::pattern_binding_signature(pattern);
                     if let Some(first) = &first_signature {

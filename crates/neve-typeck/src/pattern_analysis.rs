@@ -434,9 +434,11 @@ pub(crate) fn analyze_match(
                     &arm.pattern.kind,
                     PatternKind::Wildcard | PatternKind::Var(_, _) | PatternKind::Binding(_, _, _)
                 ) || match &arm.pattern.kind {
-                    PatternKind::Record(fields) => {
-                        let covered: Vec<&str> = fields.iter().map(|(n, _)| n.as_str()).collect();
-                        declared_fields.iter().all(|f| covered.contains(f))
+                    PatternKind::Record { fields, rest } => {
+                        *rest
+                            || declared_fields
+                                .iter()
+                                .all(|field| fields.iter().any(|(name, _)| name == field))
                     }
                     _ => false,
                 };

@@ -150,10 +150,37 @@ impl Substitution {
         self.map.insert(var, ty);
     }
 
-    /// Bind a generic parameter to a concrete type.
-    /// 将泛型参数绑定到具体类型。
-    pub fn bind_param(&mut self, idx: u32, ty: Ty) {
+    /// Bind a generic parameter to a type unless that would create a cycle.
+    /// 将泛型参数绑定到类型，避免创建循环替换。
+    pub fn bind_param(&mut self, idx: u32, ty: Ty) -> bool {
+        let ty = self.apply(&ty);
+        if Self::contains_param(&ty, idx) {
+            return false;
+        }
         self.params.insert(idx, ty);
+        true
+    }
+
+    fn contains_param(ty: &Ty, target: u32) -> bool {
+        match &ty.kind {
+            TyKind::Param(idx, _) => *idx == target,
+            TyKind::Fn(params, ret) => {
+                params
+                    .iter()
+                    .any(|param| Self::contains_param(param, target))
+                    || Self::contains_param(ret, target)
+            }
+            TyKind::Tuple(items) | TyKind::Named(_, items) => {
+                items.iter().any(|item| Self::contains_param(item, target))
+            }
+            TyKind::Record(fields)
+            | TyKind::DynamicRecord(fields)
+            | TyKind::SafeRecordBase(fields) => fields
+                .iter()
+                .any(|(_, field)| Self::contains_param(field, target)),
+            TyKind::Forall(_, body) => Self::contains_param(body, target),
+            _ => false,
+        }
     }
 
     /// Get a bound type variable.
@@ -204,13 +231,19 @@ pub fn unify(t1: &Ty, t2: &Ty, subst: &mut Substitution) -> Result<(), String> {
         // Generic type parameters
         (TyKind::Param(idx1, _), TyKind::Param(idx2, _)) if idx1 == idx2 => Ok(()),
         (TyKind::Param(idx, _), _) => {
-            // Bind the generic parameter to the concrete type
-            subst.bind_param(*idx, t2.clone());
-            Ok(())
+            // Bind the generic parameter to the concrete type.
+            if subst.bind_param(*idx, t2.clone()) {
+                Ok(())
+            } else {
+                Err("infinite generic type".to_string())
+            }
         }
         (_, TyKind::Param(idx, _)) => {
-            subst.bind_param(*idx, t1.clone());
-            Ok(())
+            if subst.bind_param(*idx, t1.clone()) {
+                Ok(())
+            } else {
+                Err("infinite generic type".to_string())
+            }
         }
 
         // Primitive types

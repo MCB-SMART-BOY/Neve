@@ -148,13 +148,12 @@ impl TraitResolver {
     /// 注册特征定义。
     /// Returns the DefId (same as input) for use in bounds lookup.
     pub fn register_trait(&mut self, def_id: DefId, def: &TraitDef) -> DefId {
-
         let methods: Vec<TraitMethod> = def
             .items
             .iter()
             .map(|item| TraitMethod {
                 name: item.name.clone(),
-                params: item.params.clone(),
+                params: item.params.iter().map(|param| param.ty.clone()).collect(),
                 return_ty: item.return_ty.clone(),
                 has_default: item.default.is_some(),
             })
@@ -193,7 +192,6 @@ impl TraitResolver {
     /// Register an impl block.
     /// 注册实现块。
     pub fn register_impl(&mut self, def_id: DefId, def: &ImplDef) -> DefId {
-
         let trait_ref = def
             .trait_ref
             .as_ref()

@@ -386,7 +386,8 @@ impl<R: Read> NarReader<R> {
         // Guard against maliciously large length fields that would OOM
         if len > Self::MAX_NAR_ELEMENT_SIZE {
             return Err(NarError::InvalidFormat(format!(
-                "element size {len} exceeds maximum {}", Self::MAX_NAR_ELEMENT_SIZE
+                "element size {len} exceeds maximum {}",
+                Self::MAX_NAR_ELEMENT_SIZE
             )));
         }
 

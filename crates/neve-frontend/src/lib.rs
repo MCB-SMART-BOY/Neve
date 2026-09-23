@@ -261,7 +261,6 @@ pub fn analyze_source(source: &str) -> AnalysisResult {
     // Parse first so we can reuse the AST for symbol indexing.
     // 先解析以便复用 AST 做符号索引。
     let (ast, mut diagnostics) = parse(source);
-
     let hir = lower(&ast);
     let mut checker = TypeChecker::new();
     checker.check(&hir);

@@ -134,3 +134,8 @@ pub enum HIRExpr {
 - **Lowering fidelity**: Every pattern form must survive lowering without loss
 - **Lossy lowering is a bug**: If a construct degrades to wildcard, it must be fixed
 - **Module resolution**: Test self/super/crate/relative/absolute/`use =` paths
+## Current Audit Boundaries
+
+- Canonical lowering preserves index expressions, destructuring bindings, constructor identity, built-in generic type IDs, and `std.bytes` import registration.
+- Legacy `effect` syntax remains accepted for compatibility; effectfulness is additionally inferred by type checking.
+- Record-variant field names/defaults, top-level refutable `let` diagnostics, duplicate variant names, and synthetic-item mappings for every tooling consumer require further convergence.

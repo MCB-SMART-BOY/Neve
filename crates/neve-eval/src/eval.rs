@@ -8,7 +8,7 @@
 
 use crate::value::{EventKind, EventValue, StreamState, StreamTransform, StreamValue};
 use crate::{Environment, Value};
-use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32};
+use neve_common::{Span, int_is_negative, int_is_zero, int_to_f64, int_to_u32, int_to_usize};
 use neve_diagnostic::Diagnostic;
 use neve_hir::{
     BinOp, DefId, Expr, ExprKind, FnDef, Generator, Item, ItemKind, Literal, LocalId, Module,
@@ -241,6 +241,7 @@ enum GlobalDef {
 /// 变体构造器定义。
 #[derive(Clone)]
 struct VariantCtor {
+    def_id: DefId,
     name: String,
     arity: usize,
 }
@@ -385,6 +386,7 @@ impl Evaluator {
                     self.variant_ctors.insert(
                         id,
                         VariantCtor {
+                            def_id: id,
                             name: name.to_string(),
                             arity,
                         },
@@ -443,6 +445,66 @@ impl Evaluator {
         }
     }
 
+    fn variant_ctor_matches(
+        &self,
+        def_id: DefId,
+        value_name: &str,
+        expected_name: &str,
+        expected_arity: usize,
+    ) -> bool {
+        self.variant_ctors.get(&def_id).is_some_and(|ctor| {
+            ctor.name == expected_name
+                && value_name == expected_name
+                && ctor.arity == expected_arity
+        })
+    }
+
+    fn unwrap_try_value(&self, value: Value) -> Result<Value, EvalError> {
+        match value {
+            Value::Ok(value) | Value::Some(value) => Ok((*value).clone()),
+            Value::Err(error) => Err(EvalError::TypeError(format!("{:?}", error))),
+            Value::None => Err(EvalError::TypeError("unwrap on None".to_string())),
+            Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
+                Err(EvalError::TypeError("unwrap on None".to_string()))
+            }
+            Value::VariantCtor { .. } => Err(EvalError::TypeError(
+                "try requires an option-like or result-like value".to_string(),
+            )),
+            Value::VariantWithId {
+                def_id,
+                name,
+                payload,
+            } if self.variant_ctor_matches(def_id, &name, "Ok", 1)
+                || self.variant_ctor_matches(def_id, &name, "Some", 1) =>
+            {
+                Ok((*payload).clone())
+            }
+            Value::VariantWithId {
+                def_id,
+                name,
+                payload,
+            } if self.variant_ctor_matches(def_id, &name, "Err", 1) => {
+                Err(EvalError::TypeError(format!("{:?}", payload)))
+            }
+            Value::VariantWithId { def_id, name, .. }
+                if self.variant_ctor_matches(def_id, &name, "None", 0) =>
+            {
+                Err(EvalError::TypeError("unwrap on None".to_string()))
+            }
+            Value::Variant(tag, payload) => match tag.as_str() {
+                "Ok" | "Some" => Ok((*payload).clone()),
+                "Err" => Err(EvalError::TypeError(format!("{:?}", payload))),
+                "None" => Err(EvalError::TypeError("unwrap on None".to_string())),
+                _ => Err(EvalError::TypeError(
+                    "try requires an option-like or result-like value".to_string(),
+                )),
+            },
+            _ => Err(EvalError::TypeError(
+                "try requires an option-like or result-like value".to_string(),
+            )),
+        }
+    }
+
     /// Evaluate an expression.
     /// 求值一个表达式。
     pub fn eval(&mut self, expr: &Expr) -> Result<Value, EvalError> {
@@ -464,7 +526,8 @@ impl Evaluator {
                     }
                     None => {
                         if let Some(ctor) = self.variant_ctors.get(def_id) {
-                            return Ok(Value::VariantCtor {
+                            return Ok(Value::VariantCtorWithId {
+                                def_id: ctor.def_id,
                                 name: ctor.name.clone(),
                                 arity: ctor.arity,
                             });
@@ -497,13 +560,11 @@ impl Evaluator {
                 let values: Result<Vec<_>, _> = items.iter().map(|e| self.eval(e)).collect();
                 Ok(Value::Tuple(Rc::new(values?)))
             }
-
-            ExprKind::Lambda(params, body) => Ok(Value::Closure {
+            ExprKind::Lambda { params, body, .. } => Ok(Value::Closure {
                 params: params.clone(),
                 body: (**body).clone(),
                 env: self.env.clone(),
             }),
-
             ExprKind::Call(func, args) => {
                 let func_val = self.eval(func)?;
                 let arg_vals: Result<Vec<_>, _> = args.iter().map(|e| self.eval(e)).collect();
@@ -578,6 +639,28 @@ impl Evaluator {
                     _ => Err(EvalError::TypeError("not a tuple".to_string())),
                 }
             }
+            ExprKind::Index { base, index } => {
+                let base_val = self.eval(base)?;
+                let index_val = self.eval(index)?;
+                let index = match index_val {
+                    Value::Int(value) => int_to_usize(&value).ok_or_else(|| {
+                        EvalError::TypeError(
+                            "list index must be a non-negative integer".to_string(),
+                        )
+                    })?,
+                    _ => {
+                        return Err(EvalError::TypeError(
+                            "list index must be an integer".to_string(),
+                        ));
+                    }
+                };
+                match base_val {
+                    Value::List(items) => items.get(index).cloned().ok_or_else(|| {
+                        EvalError::TypeError("list index out of bounds".to_string())
+                    }),
+                    _ => Err(EvalError::TypeError("indexing requires a list".to_string())),
+                }
+            }
 
             ExprKind::Binary(op, left, right) => {
                 let left_val = self.eval(left)?;
@@ -607,9 +690,19 @@ impl Evaluator {
                     Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
                         self.eval(default)
                     }
-                    Value::VariantCtor { .. } => Err(EvalError::TypeError(
-                        "coalesce requires an option-like value".to_string(),
-                    )),
+                    Value::VariantCtorWithId { name, arity, .. }
+                        if arity == 0 && name == "None" =>
+                    {
+                        self.eval(default)
+                    }
+                    Value::VariantWithId { name, payload, .. }
+                        if name == "None" && matches!(*payload, Value::Unit) =>
+                    {
+                        self.eval(default)
+                    }
+                    Value::VariantWithId { name, payload, .. } if name == "Some" => {
+                        Ok((*payload).clone())
+                    }
                     Value::Variant(tag, payload) => match tag.as_str() {
                         "None" => self.eval(default),
                         "Some" => Ok((*payload).clone()),
@@ -624,32 +717,8 @@ impl Evaluator {
             }
 
             ExprKind::Try(inner) => {
-                fn unwrap_try_value(value: Value) -> Result<Value, EvalError> {
-                    match value {
-                        Value::Ok(v) | Value::Some(v) => Ok((*v).clone()),
-                        Value::Err(e) => Err(EvalError::TypeError(format!("{:?}", e))),
-                        Value::None => Err(EvalError::TypeError("unwrap on None".to_string())),
-                        Value::VariantCtor { name, arity } if arity == 0 && name == "None" => {
-                            Err(EvalError::TypeError("unwrap on None".to_string()))
-                        }
-                        Value::VariantCtor { .. } => Err(EvalError::TypeError(
-                            "try requires an option-like or result-like value".to_string(),
-                        )),
-                        Value::Variant(tag, payload) => match tag.as_str() {
-                            "Ok" | "Some" => Ok((*payload).clone()),
-                            "Err" => Err(EvalError::TypeError(format!("{:?}", payload))),
-                            "None" => Err(EvalError::TypeError("unwrap on None".to_string())),
-                            _ => Err(EvalError::TypeError(
-                                "try requires an option-like or result-like value".to_string(),
-                            )),
-                        },
-                        _ => Err(EvalError::TypeError(
-                            "try requires an option-like or result-like value".to_string(),
-                        )),
-                    }
-                }
-
-                unwrap_try_value(self.eval(inner)?)
+                let value = self.eval(inner)?;
+                self.unwrap_try_value(value)
             }
 
             ExprKind::Block(stmts, expr) => {
@@ -1100,22 +1169,49 @@ impl Evaluator {
             (Value::Bytes(x), Value::Bytes(y)) => x == y,
             (Value::Command(x), Value::Command(y)) => x == y,
             (Value::ProcessResult(x), Value::ProcessResult(y)) => x == y,
-            (Value::Unit, Value::Unit) => true,
-            (Value::None, Value::None) => true,
-            (Value::List(x), Value::List(y)) => {
+            (Value::Unit, Value::Unit) | (Value::None, Value::None) => true,
+            (Value::List(x), Value::List(y)) | (Value::Tuple(x), Value::Tuple(y)) => {
                 x.len() == y.len()
                     && x.iter()
                         .zip(y.iter())
-                        .all(|(a, b)| Self::values_equal(a, b))
+                        .all(|(left, right)| Self::values_equal(left, right))
             }
-            (Value::Tuple(x), Value::Tuple(y)) => {
-                x.len() == y.len()
-                    && x.iter()
-                        .zip(y.iter())
-                        .all(|(a, b)| Self::values_equal(a, b))
+            (Value::Record(x), Value::Record(y)) | (Value::Map(x), Value::Map(y)) => {
+                Self::records_equal(x, y)
             }
+            (Value::Set(x), Value::Set(y)) => x == y,
+            (
+                Value::VariantWithId {
+                    def_id: x_id,
+                    payload: x,
+                    ..
+                },
+                Value::VariantWithId {
+                    def_id: y_id,
+                    payload: y,
+                    ..
+                },
+            ) => x_id == y_id && Self::values_equal(x, y),
+            (Value::Variant(x_name, x), Value::Variant(y_name, y)) => {
+                x_name == y_name && Self::values_equal(x, y)
+            }
+            (Value::Some(x), Value::Some(y))
+            | (Value::Ok(x), Value::Ok(y))
+            | (Value::Err(x), Value::Err(y)) => Self::values_equal(x, y),
             _ => false,
         }
+    }
+
+    fn records_equal(
+        left: &std::collections::HashMap<String, Value>,
+        right: &std::collections::HashMap<String, Value>,
+    ) -> bool {
+        left.len() == right.len()
+            && left.iter().all(|(name, value)| {
+                right
+                    .get(name)
+                    .is_some_and(|other| Self::values_equal(value, other))
+            })
     }
 
     fn compare(&self, a: &Value, b: &Value) -> Result<std::cmp::Ordering, EvalError> {
@@ -1150,8 +1246,6 @@ impl Evaluator {
             }
         }
         let _guard = DepthGuard(&self.recursion_depth as *const std::cell::Cell<u32>);
-
-        // Tail call optimization: use iteration instead of recursion
         let mut current_func = func;
         let mut current_args = args;
 
@@ -1165,23 +1259,27 @@ impl Evaluator {
                         return Err(EvalError::WrongArity);
                     }
 
-                    // Set up environment for function execution
-                    let old_env = self.env.clone();
-                    self.env = env.child();
-
-                    for (param, arg) in params.iter().zip(current_args) {
-                        self.env.define(param.id, arg);
+                    // Match every parameter before mutating the evaluator environment.
+                    // 在修改求值器环境前先匹配全部参数，避免部分绑定泄漏。
+                    let mut bindings = Vec::new();
+                    for (param, arg) in params.iter().zip(&current_args) {
+                        let param_bindings = self
+                            .match_pattern(&param.pattern, arg)
+                            .ok_or(EvalError::PatternMatchFailed)?;
+                        bindings.extend(param_bindings);
                     }
 
-                    // Evaluate the body and check if result is a tail call
-                    match self.eval_with_tco(&body)? {
-                        TcoResult::Value(v) => {
-                            self.env = old_env;
-                            return Ok(v);
-                        }
+                    let old_env = self.env.clone();
+                    self.env = env.child();
+                    self.env.define_many(bindings);
+
+                    // Restore the caller environment on both success and failure.
+                    // 无论成功还是失败都恢复调用者环境。
+                    let tco_result = self.eval_with_tco(&body);
+                    self.env = old_env;
+                    match tco_result? {
+                        TcoResult::Value(v) => return Ok(v),
                         TcoResult::TailCall(func, args) => {
-                            // Tail call detected - loop instead of recurring
-                            self.env = old_env;
                             current_func = func;
                             current_args = args;
                             continue;
@@ -1204,6 +1302,27 @@ impl Evaluator {
                         return Ok(result);
                     }
                     return func(current_args).map_err(EvalError::TypeError);
+                }
+                Value::VariantCtorWithId {
+                    def_id,
+                    name,
+                    arity,
+                } => {
+                    if current_args.len() != arity {
+                        return Err(EvalError::WrongArity);
+                    }
+
+                    let payload = match current_args.len() {
+                        0 => Value::Unit,
+                        1 => current_args.into_iter().next().unwrap(),
+                        _ => Value::Tuple(Rc::new(current_args)),
+                    };
+
+                    return Ok(Value::VariantWithId {
+                        def_id,
+                        name,
+                        payload: Box::new(payload),
+                    });
                 }
                 Value::VariantCtor { name, arity } => {
                     if current_args.len() != arity {
@@ -2814,7 +2933,7 @@ impl Evaluator {
                         + rest.as_deref().map(estimate_bindings).unwrap_or(0)
                         + tail.iter().map(estimate_bindings).sum::<usize>()
                 }
-                PatternKind::Record(fields) => {
+                PatternKind::Record { fields, .. } => {
                     fields.iter().map(|(_, pat)| estimate_bindings(pat)).sum()
                 }
                 PatternKind::Constructor(_, patterns) | PatternKind::Or(patterns) => {
@@ -2903,8 +3022,11 @@ impl Evaluator {
                     None
                 }
             }
-            PatternKind::Record(fields) => {
+            PatternKind::Record { fields, rest } => {
                 if let Value::Record(record) = value {
+                    if !rest && record.len() != fields.len() {
+                        return None;
+                    }
                     let capacity = fields.iter().map(|(_, pat)| estimate_bindings(pat)).sum();
                     let mut bindings = Vec::with_capacity(capacity);
                     for (name, pat) in fields {
@@ -2917,35 +3039,45 @@ impl Evaluator {
                 }
             }
             PatternKind::Constructor(def_id, patterns) => {
-                if let Some(ctor) = self.variant_ctors.get(def_id)
-                    && let Value::Variant(tag, payload) = value
-                    && tag == &ctor.name
-                {
-                    return match patterns.as_slice() {
-                        [] => {
-                            if matches!(**payload, Value::Unit) {
-                                Some(Vec::new())
-                            } else {
-                                None
-                            }
-                        }
-                        [p] => self.match_pattern(p, payload),
-                        _ => {
-                            if let Value::Tuple(values) = payload.as_ref() {
-                                if values.len() != patterns.len() {
-                                    return None;
-                                }
-                                let capacity = patterns.iter().map(estimate_bindings).sum();
-                                let mut bindings = Vec::with_capacity(capacity);
-                                for (p, v) in patterns.iter().zip(values.iter()) {
-                                    bindings.extend(self.match_pattern(p, v)?);
-                                }
-                                Some(bindings)
-                            } else {
-                                None
-                            }
-                        }
+                if let Some(ctor) = self.variant_ctors.get(def_id) {
+                    if ctor.arity != patterns.len() {
+                        return None;
+                    }
+                    let payload = match value {
+                        Value::VariantWithId {
+                            def_id: value_id,
+                            name,
+                            payload,
+                        } if value_id == def_id && name == &ctor.name => Some(payload),
+                        _ => None,
                     };
+                    if let Some(payload) = payload {
+                        return match patterns.as_slice() {
+                            [] => {
+                                if matches!(**payload, Value::Unit) {
+                                    Some(Vec::new())
+                                } else {
+                                    None
+                                }
+                            }
+                            [p] => self.match_pattern(p, payload),
+                            _ => {
+                                if let Value::Tuple(values) = payload.as_ref() {
+                                    if values.len() != patterns.len() {
+                                        return None;
+                                    }
+                                    let capacity = patterns.iter().map(estimate_bindings).sum();
+                                    let mut bindings = Vec::with_capacity(capacity);
+                                    for (p, v) in patterns.iter().zip(values.iter()) {
+                                        bindings.extend(self.match_pattern(p, v)?);
+                                    }
+                                    Some(bindings)
+                                } else {
+                                    None
+                                }
+                            }
+                        };
+                    }
                 }
 
                 match (
@@ -2954,9 +3086,23 @@ impl Evaluator {
                     value,
                 ) {
                     (Some("Some"), [p], Value::Some(v)) => self.match_pattern(p, v),
+                    (Some("Some"), [p], Value::Variant(tag, v)) if tag == "Some" => {
+                        self.match_pattern(p, v)
+                    }
                     (Some("None"), [], Value::None) => Some(Vec::new()),
+                    (Some("None"), [], Value::Variant(tag, payload))
+                        if tag == "None" && matches!(**payload, Value::Unit) =>
+                    {
+                        Some(Vec::new())
+                    }
                     (Some("Ok"), [p], Value::Ok(v)) => self.match_pattern(p, v),
+                    (Some("Ok"), [p], Value::Variant(tag, v)) if tag == "Ok" => {
+                        self.match_pattern(p, v)
+                    }
                     (Some("Err"), [p], Value::Err(v)) => self.match_pattern(p, v),
+                    (Some("Err"), [p], Value::Variant(tag, v)) if tag == "Err" => {
+                        self.match_pattern(p, v)
+                    }
                     _ => None,
                 }
             }
@@ -3052,6 +3198,13 @@ impl Evaluator {
                 let strs: Vec<String> = set.iter().cloned().collect();
                 format!("Set{{ {} }}", strs.join(", "))
             }
+            Value::VariantWithId { name, payload, .. } => {
+                if matches!(**payload, Value::Unit) {
+                    name.clone()
+                } else {
+                    format!("{}({})", name, Self::value_to_string(payload))
+                }
+            }
             Value::Variant(tag, payload) => {
                 if matches!(**payload, Value::Unit) {
                     tag.clone()
@@ -3060,6 +3213,9 @@ impl Evaluator {
                 }
             }
             Value::VariantCtor { name, arity } => format!("<variant:{}:{}>", name, arity),
+            Value::VariantCtorWithId { name, arity, .. } => {
+                format!("<variant:{}:{}>", name, arity)
+            }
             Value::Builtin(b) => format!("<builtin:{}>", b.name),
             Value::BuiltinFn(name, _) => format!("<builtin:{}>", name),
             Value::Closure { .. } => "<function>".to_string(),
@@ -3235,6 +3391,10 @@ mod tests {
                 Param {
                     id: n_id,
                     name: "n".to_string(),
+                    pattern: Pattern {
+                        kind: PatternKind::Var(n_id, "n".to_string()),
+                        span,
+                    },
                     ty: Ty {
                         kind: TyKind::Int,
                         span,
@@ -3244,6 +3404,10 @@ mod tests {
                 Param {
                     id: acc_id,
                     name: "acc".to_string(),
+                    pattern: Pattern {
+                        kind: PatternKind::Var(acc_id, "acc".to_string()),
+                        span,
+                    },
                     ty: Ty {
                         kind: TyKind::Int,
                         span,

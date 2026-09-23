@@ -40,10 +40,10 @@ pub enum ExprKind {
     /// Variable reference / 变量引用
     Var(Ident),
 
-    /// Record literal `#{ x = 1, y = 2 }` / 记录字面量
+    /// Record literal `{ x = 1, y = 2 }` / 记录字面量
     Record(Vec<RecordField>),
 
-    /// Record update `#{ record | x = 1 }` / 记录更新
+    /// Record update `{ record | x = 1 }` / 记录更新
     RecordUpdate {
         base: Box<Expr>,
         fields: Vec<RecordField>,
@@ -52,7 +52,7 @@ pub enum ExprKind {
     /// List literal `[1, 2, 3]` / 列表字面量
     List(Vec<Expr>),
 
-    /// List comprehension `[x * 2 | x <- xs, x > 0]` / 列表推导
+    /// List comprehension `[x * 2 | x <- xs]` / 列表推导
     ListComp {
         body: Box<Expr>,
         generators: Vec<Generator>,
@@ -61,9 +61,12 @@ pub enum ExprKind {
     /// Tuple `(a, b, c)` / 元组
     Tuple(Vec<Expr>),
 
-    /// Lambda `fn(x) x + 1` / Lambda 表达式
+    /// Lambda `|x| x + 1` / Lambda 表达式
     Lambda {
         params: Vec<LambdaParam>,
+        /// Optional explicit return type after the closing parameter delimiter.
+        /// 闭合参数分隔符后的可选显式返回类型。
+        return_type: Option<Type>,
         body: Box<Expr>,
     },
 

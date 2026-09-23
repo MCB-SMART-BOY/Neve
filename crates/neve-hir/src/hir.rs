@@ -16,6 +16,47 @@ pub const BUILTIN_OPTION_NONE_CTOR_ID: DefId = DefId(u32::MAX - 17);
 pub const BUILTIN_RESULT_OK_CTOR_ID: DefId = DefId(u32::MAX - 18);
 pub const BUILTIN_RESULT_ERR_CTOR_ID: DefId = DefId(u32::MAX - 19);
 
+/// Builtin type IDs reserved for canonical HIR type lowering.
+/// 为 canonical HIR 类型降级预留的内置类型 ID。
+pub const BUILTIN_LIST_TYPE_ID: DefId = DefId(u32::MAX);
+pub const BUILTIN_OPTION_TYPE_ID: DefId = DefId(u32::MAX - 1);
+pub const BUILTIN_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 2);
+pub const BUILTIN_MAP_TYPE_ID: DefId = DefId(u32::MAX - 3);
+pub const BUILTIN_SET_TYPE_ID: DefId = DefId(u32::MAX - 4);
+pub const BUILTIN_PATH_TYPE_ID: DefId = DefId(u32::MAX - 5);
+pub const BUILTIN_BYTES_TYPE_ID: DefId = DefId(u32::MAX - 6);
+pub const BUILTIN_COMMAND_TYPE_ID: DefId = DefId(u32::MAX - 7);
+pub const BUILTIN_PROCESS_RESULT_TYPE_ID: DefId = DefId(u32::MAX - 8);
+pub const BUILTIN_PIPELINE_TYPE_ID: DefId = DefId(u32::MAX - 9);
+pub const BUILTIN_REDIRECT_TYPE_ID: DefId = DefId(u32::MAX - 10);
+pub const BUILTIN_TASK_TYPE_ID: DefId = DefId(u32::MAX - 11);
+pub const BUILTIN_EVENT_TYPE_ID: DefId = DefId(u32::MAX - 12);
+pub const BUILTIN_LIVE_TYPE_ID: DefId = DefId(u32::MAX - 13);
+pub const BUILTIN_STREAM_TYPE_ID: DefId = DefId(u32::MAX - 14);
+
+/// Resolve a builtin type name into its reserved HIR ID.
+/// 将内置类型名称解析为预留的 HIR ID。
+pub fn builtin_type_id(name: &str) -> Option<DefId> {
+    match name {
+        "List" => Some(BUILTIN_LIST_TYPE_ID),
+        "Option" => Some(BUILTIN_OPTION_TYPE_ID),
+        "Result" => Some(BUILTIN_RESULT_TYPE_ID),
+        "Map" => Some(BUILTIN_MAP_TYPE_ID),
+        "Set" => Some(BUILTIN_SET_TYPE_ID),
+        "Path" => Some(BUILTIN_PATH_TYPE_ID),
+        "Bytes" => Some(BUILTIN_BYTES_TYPE_ID),
+        "Command" => Some(BUILTIN_COMMAND_TYPE_ID),
+        "ProcessResult" => Some(BUILTIN_PROCESS_RESULT_TYPE_ID),
+        "Pipeline" => Some(BUILTIN_PIPELINE_TYPE_ID),
+        "Redirect" => Some(BUILTIN_REDIRECT_TYPE_ID),
+        "Task" => Some(BUILTIN_TASK_TYPE_ID),
+        "Event" => Some(BUILTIN_EVENT_TYPE_ID),
+        "Live" => Some(BUILTIN_LIVE_TYPE_ID),
+        "Stream" => Some(BUILTIN_STREAM_TYPE_ID),
+        _ => None,
+    }
+}
+
 /// Resolve a builtin constructor name into its reserved HIR ID.
 /// 将内置构造器名称解析为预留的 HIR ID。
 pub fn builtin_constructor_id(name: &str) -> Option<DefId> {
@@ -436,10 +477,15 @@ pub struct FnDef {
 /// 函数参数。
 #[derive(Debug, Clone)]
 pub struct Param {
-    /// Local variable ID. / 局部变量 ID。
+    /// Primary local variable ID kept for simple-parameter consumers.
+    /// 为简单参数消费者保留的主局部变量 ID。
     pub id: LocalId,
-    /// Parameter name. / 参数名称。
+    /// Primary binding name kept for tooling compatibility.
+    /// 为工具兼容性保留的主绑定名称。
     pub name: String,
+    /// Full parameter pattern, including destructuring bindings.
+    /// 完整参数模式，包括解构绑定。
+    pub pattern: Pattern,
     /// Parameter type. / 参数类型。
     pub ty: Ty,
     /// Source location. / 源代码位置。
@@ -478,6 +524,8 @@ pub struct FieldDef {
     pub name: String,
     /// Field type. / 字段类型。
     pub ty: Ty,
+    /// Default field value, if declared. / 字段声明的默认值（如有）。
+    pub default: Option<Expr>,
     /// Source location. / 源代码位置。
     pub span: Span,
 }
@@ -514,6 +562,8 @@ pub struct VariantDef {
     pub name: String,
     /// Variant fields (for tuple variants). / 变体字段（用于元组变体）。
     pub fields: Vec<Ty>,
+    /// Named fields for record variants. / 记录变体的命名字段。
+    pub record_fields: Option<Vec<FieldDef>>,
     /// Source location. / 源代码位置。
     pub span: Span,
 }
@@ -568,8 +618,8 @@ pub struct TraitItem {
     pub name: String,
     /// Generic parameters.
     pub generics: Vec<GenericParam>,
-    /// Parameter types.
-    pub params: Vec<Ty>,
+    /// Parameters, including their binding patterns.
+    pub params: Vec<Param>,
     /// Return type.
     pub return_ty: Ty,
     /// Default implementation (if any).
@@ -660,8 +710,14 @@ pub enum ExprKind {
     /// Tuple expression. / 元组表达式。
     Tuple(Vec<Expr>),
     /// Lambda expression. / Lambda 表达式。
-    Lambda(Vec<Param>, Box<Expr>),
-    /// Function call. / 函数调用。
+    Lambda {
+        /// Lowered parameter bindings. / 降级后的参数绑定。
+        params: Vec<Param>,
+        /// Lambda body. / Lambda 函数体。
+        body: Box<Expr>,
+        /// Optional declared return type. / 可选的显式返回类型。
+        return_ty: Option<Ty>,
+    },
     Call(Box<Expr>, Vec<Expr>),
     /// Method call `x.foo(y)`. / 方法调用 `x.foo(y)`。
     MethodCall {
@@ -677,10 +733,21 @@ pub enum ExprKind {
     },
     /// Field access. / 字段访问。
     Field(Box<Expr>, String),
-    /// Safe field access `x?.field`. / 安全字段访问 `x?.field`。
-    SafeField { base: Box<Expr>, field: String },
+    /// Safe field access `x?.field`. / 安全字段访问。
+    SafeField {
+        base: Box<Expr>,
+        field: String,
+    },
     /// Tuple index access. / 元组索引访问。
     TupleIndex(Box<Expr>, u32),
+    /// Collection index access `base[index]`.
+    /// 集合索引访问 `base[index]`。
+    Index {
+        /// Value being indexed. / 被索引的值。
+        base: Box<Expr>,
+        /// Index expression. / 索引表达式。
+        index: Box<Expr>,
+    },
     /// Binary operation. / 二元运算。
     Binary(BinOp, Box<Expr>, Box<Expr>),
     /// Unary operation. / 一元运算。
@@ -861,9 +928,14 @@ pub enum PatternKind {
         rest: Option<Box<Pattern>>,
         tail: Vec<Pattern>,
     },
-    /// Record pattern. / 记录模式。
-    Record(Vec<(String, Pattern)>),
-    /// Constructor pattern. / 构造器模式。
+    /// Record pattern with optional rest acceptance (`{ field, .. }`).
+    /// 带可选剩余字段接受的记录模式（`{ field, .. }`）。
+    Record {
+        /// Explicitly matched fields. / 显式匹配的字段。
+        fields: Vec<(String, Pattern)>,
+        /// Whether unspecified fields are accepted. / 是否接受未列出的字段。
+        rest: bool,
+    },
     Constructor(DefId, Vec<Pattern>),
     /// Or pattern (`a | b`). / Or 模式（`a | b`）。
     Or(Vec<Pattern>),

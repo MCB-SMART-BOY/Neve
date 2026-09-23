@@ -117,6 +117,33 @@ fn test_comments() {
 }
 
 #[test]
+fn test_ampersand_line_comment() {
+    assert_eq!(
+        lex("& comment\nlet x = 1"),
+        vec![
+            TokenKind::Let,
+            TokenKind::Ident("x".to_string()),
+            TokenKind::Eq,
+            TokenKind::Int(1.into()),
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn test_ampersand_merge_remains_operator() {
+    assert_eq!(
+        lex("a & b"),
+        vec![
+            TokenKind::Ident("a".to_string()),
+            TokenKind::Amp,
+            TokenKind::Ident("b".to_string()),
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn test_identifiers() {
     assert_eq!(
         lex("foo bar_baz _private"),

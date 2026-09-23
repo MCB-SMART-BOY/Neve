@@ -1817,6 +1817,15 @@ fn test_typeck_list_single() {
 }
 
 #[test]
+fn test_typeck_builtin_list_annotation_rejects_non_list_value() {
+    assert_has_diagnostic(
+        "let x: List<Int> = \"not a list\";",
+        Severity::Error,
+        "type mismatch",
+    );
+}
+
+#[test]
 fn test_typeck_list_multiple() {
     check_no_errors("let x = [1, 2, 3];");
 }

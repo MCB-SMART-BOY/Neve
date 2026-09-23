@@ -157,6 +157,39 @@ impl Document {
     }
 }
 
+fn find_hir_item_for_ast<'a>(ast_item: &ast::Item, hir: &'a Module) -> Option<&'a neve_hir::Item> {
+    hir.items
+        .iter()
+        .find(|hir_item| hir_item_matches_ast(ast_item, hir_item))
+}
+
+fn hir_item_matches_ast(ast_item: &ast::Item, hir_item: &neve_hir::Item) -> bool {
+    if ast_item.span != hir_item.span {
+        return false;
+    }
+
+    match (&ast_item.kind, &hir_item.kind) {
+        (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => match &def.pattern.kind {
+            AstPatternKind::Var(ident) => hir_fn.name == ident.name,
+            _ => hir_fn.name.starts_with("__neve_pattern_value_"),
+        },
+        (ast::ItemKind::Fn(def), HirItemKind::Fn(hir_fn)) => hir_fn.name == def.name.name,
+        (ast::ItemKind::TypeAlias(def), HirItemKind::TypeAlias(hir_alias)) => {
+            hir_alias.name == def.name.name
+        }
+        (ast::ItemKind::Struct(def), HirItemKind::Struct(hir_struct)) => {
+            hir_struct.name == def.name.name
+        }
+        (ast::ItemKind::Enum(def), HirItemKind::Enum(hir_enum)) => hir_enum.name == def.name.name,
+        (ast::ItemKind::Trait(def), HirItemKind::Trait(hir_trait)) => {
+            hir_trait.name == def.name.name
+        }
+        (ast::ItemKind::Impl(_), HirItemKind::Impl(_))
+        | (ast::ItemKind::ExprStmt(_), HirItemKind::Expr(_)) => true,
+        _ => false,
+    }
+}
+
 fn build_hover_maps(
     ast: &SourceFile,
     hir: &Module,
@@ -172,14 +205,12 @@ fn build_hover_maps(
             format_type_with_names_map(ty, &semantics.global_names)
         }
     };
-    let mut hir_items = hir.items.iter();
-
     for ast_item in &ast.items {
         let hir_item = match &ast_item.kind {
             ast::ItemKind::Import(_) => continue,
-            _ => match hir_items.next() {
+            _ => match find_hir_item_for_ast(ast_item, hir) {
                 Some(item) => item,
-                None => break,
+                None => continue,
             },
         };
 
@@ -266,7 +297,7 @@ fn build_hover_maps(
                     for (ast_param, hir_param) in ast_item.params.iter().zip(&hir_item.params) {
                         collect_type_hovers(
                             &ast_param.ty,
-                            hir_param,
+                            &hir_param.ty,
                             semantics,
                             hir,
                             &mut semantic_hovers,
@@ -336,11 +367,14 @@ fn build_hover_maps(
 fn callable_type_string(
     module: &Module,
     generics: &[neve_hir::GenericParam],
-    params: &[Ty],
+    params: &[HirParam],
     ret: &Ty,
 ) -> String {
     let mut ty = Ty {
-        kind: TyKind::Fn(params.to_vec(), Box::new(ret.clone())),
+        kind: TyKind::Fn(
+            params.iter().map(|param| param.ty.clone()).collect(),
+            Box::new(ret.clone()),
+        ),
         span: Span::DUMMY,
     };
 
@@ -464,7 +498,14 @@ fn collect_expr_hovers(
                 semantic_hovers,
             );
         }
-        (ast::ExprKind::Lambda { params, body }, HirExprKind::Lambda(hir_params, hir_body)) => {
+        (
+            ast::ExprKind::Lambda { params, body, .. },
+            HirExprKind::Lambda {
+                params: hir_params,
+                body: hir_body,
+                ..
+            },
+        ) => {
             for (ast_param, hir_param) in params.iter().zip(hir_params) {
                 if let AstPatternKind::Var(ident) = &ast_param.pattern.kind
                     && ident.name == hir_param.name
@@ -1077,7 +1118,12 @@ fn collect_pattern_definition_hovers(
                 );
             }
         }
-        (ast::PatternKind::Record { fields, .. }, HirPatternKind::Record(hir_fields)) => {
+        (
+            ast::PatternKind::Record { fields, .. },
+            HirPatternKind::Record {
+                fields: hir_fields, ..
+            },
+        ) => {
             for (ast_field, (hir_name, hir_pattern)) in fields.iter().zip(hir_fields) {
                 if let Some(ast_pattern) = &ast_field.pattern {
                     collect_pattern_definition_hovers(
