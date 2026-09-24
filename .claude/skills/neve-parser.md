@@ -174,7 +174,11 @@ pub enum ExprKind {
 | `neve-syntax/src/item.rs` | Item, LetBinding, FnDef, TypeDef |
 | `tests/parser.rs` | 220+ parser golden/integration tests |
 
-- **Golden tests**: Parse source, compare formatted AST output to `.txt` baseline
-- **Integration tests**: `tests/parser.rs` — 220+ tests covering canonical and legacy syntax forms
-- **Verified parser coverage**: shebang handling, canonical record/enum forms, implicit record arguments, legacy effect markers, and delimiter-sensitive `match` parsing.
-- **Known boundary**: lexer discards comment trivia; formatter cannot preserve comments until trivia is represented in the AST/CST.
+- **Golden tests**: Parse source, compare formatted AST output to `.txt` baseline.
+- **Integration tests**: `tests/parser.rs` — tests cover canonical and legacy
+  syntax forms, including wildcard patterns.
+- **Verified parser coverage**: shebang handling, canonical record/enum forms,
+  implicit record arguments, legacy effect markers, delimiter-sensitive
+  `match` parsing, and wildcard-vs-variable pattern classification.
+- **Known boundary**: lexer discards comment trivia; formatter cannot preserve
+  comments until trivia is represented in the AST/CST.

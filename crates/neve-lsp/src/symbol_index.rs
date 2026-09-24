@@ -8,7 +8,7 @@ use neve_common::Span;
 use neve_syntax::{
     Expr, ExprKind, Item, ItemKind, Pattern, PatternKind, SourceFile, Stmt, StmtKind,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A symbol in the source code.
 /// 源代码中的符号。
@@ -78,6 +78,9 @@ pub struct SymbolIndex {
     /// Scope-aware symbol table for local variable resolution.
     /// 用于局部变量解析的作用域感知符号表。
     scopes: Vec<HashMap<String, Symbol>>,
+    /// Constructor references must not fall back to unrelated same-name symbols.
+    /// 构造器引用不能回退到同名但无关的符号。
+    constructor_references: HashSet<Span>,
 }
 
 impl SymbolIndex {
@@ -88,6 +91,7 @@ impl SymbolIndex {
             definitions: HashMap::new(),
             references: Vec::new(),
             scopes: vec![HashMap::new()],
+            constructor_references: HashSet::new(),
         }
     }
 
@@ -105,6 +109,9 @@ impl SymbolIndex {
         if let Some(reference) = self.find_reference_at(offset) {
             if let Some(def_span) = reference.target_def_span {
                 return self.find_symbol_by_def_span(def_span);
+            }
+            if self.constructor_references.contains(&reference.span) {
+                return None;
             }
 
             return self.definitions.get(&reference.name)?.first();
@@ -139,6 +146,9 @@ impl SymbolIndex {
                         r.target_def_span == Some(def_span) && (include_declaration || !r.is_write)
                     })
                     .collect();
+            }
+            if self.constructor_references.contains(&reference.span) {
+                return Vec::new();
             }
 
             return self
@@ -198,8 +208,17 @@ impl SymbolIndex {
     // === Indexing methods / 索引方法 ===
 
     fn index_source_file(&mut self, file: &SourceFile) {
+        // HIR makes enum constructors visible regardless of declaration order.
+        // HIR 中枚举构造器的可见性不依赖声明顺序。
         for item in &file.items {
-            self.index_item(item);
+            if matches!(&item.kind, ItemKind::Enum(_)) {
+                self.index_item(item);
+            }
+        }
+        for item in &file.items {
+            if !matches!(&item.kind, ItemKind::Enum(_)) {
+                self.index_item(item);
+            }
         }
     }
 
@@ -591,6 +610,54 @@ impl SymbolIndex {
         }
     }
 
+    fn pattern_binding_names(pattern: Option<&Pattern>) -> HashSet<String> {
+        let mut names = HashSet::new();
+        let Some(pattern) = pattern else {
+            return names;
+        };
+        match &pattern.kind {
+            PatternKind::Var(ident) if ident.name != "_" => {
+                names.insert(ident.name.clone());
+            }
+            PatternKind::Tuple(patterns)
+            | PatternKind::List(patterns)
+            | PatternKind::Or(patterns) => {
+                for pattern in patterns {
+                    names.extend(Self::pattern_binding_names(Some(pattern)));
+                }
+            }
+            PatternKind::Record { fields, .. } => {
+                for field in fields {
+                    if let Some(pattern) = &field.pattern {
+                        names.extend(Self::pattern_binding_names(Some(pattern)));
+                    } else {
+                        names.insert(field.name.name.clone());
+                    }
+                }
+            }
+            PatternKind::Constructor { args, .. } => {
+                for pattern in args {
+                    names.extend(Self::pattern_binding_names(Some(pattern)));
+                }
+            }
+            PatternKind::Binding { name, pattern } => {
+                names.insert(name.name.clone());
+                names.extend(Self::pattern_binding_names(Some(pattern)));
+            }
+            PatternKind::ListRest { init, rest, tail } => {
+                for pattern in init {
+                    names.extend(Self::pattern_binding_names(Some(pattern)));
+                }
+                names.extend(Self::pattern_binding_names(rest.as_deref()));
+                for pattern in tail {
+                    names.extend(Self::pattern_binding_names(Some(pattern)));
+                }
+            }
+            PatternKind::Wildcard | PatternKind::Literal(_) | PatternKind::Var(_) => {}
+        }
+        names
+    }
+
     fn index_pattern(&mut self, pattern: &Pattern, is_definition: bool) {
         match &pattern.kind {
             PatternKind::Var(ident) => {
@@ -655,12 +722,77 @@ impl SymbolIndex {
                 // Constructor name is a reference
                 // 构造函数名是一个引用
                 for part in path {
-                    self.add_named_reference(part.name.clone(), part.span, false, None);
+                    let target = if path.len() == 1 {
+                        self.scopes
+                            .first()
+                            .and_then(|scope| scope.get(&part.name))
+                            .filter(|symbol| symbol.kind == SymbolKind::Variant)
+                            .map(|symbol| symbol.def_span)
+                    } else {
+                        None
+                    };
+                    self.constructor_references.insert(part.span);
+                    self.add_named_reference(part.name.clone(), part.span, false, target);
                 }
                 // Pattern arguments may introduce bindings
                 // 模式参数可能引入绑定
                 for arg in args {
                     self.index_pattern(arg, is_definition);
+                }
+            }
+            PatternKind::Or(patterns) if is_definition => {
+                let names = Self::pattern_binding_names(patterns.first());
+                let existing_spans: HashMap<_, _> = names
+                    .iter()
+                    .filter_map(|name| {
+                        self.definitions.get(name).map(|symbols| {
+                            (
+                                name.clone(),
+                                symbols.iter().map(|s| s.def_span).collect::<HashSet<_>>(),
+                            )
+                        })
+                    })
+                    .collect();
+
+                if let Some(first) = patterns.first() {
+                    self.index_pattern(first, true);
+                }
+                let canonical: HashMap<_, _> = names
+                    .iter()
+                    .filter_map(|name| self.lookup_symbol(name).cloned().map(|s| (name.clone(), s)))
+                    .collect();
+                for pattern in patterns.iter().skip(1) {
+                    self.index_pattern(pattern, true);
+                }
+
+                for (name, symbol) in canonical {
+                    let duplicate_spans: HashSet<_> = self
+                        .definitions
+                        .get(&name)
+                        .into_iter()
+                        .flat_map(|symbols| symbols.iter())
+                        .filter(|candidate| {
+                            !existing_spans
+                                .get(&name)
+                                .is_some_and(|spans| spans.contains(&candidate.def_span))
+                                && candidate.def_span != symbol.def_span
+                        })
+                        .map(|candidate| candidate.def_span)
+                        .collect();
+                    if let Some(symbols) = self.definitions.get_mut(&name) {
+                        symbols.retain(|candidate| !duplicate_spans.contains(&candidate.def_span));
+                    }
+                    for reference in &mut self.references {
+                        if reference
+                            .target_def_span
+                            .is_some_and(|span| duplicate_spans.contains(&span))
+                        {
+                            reference.target_def_span = Some(symbol.def_span);
+                        }
+                    }
+                    if let Some(scope) = self.scopes.last_mut() {
+                        scope.insert(name, symbol);
+                    }
                 }
             }
             PatternKind::Or(patterns) => {

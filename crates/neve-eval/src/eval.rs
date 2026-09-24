@@ -567,8 +567,8 @@ impl Evaluator {
             }),
             ExprKind::Call(func, args) => {
                 let func_val = self.eval(func)?;
-                let arg_vals: Result<Vec<_>, _> = args.iter().map(|e| self.eval(e)).collect();
-                self.apply(func_val, arg_vals?)
+                let arg_vals = self.prepare_call_args(&func_val, args, None)?;
+                self.apply(func_val, arg_vals)
             }
 
             ExprKind::MethodCall {
@@ -576,25 +576,7 @@ impl Evaluator {
                 target,
                 args,
                 ..
-            } => {
-                let recv_val = self.eval(receiver)?;
-                let mut arg_vals = vec![recv_val];
-                for arg in args {
-                    arg_vals.push(self.eval(arg)?);
-                }
-
-                // Canonical dispatch order mirrors type checking:
-                // 1. use resolved inherent/trait method targets when available
-                // 2. otherwise evaluate the lowered callable fallback target
-                if let Some(method_def_id) = self.method_resolutions.get(&expr.span).copied()
-                    && let Some(func_val) = self.global_callable(method_def_id)
-                {
-                    self.apply(func_val, arg_vals)
-                } else {
-                    let func_val = self.eval(target)?;
-                    self.apply(func_val, arg_vals)
-                }
-            }
+            } => self.eval_method_call(receiver, target, args, expr.span),
 
             ExprKind::Field(base, field) => {
                 let base_val = self.eval(base)?;
@@ -662,11 +644,7 @@ impl Evaluator {
                 }
             }
 
-            ExprKind::Binary(op, left, right) => {
-                let left_val = self.eval(left)?;
-                let right_val = self.eval(right)?;
-                self.eval_binary(*op, left_val, right_val)
-            }
+            ExprKind::Binary(op, left, right) => self.eval_binary_expr(*op, left, right),
 
             ExprKind::Unary(op, operand) => {
                 let val = self.eval(operand)?;
@@ -674,7 +652,7 @@ impl Evaluator {
             }
 
             ExprKind::If(cond, then_branch, else_branch) => {
-                let cond_val = self.eval(cond)?;
+                let cond_val = self.eval_forced(cond)?;
                 if cond_val.is_truthy() {
                     self.eval(then_branch)
                 } else {
@@ -721,51 +699,17 @@ impl Evaluator {
                 self.unwrap_try_value(value)
             }
 
-            ExprKind::Block(stmts, expr) => {
-                let old_env = self.env.clone();
-                self.env = self.env.child();
-
+            ExprKind::Block(stmts, expr) => self.with_child_env(|eval| {
                 for stmt in stmts {
-                    self.eval_stmt(stmt)?;
+                    eval.eval_stmt(stmt)?;
                 }
-
-                let result = if let Some(e) = expr {
-                    self.eval(e)?
-                } else {
-                    Value::Unit
-                };
-
-                self.env = old_env;
-                Ok(result)
-            }
-
-            ExprKind::Match(scrutinee, arms) => {
-                let val = self.eval(scrutinee)?;
-                for arm in arms {
-                    if let Some(bindings) = self.match_pattern(&arm.pattern, &val) {
-                        let old_env = self.env.clone();
-                        self.env = self.env.child();
-
-                        for (id, value) in bindings {
-                            self.env.define(id, value);
-                        }
-
-                        // Check guard if present
-                        if let Some(guard) = &arm.guard {
-                            let guard_val = self.eval(guard)?;
-                            if !guard_val.is_truthy() {
-                                self.env = old_env;
-                                continue;
-                            }
-                        }
-
-                        let result = self.eval(&arm.body)?;
-                        self.env = old_env;
-                        return Ok(result);
-                    }
+                match expr {
+                    Some(expr) => eval.eval(expr),
+                    None => Ok(Value::Unit),
                 }
-                Err(EvalError::PatternMatchFailed)
-            }
+            }),
+
+            ExprKind::Match(scrutinee, arms) => self.eval_match(scrutinee, arms),
 
             ExprKind::Interpolated(parts) => {
                 let mut result = String::new();
@@ -792,14 +736,10 @@ impl Evaluator {
                     .match_pattern(pattern, &val)
                     .ok_or(EvalError::PatternMatchFailed)?;
 
-                let old_env = self.env.clone();
-                let new_env = self.env.child();
-                new_env.define_many(bindings);
-                self.env = new_env;
-
-                let result = self.eval(body);
-                self.env = old_env;
-                result
+                self.with_child_env(|eval| {
+                    eval.env.define_many(bindings);
+                    eval.eval(body)
+                })
             }
 
             ExprKind::Lazy(inner) => Ok(Value::Thunk(crate::value::Thunk::new_hir(
@@ -815,6 +755,111 @@ impl Evaluator {
 
             ExprKind::Error(message) => Err(EvalError::TypeError(message.clone())),
         }
+    }
+
+    fn with_child_env<T>(
+        &mut self,
+        evaluate: impl FnOnce(&mut Self) -> Result<T, EvalError>,
+    ) -> Result<T, EvalError> {
+        let child = self.env.child();
+        let previous = std::mem::replace(&mut self.env, child);
+        let result = evaluate(self);
+        self.env = previous;
+        result
+    }
+
+    fn prepare_call_args(
+        &mut self,
+        callable: &Value,
+        args: &[Expr],
+        receiver: Option<Value>,
+    ) -> Result<Vec<Value>, EvalError> {
+        let offset = usize::from(receiver.is_some());
+        let mut values = Vec::with_capacity(args.len() + offset);
+        values.extend(receiver);
+        for (index, argument) in args.iter().enumerate() {
+            let value = if let Value::Closure { params, .. } = callable
+                && params
+                    .get(index + offset)
+                    .is_some_and(|param| param.is_lazy)
+            {
+                Value::Thunk(crate::value::Thunk::new_hir(
+                    argument.clone(),
+                    self.env.clone(),
+                ))
+            } else {
+                self.eval(argument)?
+            };
+            values.push(value);
+        }
+        Ok(values)
+    }
+
+    fn eval_method_call(
+        &mut self,
+        receiver: &Expr,
+        target: &Expr,
+        args: &[Expr],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let receiver = self.eval(receiver)?;
+        // Resolve the callable before preparing its explicit arguments.
+        // 在准备显式实参前解析可调用对象，以保留参数的惰性语义。
+        let callable = match self.method_resolutions.get(&span).copied() {
+            Some(def_id) => self.global_callable(def_id),
+            None => None,
+        };
+        let callable = match callable {
+            Some(callable) => callable,
+            None => self.eval(target)?,
+        };
+        let values = self.prepare_call_args(&callable, args, Some(receiver))?;
+        self.apply(callable, values)
+    }
+
+    fn eval_binary_expr(
+        &mut self,
+        op: BinOp,
+        left: &Expr,
+        right: &Expr,
+    ) -> Result<Value, EvalError> {
+        let left = self.eval(left)?;
+        if matches!(op, BinOp::And | BinOp::Or) {
+            let is_truthy = self.force_value(&left)?.is_truthy();
+            if is_truthy == matches!(op, BinOp::Or) {
+                return Ok(Value::Bool(is_truthy));
+            }
+            let right = self.eval(right)?;
+            return Ok(Value::Bool(self.force_value(&right)?.is_truthy()));
+        }
+        let right = self.eval(right)?;
+        self.eval_binary(op, left, right)
+    }
+
+    fn eval_match(
+        &mut self,
+        scrutinee: &Expr,
+        arms: &[neve_hir::MatchArm],
+    ) -> Result<Value, EvalError> {
+        let value = self.eval(scrutinee)?;
+        for arm in arms {
+            let Some(bindings) = self.match_pattern(&arm.pattern, &value) else {
+                continue;
+            };
+            let result = self.with_child_env(|eval| {
+                eval.env.define_many(bindings);
+                if let Some(guard) = &arm.guard
+                    && !eval.eval_forced(guard)?.is_truthy()
+                {
+                    return Ok(None);
+                }
+                eval.eval(&arm.body).map(Some)
+            })?;
+            if let Some(value) = result {
+                return Ok(value);
+            }
+        }
+        Err(EvalError::PatternMatchFailed)
     }
 
     fn eval_generators(
@@ -847,21 +892,15 @@ impl Evaluator {
                 .match_pattern(&generator.pattern, item)
                 .ok_or(EvalError::PatternMatchFailed)?;
 
-            let old_env = self.env.clone();
-            let new_env = self.env.child();
-            new_env.define_many(bindings);
-            self.env = new_env;
-
-            if let Some(condition) = &generator.condition {
-                let cond_val = self.eval(condition)?;
-                if !cond_val.is_truthy() {
-                    self.env = old_env;
-                    continue;
+            self.with_child_env(|eval| {
+                eval.env.define_many(bindings);
+                if let Some(condition) = &generator.condition
+                    && !eval.eval_forced(condition)?.is_truthy()
+                {
+                    return Ok(());
                 }
-            }
-
-            self.eval_generators(body, generators, index + 1, results)?;
-            self.env = old_env;
+                eval.eval_generators(body, generators, index + 1, results)
+            })?;
         }
 
         Ok(())
@@ -1567,13 +1606,13 @@ impl Evaluator {
             // Direct call in tail position
             ExprKind::Call(func, args) => {
                 let func_val = self.eval(func)?;
-                let arg_vals: Result<Vec<_>, _> = args.iter().map(|e| self.eval(e)).collect();
-                Ok(TcoResult::TailCall(func_val, arg_vals?))
+                let arg_vals = self.prepare_call_args(&func_val, args, None)?;
+                Ok(TcoResult::TailCall(func_val, arg_vals))
             }
 
             // If-then-else: evaluate condition, then the appropriate branch with TCO
             ExprKind::If(cond, then_branch, else_branch) => {
-                let cond_val = self.eval(cond)?;
+                let cond_val = self.eval_forced(cond)?;
                 match cond_val {
                     Value::Bool(true) => self.eval_with_tco(then_branch),
                     Value::Bool(false) => self.eval_with_tco(else_branch),
@@ -1584,50 +1623,18 @@ impl Evaluator {
             }
 
             // Block: evaluate statements, then final expression with TCO
-            ExprKind::Block(stmts, final_expr) => {
+            ExprKind::Block(stmts, final_expr) => self.with_child_env(|eval| {
                 for stmt in stmts {
-                    self.eval_stmt(stmt)?;
+                    eval.eval_stmt(stmt)?;
                 }
-
-                if let Some(expr) = final_expr {
-                    self.eval_with_tco(expr)
-                } else {
-                    Ok(TcoResult::Value(Value::Unit))
+                match final_expr {
+                    Some(expr) => eval.eval_with_tco(expr),
+                    None => Ok(TcoResult::Value(Value::Unit)),
                 }
-            }
+            }),
 
             // Match: evaluate scrutinee, match pattern, then evaluate arm with TCO
-            ExprKind::Match(scrutinee, arms) => {
-                let scrutinee_val = self.eval(scrutinee)?;
-
-                for arm in arms {
-                    if let Some(bindings) = self.match_pattern(&arm.pattern, &scrutinee_val) {
-                        // Check guard if present
-                        if let Some(guard) = &arm.guard {
-                            let old_env = self.env.clone();
-                            for (id, val) in bindings {
-                                self.env.define(id, val);
-                            }
-                            let guard_val = self.eval(guard)?;
-                            self.env = old_env;
-
-                            if guard_val != Value::Bool(true) {
-                                continue;
-                            }
-                        } else {
-                            // No guard, just bind variables
-                            for (id, val) in bindings {
-                                self.env.define(id, val);
-                            }
-                        }
-
-                        // Evaluate the arm body with TCO
-                        return self.eval_with_tco(&arm.body);
-                    }
-                }
-
-                Err(EvalError::PatternMatchFailed)
-            }
+            ExprKind::Match(scrutinee, arms) => self.eval_match_with_tco(scrutinee, arms),
 
             // All other expressions are not in tail position - evaluate normally
             _ => {
@@ -1635,6 +1642,37 @@ impl Evaluator {
                 Ok(TcoResult::Value(val))
             }
         }
+    }
+
+    fn eval_match_with_tco(
+        &mut self,
+        scrutinee: &Expr,
+        arms: &[neve_hir::MatchArm],
+    ) -> Result<TcoResult, EvalError> {
+        let value = self.eval(scrutinee)?;
+        for arm in arms {
+            let Some(bindings) = self.match_pattern(&arm.pattern, &value) else {
+                continue;
+            };
+            let result = self.with_child_env(|eval| {
+                eval.env.define_many(bindings);
+                if let Some(guard) = &arm.guard
+                    && eval.eval_forced(guard)? != Value::Bool(true)
+                {
+                    return Ok(None);
+                }
+                eval.eval_with_tco(&arm.body).map(Some)
+            })?;
+            if let Some(result) = result {
+                return Ok(result);
+            }
+        }
+        Err(EvalError::PatternMatchFailed)
+    }
+
+    fn eval_forced(&mut self, expr: &Expr) -> Result<Value, EvalError> {
+        let value = self.eval(expr)?;
+        self.force_value(&value)
     }
 
     fn force_value(&mut self, value: &Value) -> Result<Value, EvalError> {
@@ -3399,6 +3437,7 @@ mod tests {
                         kind: TyKind::Int,
                         span,
                     },
+                    is_lazy: false,
                     span,
                 },
                 Param {
@@ -3412,6 +3451,7 @@ mod tests {
                         kind: TyKind::Int,
                         span,
                     },
+                    is_lazy: false,
                     span,
                 },
             ],

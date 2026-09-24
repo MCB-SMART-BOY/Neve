@@ -191,10 +191,10 @@ fn test_document_builds_semantic_hover_for_generic_function() {
 
 #[test]
 fn test_document_hover_maps_function_after_top_level_destructuring() {
-    let doc = Document::new(
-        "file:///test.neve".to_string(),
-        "let (text, count) = (\"text\", 2); fn foo(x: Int) -> Int = x;".to_string(),
-    );
+    let source =
+        "let (text, count) = (\"text\", 2); fn foo(x: Int) -> Int = x; let pair = (text, count);";
+    assert_top_level_binding_hovers(source, &[("text", "String"), ("count", "Int")]);
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
     let index = doc
         .symbol_index
         .as_ref()
@@ -209,6 +209,117 @@ fn test_document_hover_maps_function_after_top_level_destructuring() {
         .expect("semantic hover should exist");
 
     assert_eq!(hover, "fn foo: (Int) -> Int");
+}
+
+fn assert_top_level_binding_hovers(source: &str, bindings: &[(&str, &str)]) {
+    let (_, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    for &(name, ty) in bindings {
+        let definition = source.find(name).unwrap();
+        let reference = source.rfind(name).unwrap();
+        assert_ne!(definition, reference, "{name} should also be referenced");
+        let symbol = index
+            .find_definition_at(reference)
+            .expect("reference should resolve to its own pattern binding");
+        assert_eq!(usize::from(symbol.def_span.start), definition, "{name}");
+        assert_eq!(symbol.def_span.len(), name.len(), "{name}");
+        assert_eq!(
+            doc.definition_hovers.get(&symbol.def_span),
+            Some(&format!("let {name}: {ty}"))
+        );
+        assert_eq!(
+            doc.semantic_hover_at(reference).map(|(_, hover)| hover),
+            Some(format!("{name}: {ty}").as_str())
+        );
+    }
+}
+
+#[test]
+fn test_document_nested_top_level_destructuring_preserves_binding_hovers() {
+    let source = r#"
+        let ({ title, payload = (count, enabled) }, [first, ..rest]) =
+            ({ title = "hi", payload = (2, true) }, [1, 2]);
+        let result = (title, count, enabled, first, rest);
+    "#;
+    assert_top_level_binding_hovers(
+        source,
+        &[
+            ("title", "String"),
+            ("count", "Int"),
+            ("enabled", "Bool"),
+            ("first", "Int"),
+            ("rest", "List[Int]"),
+        ],
+    );
+}
+
+#[test]
+fn test_document_binding_pattern_preserves_initializer_local_hovers() {
+    let source = r#"
+        let whole @ (text, count) = { let prefix = "text"; (prefix, 2) };
+        let result = (whole, text, count);
+    "#;
+    assert_top_level_binding_hovers(
+        source,
+        &[
+            ("whole", "(String, Int)"),
+            ("text", "String"),
+            ("count", "Int"),
+        ],
+    );
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let reference = source.rfind("prefix").unwrap();
+    let symbol = index.find_definition_at(reference).unwrap();
+    assert_eq!(
+        doc.definition_hovers
+            .get(&symbol.def_span)
+            .map(String::as_str),
+        Some("prefix: String")
+    );
+    assert_eq!(
+        doc.semantic_hover_at(reference).map(|(_, hover)| hover),
+        Some("prefix: String")
+    );
+}
+
+#[test]
+fn test_document_constructor_or_pattern_preserves_each_binding_hover_span() {
+    let source = r#"
+        enum Choice { Pick(Int), Other(Int) };
+        let Pick(value) | Other(value) = Pick(1);
+        let result = value;
+    "#;
+    let (_, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let definitions: Vec<_> = source
+        .match_indices("value)")
+        .map(|(offset, _)| offset)
+        .collect();
+    assert_eq!(definitions.len(), 2);
+    for offset in definitions {
+        let hover = doc
+            .definition_hovers
+            .iter()
+            .find(|(span, _)| usize::from(span.start) == offset)
+            .expect("each or-pattern binding span should have a hover");
+        assert_eq!(hover.0.len(), "value".len());
+        assert_eq!(hover.1, "let value: Int");
+    }
+    assert_eq!(
+        doc.semantic_hover_at(source.rfind("value").unwrap())
+            .map(|(_, hover)| hover),
+        Some("value: Int")
+    );
 }
 
 #[test]
@@ -263,6 +374,28 @@ fn test_document_hover_includes_local_parameters_and_lets() {
         .get(&sum_symbol.def_span)
         .expect("local let semantic hover should exist");
     assert_eq!(sum_hover, "sum: Int");
+}
+
+#[test]
+fn test_document_hover_includes_destructured_function_parameters() {
+    let source = "fn sum_pair((x, y): (Int, Int)) -> Int = x + y;";
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+
+    for name in ["x", "y"] {
+        let symbol = index
+            .get_definitions(name)
+            .and_then(|defs| defs.first())
+            .expect("tuple parameter definition should be indexed");
+        let hover = doc
+            .definition_hovers
+            .get(&symbol.def_span)
+            .expect("tuple parameter hover should exist");
+        assert_eq!(hover, &format!("{name}: Int"));
+    }
 }
 
 #[test]
@@ -520,6 +653,26 @@ fn test_document_hover_uses_std_list_max_binding_type() {
         .expect("semantic hover should exist");
 
     assert_eq!(hover, "let value: Option[Int]");
+}
+#[test]
+fn test_document_hover_traverses_std_method_arguments() {
+    let source = "use std.list = list; let value = list.map(|x: Int| x, [1]);";
+    let doc = Document::new("file:///test.neve".to_string(), source.to_string());
+    let index = doc
+        .symbol_index
+        .as_ref()
+        .expect("symbol index should exist");
+    let symbol = index
+        .get_definitions("x")
+        .and_then(|defs| defs.first())
+        .expect("lambda parameter should be indexed");
+
+    assert_eq!(
+        doc.definition_hovers
+            .get(&symbol.def_span)
+            .map(String::as_str),
+        Some("x: Int")
+    );
 }
 
 #[test]
@@ -3058,6 +3211,110 @@ fn test_semantic_tokens_function() {
     assert!(semantic.len() >= 4);
 }
 
+fn collect_ast_semantic_tokens(source: &str) -> Vec<(&str, u32, u32)> {
+    let (_, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+    let lines: Vec<_> = source.lines().collect();
+    let mut positions = std::collections::BTreeSet::new();
+    let mut line = 0;
+    let mut column = 0;
+    neve_lsp::generate_semantic_tokens_from_ast(source)
+        .into_iter()
+        .map(|token| {
+            line += token.delta_line as usize;
+            column = if token.delta_line == 0 {
+                column + token.delta_start as usize
+            } else {
+                token.delta_start as usize
+            };
+            assert!(positions.insert((line, column)), "duplicate token position");
+            (
+                &lines[line][column..column + token.length as usize],
+                token.token_type,
+                token.token_modifiers_bitset,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn test_semantic_tokens_nested_pattern_bindings_are_declarations() {
+    use neve_lsp::{token_modifiers, token_types};
+
+    let source = r#"
+        let whole @ ({ short, renamed = (left, [element]) }, [head, ..rest, tail]) = input;
+        fn local() = { let (block_first, { value = block_second }) = input; 0 };
+        fn inspect(value) = match value {
+            Some((inner, [first, ..middle, last])) -> 0,
+            None -> 0
+        };
+        fn alternatives(value) = match value {
+            Some(choice) | Other(choice) -> 0,
+            _ -> 0
+        };
+    "#;
+    let tokens = collect_ast_semantic_tokens(source);
+    let declarations: Vec<_> = tokens
+        .iter()
+        .filter(|(_, kind, modifiers)| {
+            *kind == token_types::VARIABLE
+                && *modifiers == (token_modifiers::DECLARATION | token_modifiers::READONLY)
+        })
+        .map(|(name, _, _)| *name)
+        .collect();
+    assert_eq!(
+        declarations,
+        [
+            "whole",
+            "short",
+            "left",
+            "element",
+            "head",
+            "rest",
+            "tail",
+            "block_first",
+            "block_second",
+            "inner",
+            "first",
+            "middle",
+            "last",
+            "choice",
+            "choice",
+        ]
+    );
+}
+
+#[test]
+fn test_semantic_tokens_nested_parameters_preserve_parameter_classification() {
+    use neve_lsp::token_types;
+
+    let source = r#"
+        fn unpack((fn_first, { field = [fn_second] })) = 0;
+        impl Show for Int {
+            fn show((impl_first, { impl_second })) = 0;
+        };
+        let closure = fn((lambda_first, { field = [lambda_second, ..lambda_rest] })) 0;
+    "#;
+    let tokens = collect_ast_semantic_tokens(source);
+    let parameters: Vec<_> = tokens
+        .iter()
+        .filter(|(_, kind, _)| *kind == token_types::PARAMETER)
+        .map(|(name, _, modifiers)| (*name, *modifiers))
+        .collect();
+    assert_eq!(
+        parameters,
+        [
+            ("fn_first", 0),
+            ("fn_second", 0),
+            ("impl_first", 0),
+            ("impl_second", 0),
+            ("lambda_first", 0),
+            ("lambda_second", 0),
+            ("lambda_rest", 0),
+        ]
+    );
+}
+
 // Symbol index tests
 
 #[test]
@@ -3173,6 +3430,130 @@ fn test_symbol_index_references_respect_shadowing() {
 
     assert_eq!(inner_refs.len(), 3);
     assert_eq!(outer_refs.len(), 2);
+}
+
+#[test]
+fn test_symbol_index_constructor_patterns_resolve_variants_in_either_order() {
+    for source in [
+        "enum Choice { Pick(Int), Empty }; fn unwrap(v) = match v { Pick(x) -> x, Empty -> 0 };",
+        "fn unwrap(v) = match v { Pick(x) -> x, Empty -> 0 }; enum Choice { Pick(Int), Empty };",
+    ] {
+        let (ast, diagnostics) = parse(source);
+        assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+        let index = SymbolIndex::from_ast(&ast);
+        for (name, pattern) in [("Pick", "Pick(x)"), ("Empty", "Empty ->")] {
+            let offset = source.find(pattern).unwrap();
+            let declaration = index.get_definitions(name).unwrap().first().unwrap();
+            let reference = index
+                .references
+                .iter()
+                .find(|reference| usize::from(reference.span.start) == offset)
+                .expect("constructor pattern reference should be indexed");
+            assert!(!reference.is_write);
+            assert_eq!(reference.target_def_span, Some(declaration.def_span));
+            assert_eq!(
+                index
+                    .find_definition_at(offset)
+                    .map(|symbol| symbol.def_span),
+                Some(declaration.def_span)
+            );
+            let references =
+                index.find_references_at(usize::from(declaration.def_span.start), false);
+            assert_eq!(references.len(), 1);
+            assert_eq!(references[0].span, reference.span);
+        }
+    }
+}
+#[test]
+fn test_symbol_index_or_pattern_bindings_share_definition_identity() {
+    let source = "enum Choice { Pick(Int), Other(Int) }; fn unwrap(v) = match v { Pick(x) | Other(x) -> x };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+    let index = SymbolIndex::from_ast(&ast);
+    let definitions = index
+        .get_definitions("x")
+        .expect("or-pattern binding should be indexed");
+    assert_eq!(definitions.len(), 1);
+
+    let first_binding = source.find("Pick(x)").unwrap() + "Pick(".len();
+    let second_binding = source.find("Other(x)").unwrap() + "Other(".len();
+    let body_reference = source.rfind("-> x").unwrap() + "-> ".len();
+    let definition_span = definitions[0].def_span;
+
+    for offset in [first_binding, second_binding, body_reference] {
+        assert_eq!(
+            index
+                .find_definition_at(offset)
+                .map(|symbol| symbol.def_span),
+            Some(definition_span)
+        );
+        assert_eq!(
+            index
+                .find_references_at(offset, true)
+                .iter()
+                .filter(|reference| reference.target_def_span == Some(definition_span))
+                .count(),
+            3
+        );
+    }
+}
+
+#[test]
+fn test_symbol_index_constructor_pattern_ignores_local_value_shadowing() {
+    let source = "enum Choice { Pick(Int), Empty }; fn unwrap(v) = { let Pick @ _ = 0; match v { Pick(x) -> x, Empty -> 0 } };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+    let index = SymbolIndex::from_ast(&ast);
+    let offset = source.find("Pick(x)").unwrap();
+    let symbol = index.find_definition_at(offset).unwrap();
+    assert_eq!(symbol.kind, neve_lsp::SymbolKind::Variant);
+    assert_eq!(
+        usize::from(symbol.def_span.start),
+        source.find("Pick(Int)").unwrap()
+    );
+}
+
+#[test]
+fn test_symbol_index_unknown_constructor_does_not_resolve_value_names() {
+    for source in [
+        "fn Missing(v) = v; fn unpack(v) = match v { Missing(x) -> x, _ -> 0 };",
+        "fn unpack(v) = { let Missing @ _ = 0; match v { Missing(x) -> x, _ -> 0 } };",
+        "fn unpack(v) = match v { Missing(x) -> x, _ -> 0 };",
+    ] {
+        let (ast, diagnostics) = parse(source);
+        assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+        let index = SymbolIndex::from_ast(&ast);
+        let offset = source.find("Missing(x)").unwrap();
+        let reference = index
+            .references
+            .iter()
+            .find(|reference| usize::from(reference.span.start) == offset)
+            .expect("unresolved constructor reference should be indexed");
+        assert!(!reference.is_write);
+        assert_eq!(reference.target_def_span, None);
+        assert!(index.find_definition_at(offset).is_none());
+        assert!(index.find_references_at(offset, true).is_empty());
+    }
+}
+
+#[test]
+fn test_symbol_index_builtin_constructor_patterns_have_no_source_definition() {
+    let source = "fn unwrap(v) = match v { Some(x) -> x, None -> 0 };";
+    let (ast, diagnostics) = parse(source);
+    assert!(diagnostics.is_empty(), "parse errors: {diagnostics:?}");
+    let index = SymbolIndex::from_ast(&ast);
+    for name in ["Some", "None"] {
+        let offset = source.find(name).unwrap();
+        let reference = index
+            .references
+            .iter()
+            .find(|reference| usize::from(reference.span.start) == offset)
+            .expect("builtin constructor reference should be indexed");
+        assert!(!reference.is_write);
+        assert_eq!(reference.target_def_span, None);
+        assert!(index.find_definition_at(offset).is_none());
+        assert!(index.find_references_at(offset, true).is_empty());
+    }
 }
 
 // =============================================================================

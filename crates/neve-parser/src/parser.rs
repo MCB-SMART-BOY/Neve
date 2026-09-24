@@ -2622,6 +2622,9 @@ impl Parser {
     /// 解析绑定模式：名称 @ 模式
     fn parse_binding_pattern(&mut self) -> Pattern {
         let start = self.current_span();
+        if matches!(self.current_kind(), TokenKind::Ident(name) if name == "_") {
+            return self.parse_primary_pattern();
+        }
 
         if let TokenKind::Ident(_) = self.current_kind() {
             let ident = self.parse_ident();

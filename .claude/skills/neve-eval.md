@@ -69,18 +69,24 @@ pub enum ThunkState {
 ```
 let x = ~expensive_computation
 //
-// x is Value::Thunk(Pending(expr, env))
+// x is Value::Thunk(HirUnevaluated { expr, env })
 //
 force(x)
   │
-  ├── if Forced(v) → return v (memoized)
+  ├── if Evaluated(v) → return v (memoized)
   │
-  └── if Pending(expr, env)
+  └── if HirUnevaluated(expr, env)
         │
-        ├── evaluate expr in env → result
-        ├── set thunk to Forced(result)
+        ├── evaluate expr in its captured environment → result
+        ├── set thunk to Evaluated(result)
         └── return result
 ```
+
+Function parameters prefixed with `~` are passed as HIR thunks. The evaluator
+forces them at boolean conditions, match guards, list-comprehension conditions,
+unary operators, and binary/comparison operations; unused lazy arguments remain
+unevaluated. `with_child_env` and function application restore the caller
+environment on both success and error paths, including TCO.
 
 ## HIR Evaluator Core Loop
 

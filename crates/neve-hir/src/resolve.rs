@@ -361,16 +361,7 @@ impl Resolver {
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
-            imported_builtin_modules: {
-                let mut m = HashMap::new();
-                for prefix in [
-                    "io", "list", "path", "Map", "Set", "option", "result", "string", "math",
-                    "fetch",
-                ] {
-                    m.insert(prefix.to_string(), prefix.to_string());
-                }
-                m
-            },
+            imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: None,
@@ -392,16 +383,7 @@ impl Resolver {
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
-            imported_builtin_modules: {
-                let mut m = HashMap::new();
-                for prefix in [
-                    "io", "list", "path", "Map", "Set", "option", "result", "string", "math",
-                    "fetch",
-                ] {
-                    m.insert(prefix.to_string(), prefix.to_string());
-                }
-                m
-            },
+            imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
             module_loader: Some(ModuleLoader::new(root_dir)),
@@ -1123,6 +1105,21 @@ impl Resolver {
         }
     }
 
+    fn resolve_builtin_module_receiver(&self, receiver: &ast::Expr) -> Option<&str> {
+        let name = match &receiver.kind {
+            ast::ExprKind::Var(ident) => &ident.name,
+            ast::ExprKind::Path(parts) => match parts.as_slice() {
+                [ident] => &ident.name,
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if self.lookup_local(name).is_some() || self.lookup_global(name).is_some() {
+            return None;
+        }
+        self.imported_builtin_modules.get(name).map(String::as_str)
+    }
+
     // === Second pass: lower items ===
     // === 第二遍：降级项 ===
 
@@ -1555,7 +1552,7 @@ impl Resolver {
     /// Lower a function parameter.
     /// 降级函数参数。
     fn lower_param(&mut self, param: &ast::Param) -> Param {
-        self.lower_param_parts(&param.pattern, Some(&param.ty), param.span)
+        self.lower_param_parts(&param.pattern, Some(&param.ty), param.is_lazy, param.span)
     }
 
     fn first_pattern_binding(pattern: &Pattern) -> Option<(LocalId, String)> {
@@ -1583,6 +1580,7 @@ impl Resolver {
         &mut self,
         pattern: &ast::Pattern,
         ty: Option<&ast::Type>,
+        is_lazy: bool,
         span: Span,
     ) -> Param {
         let pattern = self.lower_pattern(pattern);
@@ -1597,6 +1595,7 @@ impl Resolver {
             name,
             pattern,
             ty,
+            is_lazy,
             span,
         }
     }
@@ -1869,7 +1868,7 @@ impl Resolver {
                 self.push_scope();
                 let params: Vec<Param> = params
                     .iter()
-                    .map(|p| self.lower_param_parts(&p.pattern, p.ty.as_ref(), p.span))
+                    .map(|p| self.lower_param_parts(&p.pattern, p.ty.as_ref(), false, p.span))
                     .collect();
                 let return_ty = return_type.as_ref().map(|ty| self.lower_type(ty));
                 let body = self.lower_expr(body);
@@ -1894,9 +1893,7 @@ impl Resolver {
             } => {
                 let args = args.iter().map(|e| self.lower_expr(e)).collect();
 
-                if let ast::ExprKind::Var(module) = &receiver.kind
-                    && let Some(module_prefix) = self.imported_builtin_modules.get(&module.name)
-                {
+                if let Some(module_prefix) = self.resolve_builtin_module_receiver(receiver) {
                     let target = Expr {
                         kind: ExprKind::Builtin(format!("{module_prefix}.{}", method.name)),
                         ty: Self::unknown_ty(span),
@@ -1914,8 +1911,12 @@ impl Resolver {
             }
 
             ast::ExprKind::Field { base, field } => {
-                let base = self.lower_expr(base);
-                ExprKind::Field(Box::new(base), field.name.clone())
+                if let Some(module_prefix) = self.resolve_builtin_module_receiver(base) {
+                    ExprKind::Builtin(format!("{module_prefix}.{}", field.name))
+                } else {
+                    let base = self.lower_expr(base);
+                    ExprKind::Field(Box::new(base), field.name.clone())
+                }
             }
 
             ast::ExprKind::TupleIndex { base, index } => {

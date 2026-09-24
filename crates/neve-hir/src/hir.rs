@@ -488,6 +488,9 @@ pub struct Param {
     pub pattern: Pattern,
     /// Parameter type. / 参数类型。
     pub ty: Ty,
+    /// Whether the argument is evaluated on demand and cached.
+    /// 是否按需对实参求值并缓存结果。
+    pub is_lazy: bool,
     /// Source location. / 源代码位置。
     pub span: Span,
 }

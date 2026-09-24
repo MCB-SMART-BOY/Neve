@@ -2023,3 +2023,20 @@ fn test_parse_multi_param_function_type() {
     let (_file, diags) = parse("let f: (Int, String) -> Bool = true;");
     assert!(diags.is_empty());
 }
+
+#[test]
+fn test_parse_wildcard_parameter_preserves_pattern_kind() {
+    let (file, diagnostics) = parse("fn discard(_, _named) = 42;");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let ItemKind::Fn(function) = &file.items[0].kind else {
+        panic!("expected function definition");
+    };
+    assert!(matches!(
+        function.params[0].pattern.kind,
+        PatternKind::Wildcard
+    ));
+    assert!(matches!(
+        &function.params[1].pattern.kind,
+        PatternKind::Var(ident) if ident.name == "_named"
+    ));
+}

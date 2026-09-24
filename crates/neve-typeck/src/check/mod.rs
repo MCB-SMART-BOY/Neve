@@ -180,11 +180,11 @@ pub struct TypeChecker {
     /// 是否检查未使用的变量。
     check_unused: bool,
     repl_mode: bool,
-    /// Whether we are currently type-checking inside an `effect` function body.
-    /// When true, effectful calls in lambdas are allowed (they inherit the enclosing effect context).
+    /// Whether the enclosing function has explicit or inferred effects.
+    /// Nested lambdas inherit this context during body inference.
     in_effectful_fn: bool,
-    /// Set of DefIds for functions marked with `effect`.
-    /// Used for inter-procedural effect checking.
+    /// Explicit and transitively inferred effectful functions and impl methods.
+    /// Computed to a fixed point before checking any function bodies.
     effectful_functions: HashSet<DefId>,
     /// Human-readable names for global definitions (for "did you mean?" suggestions).
     /// 全局定义的人类可读名称（用于"你是想说？"建议）。
@@ -280,11 +280,21 @@ impl TypeChecker {
         // 第二遍：检查特征实现是否完整
         self.check_all_impls();
 
+        // Establish all effect contexts before checking bodies, including forward
+        // references and recursive call chains. Method dispatch is resolved while
+        // checking bodies, so unresolved method fallbacks stay out of this pass.
+        self.infer_function_effects(module, false);
+
         // Third pass: type check function bodies
         // 第三遍：对函数体进行类型检查
         for item in &module.items {
             self.check_item(item);
         }
+
+        // Rebuild the effect graph with resolved method DefIds and validate lambdas
+        // that could not be classified before method dispatch was type-checked.
+        self.infer_function_effects(module, true);
+        self.check_deferred_lambda_effects(module);
 
         // Fourth pass: verify deferred trait bound constraints.
         // By now, type variables should be unified, so the actual types
@@ -1733,27 +1743,169 @@ impl TypeChecker {
         }
     }
 
-    /// Returns true if the expression body contains effectful calls.
-    fn body_has_effectful_calls(&self, expr: &neve_hir::Expr) -> bool {
-        let mut calls = Vec::new();
-        self.collect_effectful_calls(expr, &mut calls);
-        !calls.is_empty()
+    /// Infer effects once from the call graph, independently of declaration order.
+    fn infer_function_effects(&mut self, module: &Module, include_method_fallbacks: bool) {
+        let mut callers = HashMap::new();
+        for item in &module.items {
+            match &item.kind {
+                ItemKind::Fn(function) => self.collect_effect_dependencies(
+                    item.id,
+                    &function.body,
+                    function.effectful,
+                    include_method_fallbacks,
+                    &mut callers,
+                ),
+                ItemKind::Impl(implementation) => {
+                    for method in &implementation.items {
+                        self.collect_effect_dependencies(
+                            method.id,
+                            &method.body,
+                            method.effectful,
+                            include_method_fallbacks,
+                            &mut callers,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut pending: Vec<_> = self.effectful_functions.iter().copied().collect();
+        while let Some(callee) = pending.pop() {
+            let Some(dependents) = callers.get(&callee) else {
+                continue;
+            };
+            for &caller in dependents {
+                if self.effectful_functions.insert(caller) {
+                    pending.push(caller);
+                }
+            }
+        }
     }
 
-    fn collect_effectful_calls(&self, expr: &neve_hir::Expr, out: &mut Vec<(String, Span)>) {
-        use neve_hir::ExprKind;
+    fn collect_effect_dependencies(
+        &mut self,
+        id: DefId,
+        body: &Expr,
+        has_explicit_effect: bool,
+        include_method_fallbacks: bool,
+        callers: &mut HashMap<DefId, Vec<DefId>>,
+    ) {
+        let mut is_effectful = has_explicit_effect;
+        self.visit_effect_references(body, include_method_fallbacks, &mut |reference| {
+            match &reference.kind {
+                ExprKind::Builtin(name) if Self::is_effectful_builtin_name(name) => {
+                    is_effectful = true;
+                }
+                ExprKind::Global(callee) => callers.entry(*callee).or_default().push(id),
+                ExprKind::MethodCall { .. } => {
+                    if let Some(callee) = self.method_resolutions.get(&reference.span) {
+                        callers.entry(*callee).or_default().push(id);
+                    }
+                }
+                _ => {}
+            }
+        });
+        if is_effectful {
+            self.effectful_functions.insert(id);
+        }
+    }
+
+    fn collect_effectful_calls(
+        &self,
+        expr: &Expr,
+        out: &mut Vec<(String, Span)>,
+        include_method_fallbacks: bool,
+    ) {
+        self.visit_effect_references(expr, include_method_fallbacks, &mut |reference| {
+            match &reference.kind {
+                ExprKind::Builtin(name) if Self::is_effectful_builtin_name(name) => {
+                    out.push((name.clone(), reference.span));
+                }
+                ExprKind::Global(id) if self.effectful_functions.contains(id) => {
+                    out.push(("call to effectful function".to_string(), reference.span));
+                }
+                ExprKind::MethodCall { method, .. }
+                    if self
+                        .method_resolutions
+                        .get(&reference.span)
+                        .is_some_and(|id| self.effectful_functions.contains(id)) =>
+                {
+                    out.push((
+                        format!("call to effectful method '{method}'"),
+                        reference.span,
+                    ));
+                }
+                _ => {}
+            }
+        });
+    }
+
+    fn check_deferred_lambda_effects(&mut self, module: &Module) {
+        let roots: Vec<(&Expr, bool)> = module
+            .items
+            .iter()
+            .flat_map(|item| match &item.kind {
+                ItemKind::Fn(function) => {
+                    vec![(&function.body, self.effectful_functions.contains(&item.id))]
+                }
+                ItemKind::Impl(implementation) => implementation
+                    .items
+                    .iter()
+                    .map(|method| (&method.body, self.effectful_functions.contains(&method.id)))
+                    .collect(),
+                ItemKind::Expr(expr) => vec![(expr, false)],
+                _ => Vec::new(),
+            })
+            .collect();
+
+        for (root, allow_effects) in roots {
+            if allow_effects {
+                continue;
+            }
+            let mut lambda_bodies = Vec::new();
+            self.visit_effect_references(root, true, &mut |expr| {
+                if let ExprKind::Lambda { body, .. } = &expr.kind {
+                    lambda_bodies.push(body.as_ref().clone());
+                }
+            });
+            for body in lambda_bodies {
+                let mut calls = Vec::new();
+                self.collect_effectful_calls(&body, &mut calls, true);
+                for (name, span) in calls {
+                    self.report_lambda_effect(name, span);
+                }
+            }
+        }
+    }
+
+    fn report_lambda_effect(&mut self, name: String, span: Span) {
+        let already_reported = self
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.span == span && diagnostic.message.contains("in lambda"));
+        if !already_reported {
+            self.error(
+                span,
+                format!("effectful call {name} in lambda; use `effect` function"),
+            );
+        }
+    }
+
+    // Keep the exhaustive HIR walk together so inference and diagnostics visit
+    // exactly the same expression positions, including deferred lambda bodies.
+    fn visit_effect_references(
+        &self,
+        expr: &Expr,
+        include_method_fallbacks: bool,
+        visit: &mut impl FnMut(&Expr),
+    ) {
         match &expr.kind {
-            ExprKind::Builtin(name) if Self::is_effectful_builtin_name(name) => {
-                out.push((name.clone(), expr.span));
-            }
-            ExprKind::Global(def_id) if self.effectful_functions.contains(def_id) => {
-                // Calling an effectful function from a pure context
-                out.push(("call to effectful function".to_string(), expr.span));
-            }
+            ExprKind::Builtin(_) | ExprKind::Global(_) => {}
             ExprKind::Call(func, args) => {
-                self.collect_effectful_calls(func, out);
-                for a in args {
-                    self.collect_effectful_calls(a, out);
+                self.visit_effect_callee(func, include_method_fallbacks, visit);
+                for arg in args {
+                    self.visit_effect_references(arg, include_method_fallbacks, visit);
                 }
             }
             ExprKind::MethodCall {
@@ -1762,83 +1914,107 @@ impl TypeChecker {
                 args,
                 ..
             } => {
-                self.collect_effectful_calls(receiver, out);
-                self.collect_effectful_calls(target, out);
-                for a in args {
-                    self.collect_effectful_calls(a, out);
+                visit(expr);
+                self.visit_effect_references(receiver, include_method_fallbacks, visit);
+                if include_method_fallbacks && !self.method_resolutions.contains_key(&expr.span) {
+                    self.visit_effect_callee(target, include_method_fallbacks, visit);
+                }
+                for arg in args {
+                    self.visit_effect_references(arg, include_method_fallbacks, visit);
                 }
             }
-            ExprKind::Binary(_, left, right) => {
-                self.collect_effectful_calls(left, out);
-                self.collect_effectful_calls(right, out);
+            ExprKind::Binary(_, left, right)
+            | ExprKind::Index {
+                base: left,
+                index: right,
             }
-            ExprKind::Unary(_, op) => self.collect_effectful_calls(op, out),
+            | ExprKind::Coalesce {
+                value: left,
+                default: right,
+            }
+            | ExprKind::Let {
+                value: left,
+                body: right,
+                ..
+            } => {
+                self.visit_effect_references(left, include_method_fallbacks, visit);
+                self.visit_effect_references(right, include_method_fallbacks, visit);
+            }
+            ExprKind::Unary(_, inner)
+            | ExprKind::Field(inner, _)
+            | ExprKind::SafeField { base: inner, .. }
+            | ExprKind::TupleIndex(inner, _)
+            | ExprKind::Try(inner)
+            | ExprKind::Lazy(inner) => {
+                self.visit_effect_references(inner, include_method_fallbacks, visit);
+            }
+            ExprKind::Lambda { body, .. } => {
+                visit(expr);
+                self.visit_effect_references(body, include_method_fallbacks, visit);
+            }
             ExprKind::If(cond, then_body, else_body) => {
-                self.collect_effectful_calls(cond, out);
-                self.collect_effectful_calls(then_body, out);
-                self.collect_effectful_calls(else_body, out);
+                self.visit_effect_references(cond, include_method_fallbacks, visit);
+                self.visit_effect_references(then_body, include_method_fallbacks, visit);
+                self.visit_effect_references(else_body, include_method_fallbacks, visit);
             }
             ExprKind::Block(stmts, tail) => {
-                for s in stmts {
-                    match &s.kind {
-                        neve_hir::StmtKind::Let { value, .. } => {
-                            self.collect_effectful_calls(value, out)
-                        }
-                        neve_hir::StmtKind::Expr(e) => self.collect_effectful_calls(e, out),
-                    }
+                for stmt in stmts {
+                    let (StmtKind::Let { value, .. } | StmtKind::Expr(value)) = &stmt.kind;
+                    self.visit_effect_references(value, include_method_fallbacks, visit);
                 }
-                if let Some(e) = tail {
-                    self.collect_effectful_calls(e, out);
+                if let Some(tail) = tail {
+                    self.visit_effect_references(tail, include_method_fallbacks, visit);
                 }
-            }
-            ExprKind::Let { value, body, .. } => {
-                self.collect_effectful_calls(value, out);
-                self.collect_effectful_calls(body, out);
             }
             ExprKind::Match(scrutinee, arms) => {
-                self.collect_effectful_calls(scrutinee, out);
+                self.visit_effect_references(scrutinee, include_method_fallbacks, visit);
                 for arm in arms {
-                    self.collect_effectful_calls(&arm.body, out);
+                    if let Some(guard) = &arm.guard {
+                        self.visit_effect_references(guard, include_method_fallbacks, visit);
+                    }
+                    self.visit_effect_references(&arm.body, include_method_fallbacks, visit);
                 }
             }
-            ExprKind::Field(base, _) => self.collect_effectful_calls(base, out),
-            ExprKind::SafeField { base, .. } => self.collect_effectful_calls(base, out),
-            ExprKind::TupleIndex(base, _) => self.collect_effectful_calls(base, out),
-            ExprKind::Index { base, index } => {
-                self.collect_effectful_calls(base, out);
-                self.collect_effectful_calls(index, out);
-            }
-            ExprKind::Try(inner) => self.collect_effectful_calls(inner, out),
-            ExprKind::Coalesce { value, default } => {
-                self.collect_effectful_calls(value, out);
-                self.collect_effectful_calls(default, out);
-            }
             ExprKind::ListComp { body, generators } => {
-                self.collect_effectful_calls(body, out);
-                for g in generators {
-                    self.collect_effectful_calls(&g.iter, out);
+                self.visit_effect_references(body, include_method_fallbacks, visit);
+                for generator in generators {
+                    self.visit_effect_references(&generator.iter, include_method_fallbacks, visit);
+                    if let Some(condition) = &generator.condition {
+                        self.visit_effect_references(condition, include_method_fallbacks, visit);
+                    }
                 }
             }
             ExprKind::Record(fields) => {
-                for (_, v) in fields {
-                    self.collect_effectful_calls(v, out);
+                for (_, value) in fields {
+                    self.visit_effect_references(value, include_method_fallbacks, visit);
                 }
             }
             ExprKind::List(items) | ExprKind::Tuple(items) => {
                 for item in items {
-                    self.collect_effectful_calls(item, out);
+                    self.visit_effect_references(item, include_method_fallbacks, visit);
                 }
             }
-            ExprKind::Lambda { body, .. } => self.collect_effectful_calls(body, out),
-            ExprKind::Lazy(inner) => self.collect_effectful_calls(inner, out),
             ExprKind::Interpolated(parts) => {
                 for part in parts {
-                    if let neve_hir::StringPart::Expr(e) = part {
-                        self.collect_effectful_calls(e, out);
+                    if let neve_hir::StringPart::Expr(value) = part {
+                        self.visit_effect_references(value, include_method_fallbacks, visit);
                     }
                 }
             }
-            _ => {}
+            ExprKind::Literal(_) | ExprKind::Var(_) | ExprKind::Error(_) => {}
+        }
+    }
+
+    /// Visit a direct call target, where a builtin/global is an actual call.
+    fn visit_effect_callee(
+        &self,
+        expr: &Expr,
+        include_method_fallbacks: bool,
+        visit: &mut impl FnMut(&Expr),
+    ) {
+        match &expr.kind {
+            ExprKind::Builtin(_) | ExprKind::Global(_) => visit(expr),
+            _ => self.visit_effect_references(expr, include_method_fallbacks, visit),
         }
     }
 
@@ -2313,13 +2489,9 @@ impl TypeChecker {
     }
 
     fn check_fn(&mut self, id: DefId, fn_def: &FnDef) {
-        // Pre-pass: scan the body for effectful calls so that the effect context
-        // is correct during body inference (nested lambdas need it).
-        let body_is_effectful = self.body_has_effectful_calls(&fn_def.body);
-        // Track whether we're inside an effectful function
-        // so that nested lambdas inherit the effect context.
+        // Nested lambdas inherit the declaration-order-independent effect context.
         let prev_effectful = self.in_effectful_fn;
-        self.in_effectful_fn = fn_def.effectful || body_is_effectful;
+        self.in_effectful_fn = self.effectful_functions.contains(&id);
 
         // Create fresh type variables for generic parameters.
         let mut generic_vars: HashMap<String, Ty> = HashMap::new();
@@ -2388,13 +2560,6 @@ impl TypeChecker {
         // Check for unused variables before clearing
         self.check_unused_locals();
 
-        // Record effectful functions for inter-procedural checking.
-        // Effect is auto-inferred: a function is effectful if annotated `effect`
-        // or if its body contains effectful calls.
-        if fn_def.effectful || body_is_effectful {
-            self.effectful_functions.insert(id);
-        }
-
         // Clear locals after checking function
         self.locals.clear();
 
@@ -2419,14 +2584,9 @@ impl TypeChecker {
         impl_generics: &HashMap<String, Ty>,
         assoc_types: &HashMap<String, Ty>,
     ) {
-        // Pre-pass: scan the body for effectful calls so that the effect context
-        // is correct during body inference (nested lambdas need it).
-        let body_is_effectful = self.body_has_effectful_calls(&item.body);
-
-        // Track whether we're inside an effectful impl method
-        // so that nested lambdas inherit the effect context.
+        // Impl methods use the same precomputed effect context as free functions.
         let prev_effectful = self.in_effectful_fn;
-        self.in_effectful_fn = item.effectful || body_is_effectful;
+        self.in_effectful_fn = self.effectful_functions.contains(&item.id);
 
         let mut generic_vars = impl_generics.clone();
         for param in &item.generics {
@@ -2483,11 +2643,6 @@ impl TypeChecker {
             }
         };
         self.globals.insert(item.id, method_ty);
-
-        // Effect auto-inference for impl methods.
-        if item.effectful || body_is_effectful {
-            self.effectful_functions.insert(item.id);
-        }
 
         self.check_unused_locals();
         self.locals.clear();
@@ -2939,12 +3094,9 @@ impl TypeChecker {
             } => {
                 if !self.repl_mode && !self.in_effectful_fn {
                     let mut calls = Vec::new();
-                    self.collect_effectful_calls(body, &mut calls);
+                    self.collect_effectful_calls(body, &mut calls, false);
                     for (name, span) in calls {
-                        self.error(
-                            span,
-                            format!("effectful call {} in lambda; use `effect` function", name),
-                        );
+                        self.report_lambda_effect(name, span);
                     }
                 }
 

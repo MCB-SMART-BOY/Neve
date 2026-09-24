@@ -73,6 +73,10 @@ didClose →  remove from document store
 
 ## Completion Architecture
 
+Semantic tokens classify nested destructuring bindings from their original AST
+identifier spans. Wildcards are intentionally omitted, while constructor
+patterns retain their constructor/reference spans for definition navigation.
+
 ```
 User types:  dat
               │
@@ -98,6 +102,13 @@ User types:  dat
               ▼
        CompletionList (sorted)
 ```
+
+## Hover and Pattern Identity
+
+Semantic hover traversal follows method receivers and every method argument,
+including nested lambda bodies. Pattern indexing preserves one definition
+identity for bindings introduced by an or-pattern, while constructor
+references retain their resolved declaration spans.
 
 ## Type-Aware Completion (54 methods, 5 receiver types)
 

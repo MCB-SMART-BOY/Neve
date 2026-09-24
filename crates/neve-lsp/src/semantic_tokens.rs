@@ -427,14 +427,12 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
     for item in &file.items {
         match &item.kind {
             ItemKind::Let(let_def) => {
-                if let Some(name_span) = get_pattern_name_span(&let_def.pattern) {
-                    add_ast_token(
-                        &mut semantic_set,
-                        name_span,
-                        token_types::VARIABLE,
-                        token_modifiers::DECLARATION | token_modifiers::READONLY,
-                    );
-                }
+                classify_ast_pattern(
+                    &mut semantic_set,
+                    &let_def.pattern,
+                    token_types::VARIABLE,
+                    token_modifiers::DECLARATION | token_modifiers::READONLY,
+                );
                 classify_ast_expr(&mut semantic_set, &let_def.value);
             }
             ItemKind::Fn(fn_def) => {
@@ -445,9 +443,12 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                     token_modifiers::DEFINITION,
                 );
                 for param in &fn_def.params {
-                    if let Some(name_span) = get_pattern_name_span(&param.pattern) {
-                        add_ast_token(&mut semantic_set, name_span, token_types::PARAMETER, 0);
-                    }
+                    classify_ast_pattern(
+                        &mut semantic_set,
+                        &param.pattern,
+                        token_types::PARAMETER,
+                        0,
+                    );
                 }
                 classify_ast_expr(&mut semantic_set, &fn_def.body);
             }
@@ -520,9 +521,12 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
                         token_modifiers::DEFINITION,
                     );
                     for param in &method.params {
-                        if let Some(name_span) = get_pattern_name_span(&param.pattern) {
-                            add_ast_token(&mut semantic_set, name_span, token_types::PARAMETER, 0);
-                        }
+                        classify_ast_pattern(
+                            &mut semantic_set,
+                            &param.pattern,
+                            token_types::PARAMETER,
+                            0,
+                        );
                     }
                     classify_ast_expr(&mut semantic_set, &method.body);
                 }
@@ -609,14 +613,45 @@ fn result_from_ast_set(
     result
 }
 
-/// Extract the name span from a pattern.
-/// 从模式中提取名称 span。
-fn get_pattern_name_span(pattern: &neve_syntax::Pattern) -> Option<neve_common::Span> {
+/// Classify every binding in a pattern using its original identifier span.
+/// 使用原始标识符 span 分类模式中的所有绑定。
+fn classify_ast_pattern(
+    semantic_set: &mut std::collections::BTreeMap<u32, (u32, u32, u32)>,
+    pattern: &neve_syntax::Pattern,
+    token_type: u32,
+    modifiers: u32,
+) {
     use neve_syntax::PatternKind;
+
     match &pattern.kind {
-        PatternKind::Var(ident) => Some(ident.span),
-        PatternKind::Binding { name, .. } => Some(name.span),
-        _ => None,
+        PatternKind::Var(ident) => add_ast_token(semantic_set, ident.span, token_type, modifiers),
+        PatternKind::Binding { name, pattern } => {
+            add_ast_token(semantic_set, name.span, token_type, modifiers);
+            classify_ast_pattern(semantic_set, pattern, token_type, modifiers);
+        }
+        PatternKind::Tuple(patterns)
+        | PatternKind::List(patterns)
+        | PatternKind::Or(patterns)
+        | PatternKind::Constructor { args: patterns, .. } => {
+            for pattern in patterns {
+                classify_ast_pattern(semantic_set, pattern, token_type, modifiers);
+            }
+        }
+        PatternKind::ListRest { init, rest, tail } => {
+            for pattern in init.iter().chain(rest.as_deref()).chain(tail) {
+                classify_ast_pattern(semantic_set, pattern, token_type, modifiers);
+            }
+        }
+        PatternKind::Record { fields, .. } => {
+            for field in fields {
+                if let Some(pattern) = &field.pattern {
+                    classify_ast_pattern(semantic_set, pattern, token_type, modifiers);
+                } else {
+                    add_ast_token(semantic_set, field.name.span, token_type, modifiers);
+                }
+            }
+        }
+        PatternKind::Wildcard | PatternKind::Literal(_) => {}
     }
 }
 
@@ -631,6 +666,12 @@ fn classify_ast_expr(
     match &expr.kind {
         ExprKind::Var(ident) => {
             add_ast_token(semantic_set, ident.span, token_types::VARIABLE, 0);
+        }
+        ExprKind::Lambda { params, body, .. } => {
+            for param in params {
+                classify_ast_pattern(semantic_set, &param.pattern, token_types::PARAMETER, 0);
+            }
+            classify_ast_expr(semantic_set, body);
         }
         ExprKind::Call { func, args } => {
             classify_ast_expr(semantic_set, func);
@@ -670,14 +711,12 @@ fn classify_ast_expr(
             for stmt in stmts {
                 match &stmt.kind {
                     StmtKind::Let { pattern, value, .. } => {
-                        if let Some(name_span) = get_pattern_name_span(pattern) {
-                            add_ast_token(
-                                semantic_set,
-                                name_span,
-                                token_types::VARIABLE,
-                                token_modifiers::DECLARATION | token_modifiers::READONLY,
-                            );
-                        }
+                        classify_ast_pattern(
+                            semantic_set,
+                            pattern,
+                            token_types::VARIABLE,
+                            token_modifiers::DECLARATION | token_modifiers::READONLY,
+                        );
                         classify_ast_expr(semantic_set, value);
                     }
                     StmtKind::Expr(e) => {
@@ -692,14 +731,12 @@ fn classify_ast_expr(
         ExprKind::Match { scrutinee, arms } => {
             classify_ast_expr(semantic_set, scrutinee);
             for arm in arms {
-                if let Some(name_span) = get_pattern_name_span(&arm.pattern) {
-                    add_ast_token(
-                        semantic_set,
-                        name_span,
-                        token_types::VARIABLE,
-                        token_modifiers::DECLARATION | token_modifiers::READONLY,
-                    );
-                }
+                classify_ast_pattern(
+                    semantic_set,
+                    &arm.pattern,
+                    token_types::VARIABLE,
+                    token_modifiers::DECLARATION | token_modifiers::READONLY,
+                );
                 classify_ast_expr(semantic_set, &arm.body);
             }
         }
@@ -709,14 +746,12 @@ fn classify_ast_expr(
             body,
             ..
         } => {
-            if let Some(name_span) = get_pattern_name_span(pattern) {
-                add_ast_token(
-                    semantic_set,
-                    name_span,
-                    token_types::VARIABLE,
-                    token_modifiers::DECLARATION | token_modifiers::READONLY,
-                );
-            }
+            classify_ast_pattern(
+                semantic_set,
+                pattern,
+                token_types::VARIABLE,
+                token_modifiers::DECLARATION | token_modifiers::READONLY,
+            );
             classify_ast_expr(semantic_set, value);
             classify_ast_expr(semantic_set, body);
         }

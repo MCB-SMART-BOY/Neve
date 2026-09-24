@@ -12,7 +12,7 @@ use neve_frontend::{
     format_type_use_in_module, format_type_with_names_map,
 };
 use neve_hir::{
-    Expr as HirExpr, ExprKind as HirExprKind, ItemKind as HirItemKind, LocalId,
+    DefId, Expr as HirExpr, ExprKind as HirExprKind, ItemKind as HirItemKind, LocalId,
     MatchArm as HirMatchArm, Param as HirParam, Pattern as HirPattern,
     PatternKind as HirPatternKind, Stmt as HirStmt, StmtKind as HirStmtKind, Ty, TyKind,
 };
@@ -169,10 +169,8 @@ fn hir_item_matches_ast(ast_item: &ast::Item, hir_item: &neve_hir::Item) -> bool
     }
 
     match (&ast_item.kind, &hir_item.kind) {
-        (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => match &def.pattern.kind {
-            AstPatternKind::Var(ident) => hir_fn.name == ident.name,
-            _ => hir_fn.name.starts_with("__neve_pattern_value_"),
-        },
+        // Only the source binding retains the initializer's expression span.
+        (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => hir_fn.body.span == def.value.span,
         (ast::ItemKind::Fn(def), HirItemKind::Fn(hir_fn)) => hir_fn.name == def.name.name,
         (ast::ItemKind::TypeAlias(def), HirItemKind::TypeAlias(hir_alias)) => {
             hir_alias.name == def.name.name
@@ -190,6 +188,59 @@ fn hir_item_matches_ast(ast_item: &ast::Item, hir_item: &neve_hir::Item) -> bool
     }
 }
 
+// Projection bodies share item spans, so use their pattern and source identities.
+fn index_top_level_projections(module: &Module) -> HashMap<(Span, DefId, &str), DefId> {
+    module
+        .items
+        .iter()
+        .filter_map(|item| {
+            let HirItemKind::Fn(function) = &item.kind else {
+                return None;
+            };
+            let HirExprKind::Let { pattern, value, .. } = &function.body.kind else {
+                return None;
+            };
+            let HirExprKind::Global(source_id) = &value.kind else {
+                return None;
+            };
+            Some(((pattern.span, *source_id, function.name.as_str()), item.id))
+        })
+        .collect()
+}
+
+fn visit_pattern_bindings(pattern: &ast::Pattern, visit: &mut impl FnMut(&ast::Ident)) {
+    match &pattern.kind {
+        AstPatternKind::Var(ident) => visit(ident),
+        AstPatternKind::Binding { name, pattern } => {
+            visit(name);
+            visit_pattern_bindings(pattern, visit);
+        }
+        AstPatternKind::Tuple(patterns)
+        | AstPatternKind::List(patterns)
+        | AstPatternKind::Or(patterns)
+        | AstPatternKind::Constructor { args: patterns, .. } => {
+            for pattern in patterns {
+                visit_pattern_bindings(pattern, visit);
+            }
+        }
+        AstPatternKind::ListRest { init, rest, tail } => {
+            for pattern in init.iter().chain(rest.as_deref()).chain(tail) {
+                visit_pattern_bindings(pattern, visit);
+            }
+        }
+        AstPatternKind::Record { fields, .. } => {
+            for field in fields {
+                if let Some(pattern) = &field.pattern {
+                    visit_pattern_bindings(pattern, visit);
+                } else {
+                    visit(&field.name);
+                }
+            }
+        }
+        AstPatternKind::Wildcard | AstPatternKind::Literal(_) => {}
+    }
+}
+
 fn build_hover_maps(
     ast: &SourceFile,
     hir: &Module,
@@ -197,6 +248,7 @@ fn build_hover_maps(
 ) -> (HashMap<Span, String>, HashMap<Span, String>) {
     let mut definition_hovers = HashMap::new();
     let mut semantic_hovers = HashMap::new();
+    let projection_ids = index_top_level_projections(hir);
     // Use type names from the entire module graph for cross-module type display
     let fmt_ty = |ty: &Ty| -> String {
         if semantics.global_names.is_empty() {
@@ -221,12 +273,19 @@ fn build_hover_maps(
 
         match (&ast_item.kind, &hir_item.kind) {
             (ast::ItemKind::Let(def), HirItemKind::Fn(hir_fn)) => {
-                if let AstPatternKind::Var(ident) = &def.pattern.kind
-                    && let Some(ty) = semantics.global_type(hir_item.id)
-                {
-                    definition_hovers
-                        .insert(ident.span, format!("let {}: {}", ident.name, fmt_ty(ty)));
-                }
+                visit_pattern_bindings(&def.pattern, &mut |ident| {
+                    let binding_id = if matches!(&def.pattern.kind, AstPatternKind::Var(_)) {
+                        Some(hir_item.id)
+                    } else {
+                        projection_ids
+                            .get(&(def.pattern.span, hir_item.id, ident.name.as_str()))
+                            .copied()
+                    };
+                    if let Some(ty) = binding_id.and_then(|id| semantics.global_type(id)) {
+                        definition_hovers
+                            .insert(ident.span, format!("let {}: {}", ident.name, fmt_ty(ty)));
+                    }
+                });
                 collect_expr_hovers(
                     &def.value,
                     &hir_fn.body,
@@ -399,18 +458,13 @@ fn collect_param_hovers(
     hovers: &mut HashMap<Span, String>,
 ) {
     for (ast_param, hir_param) in ast_params.iter().zip(hir_params) {
-        if let AstPatternKind::Var(ident) = &ast_param.pattern.kind
-            && ident.name == hir_param.name
-        {
-            insert_local_hover(
-                ident.span,
-                &ident.name,
-                hir_param.id,
-                semantics,
-                module,
-                hovers,
-            );
-        }
+        collect_pattern_definition_hovers(
+            &ast_param.pattern,
+            &hir_param.pattern,
+            semantics,
+            module,
+            hovers,
+        );
     }
 }
 
@@ -706,6 +760,26 @@ fn collect_expr_hovers(
                 semantics,
                 module,
                 definition_hovers,
+                semantic_hovers,
+            );
+            for (ast_arg, hir_arg) in args.iter().zip(hir_args) {
+                collect_expr_hovers(
+                    ast_arg,
+                    hir_arg,
+                    semantics,
+                    module,
+                    definition_hovers,
+                    semantic_hovers,
+                );
+            }
+        }
+        (ast::ExprKind::MethodCall { method, args, .. }, HirExprKind::Call(_, hir_args)) => {
+            insert_method_hover(
+                method.span,
+                &method.name,
+                hir_expr.span,
+                semantics,
+                module,
                 semantic_hovers,
             );
             for (ast_arg, hir_arg) in args.iter().zip(hir_args) {

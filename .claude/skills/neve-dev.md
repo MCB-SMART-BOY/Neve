@@ -41,6 +41,11 @@ User Input (.neve file or REPL line)
        └──→ Config evaluation (flake.nix-like)
 ```
 
+The `neve check` purity gate walks canonical HIR with the frontend's method
+resolution table. Resolved trait methods are checked by their method identity;
+unresolved targets retain builtin fallback checking, and index operands,
+guards, comprehension conditions, lambdas, and interpolations are traversed.
+
 ## Build Commands
 
 ```bash

@@ -1,8 +1,9 @@
-use std;
+use std.list;
+use std.string;
 
-let nums = std.list.range(1, 3);
-let total = std.list.len(nums);
+let nums = list.range(1, 3);
+let total = list.len(nums);
 
 let words = ["root", "import"];
-let joined = std.string.join(words, " ");
+let joined = string.join(words, " ");
 let result = #{ total = total, joined = joined };

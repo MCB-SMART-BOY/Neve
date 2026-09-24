@@ -113,7 +113,9 @@ Implementation order:
 | `tests/end_to_end.rs` | 541 canonical pipeline tests |
 | `tests/parser.rs` | 220+ parser integration tests + golden tests |
 | `tests/typeck.rs` | 287+ type system tests |
+| `tests/frontend.rs` | Effect propagation and frontend pipeline regressions |
+| `tests/lsp.rs` | LSP semantic hover, symbol, and navigation regressions |
 | `tests/eval.rs` | HIR evaluator tests |
-| `tests/README.md` | Test policy — gap naming, divergence sentinels |
+| `tests/runtime_semantics.rs` | Lazy-parameter and evaluator-scope regressions |
 | `scripts/test.sh` | Pre-commit pipeline |
 | `scripts/bug_hunt.py` | Fuzzing harness |

@@ -3552,3 +3552,245 @@ fn test_typeck_auto_infers_effect_for_io_call() {
         result.diagnostics
     );
 }
+
+fn assert_typeck_effect_diagnostics(source: &str, expected_effect_site: Option<&str>) {
+    let result = analyze_source(source);
+    let (effect_errors, other_errors): (Vec<_>, Vec<_>) = result
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
+        .partition(|diagnostic| {
+            diagnostic.message.contains("effectful call")
+                && diagnostic.message.contains("in lambda")
+        });
+    assert!(
+        other_errors.is_empty(),
+        "unexpected parse/type errors: {other_errors:?}"
+    );
+    if let Some(expected_site) = expected_effect_site {
+        assert!(
+            !effect_errors.is_empty(),
+            "expected effect diagnostics for `{expected_site}`, got {:?}",
+            result.diagnostics
+        );
+        assert!(
+            effect_errors
+                .iter()
+                .all(|diagnostic| { source[diagnostic.span.range()].contains(expected_site) }),
+            "unexpected effect diagnostic sites: {effect_errors:?}"
+        );
+    } else {
+        assert!(
+            effect_errors.is_empty(),
+            "unexpected effect diagnostics: {effect_errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_typeck_forward_effect_call_in_nested_lambda_reports_effect() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        |file: String| |suffix: String| load_file(file + suffix);
+        fn load_file(file: String) -> String = io.readFile(file);
+        "#,
+        Some("load_file"),
+    );
+}
+
+#[test]
+fn test_typeck_multihop_effect_call_in_nested_lambda_is_order_independent() {
+    let declarations = [
+        "fn first(file: String) -> String = second(file);",
+        "fn second(file: String) -> String = third(file);",
+        "fn third(file: String) -> String = io.readFile(file);",
+    ];
+    let source_orders = [
+        declarations.join("\n"),
+        declarations
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("\n"),
+    ];
+    for declarations in source_orders {
+        let source = format!(
+            r#"
+            use std.io = io;
+            |file: String| |suffix: String| first(file + suffix);
+            {declarations}
+            "#
+        );
+        assert_typeck_effect_diagnostics(&source, Some("first"));
+    }
+}
+
+#[test]
+fn test_typeck_recursive_effect_chain_reports_effect_before_definitions() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        |file: String| entry(file);
+        fn entry(file: String) -> String = next(file);
+        fn next(file: String) -> String =
+            if file == "" -> io.readFile(file) else entry("");
+        "#,
+        Some("entry"),
+    );
+}
+
+#[test]
+fn test_typeck_recursive_pure_chain_does_not_infer_effect() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        |value: Int| entry(value);
+        fn entry(value: Int) -> Int = next(value);
+        fn next(value: Int) -> Int = if value == 0 -> 0 else entry(value - 1);
+        "#,
+        None,
+    );
+}
+
+#[test]
+fn test_typeck_explicit_effect_marker_propagates_to_forward_callers() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        |value: Int| first(value);
+        fn first(value: Int) -> Int = marked(value);
+        effect fn marked(value: Int) -> Int = value;
+        "#,
+        Some("first"),
+    );
+}
+
+#[test]
+fn test_typeck_forward_effect_chain_allows_enclosed_nested_lambdas() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        fn outer(file: String) -> String = {
+            let nested = |prefix: String| |suffix: String| first(prefix + suffix);
+            nested(file)("")
+        };
+        fn first(file: String) -> String = second(file);
+        fn second(file: String) -> String = io.readFile(file);
+        "#,
+        None,
+    );
+}
+
+#[test]
+fn test_typeck_forward_effect_chain_allows_enclosed_impl_lambdas() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        trait Read { fn read(self) -> String; };
+        impl Read for String {
+            fn read(self) -> String = {
+                let nested = |prefix: String| |suffix: String| first(prefix + suffix);
+                nested(self)("")
+            };
+        };
+        fn first(file: String) -> String = second(file);
+        fn second(file: String) -> String = io.readFile(file);
+        "#,
+        None,
+    );
+}
+#[test]
+fn test_typeck_method_effect_propagates_to_forward_lambda() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        trait Loader { fn load(self) -> String; };
+        impl Loader for String {
+            fn load(self) -> String = io.readFile(self);
+        };
+        fn wrapper(path: String) -> String = path.load();
+        |path: String| wrapper(path);
+        "#,
+        Some("wrapper"),
+    );
+}
+
+#[test]
+fn test_typeck_pure_method_named_like_builtin_is_not_effectful() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        trait Reader { fn read(self) -> String; };
+        impl Reader for String {
+            fn read(self) -> String = self;
+        };
+        |value: String| value.read();
+        "#,
+        None,
+    );
+}
+
+#[test]
+fn test_typeck_function_value_references_are_not_effectful_calls() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        fn load(path: String) -> String = io.readFile(path);
+        |path: String| (io.readFile, load);
+        "#,
+        None,
+    );
+}
+
+#[test]
+fn test_typeck_match_guard_in_lambda_reports_effect() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        |file: String| match true {
+            true if io.pathExists(file) -> true,
+            _ -> false
+        };
+        "#,
+        Some("io.pathExists"),
+    );
+}
+
+#[test]
+fn test_typeck_list_comp_condition_in_lambda_reports_effect() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        |files: List<String>| [file | file <- files, io.pathExists(file)];
+        "#,
+        Some("io.pathExists"),
+    );
+}
+
+#[test]
+fn test_typeck_match_guard_effect_propagates_to_forward_callers() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        |file: String| first(file);
+        fn first(file: String) -> Bool = file_exists(file);
+        fn file_exists(file: String) -> Bool = match true {
+            true if io.pathExists(file) -> true,
+            _ -> false
+        };
+        "#,
+        Some("first"),
+    );
+}
+
+#[test]
+fn test_typeck_list_comp_condition_effect_propagates_to_forward_callers() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        use std.io = io;
+        |files: List<String>| first(files);
+        fn first(files: List<String>) -> List<String> = existing(files);
+        fn existing(files: List<String>) -> List<String> =
+            [file | file <- files, io.pathExists(file)];
+        "#,
+        Some("first"),
+    );
+}

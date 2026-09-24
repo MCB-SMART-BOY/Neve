@@ -2206,6 +2206,38 @@ fn test_eval_bool_double_not() {
 }
 
 #[test]
+fn test_eval_bool_and_short_circuits_false_left() {
+    assert!(matches!(
+        eval_source("false && (10 / 0)"),
+        Ok(Value::Bool(false))
+    ));
+}
+
+#[test]
+fn test_eval_bool_or_short_circuits_true_left() {
+    assert!(matches!(
+        eval_source("true || (10 / 0)"),
+        Ok(Value::Bool(true))
+    ));
+}
+
+#[test]
+fn test_eval_bool_and_evaluates_required_right_operand() {
+    assert!(matches!(
+        eval_source("true && (10 / 0)"),
+        Err(EvalError::DivisionByZero)
+    ));
+}
+
+#[test]
+fn test_eval_bool_or_evaluates_required_right_operand() {
+    assert!(matches!(
+        eval_source("false || (10 / 0)"),
+        Err(EvalError::DivisionByZero)
+    ));
+}
+
+#[test]
 fn test_eval_bool_and_true_true() {
     assert!(matches!(
         eval_source("let x = true && true;"),

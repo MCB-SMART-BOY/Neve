@@ -131,11 +131,21 @@ pub enum HIRExpr {
 
 ## Testing
 
-- **Lowering fidelity**: Every pattern form must survive lowering without loss
-- **Lossy lowering is a bug**: If a construct degrades to wildcard, it must be fixed
-- **Module resolution**: Test self/super/crate/relative/absolute/`use =` paths
+- **Lowering fidelity**: Every pattern form must survive lowering without loss.
+- **Lossy lowering is a bug**: If a construct degrades to wildcard, it must be fixed.
+- **Module resolution**: Test self/super/crate/relative/absolute/`use =` paths.
+- **Runtime boundary**: HIR evaluator tests cover lazy parameters, forced
+  conditions/guards/comprehension filters, and environment restoration after
+  errors and tail calls.
+
 ## Current Audit Boundaries
 
-- Canonical lowering preserves index expressions, destructuring bindings, constructor identity, built-in generic type IDs, and `std.bytes` import registration.
-- Legacy `effect` syntax remains accepted for compatibility; effectfulness is additionally inferred by type checking.
-- Record-variant field names/defaults, top-level refutable `let` diagnostics, duplicate variant names, and synthetic-item mappings for every tooling consumer require further convergence.
+- Canonical lowering preserves index expressions, destructuring bindings,
+  constructor identity, built-in generic type IDs, and `std.bytes` import
+  registration.
+- Effect inference is declaration-order independent, resolves method calls
+  before its final fixed-point pass, and traverses nested lambdas, guards, and
+  comprehension conditions.
+- Tooling consumers use canonical spans for destructured/or-pattern bindings
+  and constructor references; synthetic item mappings remain an explicit
+  boundary for future convergence.

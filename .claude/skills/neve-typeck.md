@@ -217,6 +217,17 @@ pub enum TypeError {
 }
 ```
 
+## Effect Inference
+
+`infer_function_effects` builds the caller graph before body checking, so
+effect propagation is independent of declaration order and supports recursive
+chains. The graph records resolved method `DefId`s as well as direct function
+calls, and a final pass recomputes effects after method dispatch is known.
+Its shared HIR walk visits calls, nested lambdas, match guards, and
+list-comprehension conditions. The CLI effect checker uses the same expression
+coverage and method-resolution table for direct builtin calls and inferred
+effectful function calls.
+
 ## Integration Points
 
 | From | To | Data |
