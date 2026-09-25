@@ -73,7 +73,7 @@ fn main() {
             name: "stdin-ok",
             source: r#"
 import std.io as io;
-let cmd = io.commandWith("cat", [], cwd=None, stdin="hi", env=#{});
+let cmd = io.commandWith({ program = "cat", args = [], stdin = "hi" });
 let r = io.execCommand(cmd);
 io.processStdout(r)
 "#,
@@ -136,7 +136,7 @@ toString(io.processSuccess(r))
             name: "safe-env",
             source: r#"
 import std.io as io;
-let cmd = io.commandWith("sh", ["-c", "echo $FOO"], cwd=None, stdin=None, env=#{FOO="bar"});
+let cmd = io.commandWith({ program = "sh", args = ["-c", "echo $FOO"], env = {FOO = "bar"} });
 let r = io.execCommand(cmd);
 io.processStdout(r)
 "#,
@@ -147,7 +147,7 @@ io.processStdout(r)
             name: "ld-preload-stripped",
             source: r#"
 import std.io as io;
-let cmd = io.commandWith("sh", ["-c", "test -z $LD_PRELOAD && echo stripped || echo LEAK"], cwd=None, stdin=None, env=#{LD_PRELOAD="/tmp/evil.so"});
+let cmd = io.commandWith({ program = "sh", args = ["-c", "test -z $LD_PRELOAD && echo stripped || echo LEAK"], env = {LD_PRELOAD = "/tmp/evil.so"} });
 let r = io.execCommand(cmd);
 io.processStdout(r)
 "#,

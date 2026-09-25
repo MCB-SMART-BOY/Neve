@@ -159,14 +159,16 @@ impl GenState {
 // ============================================================
 
 fn project_dir() -> PathBuf {
-    let this_file = PathBuf::from(file!());
-    // scripts/gen-diff-test.rs -> scripts/.. -> project root
-    this_file
+    // `CARGO_MANIFEST_DIR` is `<root>/n3v3-cli`; its parent is the workspace root.
+    // This example used to live in `scripts/`, so `file!()`-relative arithmetic
+    // stopped at `n3v3-cli` and made `formal_dir()` point at a missing directory.
+    // `CARGO_MANIFEST_DIR` 是 `<root>/n3v3-cli`，其父目录即工作区根。该示例原先位于
+    // `scripts/`，基于 `file!()` 的相对路径只退到 `n3v3-cli`，导致 `formal_dir()`
+    // 指向不存在的目录（`lake` 因此 ENOENT）。
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .unwrap_or(&PathBuf::from("."))
-        .parent()
-        .unwrap_or(&PathBuf::from("."))
-        .to_path_buf()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn n3v3_bin() -> PathBuf {
@@ -183,8 +185,15 @@ fn formal_dir() -> PathBuf {
 }
 
 fn run_rust(n3v3_source: &str) -> String {
+    // Effect tests call `io.*` builtins; the module binding is part of the
+    // program, so prepend it here instead of repeating it in every generated
+    // source string. Without it the run fails with an unresolved `io` and the
+    // suite only sees empty stdout.
+    // 效果测试调用 `io.*` 内建，模块绑定属于程序本身：在此统一补上，避免每段生成源码
+    // 各自重复。缺少它时求值报未解析的 `io`，套件只能看到空 stdout。
+    let source = format!("use std.io as io;\n{n3v3_source}");
     let tmp = env::temp_dir().join(format!("gen_diff_{}.n3v3", std::process::id()));
-    fs::write(&tmp, n3v3_source).expect("write tempfile");
+    fs::write(&tmp, source).expect("write tempfile");
 
     let bin = n3v3_bin();
     let output = if bin.file_name().is_some_and(|n| n == "n3v3") {
@@ -332,7 +341,7 @@ fn generate_effects_tests(n: usize, seed: u64) -> Vec<EffectTest> {
                 src: "let p = io.pipeline([io.command(\"echo\", [\"n3v3\"]), io.command(\"cat\", [])]); let r = io.execPipeline(p); toString(io.processSuccess(r))".into(),
                 expected: "true".into() }),
             2 => tests.push(EffectTest { name: "stdin-small".into(),
-                src: "let cmd = io.commandWith(\"cat\", [], stdin=\"hello\", env=#{}); let r = io.execCommand(cmd); io.processStdout(r)".into(),
+                src: "let cmd = io.commandWith({ program = \"cat\", stdin = \"hello\" }); let r = io.execCommand(cmd); io.processStdout(r)".into(),
                 expected: "hello".into() }),
             3 => tests.push(EffectTest { name: "exit-code".into(),
                 src: "let r = io.execCommand(io.command(\"true\", [])); toString(io.processSuccess(r))".into(),
