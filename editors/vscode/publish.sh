@@ -1,5 +1,5 @@
 #!/bin/bash
-# Publish the Neve VS Code extension to the marketplace.
+# Publish the n3v3 VS Code extension to the marketplace.
 # Requires: vsce (npm install -g @vscode/vsce), personal access token
 
 set -euo pipefail
@@ -17,4 +17,4 @@ echo "=== Publishing ==="
 npx vsce publish
 
 echo "=== Done ==="
-echo "Extension published to https://marketplace.visualstudio.com/items?itemName=neve-lang.neve"
+echo "Extension published to https://marketplace.visualstudio.com/items?itemName=neve-lang.n3v3"

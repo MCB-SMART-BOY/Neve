@@ -3,11 +3,7 @@
     "allow": [
       "Bash(cargo:*)",
       "Bash(git:*)",
-      "Bash(cd /home/mcbgaruda/projects/Neve && cargo:*)",
-      "Bash(cd /home/mcbgaruda/projects/Neve && git:*)",
-      "Bash(cd /home/mcbgaruda/projects/Neve/formal && lake:*)",
       "Bash(gh:*)",
-      "Bash(python3:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(wc:*)",
@@ -31,7 +27,7 @@
       "Edit(**/*.md)",
       "Edit(**/*.toml)",
       "Edit(**/*.lean)",
-      "Edit(**/*.neve)",
+      "Edit(**/*.n3v3)",
       "Edit(**/*.json)",
       "Edit(**/*.lock)",
       "Edit(**/*.yml)",
@@ -44,7 +40,7 @@
       "Write(**/*.sh)",
       "Write(**/*.js)",
       "Write(**/*.lean)",
-      "Write(**/*.neve)"
+      "Write(**/*.n3v3)"
     ],
     "ask": [
       "Bash(cargo publish:*)",
@@ -65,7 +61,7 @@
     },
     "post-edit": {
       "command": ".claude/hooks/verify-skills.sh",
-      "description": "Verify skill claims against actual code after edits"
+      "description": "Verify skill claims after edits; docs validation wiring is owned by the hooks workflow"
     },
     "post-test": {
       "command": ".claude/hooks/check-regressions.sh",
@@ -74,8 +70,8 @@
   },
   "rules": ".claude/rules.md",
   "env": {
-    "NEVE_SKILLS_DIR": "${workspaceFolder}/.claude/skills",
-    "NEVE_HOOKS_DIR": "${workspaceFolder}/.claude/hooks",
+    "N3V3_SKILLS_DIR": "${workspaceFolder}/.claude/skills",
+    "N3V3_HOOKS_DIR": "${workspaceFolder}/.claude/hooks",
     "LEAN_PATH": "${workspaceFolder}/formal"
   },
   "model": "opus",
@@ -84,72 +80,84 @@
     "baseRef": "head"
   },
   "skills": {
-    "neve-dev": {
-      "description": "Neve project architecture and development workflow",
-      "path": ".claude/skills/neve-dev.md"
+    "n3v3-dev": {
+      "description": "n3v3 project architecture and development workflow",
+      "path": ".claude/skills/n3v3-dev.md"
     },
-    "neve-parser": {
+    "n3v3-parser": {
       "description": "Lexer and recursive-descent parser development",
-      "path": ".claude/skills/neve-parser.md"
+      "path": ".claude/skills/n3v3-parser.md"
     },
-    "neve-typeck": {
+    "n3v3-typeck": {
       "description": "Hindley-Milner type inference and trait system",
-      "path": ".claude/skills/neve-typeck.md"
+      "path": ".claude/skills/n3v3-typeck.md"
     },
-    "neve-hir": {
+    "n3v3-hir": {
       "description": "HIR lowering and name resolution",
-      "path": ".claude/skills/neve-hir.md"
+      "path": ".claude/skills/n3v3-hir.md"
     },
-    "neve-eval": {
+    "n3v3-eval": {
       "description": "Tree-walking interpreter (HIR canonical)",
-      "path": ".claude/skills/neve-eval.md"
+      "path": ".claude/skills/n3v3-eval.md"
     },
-    "neve-std": {
+    "n3v3-std": {
       "description": "Standard library (I/O, Stream<T>, collections)",
-      "path": ".claude/skills/neve-std.md"
+      "path": ".claude/skills/n3v3-std.md"
     },
-    "neve-lsp": {
-      "description": "Language Server Protocol (21 methods, 2 stub notifications)",
-      "path": ".claude/skills/neve-lsp.md"
+    "n3v3-diagnostic": {
+      "description": "Compiler diagnostic system and error reporting",
+      "path": ".claude/skills/n3v3-diagnostic.md"
     },
-    "neve-test": {
-      "description": "Testing strategy with 547 E2E tests",
-      "path": ".claude/skills/neve-test.md"
+    "n3v3-fmt": {
+      "description": "n3v3 formatter and formatting validation",
+      "path": ".claude/skills/n3v3-fmt.md"
     },
-    "neve-effect": {
+    "n3v3-lsp": {
+      "description": "Language Server Protocol; method/notification counts from scripts/counts.sh. did_change_configuration and did_change_watched_files are accepted but stubbed (restart to apply).",
+      "path": ".claude/skills/n3v3-lsp.md"
+    },
+    "n3v3-test": {
+      "description": "Testing strategy; E2E and other counts from scripts/counts.sh",
+      "path": ".claude/skills/n3v3-test.md"
+    },
+    "n3v3-effect": {
       "description": "Effect system (EffectEval v4.3, 34 rules)",
-      "path": ".claude/skills/neve-effect.md"
+      "path": ".claude/skills/n3v3-effect.md"
     },
-    "neve-lean": {
+    "n3v3-lean": {
       "description": "Formal verification with Lean 4 (21 modules)",
-      "path": ".claude/skills/neve-lean.md"
+      "path": ".claude/skills/n3v3-lean.md"
+    },
+    "run-n3v3": {
+      "description": "Canonical n3v3 CLI smoke-test driver",
+      "path": ".claude/skills/run-n3v3/SKILL.md"
     }
   },
   "agents": {
-    "neve-parser-dev": {
+    "n3v3-parser-dev": {
       "description": "Specialized agent for parser/lexer/syntax development",
       "path": ".claude/agents/parser-agent.md"
     },
-    "neve-typeck-dev": {
+    "n3v3-typeck-dev": {
       "description": "Specialized agent for type system development",
       "path": ".claude/agents/typeck-agent.md"
     },
-    "neve-reviewer": {
-      "description": "Code review agent for Neve Rust codebase",
+    "n3v3-reviewer": {
+      "description": "Code review agent for n3v3 Rust codebase",
       "path": ".claude/agents/reviewer-agent.md"
     },
-    "neve-verifier": {
+    "n3v3-verifier": {
       "description": "Formal verification agent for Lean proofs",
       "path": ".claude/agents/verifier-agent.md"
     }
   },
   "workflows": {
     "full-test": {
-      "description": "Run full test suite with differential and E2E",
+      "description": "Run scripts/validate.sh --ci and mechanically verify canonical counts",
       "path": ".claude/workflows/full-test.js"
     },
     "pre-release": {
-      "description": "Pre-release checklist: test + clippy + fmt + changelog",
+      "description": "Run scripts/validate.sh --release with version and changelog checks",
       "path": ".claude/workflows/pre-release.js"
     }
   }

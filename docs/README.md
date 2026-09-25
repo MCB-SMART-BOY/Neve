@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../assets/logo.svg" width="120" alt="n3v3 logo">
 
-<h1>Neve Documentation Hub</h1>
+<h1>n3v3 Documentation Hub</h1>
 
 <p>
   <strong><a href="../README.md">Home</a></strong> ·
@@ -14,11 +14,11 @@
 
 </div>
 
-**Current version: v5.0.0**. 12 canonical keywords, 55 diagnostic codes, 550 E2E tests (all pass), 21 LSP methods. Install via `cargo install n3v3`.
+**Current version: v5.0.0**. 12 canonical keywords, 55 diagnostic codes, 556 E2E tests (all pass), 26 LSP methods. Install via `cargo install n3v3`.
 
-Welcome to the Neve documentation hub. For **developer reference** (per-crate APIs,
-architecture, integration points), see `.claude/skills/` — one skill per crate,
-kept in sync with the actual code.
+Welcome to the n3v3 documentation hub. For **developer reference** (per-crate APIs,
+architecture, integration points), see `.claude/skills/` — 13 skill entry points
+covering crate and cross-cutting tooling, kept in sync with the actual code.
 
 ---
 
@@ -27,15 +27,15 @@ kept in sync with the actual code.
 - New user: [user/install.md](user/install.md), [user/quickstart.md](user/quickstart.md), [user/tutorial.md](user/tutorial.md)
 - Language reference: [reference/spec.md](reference/spec.md), [reference/api.md](reference/api.md), [reference/diagnostics.md](reference/diagnostics.md)
 - Contributor: [contributor/contributing.md](contributor/contributing.md), [contributor/onboarding.md](contributor/onboarding.md), [contributor/architecture.md](contributor/architecture.md)
-- Project status: [project/feature-matrix.md](project/feature-matrix.md), [project/changelog.md](project/changelog.md)
-- Stability: [reference/stability.md](reference/stability.md)
-- **Developer skills**: [`.claude/skills/`](../.claude/skills/) — per-crate architecture, APIs, key files
+- Project and ecosystem: [project/philosophy.md](project/philosophy.md), [project/feature-matrix.md](project/feature-matrix.md), [project/ecosystem-design.md](project/ecosystem-design.md), [project/registry.md](project/registry.md), [project/changelog.md](project/changelog.md)
+- Tooling and policy: [reference/lsp.md](reference/lsp.md), [reference/stability.md](reference/stability.md)
+- **Developer skills**: [`.claude/skills/`](../.claude/skills/) — 13 skill entry points for architecture, APIs, and key files
 
 ---
 
 ## By Audience
 
-### I want to use Neve
+### I want to use n3v3
 
 - [user/install.md](user/install.md): installation, platform notes, binary cache setup
 - [user/quickstart.md](user/quickstart.md): quickest path to first expression and file
@@ -49,10 +49,16 @@ kept in sync with the actual code.
 
 ### I want to understand project reality
 
+- [project/philosophy.md](project/philosophy.md): design principles and trade-offs
 - [project/feature-matrix.md](project/feature-matrix.md): real support matrix
 - [project/ecosystem-design.md](project/ecosystem-design.md): flake, store, builder, registry
+- [project/registry.md](project/registry.md): package registry behavior and policy
 - [project/changelog.md](project/changelog.md): released changes only
-- [../.claude/forward-plan.md](../.claude/forward-plan.md): language completion roadmap
+
+### I want tooling and policy
+
+- [reference/lsp.md](reference/lsp.md): Language Server Protocol methods and capabilities
+- [reference/stability.md](reference/stability.md): stability tiers and compatibility policy
 
 ### I want to contribute
 
@@ -64,16 +70,29 @@ kept in sync with the actual code.
 
 ## CLI Docs
 
+The built-in catalog is exposed through these 17 `n3v3 doc` topics:
+
 ```bash
-neve doc index
-neve doc quickstart
-neve doc spec
-neve doc api
-neve doc contributing
-neve doc feature-matrix
+n3v3 doc index
+n3v3 doc quickstart
+n3v3 doc tutorial
+n3v3 doc spec
+n3v3 doc api
+n3v3 doc diagnostics
+n3v3 doc philosophy
+n3v3 doc install
+n3v3 doc architecture
+n3v3 doc onboarding
+n3v3 doc contributing
+n3v3 doc feature-matrix
+n3v3 doc lsp
+n3v3 doc stability
+n3v3 doc ecosystem-design
+n3v3 doc registry
+n3v3 doc changelog
 ```
 
-For command behavior, use `neve --help`.
+For command behavior, use `n3v3 --help`.
 
 ---
 

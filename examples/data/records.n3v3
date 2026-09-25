@@ -1,0 +1,19 @@
+person = { name = "Alice", age = 30, active = true }
+
+println(person.name);
+
+println(person.age);
+
+older = { name = person.name, age = person.age + 1, active = person.active }
+
+println(older.age);
+
+describe = |p| {
+  p.name + " is " + toString(p.age) + " years old"
+}
+
+println(describe(person));
+
+team = { name = "n3v3 Team", lead = { name = "Bob", role = "architect" } }
+
+println(team.lead.name);

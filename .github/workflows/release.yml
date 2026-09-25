@@ -1,10 +1,15 @@
+# 发布契约 / Release contract:
+# This workflow publishes binary archives only. It never runs `cargo publish`;
+# crates.io publication is a separate manual `cargo publish` operation.
+# 本工作流仅发布二进制归档，不执行 `cargo publish`；crates.io 发布由人工
+# 单独执行 `cargo publish`。
+
 name: Release
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,59 +20,129 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CROSS_VERSION: '0.2.5'
 
 jobs:
+  release-gates:
+    name: Release gates / 发布闸门
+    runs-on: ubuntu-latest
+    # The gate set is the full canonical validator (build, lint, deps, tests,
+    # smoke, docs), which needs the same budget as CI's validate job.
+    # 闸门集合是完整的规范校验器（构建、lint、依赖、测试、smoke、文档），
+    # 需要与 CI validate 任务同等的预算。
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify tag and workspace version / 校验标签与工作区版本
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag_version="${RELEASE_TAG#v}"
+          workspace_version="$(
+            awk '
+              /^\[workspace\.package\]/ { inside = 1; next }
+              /^\[/ { inside = 0 }
+              inside && /^version[[:space:]]*=/ {
+                gsub(/[^0-9.]/, "", $0)
+                print
+                exit
+              }
+            ' Cargo.toml
+          )"
+          if [ -z "$workspace_version" ]; then
+            printf 'Unable to read [workspace.package] version from Cargo.toml\n' >&2
+            exit 1
+          fi
+          if [ "$tag_version" != "$workspace_version" ]; then
+            printf 'Release tag v%s does not match workspace version %s\n' \
+              "$tag_version" "$workspace_version" >&2
+            exit 1
+          fi
+          printf 'Release tag and workspace version both resolve to %s\n' "$workspace_version"
+
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      # Release artefacts must come from a revision that passed the same gates as
+      # CI, so the gate job calls the single entry point in strict mode instead of
+      # re-listing commands. Tag pushes do not trigger ci.yml (`on.push.branches`
+      # is branch-scoped), so this job is the only proof for release commits.
+      # 发布产物必须来自通过 CI 同等闸门的提交，因此闸门任务以严格模式调用唯一入口，
+      # 不再自行罗列命令。tag 推送不会触发 ci.yml（`on.push.branches` 只作用于分支），
+      # 因此本任务是发布提交的唯一证明。
+      - name: Install pinned CI gate tools / 安装固定版本 CI 闸门工具
+        run: scripts/install-gate-tools.sh
+
+      - name: Build CLI for strict smoke and docs gates / 为严格 smoke 与文档闸门准备 CLI
+        run: cargo build -p n3v3
+
+      - name: Run canonical validation (release mode) / 运行规范验证入口（发布模式）
+        run: scripts/validate.sh --release --strict
+
   build:
-    name: Build ${{ matrix.target }}
+    name: Build binary / 构建二进制 (${{ matrix.target }})
+    needs: release-gates
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux
+          # Linux / Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             cross: false
-
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             cross: true
 
-          # macOS
+          # macOS / macOS
           - os: macos-latest
             target: x86_64-apple-darwin
             cross: false
-
           - os: macos-latest
             target: aarch64-apple-darwin
             cross: false
 
-          # Windows
+          # Windows / Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             cross: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          targets: ${{ matrix.target }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-release-
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ runner.os }}-${{ matrix.target }}-release
-          cache-on-failure: true
+      - name: Install pinned cross / 安装固定版本 cross
+        if: ${{ matrix.cross }}
+        run: cargo install cross --version "$CROSS_VERSION" --locked
 
-      - name: Install cross
-        if: matrix.cross
-        uses: taiki-e/install-action@cross
-
-      - name: Build binary (Unix)
+      - name: Build binary (Unix) / 构建 Unix 二进制
         if: matrix.os != 'windows-latest'
         run: |
+          set -euo pipefail
           if [ "${{ matrix.cross }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }} -p n3v3
           else
@@ -75,147 +150,131 @@ jobs:
           fi
         shell: bash
 
-      - name: Build binary (Windows)
+      - name: Build binary (Windows) / 构建 Windows 二进制
         if: matrix.os == 'windows-latest'
         run: cargo build --release --target ${{ matrix.target }} -p n3v3
 
-      - name: Strip binary (Unix)
+      - name: Package binary (Unix) / 打包 Unix 二进制
         if: matrix.os != 'windows-latest'
         run: |
-          if command -v strip >/dev/null 2>&1; then
-            strip target/${{ matrix.target }}/release/neve || true
-          fi
-        shell: bash
-
-      - name: Package binary (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
+          set -euo pipefail
           cd target/${{ matrix.target }}/release
-          tar czf neve-${{ matrix.target }}.tar.gz neve
-          mv neve-${{ matrix.target }}.tar.gz ../../../
+          tar czf n3v3-${{ matrix.target }}.tar.gz n3v3
+          mv n3v3-${{ matrix.target }}.tar.gz ../../../
         shell: bash
 
-      - name: Package binary (Windows)
+      - name: Package binary (Windows) / 打包 Windows 二进制
         if: matrix.os == 'windows-latest'
         run: |
-          cd target/${{ matrix.target }}/release
-          7z a neve-${{ matrix.target }}.zip neve.exe
-          mv neve-${{ matrix.target }}.zip ../../../
+          $archive = "n3v3-${{ matrix.target }}.zip"
+          7z a $archive "target/${{ matrix.target }}/release/n3v3.exe"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload binary artifact / 上传二进制制品
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: neve-${{ matrix.target }}
+          name: n3v3-${{ matrix.target }}
           path: |
-            neve-*.tar.gz
-            neve-*.zip
+            n3v3-*.tar.gz
+            n3v3-*.zip
           if-no-files-found: error
 
   release:
-    name: Create Release
+    name: Create binary release / 创建二进制发布
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Download all binary artifacts / 下载全部二进制制品
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Create GitHub release / 创建 GitHub Release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           files: artifacts/*/*
           body: |
-            ## Neve ${{ github.ref_name }}
+            ## n3v3 ${{ github.ref_name }}
 
-            ### LSP Overhaul — 19 Methods, Type-Aware Completion
+            ### Release contract / 发布契约
 
-            - **19 LSP methods**: hover, completion (type-aware), signatureHelp, definition, references, documentHighlight, rename, formatting, documentSymbol, semanticTokens (AST-based), inlayHint, foldingRange, codeAction, completionItem/resolve
+            This workflow publishes binary archives only; it does not publish
+            packages to crates.io. crates.io publication is a separate manual
+            `cargo publish` operation.
+
+            本工作流仅发布二进制归档，不发布 crates.io 包；crates.io 发布由人工
+            单独执行 `cargo publish`。
+
+            ### LSP and tooling / LSP 与工具链
+
+            - **26 LSP methods**, including hover, completion (type-aware), signatureHelp, definition, references, documentHighlight, rename, formatting, documentSymbol, semanticTokens (AST-based), inlayHint, foldingRange, codeAction, and completionItem/resolve
             - **Type-aware dot-completion**: methods filtered by receiver type (List, String, Option, Result, Record)
-            - **Editor integration**: `neve setup helix` (6 query files, 22 highlight scopes), `neve setup vscode`
-            - **CLI**: `neve lsp --check` (10-point health check), `neve lsp --version`
-            - **Tests**: 164 LSP tests (151 integration + 13 unit)
+            - **Editor integration**: `n3v3 setup helix`, `n3v3 setup vscode`
+            - **CLI**: `n3v3 lsp --check`, `n3v3 lsp --version`
+            - **Tests**: LSP coverage is maintained by the repository test suites.
 
-            ### Installation
+            ### Installation / 安装
 
             Download the appropriate binary for your platform:
 
-            - **Linux (x86_64)**: `neve-x86_64-unknown-linux-gnu.tar.gz`
-            - **Linux (ARM64)**: `neve-aarch64-unknown-linux-gnu.tar.gz`
-            - **macOS (Intel)**: `neve-x86_64-apple-darwin.tar.gz`
-            - **macOS (Apple Silicon)**: `neve-aarch64-apple-darwin.tar.gz`
-            - **Windows (x86_64)**: `neve-x86_64-pc-windows-msvc.zip`
+            下载适合你平台的二进制文件：
+
+            - **Linux (x86_64)**: `n3v3-x86_64-unknown-linux-gnu.tar.gz`
+            - **Linux (ARM64)**: `n3v3-aarch64-unknown-linux-gnu.tar.gz`
+            - **macOS (Intel)**: `n3v3-x86_64-apple-darwin.tar.gz`
+            - **macOS (Apple Silicon)**: `n3v3-aarch64-apple-darwin.tar.gz`
+            - **Windows (x86_64)**: `n3v3-x86_64-pc-windows-msvc.zip`
 
             Extract and add to your PATH:
 
             ```bash
             # Linux/macOS
-            tar xzf neve-*.tar.gz
-            sudo mv neve /usr/local/bin/
+            tar xzf n3v3-*.tar.gz
+            sudo mv n3v3 /usr/local/bin/
 
             # Or add to user bin
             mkdir -p ~/.local/bin
-            mv neve ~/.local/bin/
+            mv n3v3 ~/.local/bin/
             ```
 
             ```powershell
             # Windows
-            Expand-Archive neve-x86_64-pc-windows-msvc.zip -DestinationPath .
-            # Add neve.exe to your PATH
+            Expand-Archive n3v3-x86_64-pc-windows-msvc.zip -DestinationPath .
+            # Add n3v3.exe to your PATH
             ```
-
-            ### Platform Notes
-
-            - **All platforms**: Core language tooling (`eval`, `run`, `check`, `repl`, `fmt`, `doc`) is available; semantic convergence is still ongoing
-            - **Unix-focused workflows**: Package/store/build flows are Unix-oriented today, and system configuration is currently Linux-only
-
-            ### What's New
-
-            See [CHANGELOG.md](docs/project/changelog.md) for details.
-
-            ---
-
-            ## Neve ${{ github.ref_name }}（中文）
-
-            ### 安装
-
-            下载适合你平台的二进制文件：
-
-            - **Linux (x86_64)**: `neve-x86_64-unknown-linux-gnu.tar.gz`
-            - **Linux (ARM64)**: `neve-aarch64-unknown-linux-gnu.tar.gz`
-            - **macOS (Intel)**: `neve-x86_64-apple-darwin.tar.gz`
-            - **macOS (Apple Silicon)**: `neve-aarch64-apple-darwin.tar.gz`
-            - **Windows (x86_64)**: `neve-x86_64-pc-windows-msvc.zip`
 
             解压后加入 PATH：
 
             ```bash
             # Linux/macOS
-            tar xzf neve-*.tar.gz
-            sudo mv neve /usr/local/bin/
+            tar xzf n3v3-*.tar.gz
+            sudo mv n3v3 /usr/local/bin/
 
             # 或加入用户目录
             mkdir -p ~/.local/bin
-            mv neve ~/.local/bin/
+            mv n3v3 ~/.local/bin/
             ```
 
             ```powershell
             # Windows
-            Expand-Archive neve-x86_64-pc-windows-msvc.zip -DestinationPath .
-            # 将 neve.exe 加入 PATH
+            Expand-Archive n3v3-x86_64-pc-windows-msvc.zip -DestinationPath .
+            # 将 n3v3.exe 加入你的 PATH
             ```
 
-            ### 平台说明
+            ### Platform notes / 平台说明
 
-            - **全部平台**: 核心语言工具链（`eval`/`run`/`check`/`repl`/`fmt`/`doc`）可用，但语义闭环仍在持续收敛
-            - **偏 Unix 的工作流**: 包管理、store 与构建流程目前以 Unix 为主，系统配置当前仅支持 Linux
+            - **All platforms**: Core language tooling (`eval`, `run`, `check`, `repl`, `fmt`, `doc`) is available.
+            - **全部平台**：核心语言工具链（`eval`、`run`、`check`、`repl`、`fmt`、`doc`）可用。
+            - **Unix-focused workflows**: Package/store/build flows are Unix-oriented today, and system configuration is currently Linux-only.
+            - **偏 Unix 的工作流**：包管理、store 与构建流程目前以 Unix 为主，系统配置当前仅支持 Linux。
 
-            ### 更新内容
+            ### What's new / 更新内容
 
+            See [CHANGELOG.md](docs/project/changelog.md) for details.
             详见 [CHANGELOG.md](docs/project/changelog.md)。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

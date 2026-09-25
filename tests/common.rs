@@ -1,6 +1,6 @@
-//! Integration tests for neve-common crate.
+//! Integration tests for n3v3-common crate.
 
-use neve_common::{BytePos, Interner, Span};
+use n3v3_common::{BytePos, Interner, Span};
 
 #[test]
 fn test_span_merge() {

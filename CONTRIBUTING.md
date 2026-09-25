@@ -1,4 +1,4 @@
-# Contributing to Neve
+# Contributing to n3v3
 
 完整贡献指南 → [docs/contributor/contributing.md](docs/contributor/contributing.md)
 

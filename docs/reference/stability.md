@@ -1,8 +1,22 @@
-# Neve Stability & Platform Support
+<div align="center">
+
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
+
+<h1>n3v3 Stability &amp; Platform Support</h1>
+
+<p><em>稳定性与平台支持</em></p>
+
+<p>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
+</p>
+
+</div>
+
 
 ## API Stability Tiers
 
-This document defines the stability guarantees for the Neve standard library (stdlib), platform support, and compiler-facing AST APIs. Current release is v5.0.0 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
+This document defines the stability guarantees for the n3v3 standard library (stdlib), platform support, and compiler-facing AST APIs. Current release is v5.0.0 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
 
 ## Tier 1: Stable ✅
 
@@ -14,7 +28,7 @@ This document defines the stability guarantees for the Neve standard library (st
 |-----|-----------|-------------|
 | `print` | `(value: a) -> Unit` | Print value to stdout without newline |
 | `println` | `(value: a) -> Unit` | Print value to stdout with newline |
-| `io.read` | `() -> String` | Read a line from stdin |
+| `io.read` | `(path: String) -> String` | Read file contents from a path |
 | `io.write` | `(msg: String) -> Unit` | Write string to stdout |
 | `io.readFile` | `(path: String) -> String` | Read entire file contents |
 | `io.writeFile` | `(path: String, content: String) -> Unit` | Write string to file |
@@ -25,6 +39,10 @@ This document defines the stability guarantees for the Neve standard library (st
 | `io.args` | `() -> List String` | Get script arguments |
 | `io.getEnv` | `(name: String) -> Option String` | Get environment variable |
 | `io.glob` | `(pattern: String) -> List String` | Glob pattern matching |
+
+Type-checker contract: `io.read(String) -> String`. The runtime additionally accepts a `Path` value, but that wider branch is an implementation convenience rather than a separate typed signature.
+类型检查器契约：`io.read(String) -> String`。运行时额外接受 `Path` 值，但这个更宽的分支属于实现便利，不是独立的类型签名。
+
 
 ### Type Conversion
 
@@ -114,7 +132,7 @@ All these types are stable:
 
 **Guarantee**: These APIs are stable in their current form but may gain new optional parameters in minor releases. Existing call sites will not break.
 
-### Stream<T> API (14 APIs)
+### Stream<T> API (13 APIs)
 
 | API | Signature | Description |
 |-----|-----------|-------------|
@@ -127,8 +145,7 @@ All these types are stable:
 | `io.streamFilter` | `(s: Stream a, f: a -> Bool) -> Stream a` | Filter stream |
 | `io.streamTake` | `(s: Stream a, n: Int) -> Stream a` | Take first n elements |
 | `io.streamDrop` | `(s: Stream a, n: Int) -> Stream a` | Drop first n elements |
-| `io.streamPipe` | `(s: Stream a, cmd: Command) -> Stream String` | Pipe stream into command |
-| `io.streamWrite` | `(s: Stream String, path: String) -> Unit` | Write stream to file |
+| `io.streamPipe` | `(s: Stream<String>, cmd: Command) -> ProcessResult` | Collect the stream and pipe it to a command |
 | `io.streamForEach` | `(s: Stream a, f: a -> Unit) -> Unit` | Apply closure to each element |
 | `io.streamFold` | `(s: Stream a, init: b, f: b -> a -> b) -> b` | Left fold over stream |
 | `io.streamWithTimeout` | `(s: Stream a, ms: Int) -> Stream (Option a)` | Stream with timeout per element |
@@ -137,29 +154,30 @@ All these types are stable:
 
 | API | Signature | Description |
 |-----|-----------|-------------|
-| `io.spawn` | `(task: Task a) -> TaskHandle a` | Spawn a task |
-| `io.poll` | `(handle: TaskHandle a) -> Option a` | Poll task for result |
-| `io.cancel` | `(handle: TaskHandle a) -> Bool` | Cancel a running task |
-| `io.awaitTask` | `(handle: TaskHandle a) -> a` | Block until task completes |
-| `io.awaitTasks` | `(handles: List (TaskHandle a)) -> List a` | Await multiple tasks |
-| `io.awaitAny` | `(handles: List (TaskHandle a)) -> a` | Await first completing task |
-| `io.awaitTaskWithTimeout` | `(handle: TaskHandle a, ms: Int) -> Option a` | Await with timeout |
+| `io.spawn` | `(task: Task[ProcessResult]) -> Int` | Spawn a task and return its integer spawn ID |
+| `io.poll` | `(spawnId: Int) -> Option[ProcessResult]` | Poll a spawn ID for a completed process result |
+| `io.cancel` | `(spawnId: Int) -> Unit` | Cancel and remove a spawned task |
+| `io.awaitTask` | `(task: Task[ProcessResult]) -> ProcessResult` | Block until a task completes |
+| `io.awaitTasks` | `(tasks: List[Task[ProcessResult]]) -> List[ProcessResult]` | Await multiple tasks |
+| `io.awaitAny` | `(tasks: List[Task[ProcessResult]]) -> ProcessResult` | Await the first completed task |
+| `io.awaitTaskWithTimeout` | `(task: Task[ProcessResult], ms: Int) -> Option[ProcessResult]` | Await with a timeout |
 
-### Registry CLI (Phase 5)
 
-| CLI Command | Description |
-|-------------|-------------|
-| `neve registry-update` | Update local registry index |
-| `neve registry-serve` | Start local registry server |
-| `neve registry-publish` | Publish package to registry |
+### Registry CLI (Implemented)
+
+On Unix, `n3v3 registry-update`, `n3v3 registry-serve`, and
+`n3v3 registry-publish` are implemented CLI commands.
+在 Unix 上，`n3v3 registry-update`、`n3v3 registry-serve` 和
+`n3v3 registry-publish` 是已实现的 CLI 命令。
+
 
 ### File I/O
 
 | API | Signature | Description |
 |-----|-----------|-------------|
-| `io.readFileLines` | `(path: String) -> List String` | Read file as lines |
+| `io.readFileLines` | `(path: String, f: String -> Unit) -> Unit` | Read file lines and invoke the callback |
 | `io.atomicWrite` | `(path: String, content: String) -> Unit` | Atomic file write |
-| `io.tempDir` | `() -> String` | Create temporary directory |
+| `io.tempDir` | `(callback: Path -> A) -> A` | Create a temporary directory for a callback |
 | `io.createDirAll` | `(path: String) -> Unit` | Create directory tree |
 | `io.removeDirAll` | `(path: String) -> Unit` | Remove directory tree |
 
@@ -235,7 +253,7 @@ Tier 3 → Tier 2 promotion requires:
 Tier 2 → Tier 1 promotion requires:
 
 1. **4 minor releases** of Tier 2 stability.
-2. **Widespread adoption** across the Neve ecosystem.
+2. **Widespread adoption** across the n3v3 ecosystem.
 3. **Formal specification** of behavior (where applicable).
 
 ## Breaking Change Policy
@@ -271,7 +289,7 @@ When a Tier 2 API needs a breaking change, the old API must:
 | REPL | ✅ | ✅ | ✅ |
 | LSP (language server) | ✅ | ✅ | ✅ |
 | Formatter | ✅ | ✅ | ✅ |
-| Stream<T> (14 APIs) | ✅ | ✅ | ✅ |
+| Stream<T> (13 APIs) | ✅ | ✅ | ✅ |
 | Task (spawn/poll/cancel) | ✅ | ✅ | ✅ |
 | Signal handling (INT/TERM/HUP) | ✅ | ❌ | ❌ |
 | TTY (raw mode, terminal size) | ✅ | ❌ | ❌ |
@@ -290,7 +308,7 @@ When a Tier 2 API needs a breaking change, the old API must:
 
 ## Versioning / 版本策略
 
-Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
+n3v3 follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 
 | Version | Meaning | Breaking changes |
 |---------|---------|------------------|
@@ -302,6 +320,9 @@ Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 
 All external-facing changes follow this lifecycle:
 
+Historical v4.x example: the following timeline records the AST evaluator migration completed before v5.0.0; it is not the v5.x deprecation schedule.
+v4.x 历史示例：下面的时间线记录 v5.0.0 之前完成的 AST evaluator 迁移，不是 v5.x 的废弃时间表。
+
 ```
 v4.X: deprecation warning → v4.X+1: continued warning → v4.X+2: removal
 ```
@@ -310,16 +331,16 @@ Example (AST evaluator removal):
 - **v3.18.0**: `#[deprecated]` on `AstEnv`/`AstEvaluator` (warning emitted)
 - **v4.0.4**: Types removed (breaking change in major)
 
-### v4.0 Exit Criteria (Completed)
+### v4.0 Exit Criteria (Historical)
 
 v4.0 marked the transition from "language prototype" to "stable language platform":
 
-1. AST compat path (`neve_eval::compat`) fully removed — ✅ Done (v4.0.4)
-2. All 6 known implementation gaps closed — ✅ Done (v4.0.4)
-3. 12 canonical keywords, v4.0 syntax canonical — ✅ Done (v4.0.4)
-4. Release policy formalized and stable — ✅ Done
-5. 62/62 design audit findings resolved — ✅ Done
-6. Semantic convergence: all features survive lowering without loss — ✅ Done
+1. AST compat path (`n3v3_eval::compat`) fully removed — **Implemented** in v4.0.4
+2. All 6 known implementation gaps closed — **Implemented** in v4.0.4
+3. 12 canonical keywords, v4.0 syntax canonical — **Implemented** in v4.0.4
+4. Release policy formalized and stable — **Implemented** in v4.0.4
+5. 62/62 design audit findings resolved — **Implemented** in v4.0.4
+6. Semantic convergence: all features survive lowering without loss — **Implemented** in v4.0.4
 
 ### v5.0 AST API cutover
 
@@ -334,7 +355,7 @@ as a wildcard or empty construct.
 
 ### Why Not Strict SemVer?
 
-- Neve completed the v4.0 milestone and continues rapid evolution
+- n3v3 completed the v4.0 milestone and continues rapid evolution
 - Syntax v4.0 solidified the language surface after the v3.0 overhaul
 - Minor releases are the primary feature-delivery vehicle
 - Major releases represent "quality milestones" rather than "anything that breaks"

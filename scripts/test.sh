@@ -1,10 +1,10 @@
 #!/bin/bash
-# Neve test runner — uses cargo examples (official Rust toolchain)
-# Flags: --clippy, --hunt, --diff, --all, --neve
+# n3v3 test runner — uses cargo examples (official Rust toolchain)
+# Flags: --clippy, --hunt, --diff, --all, --n3v3
 
 for arg in "$@"; do
     case "$arg" in
-        --neve) exec cargo run -q -p n3v3 -- run scripts/test.neve "$@" 2>/dev/null ;;
+        --n3v3) exec cargo run -q -p n3v3 -- run scripts/test.n3v3 "$@" 2>/dev/null ;;
         --hunt) exec cargo run -q -p n3v3 --example bug_hunt ;;
         --diff) exec cargo run -q -p n3v3 --example gen_diff_test -- -n 50 -d 3 ;;
         --all)

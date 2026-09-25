@@ -1,4 +1,4 @@
-# Neve Brand Assets
+# n3v3 Brand Assets
 
 This directory stores the logo and icon variants used by the repository, release artifacts, and packaging metadata.
 这个目录保存仓库、发布产物和包管理元数据使用的 logo 与图标资源。

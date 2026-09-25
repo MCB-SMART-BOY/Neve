@@ -1,27 +1,46 @@
-# Neve LSP — Language Server Protocol Implementation
+<div align="center">
+
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
+
+<h1>n3v3 LSP — Language Server Protocol Implementation</h1>
+
+<p><em>n3v3 LSP — 语言服务器协议实现</em></p>
+
+<p>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
+</p>
+
+</div>
+
 
 ## Overview
 
-The Neve LSP server (`neve lsp`) provides full IDE support for Neve source files (`.neve`). It implements the Language Server Protocol over stdio JSON-RPC and is compatible with any LSP-capable editor.
+The n3v3 LSP server (`n3v3 lsp`) provides full IDE support for n3v3 source files (`.n3v3`). It implements the Language Server Protocol over stdio JSON-RPC and is compatible with any LSP-capable editor.
 
 ## Quick Start
 
 ```bash
 # One-shot Helix setup
-neve setup helix
+n3v3 setup helix
 
 # Start the LSP server
-neve lsp
+n3v3 lsp
 
 # Health check
-neve lsp --check
+n3v3 lsp --check
 ```
 
-Open any `.neve` file in Helix — syntax highlighting, auto-completion, and diagnostics work out of the box.
+Open any `.n3v3` file in Helix — syntax highlighting, auto-completion, and diagnostics work out of the box.
 
-## Supported LSP Methods (21 total)
+## Supported LSP Methods — 26 LSP methods / 支持的 LSP 方法 — 26 个 LSP 方法
 
-### Text Document Features
+The `LanguageServer` implementation contains 19 request handlers and 7 notification handlers. The feature methods advertised by `server_capabilities()` are listed under “Implemented and declared”; lifecycle handlers, stubs, and unimplemented optional methods are separated below.
+`LanguageServer` 实现包含 19 个请求 handler 与 7 个通知 handler。`server_capabilities()` 声明的功能列在“实现并声明”下；生命周期 handler、stub 与未实现的可选方法分开列出。
+
+### Implemented and declared / 实现并声明
+
+### Text Document Features / 文本文档功能
 
 | Method | Status | Description |
 |--------|--------|-------------|
@@ -38,7 +57,7 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/documentHighlight` | ✅ | Read/write occurrence highlighting |
 | `textDocument/rename` | ✅ | Batch rename with prepare support |
 | `textDocument/prepareRename` | ✅ | Prepare rename validation |
-| `textDocument/formatting` | ✅ | Format document via `neve-fmt` |
+| `textDocument/formatting` | ✅ | Format document via `n3v3-fmt` |
 | `textDocument/documentSymbol` | ✅ | Hierarchical symbol view |
 | `textDocument/semanticTokens/full` | ✅ | AST-based semantic tokens (10 types, 8 node kinds) |
 | `textDocument/inlayHint` | ✅ | Type inference hints for let bindings and function returns |
@@ -46,23 +65,44 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/codeAction` | ✅ | Quick-fix diagnostics |
 | `textDocument/codeLens` | ✅ | Reference counts on functions, types, and traits |
 
-### Workspace Features
+### Workspace Features / 工作区功能
 
 | Method | Status | Description |
 |--------|--------|-------------|
 | `workspace/symbol` | ✅ | Search symbols across open documents |
+
+
+### Protocol lifecycle handlers / 协议生命周期 handler
+
+| Method | Status | Description |
+|--------|--------|-------------|
+| `initialize` | ✅ Implemented | Return server information and `server_capabilities()` |
+| `shutdown` | ✅ Implemented | Complete the shutdown request |
+| `initialized` | ✅ Implemented | Log successful server initialization |
+
+### Protocol handlers but stub / 协议 handler 但为 stub
+
+| Method | Status | Description |
+|--------|--------|-------------|
+| `workspace/didChangeConfiguration` | ⚠️ Stub | Accepts the event; restart the server for new settings to take effect |
+| `workspace/didChangeWatchedFiles` | ⚠️ Stub | Accepts the event; restart the server because file changes are not re-analysed |
+
+### Not implemented / 未实现
+
+Optional methods not listed by `server_capabilities()` are not implemented or advertised. Examples include `textDocument/willSave`, `textDocument/willSaveWaitUntil`, `textDocument/rangeFormatting`, `textDocument/onTypeFormatting`, `textDocument/documentLink`, `textDocument/documentColor`, and `workspace/executeCommand`.
+`server_capabilities()` 未列出的可选方法不会实现或声明。例如：`textDocument/willSave`、`textDocument/willSaveWaitUntil`、`textDocument/rangeFormatting`、`textDocument/onTypeFormatting`、`textDocument/documentLink`、`textDocument/documentColor` 与 `workspace/executeCommand`。
 
 ## Editor Integration
 
 ### Helix (Complete)
 
 ```bash
-neve setup helix
+n3v3 setup helix
 ```
 
 Installs:
-- **Grammar**: `~/.config/helix/runtime/grammars/neve.so` (tree-sitter)
-- **Queries**: 6 files in `~/.config/helix/runtime/queries/neve/`
+- **Grammar**: `~/.config/helix/runtime/grammars/n3v3.so` (tree-sitter)
+- **Queries**: 6 files in `~/.config/helix/runtime/queries/n3v3/`
   - `highlights.scm` — Syntax highlighting
   - `locals.scm` — Local variable scoping
   - `indents.scm` — Auto-indentation
@@ -88,12 +128,12 @@ Extension skeleton in `editors/vscode/`:
 
 ### Sublime Text (Syntax Only)
 
-Syntax definition in `editors/neve.sublime-syntax`.
+Syntax definition in `editors/n3v3.sublime-syntax`.
 
 ## Completion Categories
 
 The completion registry is assembled from the standard-library completion
-modules in `crates/neve-lsp/src/stdlib_completion`; inventory counts are
+modules in `crates/n3v3-lsp/src/stdlib_completion`; inventory counts are
 intentionally not duplicated here.
 
 | Category | Coverage | Example |
@@ -102,7 +142,7 @@ intentionally not duplicated here.
 | Standard library | Registry-backed module completions | `io.readFile`, `list.map`, `string.trim` |
 | Types | Built-in and user-defined types | `Int`, `String`, `List`, `Option`, `Result`, `Stream` |
 | Methods | Receiver-type-aware completions | `map`, `filter`, `split`, `unwrap`, `keys` |
-| Import paths | Workspace-aware module paths | `.neve` modules |
+| Import paths | Workspace-aware module paths | `.n3v3` modules |
 
 ### Type-Aware Method Completion
 
@@ -134,7 +174,7 @@ When typing `expr.`, only methods applicable to the expression's inferred type a
 ## Architecture
 
 ```
-neve-lsp (crate)
+n3v3-lsp (crate)
 ├── backend.rs     — LSP protocol handlers (2300+ lines)
 ├── capabilities.rs — Server capability declarations
 ├── document.rs    — Document model: parsing, analysis, hover maps
@@ -143,7 +183,7 @@ neve-lsp (crate)
 └── stdlib_completion/ — Stdlib completion specs (9 modules)
 ```
 
-The LSP server uses `neve-frontend` for the canonical analysis pipeline:
+The LSP server uses `n3v3-frontend` for the canonical analysis pipeline:
 ```
 Source Text → Parser (AST) → Lowering (HIR) → Type Check → ModuleSemantics
                                                               ↓
@@ -157,11 +197,11 @@ Source Text → Parser (AST) → Lowering (HIR) → Type Check → ModuleSemanti
 cargo build -p n3v3
 
 # Test LSP crate
-cargo test -p neve-lsp          # 19 unit tests
+cargo test -p n3v3-lsp          # Test the LSP crate
 
 # Test LSP integration
 cargo test --test lsp            # LSP integration tests
 
 # Health check
-cargo run -p n3v3 -- lsp --check  # 7 automated checks
+cargo run -p n3v3 -- lsp --check  # Run the health check
 ```

@@ -11,15 +11,27 @@
 - [ ] release: version bump
 - [ ] chore: CI/build/tooling
 
-## Checklist
-- [ ] `cargo test --workspace` passes
-- [ ] `cargo fmt --all` passes
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
-- [ ] New tests added in the appropriate file
-- [ ] `docs/project/feature-matrix.md` updated if capability changed
-- [ ] `docs/project/changelog.md` updated if user-facing change
-- [ ] `CLAUDE.md` updated if needed
-- [ ] All evaluation goes through canonical HIR pipeline
+## Validation
+<!--
+Single source of truth: `scripts/validate.sh`.
+Gate definitions: `scripts/validate.sh --list`.
+-->
+
+### Local validation
+- [ ] Before requesting review, run `scripts/validate.sh --quick` (format, lint, build, skills, and docs).
+- [ ] For CI-equivalent local validation, run `scripts/validate.sh`; missing external tools may report `[SKIP]`.
+- [ ] Use `scripts/validate.sh --strict` when skipped gates must fail.
+- [ ] For release-facing changes, run `scripts/validate.sh --release`.
+
+### CI validation
+- [ ] The required CI job passes via `.github/workflows/ci.yml` → `scripts/validate.sh --ci` (CI enables strict mode).
+
+## Change Hygiene
+- [ ] New tests are added in the appropriate file when behavior changes.
+- [ ] `docs/project/feature-matrix.md` is updated when capability status changes.
+- [ ] `docs/project/changelog.md` is updated for user-facing changes.
+- [ ] `CLAUDE.md` is updated when project-level guidance changes.
+- [ ] All evaluation goes through the canonical HIR pipeline.
 
 ## Affected Crates
 <!-- List the crates modified by this PR -->

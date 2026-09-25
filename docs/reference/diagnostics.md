@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Diagnostic Codes</h1>
 
@@ -20,11 +20,14 @@
 
 ## Overview / 概览
 
-- Codes are grouped by component: lexer (E0001+), parser (E0100+), type checker (E0200+), eval (E0300+).
+This reference documents **55 diagnostic codes**.
+本参考文档记录 **55 个诊断码**。
+
+- Codes are grouped by component: lexer (E0001+), parser (E0100+), type checker (E0200+), eval (E0300+), and module (E0400+).
 - CLI output and LSP diagnostics show these codes so you can search them quickly.
 - Some codes include a suggested fix; the compiler will surface it as `help` when available.
 
-- 错误码按模块划分：词法（E0001+）、语法（E0100+）、类型（E0200+）、求值（E0300+）。
+- 错误码按模块划分：词法（E0001+）、语法（E0100+）、类型（E0200+）、求值（E0300+）和模块（E0400+）。
 - CLI 输出和 LSP 诊断都会显示这些代码，方便快速定位。
 - 部分错误码带有修复建议，编译器会以 `help` 形式展示。
 

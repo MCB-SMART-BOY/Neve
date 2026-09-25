@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Integration Tests</h1>
 
@@ -15,10 +15,10 @@
 
 ---
 
-This directory contains integration tests for the Neve language.
+This directory contains integration tests for the n3v3 language.
 Some files validate a single compiler/runtime stage, while `end_to_end.rs`
 is reserved for trustworthy smoke coverage of real frontend/runtime paths.
-本目录包含 Neve 语言的集成测试。
+本目录包含 n3v3 语言的集成测试。
 其中一部分测试单独验证某个编译器/运行时阶段，`end_to_end.rs`
 只保留给真实前端与运行时路径的可信烟雾测试。
 
@@ -228,7 +228,7 @@ Steps to add new integration tests:
    #[test]
    fn test_my_new_feature() {
        let source = r#"
-           // Neve code here
+           // n3v3 code here
        "#;
 
        let result = test_helper(source);
@@ -288,6 +288,6 @@ When adding tests, please follow:
 
 ---
 
-**测试你的代码,让 Neve 更健壮!** 🧪
+**测试你的代码,让 n3v3 更健壮!** 🧪
 
-**Test your code, make Neve more robust!** 🧪
+**Test your code, make n3v3 more robust!** 🧪

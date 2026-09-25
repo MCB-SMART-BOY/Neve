@@ -1,0 +1,19 @@
+[package]
+name = "n3v3-fetch"
+description = "Source fetching for the n3v3 package system"
+repository.workspace = true
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+n3v3-derive = { version = "5.0.0", path = "../n3v3-derive" }
+thiserror.workspace = true
+reqwest = { workspace = true }
+git2.workspace = true
+tar.workspace = true
+flate2.workspace = true
+xz2.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]

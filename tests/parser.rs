@@ -1,7 +1,7 @@
-//! Integration tests for neve-parser crate.
+//! Integration tests for n3v3-parser crate.
 
-use neve_parser::parse;
-use neve_syntax::{BinOp, ExprKind, ItemKind, PatternKind, TypeKind};
+use n3v3_parser::parse;
+use n3v3_syntax::{BinOp, ExprKind, ItemKind, PatternKind, TypeKind};
 
 // ============================================================================
 // Basic Parsing Tests
@@ -991,7 +991,7 @@ fn test_record_update_multiple() {
 
 #[test]
 fn test_canonical_record_shorthand_and_update() {
-    let (file, diags) = parse("let r = { name }; let r2 = { r | name = \"neve\" };");
+    let (file, diags) = parse("let r = { name }; let r2 = { r | name = \"n3v3\" };");
     assert!(diags.is_empty(), "parse errors: {:?}", diags);
     assert!(matches!(
         &file.items[0].kind,
@@ -1729,7 +1729,7 @@ fn test_parse_fn_effect_auto_inferred() {
     assert!(diags.is_empty(), "unexpected parse errors: {:?}", diags);
     assert_eq!(file.items.len(), 1);
     match &file.items[0].kind {
-        neve_syntax::ItemKind::Fn(def) => {
+        n3v3_syntax::ItemKind::Fn(def) => {
             // effect is always false in parser (auto-inferred later by typeck)
             assert!(!def.effect, "parser no longer sets effect flag")
         }
@@ -1742,7 +1742,7 @@ fn test_parse_fn_without_effect() {
     let (file, diags) = parse("fn add(x: Int) -> Int = x + 1;");
     assert!(diags.is_empty());
     match &file.items[0].kind {
-        neve_syntax::ItemKind::Fn(def) => assert!(!def.effect, "expected effect=false"),
+        n3v3_syntax::ItemKind::Fn(def) => assert!(!def.effect, "expected effect=false"),
         _ => panic!("expected Fn item"),
     }
 }
@@ -2059,7 +2059,7 @@ fn test_parse_multiline_comment() {
 #[test]
 fn test_parse_shebang() {
     // The parser now strips shebang lines internally.
-    let (file, diags) = parse("#!/usr/bin/env neve\nlet x = 1;");
+    let (file, diags) = parse("#!/usr/bin/env n3v3\nlet x = 1;");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
 }

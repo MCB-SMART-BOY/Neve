@@ -5,7 +5,7 @@
 
 mod support;
 
-use neve_hir::{ModuleLoadError, ModuleLoader};
+use n3v3_hir::{ModuleLoadError, ModuleLoader};
 use std::fs;
 use support::module_fixtures::create_test_module;
 use tempfile::TempDir;
@@ -49,7 +49,7 @@ fn test_nested_module_loading() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
 
-    // Create nested module structure: utils/string.neve
+    // Create nested module structure: utils/string.n3v3
     fs::create_dir_all(root.join("utils")).unwrap();
     create_test_module(
         root,
@@ -60,7 +60,7 @@ fn test_nested_module_loading() {
         "#,
     );
 
-    // Create utils/mod.neve to re-export
+    // Create utils/mod.n3v3 to re-export
     create_test_module(
         root,
         &["utils", "mod"],

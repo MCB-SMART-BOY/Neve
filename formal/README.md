@@ -1,13 +1,13 @@
-# Neve Formal Verification
+# n3v3 Formal Verification
 
-用 [Lean 4](https://lean-lang.org/) 对 Neve 语言核心语义的形式化验证。
+用 [Lean 4](https://lean-lang.org/) 对 n3v3 语言核心语义的形式化验证。
 
 ## 目录结构
 
 ```
 formal/
-├── Neve.lean                   — 主模块（导入所有子模块）
-├── Neve/
+├── n3v3.lean                   — 主模块（导入所有子模块）
+├── n3v3/
 │   ├── Spec/
 │   │   ├── Syntax.lean         — 核心语法（类型、值、表达式、模式、BinOp、Effect）
 │   │   ├── Typing.lean v4      — 类型检查规则（12 条 BinOp 全覆盖）
@@ -79,10 +79,10 @@ lake build
 
 | Lean 模块 | Rust 对应 | 精化桥 |
 |-----------|----------|--------|
-| Spec/Syntax.lean | crates/neve-hir/ | — |
-| Spec/Typing.lean | crates/neve-typeck/ | — |
-| Spec/Eval.lean | crates/neve-eval/ | — |
-| Spec/Effects.lean v4.3 (34 rules, +5 stream Phase C) | crates/neve-std/src/io/ | — |
+| Spec/Syntax.lean | crates/n3v3-hir/ | — |
+| Spec/Typing.lean | crates/n3v3-typeck/ | — |
+| Spec/Eval.lean | crates/n3v3-eval/ | — |
+| Spec/Effects.lean v4.3 (34 rules, +5 stream Phase C) | crates/n3v3-std/src/io/ | — |
 | Verify/Path.lean | resolve_redirect_path | Refinement/Path.lean |
 | Verify/Environ.lean | configured_process_command | Refinement/Environ.lean |
 | Verify/Limits.lean | MAX_*_BYTES checks | Refinement/Limits.lean |

@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
-<h1>Neve Language Specification</h1>
+<h1>n3v3 Language Specification — v4 Grammar Syntax</h1>
 
-<p><em>语言规范 v4.0 — 含形式化语义 (Lean-verified)</em></p>
+<p><em>n3v3 language specification — v4 grammar syntax, product v5.0.0 · 语言规范：v4 语法形态，产品 v5.0.0 — 含形式化语义 (Lean-verified)</em></p>
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -18,19 +18,29 @@
 > *The formal spec. For when you need the precise truth.*  
 > 语言规范：当你需要严谨的定义时使用。
 
+## Version Context / 版本语境
+
+This specification documents the v4 grammar syntax as shipped by product v5.0.0. The product version and grammar version are distinct: v5.0.0 keeps the v4 surface syntax while making the AST-to-HIR pipeline canonical.
+本规范记录产品 v5.0.0 使用的 v4 语法形态。产品版本与语法版本不同：v5.0.0 保留 v4 表层语法，并将 AST 到 HIR 的流程作为唯一规范路径。
+
+### v5.0 AST/HIR cutover / v5.0 AST/HIR 切换
+
+`n3v3-frontend` parses source into an AST, lowers it to HIR, and type-checks the HIR; `n3v3-eval::Evaluator` evaluates HIR modules. The former `n3v3_eval::compat` AST evaluator path was removed in v5.0.0; `n3v3-eval` now exposes the HIR evaluator only (`crates/n3v3-frontend/src/lib.rs:274-315`, `crates/n3v3-eval/src/lib.rs:1-14`).
+`n3v3-frontend` 将源代码解析为 AST、降级为 HIR 并检查 HIR；`n3v3-eval::Evaluator` 对 HIR 模块求值。旧的 `n3v3_eval::compat` AST 求值路径已在 v5.0.0 删除；`n3v3-eval` 现在只公开 HIR 求值器（`crates/n3v3-frontend/src/lib.rs:274-315`、`crates/n3v3-eval/src/lib.rs:1-14`）。
+
+Migration: consumers that called `AstEnv`, `AstEvaluator`, or `n3v3_eval::compat` must switch to `n3v3-frontend::analyze_source`/`analyze_ast`, then pass the resulting HIR module and method-resolution table to `n3v3-eval::Evaluator::eval_evaluable_module` (or `eval_module_with_method_resolutions`). Public syntax enums remain inspection boundaries; wildcard-match them to remain forward-compatible.
+迁移：曾调用 `AstEnv`、`AstEvaluator` 或 `n3v3_eval::compat` 的消费者必须改用 `n3v3-frontend::analyze_source`/`analyze_ast`，再将得到的 HIR 模块与 method-resolution table 传给 `n3v3-eval::Evaluator::eval_evaluable_module`（或 `eval_module_with_method_resolutions`）。公共 syntax enum 仍是检查边界；请使用 wildcard match 以保持前向兼容。
+
 ## 1. Design Principles / 设计原则
 
 
 - **Zero Ambiguity**: Every construct parses exactly one way
 - **Syntactic Consistency**: Similar things look similar
 - **Indentation Independent**: Explicit delimiters, no significant whitespace
-- **Purely Functional**: No side effects, referential transparency
+- **Pure by default**: Referential transparency is preferred; host side effects are explicit and traceable through effect inference and checking.
 
 
-- **零二义性**: 每个语法结构只有一种解析方式
-- **语法一致**: 相似的东西长得相似
-- **不靠缩进**: 用显式分隔符,不玩空格游戏
-- **纯函数式**: 没有副作用,引用透明
+- **默认纯函数式**：优先保持引用透明；主机副作用通过 effect 推导与检查显式可追踪。
 
 
 ## 2. Symbol Reference / 符号速查
@@ -71,7 +81,7 @@
 
 ### Comments / 注释
 
-```neve
+```n3v3
 -- single line comment --
 
 --
@@ -84,7 +94,7 @@
 
 ### Literals
 
-```neve
+```n3v3
 -- Integers
 42  -17  0xFF  0o77  0b1010  1_000_000
 
@@ -120,7 +130,7 @@ literal requires the next character to be alphanumeric or `_`, `-`, `.`.
 
 ### 注释
 
-```neve
+```n3v3
 -- 单行注释 --
 
 --
@@ -131,7 +141,7 @@ literal requires the next character to be alphanumeric or `_`, `-`, `.`.
 
 ### 字面量
 
-```neve
+```n3v3
 -- 整数
 42  -17  0xFF  0o77  0b1010  1_000_000
 
@@ -164,7 +174,7 @@ true  false
 
 ### Primitive Types
 
-```neve
+```n3v3
 Int     -- arbitrary precision integer
 Float   -- 64-bit floating point
 Bool    -- boolean
@@ -178,7 +188,7 @@ Path literals (`./config`, `/etc/hosts`) are first-class `Path` values.
 
 ### Compound Types
 
-```neve
+```n3v3
 List<Int>                       -- list
 Option<Int>                     -- optional value
 Result<Int, String>             -- result with error
@@ -198,7 +208,7 @@ Bytes                           -- binary data
 
 ### 原始类型
 
-```neve
+```n3v3
 Int     -- 任意精度整数
 Float   -- 64 位浮点
 Bool    -- 布尔
@@ -212,7 +222,7 @@ Unit    -- 空类型 ()
 
 ### 复合类型
 
-```neve
+```n3v3
 List<Int>                       -- 列表
 Option<Int>                     -- 可选值
 Result<Int, String>             -- 带错误的结果
@@ -235,7 +245,7 @@ Bytes                           -- 二进制数据
 
 Top-level `let`/`fn`/`;` are **optional** in v4.0. `struct`/`enum` → `type`.
 
-```neve
+```n3v3
 -- Type alias
 type Port = Int
 
@@ -271,7 +281,7 @@ readConfig(path: String) -> String = io.readFile(path)
 
 顶层 `let`/`fn`/`;` 在 v4.0 中是**可选的**。`struct`/`enum` → `type`。
 
-```neve
+```n3v3
 -- 类型别名
 type Port = Int
 
@@ -307,7 +317,7 @@ readConfig(path: String) -> String = io.readFile(path)
 
 ### Bindings
 
-```neve
+```n3v3
 let x = 42;
 let (a, b) = (1, 2);
 let { x, y } = point;
@@ -315,7 +325,7 @@ let { x, y } = point;
 
 ### Records (v4.0)
 
-```neve
+```n3v3
 { x = 0, y = 0 }
 { name }              -- shorthand
 { point | x = 10 }    -- update
@@ -324,7 +334,7 @@ config & override     -- merge
 
 ### Lists
 
-```neve
+```n3v3
 [1, 2, 3]
 [1, 2] ++ [3, 4]
 [x * 2 | x <- xs, x > 0]    -- comprehension
@@ -332,7 +342,7 @@ config & override     -- merge
 
 ### Closures / Lambdas (v4.0)
 
-```neve
+```n3v3
 |x| x + 1
 |x, y| x + y
 |x: Int| -> Int { x + 1 }
@@ -340,15 +350,27 @@ config & override     -- merge
 
 ### Conditionals
 
-```neve
+```n3v3
 if x > 0 -> "positive" else "non-positive"
+```
+
+`if` is an expression. The `else` branch is required, and both branches must have the same type. Omitting `else` is a syntax error (`E0100`, expected `Else`), not a type error. `{}` is an empty `Record`, not `Unit`, so an empty branch must use `()`:
+
+```n3v3
+if cond -> { io.println("warn") } else ();
+```
+
+`if` 是表达式。`else` 分支必填，且两分支类型必须一致。省略 `else` 是语法错误（`E0100`，expected `Else`），不是类型错误。`{}` 是空 `Record` 而不是 `Unit`，因此空分支必须写成 `()`：
+
+```n3v3
+if cond -> { io.println("warn") } else ();
 ```
 
 ### Pattern Matching (Must Be Exhaustive)
 
-`match` requires exhaustive coverage. For non-exhaustive conditions, use `if-else`.
+`match` requires exhaustive coverage. For non-exhaustive conditions, use `if-else`; `if` itself always requires both branches and matching branch types.
 
-```neve
+```n3v3
 -- match: exhaustive (compiler enforces)
 match x {
     0 -> "zero",
@@ -364,7 +386,7 @@ else "zero"
 
 ### Error Handling
 
-```neve
+```n3v3
 let data = fetch(url)?;     -- propagate error
 let x = maybe ?? default;   -- default value
 user?.profile?.name         -- safe access
@@ -372,7 +394,7 @@ user?.profile?.name         -- safe access
 
 ### Method Calls
 
-```neve
+```n3v3
 x.foo(y)
 ```
 
@@ -387,7 +409,7 @@ Current canonical dispatch order:
 
 ### 绑定
 
-```neve
+```n3v3
 let x = 42;
 let (a, b) = (1, 2);
 let { x, y } = point;
@@ -395,7 +417,7 @@ let { x, y } = point;
 
 ### 记录
 
-```neve
+```n3v3
 { x = 0, y = 0 }
 { name }              -- 简写
 { point | x = 10 }    -- 更新
@@ -404,7 +426,7 @@ config & override     -- 合并
 
 ### 列表
 
-```neve
+```n3v3
 [1, 2, 3]
 [1, 2] ++ [3, 4]
 [x * 2 | x <- xs, x > 0]    -- 推导式
@@ -412,7 +434,7 @@ config & override     -- 合并
 
 ### 闭包 / Lambdas (v4.0)
 
-```neve
+```n3v3
 |x| x + 1
 |x, y| x + y
 |x: Int| -> Int { x + 1 }
@@ -420,15 +442,21 @@ config & override     -- 合并
 
 ### 条件
 
-```neve
+```n3v3
 if x > 0 -> "正数" else "非正数"
+```
+
+`if` 是表达式。`else` 分支必填，且两分支类型必须一致。省略 `else` 是语法错误（`E0100`，expected `Else`），不是类型错误。`{}` 是空 `Record` 而不是 `Unit`，因此空分支必须写成 `()`：
+
+```n3v3
+if cond -> { io.println("warn") } else ();
 ```
 
 ### 模式匹配（必须穷尽）
 
-`match` 要求穷尽覆盖。非穷尽场景用 `if-else`。
+`match` 要求穷尽覆盖。非穷尽场景使用 `if-else`；`if` 本身始终要求两条分支且分支类型一致。
 
-```neve
+```n3v3
 -- match：穷尽（编译器强制）
 match x {
     0 -> "零",
@@ -444,7 +472,7 @@ else "零"
 
 ### 错误处理
 
-```neve
+```n3v3
 let data = fetch(url)?;     -- 传播错误
 let x = maybe ?? default;   -- 默认值
 user?.profile?.name         -- 安全访问
@@ -452,7 +480,7 @@ user?.profile?.name         -- 安全访问
 
 ### 方法调用
 
-```neve
+```n3v3
 x.foo(y)
 ```
 
@@ -534,7 +562,7 @@ x.foo(y)
 ## 8. Modules / 模块
 
 
-```neve
+```n3v3
 add(x: Int, y: Int) -> Int = x + y
 
 use std.list
@@ -546,7 +574,7 @@ use crate.utils
 ```
 
 
-```neve
+```n3v3
 add(x: Int, y: Int) -> Int = x + y
 
 use std.list
@@ -561,22 +589,22 @@ use crate.utils
 ## 9. Lazy Evaluation / 惰性求值
 
 
-```neve
+```n3v3
 let expensive = ~compute();
 let result = force(expensive);
 ```
 
 ## 10. Effect System / 副作用系统
 
-Neve distinguishes pure functions from effectful ones at compile time.
-Neve 在编译期区分纯函数和副作用函数。
+n3v3 distinguishes pure functions from effectful ones at compile time.
+n3v3 在编译期区分纯函数和副作用函数。
 
 ### Effect Annotation / 副作用注解
 
 Effectfulness is auto-inferred by the type checker. The `effect` keyword is accepted for backward compatibility but is not required.
 副作用性由类型检查器自动推断。`effect` 关键字仅为向后兼容而接受，并非必需。
 
-```neve
+```n3v3
 -- Pure function: no effects allowed / 纯函数：不允许副作用
 fn pureAdd(x: Int, y: Int) -> Int = x + y;
 
@@ -586,16 +614,19 @@ fn readHostname() -> String = io.readFile("/etc/hostname");
 
 ### Effect Checking / 副作用检查
 
-- `neve check` enforces effect purity by default: pure functions cannot call effectful builtins
-- `neve check` 默认强制副作用检查：纯函数不得调用副作用内置函数
-- The `effect` annotation propagates: calling an effectful function requires the caller to be effectful
-- `effect` 注解传播：调用副作用函数要求调用者也是副作用函数
-- Inspector functions (`processSuccess`, `processStdout`, `processCode`, `processStderr`) are pure
-- 检查器函数（`processSuccess`、`processStdout`、`processCode`、`processStderr`）是纯函数
-- `neve check` performs module-level purity checking by default (rejects all effectful calls; use `--allow-effects` to bypass)
-- `neve check` 默认执行模块级纯度检查（拒绝所有副作用调用；使用 `--allow-effects` 绕过）
+The type checker infers effectfulness from effectful builtins and transitively from called functions; an explicit `effect` keyword remains accepted for compatibility but is not required. Effectful functions therefore remain expressible—the system makes their host effects visible instead of claiming that all code is side-effect free.
+类型检查器根据有副作用的内置函数，并沿调用关系传递地推导函数的 effect；显式 `effect` 关键字仍为兼容性保留但不是必需的。因此有副作用的函数仍可表达；系统让主机副作用可见，而不是声称所有代码都没有副作用。
+
+`n3v3 check` enables a CLI effect gate by default: it rejects collected effectful calls and exits with `effect check failed`. `n3v3 check --allow-effects` disables only that gate and still performs parsing and type checking. Warnings do not make a successful check fail; the success output is `[OK] OK - No errors found` (or includes the warning count).
+`n3v3 check` 默认启用 CLI effect gate：拒绝收集到的副作用调用并以 `effect check failed` 退出。`n3v3 check --allow-effects` 只关闭该 gate，仍执行解析与类型检查。警告不会让成功检查失败；成功输出为 `[OK] OK - No errors found`（或附带警告数量）。
+
+- Inspector functions (`processSuccess`, `processStdout`, `processCode`, `processStderr`) are pure.
+- 检查器函数（`processSuccess`、`processStdout`、`processCode`、`processStderr`）是纯函数。
 
 ### Effectful Builtins / 副作用内置函数
+
+The effect registry classifies host-facing `std.io` and `std.fetch` operations as effectful; process inspectors and pure constructors remain pure.
+effect registry 将面向主机的 `std.io` 与 `std.fetch` 操作分类为有副作用；Process inspector 与纯构造器仍是纯函数。
 
 | Module | Functions | Effect |
 |--------|-----------|--------|
@@ -607,11 +638,11 @@ fn readHostname() -> String = io.readFile("/etc/hostname");
 
 ## 11. Scripting / 脚本
 
-Neve supports shebang-based scripting with command-line argument access.
-Neve 支持基于 shebang 的脚本编写和命令行参数访问。
+n3v3 supports shebang-based scripting with command-line argument access.
+n3v3 支持基于 shebang 的脚本编写和命令行参数访问。
 
-```neve
-#!/usr/bin/env neve
+```n3v3
+#!/usr/bin/env n3v3
 use std.io = io;
 
 -- Access script arguments / 访问脚本参数
@@ -625,8 +656,8 @@ let result = io.awaitTaskWithTimeout(task, 5000);
 
 ### Shebang Support / Shebang 支持
 
-- `.neve` files starting with `#!/usr/bin/env neve` can be executed directly
-- 以 `#!/usr/bin/env neve` 开头的 `.neve` 文件可直接执行
+- `.n3v3` files starting with `#!/usr/bin/env n3v3` can be executed directly
+- 以 `#!/usr/bin/env n3v3` 开头的 `.n3v3` 文件可直接执行
 - The shebang line is automatically stripped before parsing
 - Shebang 行在解析前自动去除
 - Remaining CLI arguments are available via `io.args() -> List[String]`
@@ -634,20 +665,13 @@ let result = io.awaitTaskWithTimeout(task, 5000);
 
 ---
 
-## 12. Known Implementation Gaps / 已知实现差距
+## 12. Implementation Status / 实现状态
 
-The following constructs are documented in this spec but have known limitations
-in the current parser or runtime. Tracked as `#[ignore]` golden tests in
-`tests/parser.rs`.
+The v4 grammar compatibility items covered by this specification are `Implemented` in v5.0.0. Lexer, parser, lowering, type checking, and HIR evaluation use the canonical pipeline; shebang stripping is an `Implemented` CLI concern rather than a parser feature.
+本规范涉及的 v4 语法兼容项在 v5.0.0 中均为 `Implemented`。词法、解析、降级、类型检查与 HIR 求值使用规范流水线；shebang 去除属于 CLI 的 `Implemented` 行为，而不是 parser 特性。
 
-| Gap | Status | Issue |
-|-----|--------|-------|
-| Unicode `\u{...}` in char literals | ✅ Done | Resolved (v3.18+), lexer supports `\u{XXXXXX}` |
-| `effect` on impl methods | ✅ N/A | effect auto-inferred in v4.0 |
-| `crate::` import prefix | ✅ Done | Resolved (v3.5), parser supports `crate.path` |
-| Multi-line `-- ... --` comments | ✅ Done | Resolved (v3.5), lexer supports `-- -- open -- -- close` |
-| Shebang stripping | ⚠️ CLI | Handled by CLI, not parser |
-| Tuple index `t.0` | ✅ Done | Resolved (v3.18+), parser + lowering + typeck + eval support |
+Migration status is recorded in the version-context section above; completed items are not kept in a gap table.
+迁移状态记录在上面的版本语境章节；已完成事项不再保留在差距表中。
 
 ---
 
@@ -682,7 +706,7 @@ true false
 ## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照
 
 
-| Nix | Neve v4.0 |
+| Nix | n3v3 v4.0 |
 |-----|-----------|
 | `{ a = 1; }` | `{ a = 1 }` |
 | `[ 1 2 3 ]` | `[1, 2, 3]` |
@@ -716,9 +740,9 @@ true false
 
 The formal semantics is defined over an abstract syntax tree (AST) that strips
 away surface syntax concerns (precedence, whitespace, comments). The AST types
-are defined in `formal/Neve/Spec/Syntax.lean`.
+are defined in `formal/n3v3/Spec/Syntax.lean`.
 
-形式化语义基于抽象语法树（AST），剥离了表面语法的细节。AST 类型定义在 `formal/Neve/Spec/Syntax.lean`。
+形式化语义基于抽象语法树（AST），剥离了表面语法的细节。AST 类型定义在 `formal/n3v3/Spec/Syntax.lean`。
 
 ### Types (Ty)
 
@@ -770,7 +794,7 @@ Pattern ::= wildcard | var(x) | lit_int(n) | lit_bool(b) | lit_string(s)
 
 ## F.2 Type System / 类型系统
 
-Defined in `formal/Neve/Spec/Typing.lean`. The typing judgment is:
+Defined in `formal/n3v3/Spec/Typing.lean`. The typing judgment is:
 
 ```
 Γ ⊢ e : τ   — "expression e has type τ in context Γ"
@@ -808,7 +832,7 @@ PatHasType(Γ, p, τ, Γ') — "pattern p matches type τ, extending context Γ 
 
 ## F.3 Evaluation Semantics / 求值语义
 
-Defined in `formal/Neve/Spec/Eval.lean`. The evaluation judgment is:
+Defined in `formal/n3v3/Spec/Eval.lean`. The evaluation judgment is:
 
 ```
 env ⊢ e ⇓ v   — "expression e evaluates to value v in environment env"
@@ -847,7 +871,7 @@ Matches(p, v, binds) — "pattern p matches value v, producing bindings binds"
 
 ## F.4 Effect Semantics / 副作用语义
 
-Defined in `formal/Neve/Spec/Effects.lean` (v4.3, 34 rules). The effectful evaluation judgment:
+Defined in `formal/n3v3/Spec/Effects.lean` (v4.3, 34 rules). The effectful evaluation judgment:
 
 ```
 env ⊢ e ⇓[σ] v, σ'   — "e evaluates to v, transforming I/O state σ to σ'"
@@ -902,7 +926,7 @@ These are **mandatory premises** in every applicable rule — any valid
 
 ## F.5 Type Safety / 类型安全
 
-Theorem in `formal/Neve/Proofs/Safety.lean`:
+Theorem in `formal/n3v3/Proofs/Safety.lean`:
 
 ```
 type_safety : [] ⊢ e : τ → ∃ v, [] ⊢ e ⇓ v
@@ -921,7 +945,7 @@ pattern matching. Three axioms remain for non-lam app/pipe
 
 ## F.6 Verified Security Properties / 已验证安全性质
 
-The following properties are stated and machine-checked in `formal/Neve/Verify/`:
+The following properties are stated and machine-checked in `formal/n3v3/Verify/`:
 
 ### Path Safety (Verify/Path.lean)
 
@@ -931,7 +955,7 @@ Theorem path_safety_with_safe_cwd:
   If cwd and redirect are both safe (no ".."), the resolved path is safe.
 ```
 
-Corresponds to Rust: `resolve_redirect_path` in `crates/neve-std/src/io/mod.rs`.
+Corresponds to Rust: `resolve_redirect_path` in `crates/n3v3-std/src/io/mod.rs`.
 Security audit finding: M-1 (path traversal).
 
 ### Environment Safety (Verify/Environ.lean)
@@ -943,7 +967,7 @@ Theorem env_safety_theorem:
   the child process environment is safe.
 ```
 
-Corresponds to Rust: `configured_process_command` in `crates/neve-std/src/io/mod.rs`.
+Corresponds to Rust: `configured_process_command` in `crates/n3v3-std/src/io/mod.rs`.
 Security audit finding: M-4 (environment injection).
 
 ### Buffer Size Limits (Verify/Limits.lean)
@@ -957,7 +981,7 @@ Theorem premises_equivalent_to_checks:
   The EffectEval premises are exactly equivalent to the check functions passing.
 ```
 
-Corresponds to Rust: all five blocking execution paths in `crates/neve-std/src/io/mod.rs`.
+Corresponds to Rust: all five blocking execution paths in `crates/n3v3-std/src/io/mod.rs`.
 Security audit findings: H-1 (stdin size), H-2 (output size).
 
 ---

@@ -1,21 +1,41 @@
-# Neve Ecosystem Design
+<div align="center">
+
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
+
+<h1>n3v3 Ecosystem Design</h1>
+
+<p><em>生态系统设计</em></p>
+
+<p>
+  <strong><a href="../../README.md">Home</a></strong> ·
+  <strong><a href="../README.md">Docs</a></strong>
+</p>
+
+</div>
+
+---
+
+# n3v3 Ecosystem Design
+
+This page describes the v5.0.0 ecosystem surface; implementation status is marked as `Implemented`, `Experimental`, or `Planned` and linked to the relevant code or command.
+本文描述 v5.0.0 的生态系统表面；实现状态使用 `Implemented`、`Experimental` 或 `Planned` 标记，并指向对应代码或命令。
 
 ## 1. Architecture
 
-Neve's ecosystem is built on a Nix-inspired content-addressed model:
+n3v3's ecosystem is built on a Nix-inspired content-addressed model:
 
 ```
-flake.neve ──→ Flake (inputs + outputs)
+flake.n3v3 ──→ Flake (inputs + outputs)
     │
     ▼
 flake.lock ──→ FlakeLock (pinned hashes)
     │
     ▼
-neve-store ──→ Content-addressed /neve/store
+n3v3-store ──→ Content-addressed /n3v3/store
     │
-    ├── neve-fetch (URL, Git, local)
-    ├── neve-builder (sandboxed builds)
-    └── neve-config (system configuration)
+    ├── n3v3-fetch (URL, Git, local)
+    ├── n3v3-builder (sandboxed builds)
+    └── n3v3-config (system configuration)
 ```
 
 ### 1.1 Design Principles
@@ -31,34 +51,36 @@ neve-store ──→ Content-addressed /neve/store
 - Deterministic build outputs.
 
 **Generational profiles**: User environments use atomic generation-based switching:
-- Each `neve package install` creates a new generation.
-- `neve package rollback` switches to the previous generation atomically.
+- Each `n3v3 package install` creates a new generation.
+- `n3v3 package rollback` switches to the previous generation atomically.
 - Generations are garbage-collection roots, protecting active packages.
 
 ### 1.2 Crate Architecture
 
 | Crate | Purpose | Status |
 |-------|---------|--------|
-| `neve-fetch` | URL, Git, and local file fetching with hash verification | Implemented |
-| `neve-store` | Content-addressed store with NAR archives, signatures, GC | Implemented |
-| `neve-builder` | Sandboxed builds (native, Docker, simple backends) | Implemented |
-| `neve-config` | System configuration with generation-based rollback | Implemented |
+| `n3v3-fetch` | URL, Git, and local file fetching with hash verification | Implemented |
+| `n3v3-store` | Content-addressed store with NAR archives, signatures, GC | Implemented |
+| `n3v3-builder` | Sandboxed builds (native, Docker, simple backends) | Implemented |
+| `n3v3-config` | System configuration with generation-based rollback | Implemented |
+The published CLI package is `n3v3`, and it installs the `n3v3` binary; the subsystem crates above are workspace crates under `crates/`.
+已发布的 CLI 软件包名为 `n3v3`，安装后提供 `n3v3` 二进制文件；上表子系统 crate 均为 `crates/` 下的 workspace crate。
 
-## 2. Flake System (already implemented)
+## 2. Flake System / Implemented
 
-### 2.1 `flake.neve`: Project Manifest
+### 2.1 `flake.n3v3`: Project Manifest
 
 The flake manifest declares inputs (dependencies) and outputs (packages, modules, configurations):
 
-```neve
+```n3v3
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    neve-std.url = "github:neve-lang/std/v0.3";
+    n3v3-std.url = "github:MCB-SMART-BOY/n3v3/v5.0.0";
   };
 
-  outputs = { self, nixpkgs, neve-std }: {
-    packages.hello = neve-std.buildNevePackage {
+  outputs = { self, nixpkgs, n3v3-std }: {
+    packages.hello = n3v3-std.buildN3v3Package {
       name = "hello";
       src = ./src;
     };
@@ -90,19 +112,19 @@ JSON lockfile pinning all dependency hashes for reproducible builds:
 
 | Type | Syntax | Example |
 |------|--------|---------|
-| GitHub | `owner/repo` | `github:neve-lang/std` |
+| GitHub | `owner/repo` | `github:MCB-SMART-BOY/n3v3` |
 | Git | `git+https://...` | `git+https://git.example.com/repo` |
 | URL | `https://...` | `https://example.com/pkg.tar.gz` |
 | Local path | `./path` | `./lib/mylib` |
 
-## 3. Store (already implemented)
+## 3. Store / Implemented
 
 ### 3.1 Content-Addressed Storage
 
-The store resides at `/neve/store` (configurable via `NEVE_STORE` environment variable). Each artifact is stored at a path derived from its content hash:
+The store resides at `/n3v3/store` (configurable via `N3V3_STORE` environment variable). Each artifact is stored at a path derived from its content hash:
 
 ```
-/neve/store/
+/n3v3/store/
   ├── abc123...-hello-1.0/
   │   ├── bin/
   │   │   └── hello
@@ -113,7 +135,7 @@ The store resides at `/neve/store` (configurable via `NEVE_STORE` environment va
 
 ### 3.2 NAR Archives
 
-Packages are serialized as NAR (Neve ARchive) archives, a deterministic archive format that preserves:
+Packages are serialized as NAR (n3v3 ARchive) archives, a deterministic archive format that preserves:
 - File permissions and types (regular, directory, symlink)
 - Modification times (normalized for reproducibility)
 - File contents
@@ -124,7 +146,7 @@ NAR archives support Ed25519 signature verification for integrity.
 
 The store supports generation-based garbage collection:
 - **Generation roots**: Active profiles and their generations protect packages.
-- **GC sweep**: `neve store gc` removes unreferenced store paths.
+- **GC sweep**: `n3v3 store gc` removes unreferenced store paths.
 - **Dry-run mode**: Preview what would be removed before executing.
 
 ### 3.4 Binary Cache / Substituter
@@ -132,34 +154,34 @@ The store supports generation-based garbage collection:
 Store artifacts can be served via binary caches:
 - **Cache URLs**: Remote HTTP(S) endpoints serving NAR archives.
 - **narinfo files**: Metadata files with hashes and signatures.
-- **Substitution**: `neve build` can download pre-built artifacts instead of building locally.
+- **Substitution**: `n3v3 build` can download pre-built artifacts instead of building locally.
 - **Upload**: Successful builds can be uploaded to writable caches.
 
-## 4. Package Management (already implemented)
+## 4. Package Management / Implemented
 
 ### 4.1 CLI Commands
 
 ```bash
 # Install a package to the user profile
-neve package install hello
+n3v3 package install hello
 
 # Remove a package from the user profile
-neve package remove hello
+n3v3 package remove hello
 
 # List installed packages
-neve package list
+n3v3 package list
 
 # Search the store and package index
-neve search <query>
+n3v3 search <query>
 
 # Rollback to previous generation
-neve package rollback
+n3v3 package rollback
 
 # Build a package
-neve build <package> --backend native
+n3v3 build <package> --backend native
 
 # Update dependencies
-neve update
+n3v3 update
 ```
 
 ### 4.2 Profile Generations
@@ -167,7 +189,7 @@ neve update
 Each installation or removal creates a new profile generation:
 
 ```
-~/.neve/profile/
+~/.n3v3/profile/
   ├── generation-1/
   │   ├── manifest
   │   └── bin/
@@ -188,28 +210,28 @@ When installing a package, the installer:
 
 ### 4.4 System Configuration
 
-The `neve config` subsystem manages system-wide configuration with the same generation-based model:
-- `neve config build`: Build system configuration from flake.
-- `neve config switch`: Atomically switch to new configuration.
-- `neve config rollback`: Revert to previous configuration.
-- `neve config list`: List configuration generations.
-- `neve config verify`: Verify generation activation snapshot integrity.
+The `n3v3 config` subsystem manages system-wide configuration with the same generation-based model:
+- `n3v3 config build`: Build system configuration from flake.
+- `n3v3 config switch`: Atomically switch to new configuration.
+- `n3v3 config rollback`: Revert to previous configuration.
+- `n3v3 config list`: List configuration generations.
+- `n3v3 config verify`: Verify generation activation snapshot integrity.
 
 ### 4.5 Package Index
 
-Neve supports a simple JSON package index for discovery:
+n3v3 supports a simple JSON package index for discovery:
 
 ```json
 [
   {"name": "nevepkgs.git", "description": "Git version control"},
   {"name": "nevepkgs.curl", "description": "URL transfer tool"},
-  {"name": "nevepkgs.neve", "description": "The Neve language"}
+  {"name": "nevepkgs.n3v3", "description": "The n3v3 language"}
 ]
 ```
 
-Location: `$HOME/.neve/package-index.json` or `$NEVE_PACKAGE_INDEX`
+Location: `$HOME/.n3v3/package-index.json` or `$N3V3_PACKAGE_INDEX`
 
-The index is searched by `neve search <query>` which matches against both package name and description.
+The index is searched by `n3v3 search <query>` which matches against both package name and description.
 
 ## 5. Build System
 
@@ -231,39 +253,39 @@ The index is searched by `neve search <query>` which matches against both packag
 
 ## 6. Future Directions
 
-### 6.1 Package Index / Registry (Implemented ✅)
+### 6.1 Package Index / Registry / Implemented
 
-Neve supports a central package registry for discovering and publishing packages. The registry CLI is now available:
+n3v3 supports a central package registry for discovering and publishing packages. The registry CLI is now available:
 
 ```bash
-neve registry-update   # Update local registry index
-neve registry-serve    # Start local registry server
-neve registry-publish  # Publish package to registry
+n3v3 registry-update   # Update local registry index
+n3v3 registry-serve    # Start local registry server
+n3v3 registry-publish  # Publish package to registry
 ```
 
-The package index is a simple JSON file at `$HOME/.neve/package-index.json` or `$NEVE_PACKAGE_INDEX`:
+The package index is a simple JSON file at `$HOME/.n3v3/package-index.json` or `$N3V3_PACKAGE_INDEX`:
 
 ```json
 [
   {"name": "nevepkgs.git", "description": "Git version control"},
   {"name": "nevepkgs.curl", "description": "URL transfer tool"},
-  {"name": "nevepkgs.neve", "description": "The Neve language"}
+  {"name": "nevepkgs.n3v3", "description": "The n3v3 language"}
 ]
 ```
 
-The index is searched by `neve search <query>` which matches against both package name and description.
+The index is searched by `n3v3 search <query>` which matches against both package name and description.
 
-### 6.2 Module System Integration
+### 6.2 Module System Integration / Planned
 
-Tighter integration between the flake system and Neve's module system, allowing `use` to resolve flake inputs.
+Tighter integration between the flake system and n3v3's module system, allowing `use` to resolve flake inputs.
 
-### 6.3 Remote Registry & Publishing
+### 6.3 Remote Registry & Publishing / Planned
 
 Future expansion of the registry system to support remote publishing workflows, decentralized package discovery, and multi-registry federation.
 
-### 6.4 Cross-Platform Support
+### 6.4 Cross-Platform Support / Planned
 
-Currently package management is Unix-only. Future phases may extend to Windows via a different store model.
+Currently package management is Unix-only. Planned work may extend it to Windows via a different store model.
 
 ## 7. References
 

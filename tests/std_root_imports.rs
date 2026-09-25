@@ -1,10 +1,10 @@
 //! Integration tests for root-level `std` builtin-module imports.
 
-use neve_common::Int;
-use neve_eval::{EvaluableModuleRef, Evaluator, Value};
-use neve_frontend::{analyze_snippet_ast, analyze_source};
-use neve_parser::parse;
-use neve_std::stdlib;
+use n3v3_common::Int;
+use n3v3_eval::{EvaluableModuleRef, Evaluator, Value};
+use n3v3_frontend::{analyze_snippet_ast, analyze_source};
+use n3v3_parser::parse;
+use n3v3_std::stdlib;
 use tempfile::TempDir;
 
 fn int(value: i64) -> Int {

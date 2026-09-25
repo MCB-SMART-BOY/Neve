@@ -1,12 +1,12 @@
-//! Integration tests for neve-config crate.
+//! Integration tests for n3v3-config crate.
 
-use neve_config::activate::{Activator, TestResult};
-use neve_config::generate::{GeneratedConfig, Generator};
-use neve_config::generation::{GenerationManager, GenerationMetadata};
-use neve_config::module::{Module, OptionDecl, OptionType};
-use neve_config::{SystemConfig, UserConfig};
-use neve_derive::{Hash, StorePath};
-use neve_eval::Value;
+use n3v3_config::activate::{Activator, TestResult};
+use n3v3_config::generate::{GeneratedConfig, Generator};
+use n3v3_config::generation::{GenerationManager, GenerationMetadata};
+use n3v3_config::module::{Module, OptionDecl, OptionType};
+use n3v3_config::{SystemConfig, UserConfig};
+use n3v3_derive::{Hash, StorePath};
+use n3v3_eval::Value;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -18,13 +18,13 @@ use std::rc::Rc;
 #[test]
 fn test_system_config_builder() {
     let config = SystemConfig::new("my-system")
-        .hostname("neve-host")
+        .hostname("n3v3-host")
         .timezone("UTC")
         .service("sshd")
         .package("vim");
 
     assert_eq!(config.name, "my-system");
-    assert_eq!(config.options.hostname, Some("neve-host".to_string()));
+    assert_eq!(config.options.hostname, Some("n3v3-host".to_string()));
     assert_eq!(config.options.services, vec!["sshd"]);
     assert_eq!(config.options.packages, vec!["vim"]);
 }
@@ -67,11 +67,11 @@ fn test_user_config_default_home() {
 #[test]
 fn test_module_builder() {
     let module = Module::new("test")
-        .import("./base.neve")
+        .import("./base.n3v3")
         .set("hostname", Value::String(Rc::new("test-host".to_string())));
 
     assert_eq!(module.name, "test");
-    assert_eq!(module.imports, vec!["./base.neve"]);
+    assert_eq!(module.imports, vec!["./base.n3v3"]);
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn test_module_load_merged_resolves_imports_in_order() {
     let dir = temp_dir("module-import-merge");
     fs::create_dir_all(&dir).unwrap();
 
-    let base = dir.join("base.neve");
+    let base = dir.join("base.n3v3");
     fs::write(
         &base,
         r#"let module = #{
@@ -196,11 +196,11 @@ fn test_module_load_merged_resolves_imports_in_order() {
     )
     .unwrap();
 
-    let child = dir.join("child.neve");
+    let child = dir.join("child.n3v3");
     fs::write(
         &child,
         r#"let module = #{
-    imports = ["./base.neve"],
+    imports = ["./base.n3v3"],
     hostname = "demo",
     packages = ["vim"]
 };
@@ -221,13 +221,13 @@ fn test_module_load_with_imports_detects_cycle() {
     let dir = temp_dir("module-import-cycle");
     fs::create_dir_all(&dir).unwrap();
 
-    let a = dir.join("a.neve");
-    let b = dir.join("b.neve");
+    let a = dir.join("a.n3v3");
+    let b = dir.join("b.n3v3");
 
     fs::write(
         &a,
         r#"let module = #{
-    imports = ["./b.neve"],
+    imports = ["./b.n3v3"],
     hostname = "a"
 };
 "#,
@@ -236,7 +236,7 @@ fn test_module_load_with_imports_detects_cycle() {
     fs::write(
         &b,
         r#"let module = #{
-    imports = ["./a.neve"],
+    imports = ["./a.n3v3"],
     hostname = "b"
 };
 "#,
@@ -254,10 +254,10 @@ fn test_module_load_supports_language_imports_via_frontend_hir() {
     let dir = temp_dir("module-language-import");
     fs::create_dir_all(&dir).unwrap();
 
-    let helpers = dir.join("helpers.neve");
+    let helpers = dir.join("helpers.n3v3");
     fs::write(&helpers, r#"fn packages(seed) = ["git", "vim"];"#).unwrap();
 
-    let main = dir.join("main.neve");
+    let main = dir.join("main.n3v3");
     fs::write(
         &main,
         r#"use helpers (packages);
@@ -281,13 +281,13 @@ fn test_module_load_reports_frontend_type_errors() {
     let dir = temp_dir("module-frontend-type-error");
     fs::create_dir_all(&dir).unwrap();
 
-    let main = dir.join("bad.neve");
+    let main = dir.join("bad.n3v3");
     fs::write(&main, "let module = 1 + true;").unwrap();
 
     let err = Module::load(&main).expect_err("type error should be surfaced");
     let message = err.to_string();
     assert!(message.contains("frontend diagnostics"));
-    assert!(message.contains("bad.neve"));
+    assert!(message.contains("bad.n3v3"));
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -296,7 +296,7 @@ fn test_module_load_reports_frontend_type_errors() {
 
 fn temp_dir(suffix: &str) -> PathBuf {
     env::temp_dir().join(format!(
-        "neve-config-test-{}-{}",
+        "n3v3-config-test-{}-{}",
         std::process::id(),
         suffix
     ))
@@ -598,7 +598,7 @@ fn test_module_empty() {
 fn test_module_many_imports() {
     let mut module = Module::new("many-imports");
     for i in 0..30 {
-        module = module.import(format!("./module-{}.neve", i));
+        module = module.import(format!("./module-{}.n3v3", i));
     }
 
     assert_eq!(module.imports.len(), 30);

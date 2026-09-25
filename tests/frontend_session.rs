@@ -3,16 +3,16 @@
 
 mod support;
 
-use neve_diagnostic::{DiagnosticKind, Severity};
-use neve_frontend::{
+use n3v3_diagnostic::{DiagnosticKind, Severity};
+use n3v3_frontend::{
     FrontendSession, SessionBuildInputs, SessionCheckError, SessionDisplayError,
     SessionModuleContext, SessionSourceCheckError, SessionVisibleState,
 };
-use neve_parser::parse;
+use n3v3_parser::parse;
 use support::module_fixtures::create_test_module;
 use tempfile::TempDir;
 
-fn parse_ok(source: &str) -> neve_syntax::SourceFile {
+fn parse_ok(source: &str) -> n3v3_syntax::SourceFile {
     let (ast, diagnostics) = parse(source);
     assert!(
         diagnostics.is_empty(),
@@ -683,7 +683,7 @@ fn test_frontend_session_prepare_checked_module_reports_loaded_module_errors() {
         panic!("expected loaded-module diagnostics, got {error:?}");
     };
     assert_eq!(entries.len(), 1, "expected one broken dependency");
-    assert!(entries[0].file_path.ends_with("broken.neve"));
+    assert!(entries[0].file_path.ends_with("broken.n3v3"));
     assert!(
         entries[0]
             .diagnostics
@@ -720,7 +720,7 @@ fn test_frontend_session_check_error_projects_loaded_module_diagnostics_for_disp
         panic!("expected loaded-module display error, got {error:?}");
     };
     assert_eq!(entries.len(), 1, "expected one broken dependency");
-    assert!(entries[0].file_path.ends_with("broken.neve"));
+    assert!(entries[0].file_path.ends_with("broken.n3v3"));
     assert!(
         entries[0]
             .diagnostics
@@ -872,8 +872,8 @@ fn test_frontend_session_returns_loaded_modules_in_dependency_order() {
 
     let loaded = session.loaded_modules_in_order();
     assert_eq!(loaded.len(), 2, "expected two loaded dependency modules");
-    assert!(loaded[0].file_path.ends_with("util.neve"));
-    assert!(loaded[1].file_path.ends_with("math.neve"));
+    assert!(loaded[0].file_path.ends_with("util.n3v3"));
+    assert!(loaded[1].file_path.ends_with("math.n3v3"));
     assert!(
         loaded.iter().all(|entry| entry.module.is_some()),
         "expected lowered HIR for loaded modules, got {:?}",
@@ -934,14 +934,14 @@ fn test_frontend_session_resolves_file_module_context_under_current_root() {
     let temp_dir = TempDir::new().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("app")).unwrap();
     std::fs::write(
-        temp_dir.path().join("app").join("mod.neve"),
+        temp_dir.path().join("app").join("mod.n3v3"),
         "let answer = 42;",
     )
     .unwrap();
 
     let mut session = FrontendSession::new(temp_dir.path());
     let context = session
-        .repl_context_for_file(temp_dir.path().join("app").join("mod.neve"), false)
+        .repl_context_for_file(temp_dir.path().join("app").join("mod.n3v3"), false)
         .expect("module context should resolve");
 
     assert_eq!(context.root_dir.as_deref(), Some(session.root_dir()));
@@ -954,14 +954,14 @@ fn test_frontend_session_loads_repl_file_input_under_current_root() {
     let temp_dir = TempDir::new().unwrap();
     std::fs::create_dir_all(temp_dir.path().join("app")).unwrap();
     std::fs::write(
-        temp_dir.path().join("app").join("mod.neve"),
+        temp_dir.path().join("app").join("mod.n3v3"),
         "let answer = 42;",
     )
     .unwrap();
 
     let mut session = FrontendSession::new(temp_dir.path());
     let input = session
-        .load_repl_file_input(temp_dir.path().join("app").join("mod.neve"), false)
+        .load_repl_file_input(temp_dir.path().join("app").join("mod.n3v3"), false)
         .expect("REPL file input should load");
 
     assert_eq!(
@@ -969,14 +969,14 @@ fn test_frontend_session_loads_repl_file_input_under_current_root() {
         temp_dir
             .path()
             .join("app")
-            .join("mod.neve")
+            .join("mod.n3v3")
             .display()
             .to_string(),
         "expected file-backed REPL source name to match the user-facing path"
     );
     assert_eq!(
         input.file_path,
-        temp_dir.path().join("app").join("mod.neve"),
+        temp_dir.path().join("app").join("mod.n3v3"),
         "expected user-facing file path to be preserved"
     );
     assert_eq!(input.source, "let answer = 42;");
@@ -989,7 +989,7 @@ fn test_frontend_session_loads_repl_file_input_under_current_root() {
 fn test_frontend_session_load_repl_file_input_reports_read_error() {
     let temp_dir = TempDir::new().unwrap();
     let mut session = FrontendSession::new(temp_dir.path());
-    let missing = temp_dir.path().join("missing.neve");
+    let missing = temp_dir.path().join("missing.n3v3");
 
     let error = session
         .load_repl_file_input(&missing, false)
@@ -1003,7 +1003,7 @@ fn test_frontend_session_load_repl_file_input_reports_read_error() {
         "expected read failure prefix, got {message}"
     );
     assert!(
-        message.contains("missing.neve"),
+        message.contains("missing.n3v3"),
         "expected missing file path, got {message}"
     );
 }
@@ -1014,14 +1014,14 @@ fn test_frontend_session_can_rebase_root_when_pristine() {
     let second = TempDir::new().unwrap();
     std::fs::create_dir_all(second.path().join("app")).unwrap();
     std::fs::write(
-        second.path().join("app").join("mod.neve"),
+        second.path().join("app").join("mod.n3v3"),
         "let answer = 42;",
     )
     .unwrap();
 
     let mut session = FrontendSession::new(first.path());
     let context = session
-        .repl_context_for_file(second.path().join("app").join("mod.neve"), true)
+        .repl_context_for_file(second.path().join("app").join("mod.n3v3"), true)
         .expect("context should rebase to new root");
 
     assert_eq!(context.root_dir.as_deref(), Some(session.root_dir()));
@@ -1036,13 +1036,13 @@ fn test_frontend_session_can_rebase_root_when_pristine() {
 fn test_frontend_session_rejects_root_switch_when_not_pristine() {
     let first = TempDir::new().unwrap();
     let second = TempDir::new().unwrap();
-    std::fs::write(second.path().join("main.neve"), "let answer = 42;").unwrap();
+    std::fs::write(second.path().join("main.n3v3"), "let answer = 42;").unwrap();
 
     let mut session = FrontendSession::new(first.path());
-    session.record_module(neve_frontend::analyze_source("let x = 1;").hir);
+    session.record_module(n3v3_frontend::analyze_source("let x = 1;").hir);
 
     let error = session
-        .repl_context_for_file(second.path().join("main.neve"), true)
+        .repl_context_for_file(second.path().join("main.n3v3"), true)
         .expect_err("non-empty sessions should not silently mix project roots");
 
     assert!(
@@ -1075,7 +1075,7 @@ fn test_frontend_session_attributes_diagnostics_for_newly_loaded_modules() {
 
     let diagnostics = session.loaded_module_diagnostics(&build.newly_loaded);
     assert_eq!(diagnostics.len(), 1, "expected one broken dependency");
-    assert!(diagnostics[0].file_path.ends_with("broken.neve"));
+    assert!(diagnostics[0].file_path.ends_with("broken.n3v3"));
     assert!(
         diagnostics[0].source.contains("fn bad() = 1 + true;"),
         "expected projected source text, got {:?}",

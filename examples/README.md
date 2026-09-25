@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Examples / 示例</h1>
 
-<p><em>Representative runnable samples for Neve — also serves as teaching material.</em></p>
+<p><em>Representative runnable samples for n3v3 — also serves as teaching material.</em></p>
 
 <p>
   <strong><a href="../README.md">Home</a></strong> ·
@@ -19,50 +19,50 @@
 
 | File | Content |
 |------|---------|
-| [`basics/arithmetic.neve`](basics/arithmetic.neve) | Integer arithmetic, operator precedence, negative numbers |
-| [`basics/booleans.neve`](basics/booleans.neve) | Boolean logic, equality, short-circuit evaluation |
-| [`basics/variables.neve`](basics/variables.neve) | Let bindings, shadowing, nested scopes |
+| [`basics/arithmetic.n3v3`](basics/arithmetic.n3v3) | Integer arithmetic, operator precedence, negative numbers |
+| [`basics/booleans.n3v3`](basics/booleans.n3v3) | Boolean logic, equality, short-circuit evaluation |
+| [`basics/variables.n3v3`](basics/variables.n3v3) | Let bindings, shadowing, nested scopes |
 
 ## Functions / 函数
 
 | File | Content |
 |------|---------|
-| [`functions/lambda.neve`](functions/lambda.neve) | Lambda expressions, higher-order functions, closures |
-| [`functions/pipe.neve`](functions/pipe.neve) | Pipe operator `\|>`, function chaining |
+| [`functions/lambda.n3v3`](functions/lambda.n3v3) | Lambda expressions, higher-order functions, closures |
+| [`functions/pipe.n3v3`](functions/pipe.n3v3) | Pipe operator `\|>`, function chaining |
 
 ## Control Flow / 控制流
 
 | File | Content |
 |------|---------|
-| [`control-flow/match.neve`](control-flow/match.neve) | Pattern matching with `match`, wildcard and binding patterns |
+| [`control-flow/match.n3v3`](control-flow/match.n3v3) | Pattern matching with `match`, wildcard and binding patterns |
 
 ## Data / 数据结构
 
 | File | Content |
 |------|---------|
-| [`data/records.neve`](data/records.neve) | Record creation, field access, nested records |
-| [`data/lists.neve`](data/lists.neve) | List literals, map/filter/length, concatenation |
+| [`data/records.n3v3`](data/records.n3v3) | Record creation, field access, nested records |
+| [`data/lists.n3v3`](data/lists.n3v3) | List literals, map/filter/length, concatenation |
 
 ## I/O / 输入输出
 
 | File | Content |
 |------|---------|
-| [`io/files.neve`](io/files.neve) | File read/write/append, directory operations |
-| [`io/process.neve`](io/process.neve) | Process execution, pipelines, stdin, exit codes |
+| [`io/files.n3v3`](io/files.n3v3) | File read/write/append, directory operations |
+| [`io/process.n3v3`](io/process.n3v3) | Process execution, pipelines, stdin, exit codes |
 
 ## Running / 运行
 
 ```bash
-neve run examples/basics/arithmetic.neve
-neve run examples/functions/lambda.neve
-neve run examples/control-flow/match.neve
-neve run examples/data/records.neve
-neve run examples/io/files.neve
+n3v3 run examples/basics/arithmetic.n3v3
+n3v3 run examples/functions/lambda.n3v3
+n3v3 run examples/control-flow/match.n3v3
+n3v3 run examples/data/records.n3v3
+n3v3 run examples/io/files.n3v3
 ```
 
 ## Bootstrap
 
 ```bash
 ls examples/bootstrap
-neve show examples/bootstrap/musl.neve
+n3v3 show examples/bootstrap/musl.n3v3
 ```

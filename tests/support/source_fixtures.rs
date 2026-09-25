@@ -37,9 +37,9 @@ pub fn pipeline_execution_source(final_binding: Option<&str>) -> String {
         consumer_flag,
         consumer_cmd,
     ) = if cfg!(windows) {
-        ("cmd", "/C", "echo neve", "cmd", "/C", "findstr neve")
+        ("cmd", "/C", "echo n3v3", "cmd", "/C", "findstr n3v3")
     } else {
-        ("sh", "-c", "printf neve", "sh", "-c", "grep neve")
+        ("sh", "-c", "printf n3v3", "sh", "-c", "grep n3v3")
     };
     let final_binding = maybe_bind_final(final_binding, "same");
 

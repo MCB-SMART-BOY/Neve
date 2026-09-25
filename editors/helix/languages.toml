@@ -1,16 +1,16 @@
-# Neve language support for Helix Editor
+# n3v3 language support for Helix Editor
 # Copy to: ~/.config/helix/languages.toml
-# Or use: neve setup helix
+# Or use: n3v3 setup helix
 
 [[language]]
-name = "neve"
-scope = "source.neve"
-file-types = ["neve"]
+name = "n3v3"
+scope = "source.n3v3"
+file-types = ["n3v3"]
 comment-token = "--"
 indent = { tab-width = 4, unit = "    " }
-language-servers = ["neve-lsp"]
+language-servers = ["n3v3-lsp"]
 auto-format = true
 
-[language-server.neve-lsp]
-command = "neve"
+[language-server.n3v3-lsp]
+command = "n3v3"
 args = ["lsp"]

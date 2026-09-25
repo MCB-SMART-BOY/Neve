@@ -1,18 +1,18 @@
 {
-  "name": "neve",
-  "displayName": "Neve Language Support",
-  "description": "Syntax highlighting, auto-completion, diagnostics, formatting, and code navigation for Neve.",
+  "name": "n3v3",
+  "displayName": "n3v3 Language Support",
+  "description": "Syntax highlighting, auto-completion, diagnostics, formatting, and code navigation for n3v3.",
   "version": "0.2.0",
   "publisher": "neve-lang",
   "license": "MPL-2.0",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/neve-lang/neve"
+    "url": "https://github.com/MCB-SMART-BOY/n3v3"
   },
-  "homepage": "https://github.com/neve-lang/neve/tree/main/editors/vscode",
+  "homepage": "https://github.com/MCB-SMART-BOY/n3v3/tree/main/editors/vscode",
   "keywords": [
-    "neve",
+    "n3v3",
     "language",
     "programming"
   ],
@@ -23,27 +23,27 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onLanguage:neve"
+    "onLanguage:n3v3"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
-        "id": "neve",
-        "aliases": ["Neve", "neve"],
-        "extensions": [".neve"],
+        "id": "n3v3",
+        "aliases": ["n3v3"],
+        "extensions": [".n3v3"],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "neve",
-        "scopeName": "source.neve",
-        "path": "./syntaxes/neve.tmLanguage.json"
+        "language": "n3v3",
+        "scopeName": "source.n3v3",
+        "path": "./syntaxes/n3v3.tmLanguage.json"
       }
     ],
     "configurationDefaults": {
-      "[neve]": {
+      "[n3v3]": {
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
         "editor.codeLens": true

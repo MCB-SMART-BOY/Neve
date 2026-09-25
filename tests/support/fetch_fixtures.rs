@@ -1,5 +1,5 @@
-use neve_derive::Hash;
-use neve_fetch::git::hash_directory;
+use n3v3_derive::Hash;
+use n3v3_fetch::git::hash_directory;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -21,7 +21,7 @@ pub fn init_local_git_repo() -> (TempDir, String, String) {
 
     for (key, value) in [
         ("user.email", "tests@example.com"),
-        ("user.name", "Neve Tests"),
+        ("user.name", "n3v3 Tests"),
     ] {
         let status = Command::new("git")
             .arg("-C")

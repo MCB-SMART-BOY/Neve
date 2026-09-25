@@ -1,6 +1,6 @@
 #!/bin/sh
-# Neve Linux Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
+# n3v3 Linux Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/n3v3/master/scripts/install.sh | sh
 
 set -e
 
@@ -11,7 +11,7 @@ echo "  /  |/ / _ \| | / / _ \ "
 echo " / /|  /  __/| |/ /  __/ "
 echo "/_/ |_/\___/ |___/\___/  "
 echo ""
-echo "Neve Installer for Linux"
+echo "n3v3 Installer for Linux"
 echo ""
 
 # Detect architecture
@@ -32,7 +32,7 @@ esac
 
 # Get latest version
 echo "Fetching latest release..."
-VERSION=$(curl -fsSL https://api.github.com/repos/MCB-SMART-BOY/Neve/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+VERSION=$(curl -fsSL https://api.github.com/repos/MCB-SMART-BOY/n3v3/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
 if [ -z "$VERSION" ]; then
     echo "Error: Failed to get latest version"
     exit 1
@@ -40,37 +40,37 @@ fi
 echo "Latest version: $VERSION"
 
 # Download URL
-URL="https://github.com/MCB-SMART-BOY/Neve/releases/download/${VERSION}/neve-${TARGET}.tar.gz"
+URL="https://github.com/MCB-SMART-BOY/n3v3/releases/download/${VERSION}/n3v3-${TARGET}.tar.gz"
 
 # Install directory
 INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
 # Download and extract
-echo "Downloading neve-${TARGET}.tar.gz..."
+echo "Downloading n3v3-${TARGET}.tar.gz..."
 TEMP_DIR=$(mktemp -d)
-curl -fsSL "$URL" -o "$TEMP_DIR/neve.tar.gz"
+curl -fsSL "$URL" -o "$TEMP_DIR/n3v3.tar.gz"
 
 echo "Extracting..."
-tar -xzf "$TEMP_DIR/neve.tar.gz" -C "$TEMP_DIR"
-mv "$TEMP_DIR/neve" "$INSTALL_DIR/neve"
-chmod +x "$INSTALL_DIR/neve"
+tar -xzf "$TEMP_DIR/n3v3.tar.gz" -C "$TEMP_DIR"
+mv "$TEMP_DIR/n3v3" "$INSTALL_DIR/n3v3"
+chmod +x "$INSTALL_DIR/n3v3"
 rm -rf "$TEMP_DIR"
 
 # Verify
 echo ""
 echo "Verifying installation..."
-if "$INSTALL_DIR/neve" --version; then
+if "$INSTALL_DIR/n3v3" --version; then
     echo ""
-    echo "Neve installed successfully!"
+    echo "n3v3 installed successfully!"
     echo ""
-    echo "Installation path: $INSTALL_DIR/neve"
+    echo "Installation path: $INSTALL_DIR/n3v3"
     echo ""
     
     # Check if in PATH
     case ":$PATH:" in
         *":$INSTALL_DIR:"*)
-            echo "You can now use 'neve' command."
+            echo "You can now use 'n3v3' command."
             ;;
         *)
             echo "Add this to your ~/.bashrc or ~/.zshrc:"
@@ -83,9 +83,9 @@ if "$INSTALL_DIR/neve" --version; then
     
     echo ""
     echo "Quick start:"
-    echo "  neve repl          # Start interactive REPL"
-    echo "  neve doc           # View documentation"
-    echo "  neve eval '1 + 2'  # Evaluate expression"
+    echo "  n3v3 repl          # Start interactive REPL"
+    echo "  n3v3 doc           # View documentation"
+    echo "  n3v3 eval '1 + 2'  # Evaluate expression"
 else
     echo "Error: Installation failed"
     exit 1

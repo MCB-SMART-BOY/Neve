@@ -1,6 +1,6 @@
-//! Integration tests for neve-lexer crate.
+//! Integration tests for n3v3-lexer crate.
 
-use neve_lexer::{Lexer, TokenKind};
+use n3v3_lexer::{Lexer, TokenKind};
 
 fn lex(source: &str) -> Vec<TokenKind> {
     let lexer = Lexer::new(source);

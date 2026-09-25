@@ -1,51 +1,52 @@
-# Neve Language Development Skills
+# n3v3 Language Development Skills
 
-A comprehensive skill suite for developing the Neve functional programming language (v5.0.0).
+A comprehensive skill suite for developing the n3v3 functional programming language (v5.0.0).
 
 ## Available Skills
 
 | Skill | Purpose | Crate(s) |
 |-------|---------|----------|
-| [neve-dev](neve-dev.md) | General workflow, build, test, CI | workspace |
-| [neve-parser](neve-parser.md) | Lexer + recursive descent parser | neve-lexer, neve-parser, neve-syntax |
-| [neve-typeck](neve-typeck.md) | Hindley-Milner type inference + Traits | neve-typeck |
-| [neve-hir](neve-hir.md) | HIR lowering + name resolution | neve-hir |
-| [neve-eval](neve-eval.md) | HIR tree-walking interpreter | neve-eval |
-| [neve-std](neve-std.md) | Standard library (I/O, Stream<T>, List) | neve-std |
-| [neve-lsp](neve-lsp.md) | Language Server Protocol | neve-lsp |
-| [neve-test](neve-test.md) | Testing strategy + 550 E2E tests | tests/ |
-| [neve-diagnostic](neve-diagnostic.md) | Compiler error system (55 codes) | neve-diagnostic |
-| [neve-fmt](neve-fmt.md) | Code formatter | neve-fmt |
-| [neve-effect](neve-effect.md) | Effect system (EffectEval v4.3) | neve-typeck, neve-eval |
-| [neve-lean](neve-lean.md) | Formal verification (Lean 4) | formal/ |
+| [n3v3-dev](n3v3-dev.md) | General workflow, build, test, CI | workspace |
+| [n3v3-parser](n3v3-parser.md) | Lexer + recursive descent parser | n3v3-lexer, n3v3-parser, n3v3-syntax |
+| [n3v3-typeck](n3v3-typeck.md) | Hindley-Milner type inference + Traits | n3v3-typeck |
+| [n3v3-hir](n3v3-hir.md) | HIR lowering + name resolution | n3v3-hir |
+| [n3v3-eval](n3v3-eval.md) | HIR tree-walking interpreter | n3v3-eval |
+| [n3v3-std](n3v3-std.md) | Standard library (I/O, Stream<T>, List) | n3v3-std |
+| [n3v3-lsp](n3v3-lsp.md) | Language Server Protocol | n3v3-lsp |
+| [n3v3-test](n3v3-test.md) | Testing strategy + 556 E2E tests | tests/ |
+| [n3v3-diagnostic](n3v3-diagnostic.md) | Compiler error system (55 diagnostic codes) | n3v3-diagnostic |
+| [n3v3-fmt](n3v3-fmt.md) | Code formatter | n3v3-fmt |
+| [n3v3-effect](n3v3-effect.md) | Effect system (EffectEval v4.3) | n3v3-typeck, n3v3-eval |
+| [n3v3-lean](n3v3-lean.md) | Formal verification (Lean 4) | formal/ |
+| [run-n3v3](run-n3v3/SKILL.md) | Build, run, smoke-test, and drive the CLI (`run-n3v3/driver.sh`) | workspace |
 
 ## Language Pipeline
 
 ```
-Source Code (.neve)
+Source Code (.n3v3)
        │
        ▼
-┌──────────────┐  neve-lexer (logos)
+┌──────────────┐  n3v3-lexer (logos)
 │   Lexer      │  Tokens with Span
 └──────┬───────┘
        │
        ▼
-┌──────────────┐  neve-parser (recursive descent LL(1))
-│   Parser     │  AST: Module { items: [...] }
+┌──────────────┐  n3v3-parser (recursive descent LL(1))
+│   Parser     │  AST: SourceFile { items: [...] }
 └──────┬───────┘
        │
        ▼
-┌──────────────┐  neve-hir (name resolution + lowering)
+┌──────────────┐  n3v3-hir (name resolution + lowering)
 │  HIR Lower   │  Resolved HIR with scoped definitions
 └──────┬───────┘
        │
        ▼
-┌──────────────┐  neve-typeck (Hindley-Milner + Traits)
+┌──────────────┐  n3v3-typeck (Hindley-Milner + Traits)
 │  Type Check  │  Typed HIR with inferred types
 └──────┬───────┘
        │
        ▼
-┌──────────────┐  neve-eval (tree-walking, lazy)
+┌──────────────┐  n3v3-eval (tree-walking, lazy)
 │  Evaluator   │  Value: Int | String | List | ...
 └──────────────┘
 ```
@@ -66,30 +67,30 @@ Source Code (.neve)
 | Lazy evaluation | `lazy expr` | `~expr` |
 | Effect annotation | `fn foo() effect = ...` | `fn foo() = ...` (auto-inferred) |
 | Visibility | `pub fn` | `fn` (all public by default) |
-| Keywords | 17 | 12 |
+| Keywords | 17 | 12 canonical keywords |
 
 ## Crate Map
 
 | Crate | Responsibility |
 |-------|----------------|
-| `neve-lexer` | Tokenization (logos) |
-| `neve-parser` | Recursive descent parser (LL(1)) |
-| `neve-syntax` | AST node definitions + source file |
-| `neve-hir` | High-level IR + name resolution |
-| `neve-typeck` | Hindley-Milner type inference + Traits |
-| `neve-frontend` | Pipeline facade (driver + session) |
-| `neve-eval` | HIR tree-walking interpreter |
-| `neve-std` | Standard library (I/O, Stream<T>, collections) |
-| `neve-lsp` | Language Server Protocol (21 methods) |
-| `neve-fmt` | Code formatter (37/37 idempotency) |
-| `neve-cli` | Command-line interface |
-| `neve-diagnostic` | Error reporting (ariadne) |
-| `neve-common` | Shared utilities + kill_process |
-| `neve-store` | Content-addressed store (BLAKE3) |
-| `neve-fetch` | Source fetching (URL, Git, local) |
-| `neve-builder` | Sandbox build system |
-| `neve-config` | System configuration (generation-based) |
-| `neve-derive` | Derivation model + hashing |
+| `n3v3-lexer` | Tokenization (logos) |
+| `n3v3-parser` | Recursive descent parser (LL(1)) |
+| `n3v3-syntax` | AST node definitions + source file |
+| `n3v3-hir` | High-level IR + name resolution |
+| `n3v3-typeck` | Hindley-Milner type inference + Traits |
+| `n3v3-frontend` | Pipeline facade (driver + session) |
+| `n3v3-eval` | HIR tree-walking interpreter |
+| `n3v3-std` | Standard library (I/O, Stream<T>, collections) |
+| `n3v3-lsp` | Language Server Protocol (26 LSP methods: 19 requests + 7 notifications) |
+| `n3v3-fmt` | Code formatter (37/37 idempotency) |
+| `n3v3-cli` | Command-line interface |
+| `n3v3-diagnostic` | Error reporting (ariadne) |
+| `n3v3-common` | Shared utilities + kill_process |
+| `n3v3-store` | Content-addressed store (BLAKE3) |
+| `n3v3-fetch` | Source fetching (URL, Git, local) |
+| `n3v3-builder` | Sandbox build system |
+| `n3v3-config` | System configuration (generation-based) |
+| `n3v3-derive` | Derivation model + hashing |
 
 ## Current Status (v5.0.0)
 
@@ -98,14 +99,14 @@ Source Code (.neve)
 | Phase 6 (Syntax v4.0) | ✅ Complete |
 | Phase 5 (Ecosystem) | ✅ Complete |
 | Phase 4 (Shell) | ✅ Complete |
-| E2E Tests | 550 (all pass) |
+| E2E Tests | 556 E2E tests (all pass) |
 | Formatter idempotency | 37/37 |
-| Stream<T> APIs | 14 (Phase A-C) |
-| LSP Methods | 21 |
+| Stream<T> APIs | 13 Stream<T> APIs |
+| LSP Methods | 26 LSP methods (19 requests + 7 notifications) |
 | EffectEval Rules | 34 (v4.3) |
-| Lean Modules | 21 |
-| Error Codes | 55 |
-| Keywords | 12 (v4.0) |
+| Lean Modules | 21 Lean modules |
+| Error Codes | 55 diagnostic codes |
+| Keywords | 12 canonical keywords |
 | CI | All green |
 | crates.io | Published (`cargo install n3v3`)|
 

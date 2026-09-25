@@ -1,18 +1,18 @@
-//! Integration tests for neve-store crate.
+//! Integration tests for n3v3-store crate.
 
-use neve_derive::{Derivation, Hash, Output, StorePath};
-use neve_store::{Database, GarbageCollector, GcResult, PathInfo, Store, store_dir};
+use n3v3_derive::{Derivation, Hash, Output, StorePath};
+use n3v3_store::{Database, GarbageCollector, GcResult, PathInfo, Store, store_dir};
 use std::env;
 use std::fs;
 
 fn temp_store(suffix: &str) -> Store {
-    let dir = env::temp_dir().join(format!("neve-store-test-{}-{}", std::process::id(), suffix));
+    let dir = env::temp_dir().join(format!("n3v3-store-test-{}-{}", std::process::id(), suffix));
     let _ = fs::remove_dir_all(&dir); // Clean up any previous run
     Store::open_at(dir).unwrap()
 }
 
 fn temp_db(suffix: &str) -> Database {
-    let dir = env::temp_dir().join(format!("neve-db-test-{}-{}", std::process::id(), suffix));
+    let dir = env::temp_dir().join(format!("n3v3-db-test-{}-{}", std::process::id(), suffix));
     let _ = fs::remove_dir_all(&dir); // Clean up any previous run
     Database::open(dir).unwrap()
 }
@@ -72,7 +72,7 @@ fn test_add_dir_preserves_symlink_entries() {
         .unwrap_or_default()
         .as_nanos();
     let src = env::temp_dir().join(format!(
-        "neve-store-src-symlink-{}-{}",
+        "n3v3-store-src-symlink-{}-{}",
         std::process::id(),
         nonce
     ));

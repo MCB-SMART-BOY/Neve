@@ -1,11 +1,11 @@
-//! Integration tests for neve-std crate.
+//! Integration tests for n3v3-std crate.
 
 mod support;
 
-use neve_derive::Hash;
-use neve_eval::Value;
-use neve_eval::value::{PipelineValue, TaskValue};
-use neve_std::stdlib;
+use n3v3_derive::Hash;
+use n3v3_eval::Value;
+use n3v3_eval::value::{PipelineValue, TaskValue};
+use n3v3_std::stdlib;
 use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
@@ -66,53 +66,53 @@ fn exec_pipeline_with_embedded_redirects(
 #[cfg(not(windows))]
 fn pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
     [
-        ("sh", vec!["-c", "printf neve"]),
-        ("sh", vec!["-c", "grep neve"]),
+        ("sh", vec!["-c", "printf n3v3"]),
+        ("sh", vec!["-c", "grep n3v3"]),
     ]
 }
 
 #[cfg(windows)]
 fn pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
     [
-        ("cmd", vec!["/C", "echo neve"]),
-        ("cmd", vec!["/C", "findstr neve"]),
+        ("cmd", vec!["/C", "echo n3v3"]),
+        ("cmd", vec!["/C", "findstr n3v3"]),
     ]
 }
 
 #[cfg(not(windows))]
 fn stdin_filter_projection_parts() -> (&'static str, Vec<&'static str>) {
-    ("sh", vec!["-c", "grep neve"])
+    ("sh", vec!["-c", "grep n3v3"])
 }
 
 #[cfg(windows)]
 fn stdin_filter_projection_parts() -> (&'static str, Vec<&'static str>) {
-    ("cmd", vec!["/C", "findstr neve"])
+    ("cmd", vec!["/C", "findstr n3v3"])
 }
 
 #[cfg(not(windows))]
 fn stdin_pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
     [
-        ("sh", vec!["-c", "grep neve"]),
-        ("sh", vec!["-c", "grep neve"]),
+        ("sh", vec!["-c", "grep n3v3"]),
+        ("sh", vec!["-c", "grep n3v3"]),
     ]
 }
 
 #[cfg(windows)]
 fn stdin_pipeline_projection_parts() -> [(&'static str, Vec<&'static str>); 2] {
     [
-        ("cmd", vec!["/C", "findstr neve"]),
-        ("cmd", vec!["/C", "findstr neve"]),
+        ("cmd", vec!["/C", "findstr n3v3"]),
+        ("cmd", vec!["/C", "findstr n3v3"]),
     ]
 }
 
 #[cfg(not(windows))]
 fn stdout_stderr_projection_parts() -> (&'static str, Vec<&'static str>) {
-    ("sh", vec!["-c", "printf neve && printf err >&2"])
+    ("sh", vec!["-c", "printf n3v3 && printf err >&2"])
 }
 
 #[cfg(windows)]
 fn stdout_stderr_projection_parts() -> (&'static str, Vec<&'static str>) {
-    ("cmd", vec!["/C", "(echo neve) & (echo err 1>&2)"])
+    ("cmd", vec!["/C", "(echo n3v3) & (echo err 1>&2)"])
 }
 
 #[test]
@@ -483,11 +483,11 @@ fn test_stdlib_has_fetch_builtins() {
 #[test]
 fn test_path_from_string_builtin_returns_path_runtime_value() {
     let builtin = get_builtin("path.fromString").expect("path.fromString builtin should exist");
-    let result = call_builtin(&builtin, &[Value::String(Rc::new("/tmp/neve".to_string()))])
+    let result = call_builtin(&builtin, &[Value::String(Rc::new("/tmp/n3v3".to_string()))])
         .expect("path.fromString should succeed");
 
     match result {
-        Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp/neve")),
+        Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp/n3v3")),
         other => panic!("expected Path runtime value, got {:?}", other),
     }
 }
@@ -499,13 +499,13 @@ fn test_path_join_path_builtin_returns_path_runtime_value() {
         &builtin,
         &[
             Value::Path(Rc::new(std::path::PathBuf::from("/tmp"))),
-            Value::String(Rc::new("neve.txt".to_string())),
+            Value::String(Rc::new("n3v3.txt".to_string())),
         ],
     )
     .expect("path.joinPath should succeed");
 
     match result {
-        Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp/neve.txt")),
+        Value::Path(path) => assert_eq!(path.as_path(), std::path::Path::new("/tmp/n3v3.txt")),
         other => panic!("expected Path runtime value, got {:?}", other),
     }
 }
@@ -516,7 +516,7 @@ fn test_path_parent_path_builtin_returns_option_path() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.txt",
+            "/tmp/n3v3.txt",
         )))],
     )
     .expect("path.parentPath should succeed");
@@ -536,14 +536,14 @@ fn test_path_filename_path_builtin_returns_option_string() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.txt",
+            "/tmp/n3v3.txt",
         )))],
     )
     .expect("path.filenamePath should succeed");
 
     match result {
         Value::Some(inner) => match inner.as_ref() {
-            Value::String(name) => assert_eq!(name.as_str(), "neve.txt"),
+            Value::String(name) => assert_eq!(name.as_str(), "n3v3.txt"),
             other => panic!("expected inner String runtime value, got {:?}", other),
         },
         other => panic!("expected Some(String), got {:?}", other),
@@ -557,7 +557,7 @@ fn test_path_extension_path_builtin_returns_option_string() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.txt",
+            "/tmp/n3v3.txt",
         )))],
     )
     .expect("path.extensionPath should succeed");
@@ -578,7 +578,7 @@ fn test_path_is_absolute_path_builtin_reports_bool() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.txt",
+            "/tmp/n3v3.txt",
         )))],
     )
     .expect("path.isAbsolutePath should succeed");
@@ -1358,7 +1358,7 @@ fn test_io_current_dir_returns_host_directory_string() {
 
 #[test]
 fn test_io_get_env_returns_none_for_missing_variable() {
-    let missing = "__NEVE_TEST_MISSING_ENV_37C93B7C__";
+    let missing = "__N3V3_TEST_MISSING_ENV_37C93B7C__";
     assert!(
         std::env::var_os(missing).is_none(),
         "test environment unexpectedly defines {missing}"
@@ -1432,7 +1432,7 @@ fn test_io_command_returns_command_runtime_value() {
         &builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -1455,7 +1455,7 @@ fn test_io_command_with_returns_configured_command_runtime_value() {
     );
     options.insert(
         "args".to_string(),
-        Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+        Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
     );
     options.insert(
         "cwd".to_string(),
@@ -1473,7 +1473,7 @@ fn test_io_command_with_returns_configured_command_runtime_value() {
     match result {
         Value::Command(command) => {
             assert_eq!(command.program(), "printf");
-            assert_eq!(command.args(), &["neve".to_string()]);
+            assert_eq!(command.args(), &["n3v3".to_string()]);
             assert_eq!(command.cwd(), Some("/tmp"));
             assert_eq!(command.stdin(), Some("stdin-text"));
             assert_eq!(command.env().get("LANG").map(String::as_str), Some("C"));
@@ -1489,13 +1489,13 @@ fn test_io_command_with_redirects_returns_redirected_command_runtime_value() {
         get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
     let builtin = get_builtin("io.commandWithRedirects")
         .expect("io.commandWithRedirects builtin should exist");
-    let redirect_path = std::path::PathBuf::from("/tmp/neve.out");
+    let redirect_path = std::path::PathBuf::from("/tmp/n3v3.out");
 
     let command = call_builtin(
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -1544,7 +1544,7 @@ fn test_io_command_with_redirects_rejects_non_redirect_list_items() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -1554,7 +1554,7 @@ fn test_io_command_with_redirects_rejects_non_redirect_list_items() {
         &[
             command,
             Value::List(Rc::new(vec![Value::String(Rc::new(
-                "/tmp/neve.out".to_string(),
+                "/tmp/n3v3.out".to_string(),
             ))])),
         ],
     )
@@ -1582,7 +1582,7 @@ fn test_io_command_with_redirects_preserves_error_prefix() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -1605,7 +1605,7 @@ fn test_io_pipeline_returns_pipeline_runtime_value() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -1643,7 +1643,7 @@ fn test_io_pipeline_with_redirects_returns_pipeline_runtime_value() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -1663,7 +1663,7 @@ fn test_io_pipeline_with_redirects_returns_pipeline_runtime_value() {
     let redirect = call_builtin(
         &redirect_builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.out",
+            "/tmp/n3v3.out",
         )))],
     )
     .expect("io.redirectStdoutPath should succeed");
@@ -1704,7 +1704,7 @@ fn test_io_pipeline_with_redirects_rejects_non_pipeline_argument() {
     let redirect = call_builtin(
         &redirect_builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.out",
+            "/tmp/n3v3.out",
         )))],
     )
     .expect("io.redirectStdoutPath should succeed");
@@ -1735,7 +1735,7 @@ fn test_io_pipeline_with_redirects_rejects_empty_pipeline() {
     let redirect = call_builtin(
         &redirect_builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.out",
+            "/tmp/n3v3.out",
         )))],
     )
     .expect("io.redirectStdoutPath should succeed");
@@ -1794,7 +1794,7 @@ fn test_io_exec_pipeline_returns_process_result_runtime_value() {
             assert!(result.is_success(), "pipeline should succeed");
             assert_eq!(result.code(), 0);
             assert!(
-                result.stdout().contains("neve"),
+                result.stdout().contains("n3v3"),
                 "pipeline stdout should contain piped content"
             );
             assert!(
@@ -1863,7 +1863,7 @@ fn test_io_exec_pipeline_honors_embedded_pipeline_redirects() {
             assert_eq!(result.stdout(), "");
             let redirected =
                 fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
-            assert!(redirected.contains("neve"));
+            assert!(redirected.contains("n3v3"));
         }
         other => panic!(
             "expected ProcessResult from io.execPipeline, got {:?}",
@@ -1975,7 +1975,7 @@ fn test_io_exec_pipeline_with_redirect_matches_embedded_pipeline_projection() {
 fn test_io_exec_pipeline_with_redirects_matches_embedded_pipeline_projection() {
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("pipeline-in.txt");
-    fs::write(&stdin_path, "neve\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3\n").expect("stdin file should be writable");
     let migrated_stdout_path = temp.path().join("pipeline-migrated-out.txt");
     let canonical_stdout_path = temp.path().join("pipeline-canonical-out.txt");
 
@@ -2219,7 +2219,7 @@ fn test_io_exec_pipeline_with_redirect_writes_stdout_to_file() {
             let redirected =
                 fs::read_to_string(&redirect_path).expect("redirected file should exist");
             assert!(
-                redirected.contains("neve"),
+                redirected.contains("n3v3"),
                 "redirected stdout file should contain piped content"
             );
             assert!(
@@ -2294,7 +2294,7 @@ fn test_io_exec_pipeline_with_stderr_redirect_writes_stderr_to_file() {
 fn test_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("pipeline-stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
 
     let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
     let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
@@ -2337,7 +2337,7 @@ fn test_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file() {
             );
             assert_eq!(result.code(), 0);
             assert!(
-                result.stdout().contains("neve"),
+                result.stdout().contains("n3v3"),
                 "stdin redirected pipeline should surface filtered stdout"
             );
         }
@@ -2353,7 +2353,7 @@ fn test_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_paths() {
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("pipeline-stdin.txt");
     let stdout_path = temp.path().join("pipeline-stdout.txt");
-    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3 stdin line\n").expect("stdin file should be writable");
 
     let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
     let pipeline_builtin = get_builtin("io.pipeline").expect("io.pipeline builtin should exist");
@@ -2407,7 +2407,7 @@ fn test_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_paths() {
             let redirected =
                 fs::read_to_string(&stdout_path).expect("redirected file should exist");
             assert!(
-                redirected.contains("neve"),
+                redirected.contains("n3v3"),
                 "stdout redirect file should contain piped stdin content"
             );
         }
@@ -2540,7 +2540,7 @@ fn test_io_exec_pipeline_with_redirect_rejects_final_stage_stdout_conflict() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -2586,7 +2586,7 @@ fn test_io_pipeline_with_redirects_rejects_final_stage_stdout_conflict() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -2729,7 +2729,7 @@ fn test_io_pipeline_rejects_non_final_stage_stdout_redirect() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("stage1 command should succeed");
@@ -2773,7 +2773,7 @@ fn test_io_pipeline_rejects_non_initial_stage_configured_stdin() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -2787,7 +2787,7 @@ fn test_io_pipeline_rejects_non_initial_stage_configured_stdin() {
             ("args".to_string(), Value::List(Rc::new(Vec::new()))),
             (
                 "stdin".to_string(),
-                Value::String(Rc::new("neve".to_string())),
+                Value::String(Rc::new("n3v3".to_string())),
             ),
         ])))],
     )
@@ -2818,7 +2818,7 @@ fn test_io_pipeline_rejects_non_initial_stage_stdin_redirect() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -2875,7 +2875,7 @@ fn test_io_pipeline_with_redirects_rejects_boundary_stdin_with_stage_local_stdin
             ("args".to_string(), Value::List(Rc::new(Vec::new()))),
             (
                 "stdin".to_string(),
-                Value::String(Rc::new("neve".to_string())),
+                Value::String(Rc::new("n3v3".to_string())),
             ),
         ])))],
     )
@@ -2905,7 +2905,7 @@ fn test_io_exec_pipeline_with_redirect_rejects_non_redirect_argument() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -2939,7 +2939,7 @@ fn test_io_exec_pipeline_with_redirect_rejects_pipeline_with_embedded_redirects(
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -2993,7 +2993,7 @@ fn test_io_task_command_returns_task_runtime_value() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3026,7 +3026,7 @@ fn test_io_task_pipeline_returns_task_runtime_value() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3069,7 +3069,7 @@ fn test_io_await_pipeline_task_honors_embedded_pipeline_redirects() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3105,7 +3105,7 @@ fn test_io_await_pipeline_task_honors_embedded_pipeline_redirects() {
             assert_eq!(result.stdout(), "");
             let redirected =
                 fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
-            assert!(redirected.contains("neve"));
+            assert!(redirected.contains("n3v3"));
         }
         other => panic!("expected ProcessResult from io.awaitTask, got {:?}", other),
     }
@@ -3149,7 +3149,7 @@ fn test_io_await_pipeline_task_returns_process_result_runtime_value() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3193,7 +3193,7 @@ fn test_io_await_task_honors_embedded_command_redirects() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3216,7 +3216,7 @@ fn test_io_await_task_honors_embedded_command_redirects() {
             assert_eq!(result.stdout(), "");
             let redirected =
                 fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
-            assert!(redirected.contains("neve"));
+            assert!(redirected.contains("n3v3"));
         }
         other => panic!("expected ProcessResult from io.awaitTask, got {:?}", other),
     }
@@ -3241,7 +3241,7 @@ fn test_io_await_tasks_returns_process_result_list_runtime_value() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3302,7 +3302,7 @@ fn test_io_await_tasks_matches_individual_await_projection() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3375,7 +3375,7 @@ fn test_io_await_tasks_preserves_indexed_error_prefix() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3383,7 +3383,7 @@ fn test_io_await_tasks_preserves_indexed_error_prefix() {
         &command_builtin,
         &[
             Value::String(Rc::new(
-                "neve-definitely-missing-command-for-tests".to_string(),
+                "n3v3-definitely-missing-command-for-tests".to_string(),
             )),
             Value::List(Rc::new(vec![])),
         ],
@@ -3468,7 +3468,7 @@ fn test_io_await_pipeline_task_matches_canonical_exec_pipeline_projection() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -3520,7 +3520,7 @@ fn test_io_await_task_preserves_error_prefix() {
         &command_builtin,
         &[
             Value::String(Rc::new(
-                "neve-definitely-missing-command-for-tests".to_string(),
+                "n3v3-definitely-missing-command-for-tests".to_string(),
             )),
             Value::List(Rc::new(vec![])),
         ],
@@ -3558,7 +3558,7 @@ fn test_io_redirect_stdout_path_returns_redirect_runtime_value() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.out",
+            "/tmp/n3v3.out",
         )))],
     )
     .expect("io.redirectStdoutPath should succeed");
@@ -3566,7 +3566,7 @@ fn test_io_redirect_stdout_path_returns_redirect_runtime_value() {
     match result {
         Value::Redirect(redirect) => {
             assert_eq!(redirect.stream_name(), "stdout");
-            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/neve.out"));
+            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/n3v3.out"));
         }
         other => panic!("expected Redirect runtime value, got {:?}", other),
     }
@@ -3578,7 +3578,7 @@ fn test_io_redirect_stdout_path_rejects_string_argument() {
         get_builtin("io.redirectStdoutPath").expect("io.redirectStdoutPath builtin should exist");
     let err = call_builtin(
         &builtin,
-        &[Value::String(Rc::new("/tmp/neve.out".to_string()))],
+        &[Value::String(Rc::new("/tmp/n3v3.out".to_string()))],
     )
     .expect_err("io.redirectStdoutPath should reject string arguments");
 
@@ -3592,7 +3592,7 @@ fn test_io_redirect_stderr_path_returns_redirect_runtime_value() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.err",
+            "/tmp/n3v3.err",
         )))],
     )
     .expect("io.redirectStderrPath should succeed");
@@ -3600,7 +3600,7 @@ fn test_io_redirect_stderr_path_returns_redirect_runtime_value() {
     match result {
         Value::Redirect(redirect) => {
             assert_eq!(redirect.stream_name(), "stderr");
-            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/neve.err"));
+            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/n3v3.err"));
         }
         other => panic!("expected Redirect runtime value, got {:?}", other),
     }
@@ -3613,7 +3613,7 @@ fn test_io_redirect_stdin_path_returns_redirect_runtime_value() {
     let result = call_builtin(
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
-            "/tmp/neve.in",
+            "/tmp/n3v3.in",
         )))],
     )
     .expect("io.redirectStdinPath should succeed");
@@ -3621,7 +3621,7 @@ fn test_io_redirect_stdin_path_returns_redirect_runtime_value() {
     match result {
         Value::Redirect(redirect) => {
             assert_eq!(redirect.stream_name(), "stdin");
-            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/neve.in"));
+            assert_eq!(redirect.path(), &std::path::PathBuf::from("/tmp/n3v3.in"));
         }
         other => panic!("expected Redirect runtime value, got {:?}", other),
     }
@@ -3633,7 +3633,7 @@ fn test_io_redirect_stderr_path_rejects_string_argument() {
         get_builtin("io.redirectStderrPath").expect("io.redirectStderrPath builtin should exist");
     let err = call_builtin(
         &builtin,
-        &[Value::String(Rc::new("/tmp/neve.err".to_string()))],
+        &[Value::String(Rc::new("/tmp/n3v3.err".to_string()))],
     )
     .expect_err("io.redirectStderrPath should reject string arguments");
 
@@ -3646,7 +3646,7 @@ fn test_io_redirect_stdin_path_rejects_string_argument() {
         get_builtin("io.redirectStdinPath").expect("io.redirectStdinPath builtin should exist");
     let err = call_builtin(
         &builtin,
-        &[Value::String(Rc::new("/tmp/neve.in".to_string()))],
+        &[Value::String(Rc::new("/tmp/n3v3.in".to_string()))],
     )
     .expect_err("io.redirectStdinPath should reject string arguments");
 
@@ -3756,7 +3756,7 @@ fn test_io_exec_command_with_stderr_redirect_writes_stderr_to_file() {
 fn test_io_exec_command_with_stdin_redirect_reads_stdin_from_file() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
 
     let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
     let redirect_builtin =
@@ -3791,7 +3791,7 @@ fn test_io_exec_command_with_stdin_redirect_reads_stdin_from_file() {
             );
             assert_eq!(result.code(), 0);
             assert!(
-                result.stdout().contains("neve"),
+                result.stdout().contains("n3v3"),
                 "stdin redirected command should surface matching stdout"
             );
         }
@@ -3806,7 +3806,7 @@ fn test_io_exec_command_with_stdin_redirect_reads_stdin_from_file() {
 fn test_io_exec_command_with_stdin_redirect_rejects_configured_stdin() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
 
     let command_builtin =
         get_builtin("io.commandWith").expect("io.commandWith builtin should exist");
@@ -3852,7 +3852,7 @@ fn test_io_exec_command_with_redirects_composes_stdin_and_stdout_paths() {
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("stdin.txt");
     let stdout_path = temp.path().join("stdout.txt");
-    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3 stdin line\n").expect("stdin file should be writable");
 
     let command_builtin = get_builtin("io.command").expect("io.command builtin should exist");
     let redirect_stdin_builtin =
@@ -3895,7 +3895,7 @@ fn test_io_exec_command_with_redirects_composes_stdin_and_stdout_paths() {
             let redirected =
                 fs::read_to_string(&stdout_path).expect("redirected file should exist");
             assert!(
-                redirected.contains("neve"),
+                redirected.contains("n3v3"),
                 "stdout redirect file should contain filtered stdin content"
             );
         }
@@ -4020,7 +4020,7 @@ fn test_io_exec_command_honors_embedded_redirects() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -4045,7 +4045,7 @@ fn test_io_exec_command_honors_embedded_redirects() {
             let redirected =
                 fs::read_to_string(&stdout_path).expect("redirected stdout file should exist");
             assert!(
-                redirected.contains("neve"),
+                redirected.contains("n3v3"),
                 "redirected stdout file should contain command output"
             );
         }
@@ -4074,7 +4074,7 @@ fn test_io_exec_command_with_redirect_matches_embedded_command_projection() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -4090,7 +4090,7 @@ fn test_io_exec_command_with_redirect_matches_embedded_command_projection() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -4296,7 +4296,7 @@ fn test_io_exec_pipeline_honors_stage_local_redirects() {
                 "stage-local redirect pipeline should succeed"
             );
             assert_eq!(result.code(), 0);
-            assert!(result.stdout().contains("neve"));
+            assert!(result.stdout().contains("n3v3"));
             assert_eq!(result.stderr(), "");
             let redirected =
                 fs::read_to_string(&stderr_path).expect("redirected stderr file should exist");
@@ -4320,7 +4320,7 @@ fn test_io_exec_command_with_redirect_rejects_non_redirect_argument() {
         &command_builtin,
         &[
             Value::String(Rc::new("printf".to_string())),
-            Value::List(Rc::new(vec![Value::String(Rc::new("neve".to_string()))])),
+            Value::List(Rc::new(vec![Value::String(Rc::new("n3v3".to_string()))])),
         ],
     )
     .expect("io.command should succeed");
@@ -4345,7 +4345,7 @@ fn test_io_exec_command_with_redirect_preserves_error_prefix() {
         &command_builtin,
         &[
             Value::String(Rc::new(
-                "neve-definitely-missing-command-for-tests".to_string(),
+                "n3v3-definitely-missing-command-for-tests".to_string(),
             )),
             Value::List(Rc::new(vec![])),
         ],
@@ -4681,7 +4681,7 @@ fn test_io_create_and_remove_dir_all() {
 fn test_io_path_exists_accepts_string_runtime_value() {
     let temp = TempDir::new().unwrap();
     let file = temp.path().join("exists.txt");
-    fs::write(&file, "neve").unwrap();
+    fs::write(&file, "n3v3").unwrap();
     let builtin = get_builtin("io.pathExists").expect("io.pathExists builtin should exist");
     let result = call_builtin(
         &builtin,
@@ -4711,7 +4711,7 @@ fn test_io_is_dir_accepts_string_runtime_value() {
 fn test_io_is_file_accepts_string_runtime_value() {
     let temp = TempDir::new().unwrap();
     let file = temp.path().join("nested.txt");
-    fs::write(&file, "neve").unwrap();
+    fs::write(&file, "n3v3").unwrap();
     let builtin = get_builtin("io.isFile").expect("io.isFile builtin should exist");
     let result = call_builtin(
         &builtin,

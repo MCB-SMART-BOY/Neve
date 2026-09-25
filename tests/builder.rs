@@ -1,10 +1,10 @@
-//! Integration tests for neve-builder crate.
+//! Integration tests for n3v3-builder crate.
 
-use neve_builder::output::{format_size, output_size, validate_output};
-use neve_builder::sandbox::{IsolationLevel, Sandbox, SandboxConfig};
-use neve_builder::{BuildBackend, Builder, BuilderConfig};
-use neve_derive::Derivation;
-use neve_store::{Database, Store};
+use n3v3_builder::output::{format_size, output_size, validate_output};
+use n3v3_builder::sandbox::{IsolationLevel, Sandbox, SandboxConfig};
+use n3v3_builder::{BuildBackend, Builder, BuilderConfig};
+use n3v3_derive::Derivation;
+use n3v3_store::{Database, Store};
 use std::env;
 use std::fs;
 
@@ -46,7 +46,7 @@ fn test_format_size_edge_cases() {
 
 #[test]
 fn test_output_size() {
-    let dir = env::temp_dir().join(format!("neve-output-test-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-test-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("test.txt"), b"hello world").unwrap();
 
@@ -61,7 +61,7 @@ fn test_output_size() {
 
 #[test]
 fn test_sandbox_config() {
-    let root = env::temp_dir().join("neve-sandbox-test");
+    let root = env::temp_dir().join("n3v3-sandbox-test");
     let config = SandboxConfig::new(root.clone());
 
     assert_eq!(config.build_dir, root.join("build"));
@@ -71,7 +71,7 @@ fn test_sandbox_config() {
 
 #[test]
 fn test_sandbox_create() {
-    let root = env::temp_dir().join(format!("neve-sandbox-test-{}", std::process::id()));
+    let root = env::temp_dir().join(format!("n3v3-sandbox-test-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
 
     let sandbox = Sandbox::new(config).unwrap();
@@ -91,7 +91,7 @@ fn test_isolation_level() {
 
 #[test]
 fn test_sandbox_with_network() {
-    let root = env::temp_dir().join(format!("neve-sandbox-net-{}", std::process::id()));
+    let root = env::temp_dir().join(format!("n3v3-sandbox-net-{}", std::process::id()));
     let mut config = SandboxConfig::new(root.clone());
     config.network = true;
 
@@ -200,7 +200,7 @@ fn test_format_size_fractional_mib() {
 
 #[test]
 fn test_output_size_empty_directory() {
-    let dir = env::temp_dir().join(format!("neve-output-empty-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-empty-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
 
     let size = output_size(&dir).unwrap();
@@ -211,7 +211,7 @@ fn test_output_size_empty_directory() {
 
 #[test]
 fn test_output_size_single_file() {
-    let dir = env::temp_dir().join(format!("neve-output-single-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-single-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("file.txt"), b"12345").unwrap();
 
@@ -223,7 +223,7 @@ fn test_output_size_single_file() {
 
 #[test]
 fn test_output_size_multiple_files() {
-    let dir = env::temp_dir().join(format!("neve-output-multi-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-multi-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("a.txt"), b"aaa").unwrap(); // 3 bytes
     fs::write(dir.join("b.txt"), b"bbbbb").unwrap(); // 5 bytes
@@ -236,7 +236,7 @@ fn test_output_size_multiple_files() {
 
 #[test]
 fn test_output_size_nested_directories() {
-    let dir = env::temp_dir().join(format!("neve-output-nested-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-nested-{}", std::process::id()));
     fs::create_dir_all(dir.join("subdir")).unwrap();
     fs::write(dir.join("root.txt"), b"root").unwrap(); // 4 bytes
     fs::write(dir.join("subdir/nested.txt"), b"nested").unwrap(); // 6 bytes
@@ -249,7 +249,7 @@ fn test_output_size_nested_directories() {
 
 #[test]
 fn test_output_size_deeply_nested() {
-    let dir = env::temp_dir().join(format!("neve-output-deep-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-deep-{}", std::process::id()));
     fs::create_dir_all(dir.join("a/b/c/d")).unwrap();
     fs::write(dir.join("a/b/c/d/deep.txt"), b"deep content").unwrap(); // 12 bytes
 
@@ -261,7 +261,7 @@ fn test_output_size_deeply_nested() {
 
 #[test]
 fn test_output_size_binary_file() {
-    let dir = env::temp_dir().join(format!("neve-output-binary-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-binary-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("binary.bin"), [0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
 
@@ -282,7 +282,7 @@ fn test_output_size_does_not_follow_directory_symlink() {
         .unwrap_or_default()
         .as_nanos();
     let dir = env::temp_dir().join(format!(
-        "neve-output-symlink-loop-{}-{}",
+        "n3v3-output-symlink-loop-{}-{}",
         std::process::id(),
         nonce
     ));
@@ -308,7 +308,7 @@ fn test_validate_output_does_not_recurse_into_directory_symlink() {
         .unwrap_or_default()
         .as_nanos();
     let dir = env::temp_dir().join(format!(
-        "neve-validate-symlink-loop-{}-{}",
+        "n3v3-validate-symlink-loop-{}-{}",
         std::process::id(),
         nonce
     ));
@@ -358,7 +358,7 @@ fn test_sandbox_config_with_special_path() {
 
 #[test]
 fn test_sandbox_directories_exist_after_create() {
-    let root = env::temp_dir().join(format!("neve-sandbox-exist-{}", std::process::id()));
+    let root = env::temp_dir().join(format!("n3v3-sandbox-exist-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
 
     let sandbox = Sandbox::new(config).unwrap();
@@ -373,7 +373,7 @@ fn test_sandbox_directories_exist_after_create() {
 
 #[test]
 fn test_sandbox_cleanup_removes_all() {
-    let root = env::temp_dir().join(format!("neve-sandbox-cleanup-{}", std::process::id()));
+    let root = env::temp_dir().join(format!("n3v3-sandbox-cleanup-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
 
     let sandbox = Sandbox::new(config).unwrap();
@@ -389,7 +389,7 @@ fn test_sandbox_cleanup_removes_all() {
 
 #[test]
 fn test_sandbox_cleanup_handles_nested_files() {
-    let root = env::temp_dir().join(format!("neve-sandbox-nested-clean-{}", std::process::id()));
+    let root = env::temp_dir().join(format!("n3v3-sandbox-nested-clean-{}", std::process::id()));
     let config = SandboxConfig::new(root.clone());
 
     let sandbox = Sandbox::new(config).unwrap();
@@ -406,8 +406,8 @@ fn test_sandbox_cleanup_handles_nested_files() {
 
 #[test]
 fn test_sandbox_multiple_instances() {
-    let root1 = env::temp_dir().join(format!("neve-sandbox-multi1-{}", std::process::id()));
-    let root2 = env::temp_dir().join(format!("neve-sandbox-multi2-{}", std::process::id()));
+    let root1 = env::temp_dir().join(format!("n3v3-sandbox-multi1-{}", std::process::id()));
+    let root2 = env::temp_dir().join(format!("n3v3-sandbox-multi2-{}", std::process::id()));
 
     let sandbox1 = Sandbox::new(SandboxConfig::new(root1.clone())).unwrap();
     let sandbox2 = Sandbox::new(SandboxConfig::new(root2.clone())).unwrap();
@@ -452,7 +452,7 @@ fn test_isolation_level_best_available_is_valid() {
 
 #[test]
 fn test_output_size_many_small_files() {
-    let dir = env::temp_dir().join(format!("neve-output-many-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-output-many-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
 
     // Create 100 small files
@@ -469,7 +469,7 @@ fn test_output_size_many_small_files() {
 #[test]
 fn test_sandbox_rapid_create_cleanup() {
     for i in 0..5 {
-        let root = env::temp_dir().join(format!("neve-sandbox-rapid-{}-{}", std::process::id(), i));
+        let root = env::temp_dir().join(format!("n3v3-sandbox-rapid-{}-{}", std::process::id(), i));
         let config = SandboxConfig::new(root.clone());
 
         let sandbox = Sandbox::new(config).unwrap();
@@ -490,12 +490,12 @@ fn test_builder_links_real_input_output_path() {
         .unwrap_or_default()
         .as_nanos();
     let store_root = env::temp_dir().join(format!(
-        "neve-builder-input-store-{}-{}",
+        "n3v3-builder-input-store-{}-{}",
         std::process::id(),
         nonce
     ));
     let build_root = env::temp_dir().join(format!(
-        "neve-builder-input-build-{}-{}",
+        "n3v3-builder-input-build-{}-{}",
         std::process::id(),
         nonce
     ));
@@ -548,12 +548,12 @@ fn test_builder_registers_output_metadata_with_references() {
         .unwrap_or_default()
         .as_nanos();
     let store_root = env::temp_dir().join(format!(
-        "neve-builder-db-store-{}-{}",
+        "n3v3-builder-db-store-{}-{}",
         std::process::id(),
         nonce
     ));
     let build_root = env::temp_dir().join(format!(
-        "neve-builder-db-build-{}-{}",
+        "n3v3-builder-db-build-{}-{}",
         std::process::id(),
         nonce
     ));
@@ -624,14 +624,14 @@ fn test_build_twice_produces_identical_store_paths() {
         .unwrap_or_default()
         .as_nanos();
     let store_root =
-        env::temp_dir().join(format!("neve-repro-store-{}-{}", std::process::id(), nonce));
+        env::temp_dir().join(format!("n3v3-repro-store-{}-{}", std::process::id(), nonce));
     let build_root1 = env::temp_dir().join(format!(
-        "neve-repro-build1-{}-{}",
+        "n3v3-repro-build1-{}-{}",
         std::process::id(),
         nonce
     ));
     let build_root2 = env::temp_dir().join(format!(
-        "neve-repro-build2-{}-{}",
+        "n3v3-repro-build2-{}-{}",
         std::process::id(),
         nonce
     ));
@@ -686,7 +686,7 @@ fn test_gc_preserves_live_paths() {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let store_root = env::temp_dir().join(format!("neve-gc-test-{}-{}", std::process::id(), nonce));
+    let store_root = env::temp_dir().join(format!("n3v3-gc-test-{}-{}", std::process::id(), nonce));
 
     let drv = Derivation::builder("gc-test", "1.0")
         .builder_path("/bin/sh")
@@ -709,12 +709,12 @@ fn test_gc_preserves_live_paths() {
 
     // Add GC root
     let mut store = Store::open_at(store_root.clone()).unwrap();
-    let gc = neve_store::gc::GarbageCollector::new(&mut store);
+    let gc = n3v3_store::gc::GarbageCollector::new(&mut store);
     gc.add_root("test-gc-root", out_path).unwrap();
 
     // GC should preserve live path
     let mut store = Store::open_at(store_root.clone()).unwrap();
-    let mut gc = neve_store::gc::GarbageCollector::new(&mut store);
+    let mut gc = n3v3_store::gc::GarbageCollector::new(&mut store);
     gc.collect().unwrap();
 
     let store = Store::open_at(store_root.clone()).unwrap();
@@ -723,11 +723,11 @@ fn test_gc_preserves_live_paths() {
 
     // Remove root and GC again
     let mut store = Store::open_at(store_root.clone()).unwrap();
-    let gc = neve_store::gc::GarbageCollector::new(&mut store);
+    let gc = n3v3_store::gc::GarbageCollector::new(&mut store);
     gc.remove_root("test-gc-root").unwrap();
 
     let mut store = Store::open_at(store_root.clone()).unwrap();
-    let mut gc = neve_store::gc::GarbageCollector::new(&mut store);
+    let mut gc = n3v3_store::gc::GarbageCollector::new(&mut store);
     gc.collect().unwrap();
 
     let _ = fs::remove_dir_all(store_root);

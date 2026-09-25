@@ -1,11 +1,11 @@
-//! Integration tests for neve-typeck crate.
+//! Integration tests for n3v3-typeck crate.
 //!
 //! This file contains extensive edge case tests for type checking.
 
-use neve_diagnostic::{Diagnostic, ErrorCode, Severity};
-use neve_hir::lower;
-use neve_parser::parse;
-use neve_typeck::{TypeChecker, format_type};
+use n3v3_diagnostic::{Diagnostic, ErrorCode, Severity};
+use n3v3_hir::lower;
+use n3v3_parser::parse;
+use n3v3_typeck::{TypeChecker, format_type};
 
 fn check_source(source: &str) -> Vec<Diagnostic> {
     let (ast, parse_diags) = parse(source);
@@ -624,7 +624,7 @@ fn test_typeck_std_typed_path_adapters_allow_valid_uses() {
     check_no_errors(
         r#"
             use std.path = path;
-            let nested: Path = path.joinPath(path.fromString("/tmp"), "neve.txt");
+            let nested: Path = path.joinPath(path.fromString("/tmp"), "n3v3.txt");
             let parent: Path = path.parentPath(nested) ?? path.fromString("/");
             let name: String = path.filenamePath(nested) ?? "missing";
             let ext: String = path.extensionPath(nested) ?? "missing";
@@ -639,7 +639,7 @@ fn test_typeck_std_typed_path_adapters_reject_string_receiver() {
     assert_has_diagnostic(
         r#"
             use std.path = path;
-            let wrong = path.extensionPath("neve.txt");
+            let wrong = path.extensionPath("n3v3.txt");
         "#,
         Severity::Error,
         "type mismatch",
@@ -1023,19 +1023,19 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
             let home_path: Option<Path> = io.homeDirPath();
             let home_text: Option<String> = io.homeDir();
             let system: String = io.currentSystem();
-            let created_dir_legacy: Unit = io.createDirAll("/tmp/neve-dir");
-            let removed_dir_legacy: Unit = io.removeDirAll("/tmp/neve-dir");
+            let created_dir_legacy: Unit = io.createDirAll("/tmp/n3v3-dir");
+            let removed_dir_legacy: Unit = io.removeDirAll("/tmp/n3v3-dir");
             let exists_legacy: Bool = io.pathExists("/tmp/file.txt");
             let dir_legacy: Bool = io.isDir("/tmp");
             let file_legacy: Bool = io.isFile("/tmp/file.txt");
-            let created_dir: Unit = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
-            let removed_dir: Unit = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
-            let cmd: Command = io.command("printf", ["neve"]);
-            let cmd2: Command = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
-            let cmd3: Command = io.commandWithRedirects(cmd, [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]);
-            let redirect: Redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
-            let redirect_err: Redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
-            let redirect_in: Redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
+            let created_dir: Unit = io.createDirAllPath(path.fromString("/tmp/n3v3-dir"));
+            let removed_dir: Unit = io.removeDirAllPath(path.fromString("/tmp/n3v3-dir"));
+            let cmd: Command = io.command("printf", ["n3v3"]);
+            let cmd2: Command = io.commandWith(#{ program = "printf", args = ["n3v3"], cwd = "/tmp" });
+            let cmd3: Command = io.commandWithRedirects(cmd, [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]);
+            let redirect: Redirect = io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"));
+            let redirect_err: Redirect = io.redirectStderrPath(path.fromString("/tmp/n3v3.err"));
+            let redirect_in: Redirect = io.redirectStdinPath(path.fromString("/tmp/n3v3.in"));
             let pipe: Pipeline = io.pipeline([cmd, cmd2]);
             let pipe2: Pipeline = io.pipelineWithRedirects(pipe, [redirect]);
             let staged_pipe: Pipeline = io.pipeline([io.commandWithRedirects(cmd, [redirect_err]), cmd2]);
@@ -1069,12 +1069,12 @@ fn test_typeck_std_io_builtins_allow_valid_uses() {
                 io.execCommand(io.commandWith(#{ program = "rustc", args = ["--version"] }));
             let proc_ok: Bool = io.processSuccess(proc);
             let proc_out0: String =
-                io.processStdout(io.execCommand(io.command("printf", ["neve"])));
+                io.processStdout(io.execCommand(io.command("printf", ["n3v3"])));
             let proc_out: String = io.processStdout(io.execCommand(io.command("rustc", ["--version"])));
             let proc_code: Int = io.processCode(io.execCommand(io.command("rustc", ["--version"])));
-            let proc_code0: Int = io.processCode(io.execCommand(io.command("sh", ["-c", "printf neve"])));
+            let proc_code0: Int = io.processCode(io.execCommand(io.command("sh", ["-c", "printf n3v3"])));
             let proc_code1: Int =
-                io.processCode(io.execCommand(io.commandWith(#{ program = "printf", args = ["neve"] })));
+                io.processCode(io.execCommand(io.commandWith(#{ program = "printf", args = ["n3v3"] })));
             let proc_err: String = io.processStderr(io.execCommand(io.command("rustc", ["--version"])));
             let exists: Bool = io.pathExistsPath(path.fromString("/tmp/file.txt"));
             let dir: Bool = io.isDirPath(path.fromString("/tmp"));
@@ -1281,7 +1281,7 @@ fn test_typeck_std_io_create_dir_all_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.createDirAllPath("/tmp/neve-dir");
+            let wrong = io.createDirAllPath("/tmp/n3v3-dir");
         "#,
         Severity::Error,
         "type mismatch",
@@ -1293,7 +1293,7 @@ fn test_typeck_std_io_remove_dir_all_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.removeDirAllPath("/tmp/neve-dir");
+            let wrong = io.removeDirAllPath("/tmp/n3v3-dir");
         "#,
         Severity::Error,
         "type mismatch",
@@ -1317,7 +1317,7 @@ fn test_typeck_std_io_command_with_rejects_non_string_program() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.commandWith(#{ program = 1, args = ["neve"] });
+            let wrong = io.commandWith(#{ program = 1, args = ["n3v3"] });
         "#,
         Severity::Error,
         "type mismatch",
@@ -1343,8 +1343,8 @@ fn test_typeck_std_io_pipeline_with_redirects_rejects_command_argument_pair() {
             use std.io = io;
             use std.path = path;
             let wrong = io.pipelineWithRedirects(
-                io.command("printf", ["neve"]),
-                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                io.command("printf", ["n3v3"]),
+                [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
             );
         "#,
         Severity::Error,
@@ -1358,7 +1358,7 @@ fn test_typeck_std_io_pipeline_with_redirects_rejects_non_redirect_list_items() 
         r#"
             use std.io = io;
             let wrong = io.pipelineWithRedirects(
-                io.pipeline([io.command("printf", ["neve"])]),
+                io.pipeline([io.command("printf", ["n3v3"])]),
                 [io.command("cat", [])]
             );
         "#,
@@ -1372,7 +1372,7 @@ fn test_typeck_std_io_exec_pipeline_rejects_command_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.execPipeline(io.command("printf", ["neve"]));
+            let wrong = io.execPipeline(io.command("printf", ["n3v3"]));
         "#,
         Severity::Error,
         "type mismatch",
@@ -1386,7 +1386,7 @@ fn test_typeck_std_io_exec_pipeline_with_embedded_redirects_rejects_non_redirect
             use std.io = io;
             let wrong = io.execPipeline(
                 io.pipelineWithRedirects(
-                    io.pipeline([io.command("printf", ["neve"])]),
+                    io.pipeline([io.command("printf", ["n3v3"])]),
                     [io.command("cat", [])]
                 )
             );
@@ -1401,7 +1401,7 @@ fn test_typeck_std_io_redirect_stdout_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.redirectStdoutPath("/tmp/neve.out");
+            let wrong = io.redirectStdoutPath("/tmp/n3v3.out");
         "#,
         Severity::Error,
         "type mismatch",
@@ -1413,7 +1413,7 @@ fn test_typeck_std_io_redirect_stderr_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.redirectStderrPath("/tmp/neve.err");
+            let wrong = io.redirectStderrPath("/tmp/n3v3.err");
         "#,
         Severity::Error,
         "type mismatch",
@@ -1425,7 +1425,7 @@ fn test_typeck_std_io_redirect_stdin_path_rejects_string_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.redirectStdinPath("/tmp/neve.in");
+            let wrong = io.redirectStdinPath("/tmp/n3v3.in");
         "#,
         Severity::Error,
         "type mismatch",
@@ -1449,7 +1449,7 @@ fn test_typeck_std_io_task_pipeline_rejects_command_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.taskPipeline(io.command("printf", ["neve"]));
+            let wrong = io.taskPipeline(io.command("printf", ["n3v3"]));
         "#,
         Severity::Error,
         "type mismatch",
@@ -1461,7 +1461,7 @@ fn test_typeck_std_io_await_task_rejects_command_argument() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.awaitTask(io.command("printf", ["neve"]));
+            let wrong = io.awaitTask(io.command("printf", ["n3v3"]));
         "#,
         Severity::Error,
         "type mismatch",
@@ -1473,7 +1473,7 @@ fn test_typeck_std_io_await_tasks_rejects_non_task_list_items() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.awaitTasks([io.command("printf", ["neve"])]);
+            let wrong = io.awaitTasks([io.command("printf", ["n3v3"])]);
         "#,
         Severity::Error,
         "type mismatch",
@@ -1487,7 +1487,7 @@ fn test_typeck_std_io_exec_command_with_embedded_redirects_rejects_non_redirect_
             use std.io = io;
             let wrong = io.execCommand(
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
+                    io.command("printf", ["n3v3"]),
                     [io.command("cat", [])]
                 )
             );
@@ -1503,7 +1503,7 @@ fn test_typeck_std_io_command_with_redirects_rejects_non_redirect_list_items() {
         r#"
             use std.io = io;
             let wrong = io.commandWithRedirects(
-                io.command("printf", ["neve"]),
+                io.command("printf", ["n3v3"]),
                 [io.command("cat", [])]
             );
         "#,
@@ -1529,7 +1529,7 @@ fn test_typeck_std_io_exec_no_longer_exposes_legacy_record_fields() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.execCommand(io.command("printf", ["neve"])).stdout;
+            let wrong = io.execCommand(io.command("printf", ["n3v3"])).stdout;
         "#,
         Severity::Error,
         "field access on non-record type",
@@ -1541,7 +1541,7 @@ fn test_typeck_std_io_exec_with_no_longer_exposes_legacy_record_fields() {
     assert_has_diagnostic(
         r#"
             use std.io = io;
-            let wrong = io.execCommand(io.commandWith(#{ program = "printf", args = ["neve"] })).code;
+            let wrong = io.execCommand(io.commandWith(#{ program = "printf", args = ["n3v3"] })).code;
         "#,
         Severity::Error,
         "field access on non-record type",
@@ -2067,7 +2067,7 @@ fn test_typeck_safe_field_on_unknown_param_accepts_option_record_callsite() {
         "
         use std.option = option;
         let readName = fn(config) config?.name ?? \"default\";
-        let value = readName(option.some(#{ name = \"neve\" }));
+        let value = readName(option.some(#{ name = \"n3v3\" }));
         ",
     );
 }
@@ -2093,7 +2093,7 @@ fn test_typeck_method_call_falls_back_to_function_call_semantics() {
     );
     let errors: Vec<_> = diags
         .iter()
-        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .filter(|d| d.severity == n3v3_diagnostic::Severity::Error)
         .collect();
     assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
 }

@@ -1299,22 +1299,22 @@ version = "5.0.0"
 dependencies = [
  "clap",
  "libc",
- "neve-builder",
- "neve-common",
- "neve-config",
- "neve-derive",
- "neve-diagnostic",
- "neve-eval",
- "neve-fetch",
- "neve-fmt",
- "neve-frontend",
- "neve-hir",
- "neve-lsp",
- "neve-parser",
- "neve-std",
- "neve-store",
- "neve-syntax",
- "neve-typeck",
+ "n3v3-builder",
+ "n3v3-common",
+ "n3v3-config",
+ "n3v3-derive",
+ "n3v3-diagnostic",
+ "n3v3-eval",
+ "n3v3-fetch",
+ "n3v3-fmt",
+ "n3v3-frontend",
+ "n3v3-hir",
+ "n3v3-lsp",
+ "n3v3-parser",
+ "n3v3-std",
+ "n3v3-store",
+ "n3v3-syntax",
+ "n3v3-typeck",
  "reqwest",
  "rustyline",
  "serde",
@@ -1325,13 +1325,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-builder"
+name = "n3v3-builder"
 version = "5.0.0"
 dependencies = [
  "libc",
- "neve-derive",
- "neve-fetch",
- "neve-store",
+ "n3v3-derive",
+ "n3v3-fetch",
+ "n3v3-store",
  "nix",
  "serde",
  "serde_json",
@@ -1340,7 +1340,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-common"
+name = "n3v3-common"
 version = "5.0.0"
 dependencies = [
  "libc",
@@ -1349,16 +1349,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-config"
+name = "n3v3-config"
 version = "5.0.0"
 dependencies = [
- "neve-builder",
- "neve-derive",
- "neve-diagnostic",
- "neve-eval",
- "neve-fetch",
- "neve-frontend",
- "neve-store",
+ "n3v3-builder",
+ "n3v3-derive",
+ "n3v3-diagnostic",
+ "n3v3-eval",
+ "n3v3-fetch",
+ "n3v3-frontend",
+ "n3v3-store",
  "serde",
  "serde_json",
  "tempfile",
@@ -1366,7 +1366,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-derive"
+name = "n3v3-derive"
 version = "5.0.0"
 dependencies = [
  "blake3",
@@ -1376,34 +1376,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-diagnostic"
+name = "n3v3-diagnostic"
 version = "5.0.0"
 dependencies = [
  "ariadne",
- "neve-common",
+ "n3v3-common",
  "thiserror 2.0.20",
 ]
 
 [[package]]
-name = "neve-eval"
+name = "n3v3-eval"
 version = "5.0.0"
 dependencies = [
  "libc",
- "neve-common",
- "neve-derive",
- "neve-diagnostic",
- "neve-hir",
- "neve-syntax",
+ "n3v3-common",
+ "n3v3-derive",
+ "n3v3-diagnostic",
+ "n3v3-hir",
+ "n3v3-syntax",
+ "tempfile",
  "thiserror 2.0.20",
 ]
 
 [[package]]
-name = "neve-fetch"
+name = "n3v3-fetch"
 version = "5.0.0"
 dependencies = [
  "flate2",
  "git2",
- "neve-derive",
+ "n3v3-derive",
  "reqwest",
  "tar",
  "tempfile",
@@ -1412,61 +1413,61 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-fmt"
+name = "n3v3-fmt"
 version = "5.0.0"
 dependencies = [
- "neve-common",
- "neve-diagnostic",
- "neve-parser",
- "neve-syntax",
+ "n3v3-common",
+ "n3v3-diagnostic",
+ "n3v3-parser",
+ "n3v3-syntax",
 ]
 
 [[package]]
-name = "neve-frontend"
+name = "n3v3-frontend"
 version = "5.0.0"
 dependencies = [
- "neve-common",
- "neve-diagnostic",
- "neve-hir",
- "neve-parser",
- "neve-syntax",
- "neve-typeck",
+ "n3v3-common",
+ "n3v3-diagnostic",
+ "n3v3-hir",
+ "n3v3-parser",
+ "n3v3-syntax",
+ "n3v3-typeck",
 ]
 
 [[package]]
-name = "neve-hir"
+name = "n3v3-hir"
 version = "5.0.0"
 dependencies = [
- "neve-common",
- "neve-diagnostic",
- "neve-parser",
- "neve-syntax",
+ "n3v3-common",
+ "n3v3-diagnostic",
+ "n3v3-parser",
+ "n3v3-syntax",
 ]
 
 [[package]]
-name = "neve-lexer"
+name = "n3v3-lexer"
 version = "5.0.0"
 dependencies = [
  "logos",
- "neve-common",
- "neve-diagnostic",
+ "n3v3-common",
+ "n3v3-diagnostic",
 ]
 
 [[package]]
-name = "neve-lsp"
+name = "n3v3-lsp"
 version = "5.0.0"
 dependencies = [
  "async-trait",
  "dashmap 6.2.1",
- "neve-common",
- "neve-diagnostic",
- "neve-fmt",
- "neve-frontend",
- "neve-hir",
- "neve-lexer",
- "neve-parser",
- "neve-syntax",
- "neve-typeck",
+ "n3v3-common",
+ "n3v3-diagnostic",
+ "n3v3-fmt",
+ "n3v3-frontend",
+ "n3v3-hir",
+ "n3v3-lexer",
+ "n3v3-parser",
+ "n3v3-syntax",
+ "n3v3-typeck",
  "serde",
  "serde_json",
  "tokio",
@@ -1474,40 +1475,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-parser"
+name = "n3v3-parser"
 version = "5.0.0"
 dependencies = [
- "neve-common",
- "neve-diagnostic",
- "neve-lexer",
- "neve-syntax",
+ "n3v3-common",
+ "n3v3-diagnostic",
+ "n3v3-lexer",
+ "n3v3-syntax",
 ]
 
 [[package]]
-name = "neve-std"
+name = "n3v3-std"
 version = "5.0.0"
 dependencies = [
  "glob",
  "libc",
- "neve-common",
- "neve-derive",
- "neve-eval",
- "neve-fetch",
+ "n3v3-common",
+ "n3v3-derive",
+ "n3v3-eval",
+ "n3v3-fetch",
  "rpassword",
  "sha2",
- "tempfile",
 ]
 
 [[package]]
-name = "neve-store"
+name = "n3v3-store"
 version = "5.0.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
  "flate2",
  "lzma-rs",
- "neve-derive",
- "neve-fetch",
+ "n3v3-derive",
+ "n3v3-fetch",
  "reqwest",
  "serde",
  "serde_json",
@@ -1517,43 +1517,43 @@ dependencies = [
 ]
 
 [[package]]
-name = "neve-syntax"
+name = "n3v3-syntax"
 version = "5.0.0"
 dependencies = [
- "neve-common",
+ "n3v3-common",
 ]
 
 [[package]]
-name = "neve-typeck"
+name = "n3v3-typeck"
 version = "5.0.0"
 dependencies = [
- "neve-common",
- "neve-diagnostic",
- "neve-hir",
- "neve-parser",
+ "n3v3-common",
+ "n3v3-diagnostic",
+ "n3v3-hir",
+ "n3v3-parser",
 ]
 
 [[package]]
-name = "neve-workspace"
+name = "n3v3-workspace"
 version = "5.0.0"
 dependencies = [
- "neve-builder",
- "neve-common",
- "neve-config",
- "neve-derive",
- "neve-diagnostic",
- "neve-eval",
- "neve-fetch",
- "neve-fmt",
- "neve-frontend",
- "neve-hir",
- "neve-lexer",
- "neve-lsp",
- "neve-parser",
- "neve-std",
- "neve-store",
- "neve-syntax",
- "neve-typeck",
+ "n3v3-builder",
+ "n3v3-common",
+ "n3v3-config",
+ "n3v3-derive",
+ "n3v3-diagnostic",
+ "n3v3-eval",
+ "n3v3-fetch",
+ "n3v3-fmt",
+ "n3v3-frontend",
+ "n3v3-hir",
+ "n3v3-lexer",
+ "n3v3-lsp",
+ "n3v3-parser",
+ "n3v3-std",
+ "n3v3-store",
+ "n3v3-syntax",
+ "n3v3-typeck",
  "tempfile",
 ]
 
@@ -2577,7 +2577,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tree-sitter-neve"
+name = "tree-sitter-n3v3"
 version = "1.0.0"
 dependencies = [
  "cc",

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Installation Guide</h1>
 
@@ -15,8 +15,8 @@
 
 ---
 
-> *Get Neve running. Should take about 2 minutes.*  
-> 装个 Neve，两分钟搞定。
+> *Get n3v3 running. Should take about 2 minutes.*  
+> 装个 n3v3，两分钟搞定。
 
 ## System Requirements / 系统要求
 
@@ -43,83 +43,85 @@
 ```bash
 cargo install n3v3
 ```
+This crates.io package is named `n3v3`; it installs the `n3v3` binary.  
+该 crates.io 软件包名为 `n3v3`，安装后提供 `n3v3` 二进制文件。
 
 Requires Rust 1.85+. This is the recommended method for developers.
 
 ### Linux / macOS Script / Linux / macOS 脚本安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/MCB-SMART-BOY/n3v3/master/scripts/install.sh | sh
 ```
 
 ### Windows Script / Windows 脚本安装
 
 ```powershell
-irm https://raw.githubusercontent.com/MCB-SMART-BOY/Neve/master/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/MCB-SMART-BOY/n3v3/master/scripts/install.ps1 | iex
 ```
 
 ### Manual Release Install / 手动安装发行版
 
 ```bash
 # Linux x86_64
-curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz
-tar xzf neve-x86_64-unknown-linux-gnu.tar.gz
-sudo install -m 755 neve /usr/local/bin/neve
+curl -LO https://github.com/MCB-SMART-BOY/n3v3/releases/latest/download/n3v3-x86_64-unknown-linux-gnu.tar.gz
+tar xzf n3v3-x86_64-unknown-linux-gnu.tar.gz
+sudo install -m 755 n3v3 /usr/local/bin/n3v3
 
 # Linux aarch64
-curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/MCB-SMART-BOY/n3v3/releases/latest/download/n3v3-aarch64-unknown-linux-gnu.tar.gz
 
 # macOS Intel
-curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-apple-darwin.tar.gz
+curl -LO https://github.com/MCB-SMART-BOY/n3v3/releases/latest/download/n3v3-x86_64-apple-darwin.tar.gz
 
 # macOS Apple Silicon
-curl -LO https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/MCB-SMART-BOY/n3v3/releases/latest/download/n3v3-aarch64-apple-darwin.tar.gz
 ```
 
 Windows release asset / Windows 发行文件：
 
 ```powershell
-Invoke-WebRequest https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-pc-windows-msvc.zip -OutFile neve.zip
-Expand-Archive neve.zip -DestinationPath $env:LOCALAPPDATA\neve\bin -Force
+Invoke-WebRequest https://github.com/MCB-SMART-BOY/n3v3/releases/latest/download/n3v3-x86_64-pc-windows-msvc.zip -OutFile n3v3.zip
+Expand-Archive n3v3.zip -DestinationPath $env:LOCALAPPDATA\n3v3\bin -Force
 ```
 
 ### Arch Linux / Arch Linux 用户
 
 ```bash
-yay -S neve-git
+yay -S n3v3
 ```
 
 ### Build from Source / 从源码编译
 
 ```bash
 # Requires Rust 1.85+ / 需要 Rust 1.85 以上
-git clone https://github.com/MCB-SMART-BOY/Neve.git
-cd Neve
+git clone https://github.com/MCB-SMART-BOY/n3v3.git
+cd n3v3
 
 # Install into Cargo bin dir / 安装到 Cargo bin 目录
-cargo install --path neve-cli --locked
+cargo install --path n3v3-cli --locked
 
 # Or build a release binary / 或仅构建 release 二进制
 cargo build --release
-sudo install -m 755 target/release/neve /usr/local/bin/neve
+sudo install -m 755 target/release/n3v3 /usr/local/bin/n3v3
 ```
 
 ## Verify Installation / 验证安装
 
 ```bash
-neve --version          # Check version / 查看版本
-neve info --platform    # Check platform capabilities / 查看平台支持
-neve repl               # Start interactive REPL / 启动 REPL
-neve eval "1 + 2"       # Evaluate expression / 计算表达式
+n3v3 --version          # prints: n3v3 5.0.0 / 输出：n3v3 5.0.0
+n3v3 info --platform    # Check platform capabilities / 查看平台支持
+n3v3 repl               # Start interactive REPL / 启动 REPL
+n3v3 eval "1 + 2"       # Evaluate expression / 计算表达式
 ```
 
 ## Binary Cache & Signatures / 二进制缓存与签名
 
 ```bash
 # One key for all caches / 单个密钥应用到全部缓存
-neve build ./pkg.neve \
+n3v3 build ./pkg.n3v3 \
   --cache-url https://cache.example.org \
-  --cache-dir /var/lib/neve/cache \
+  --cache-dir /var/lib/n3v3/cache \
   --cache-public-key 'ed25519:<base64-public-key>' \
   --cache-private-key 'ed25519:<base64-private-key>' \
   --cache-upload
@@ -127,12 +129,12 @@ neve build ./pkg.neve \
 
 Environment variables / 环境变量：
 
-- `NEVE_BINARY_CACHE_URLS` (comma-separated) / 远程缓存 URL（逗号分隔）
-- `NEVE_BINARY_CACHE_LOCAL_DIRS` (comma-separated) / 本地缓存目录（逗号分隔）
-- `NEVE_BINARY_CACHE_PUBLIC_KEYS` (comma-separated, fallback `NEVE_BINARY_CACHE_PUBLIC_KEY`)
-- `NEVE_BINARY_CACHE_PRIVATE_KEYS` (comma-separated, fallback `NEVE_BINARY_CACHE_PRIVATE_KEY`)
-- `NEVE_BINARY_CACHE_UPLOAD` (`true/false`)
-- `NEVE_SUBSTITUTE` (`true/false`)
+- `N3V3_BINARY_CACHE_URLS` (comma-separated) / 远程缓存 URL（逗号分隔）
+- `N3V3_BINARY_CACHE_LOCAL_DIRS` (comma-separated) / 本地缓存目录（逗号分隔）
+- `N3V3_BINARY_CACHE_PUBLIC_KEYS` (comma-separated, fallback `N3V3_BINARY_CACHE_PUBLIC_KEY`)
+- `N3V3_BINARY_CACHE_PRIVATE_KEYS` (comma-separated, fallback `N3V3_BINARY_CACHE_PRIVATE_KEY`)
+- `N3V3_BINARY_CACHE_UPLOAD` (`true/false`)
+- `N3V3_SUBSTITUTE` (`true/false`)
 
 Key mapping rule / 密钥映射规则：
 
@@ -150,10 +152,10 @@ Behavior notes / 行为说明：
 
 ## Troubleshooting / 常见问题
 
-### "Command not found: neve" / 提示找不到命令
+### "Command not found: n3v3" / 提示找不到命令
 
-Make sure Neve is in your PATH:
-确保 Neve 在 PATH 中：
+Make sure n3v3 is in your PATH:
+确保 n3v3 在 PATH 中：
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"  # Add to ~/.bashrc or ~/.zshrc
@@ -175,7 +177,7 @@ sudo pacman -S base-devel         # Arch
 ### macOS Security Warning / macOS 安全警告
 
 ```bash
-xattr -d com.apple.quarantine neve  # Remove quarantine flag
+xattr -d com.apple.quarantine n3v3  # Remove quarantine flag
 ```
 
 ## What's Next / 接下来

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Complete Tutorial</h1>
 
@@ -24,7 +24,7 @@
 
 All bindings are immutable:
 
-```neve
+```n3v3
 x = 42
 name = "Alice"
 valid = true
@@ -32,7 +32,7 @@ valid = true
 
 ### Functions
 
-```neve
+```n3v3
 -- Named function
 add(x: Int, y: Int) -> Int = x + y
 
@@ -45,7 +45,7 @@ greet(name) = `Hello, {name}!`
 
 ### Records
 
-```neve
+```n3v3
 user = {
     name = "Bob",
     age = 30,
@@ -64,7 +64,7 @@ u = { name, age = 25 }  -- same as { name = name, age = 25 }
 
 ### Lists
 
-```neve
+```n3v3
 nums = [1, 2, 3, 4, 5]
 
 -- Concatenate
@@ -77,7 +77,7 @@ filtered = [x | x <- nums, x > 2]
 
 ### Blocks
 
-```neve
+```n3v3
 result = {
     a = 10
     b = 20
@@ -92,7 +92,7 @@ result = {
 
 所有绑定都是不可变的：
 
-```neve
+```n3v3
 x = 42
 name = "Alice"
 valid = true
@@ -100,7 +100,7 @@ valid = true
 
 ### 函数
 
-```neve
+```n3v3
 -- 命名函数
 add(x: Int, y: Int) -> Int = x + y
 
@@ -113,7 +113,7 @@ greet(name) = `你好，{name}！`
 
 ### 记录
 
-```neve
+```n3v3
 user = {
     name = "小明",
     age = 30,
@@ -132,7 +132,7 @@ u = { name, age = 25 }  -- 等价于 { name = name, age = 25 }
 
 ### 列表
 
-```neve
+```n3v3
 nums = [1, 2, 3, 4, 5]
 
 -- 拼接
@@ -145,7 +145,7 @@ filtered = [x | x <- nums, x > 2]
 
 ### 代码块
 
-```neve
+```n3v3
 result = {
     a = 10
     b = 20
@@ -161,13 +161,13 @@ result = {
 
 ### Basic Types
 
-```neve
-Int, Float, Bool, Char, String, Unit
+```n3v3
+-- Primitive types include: Int, Float, Bool, Char, String, Unit
 ```
 
 ### Compound Types
 
-```neve
+```n3v3
 -- Tuple
 type Point = (Int, Int)
 
@@ -180,7 +180,7 @@ type User = { name: String, age: Int }
 
 ### Generics
 
-```neve
+```n3v3
 first<T>(xs: List<T>) -> Option<T> = match xs {
     [] -> None,
     [h, ..] -> Some(h),
@@ -191,9 +191,9 @@ identity<T>(x: T) -> T = x
 
 ### Type Inference
 
-Neve uses Hindley-Milner:
+n3v3 uses Hindley-Milner:
 
-```neve
+```n3v3
 double = |x| x * 2     -- inferred: Int -> Int
 id = |x| x             -- inferred: forall a. a -> a
 ```
@@ -203,13 +203,13 @@ id = |x| x             -- inferred: forall a. a -> a
 
 ### 基本类型
 
-```neve
-Int, Float, Bool, Char, String, Unit
+```n3v3
+-- 基本类型包括：Int、Float、Bool、Char、String、Unit
 ```
 
 ### 复合类型
 
-```neve
+```n3v3
 -- 元组
 type Point = (Int, Int)
 
@@ -222,7 +222,7 @@ type User = { name: String, age: Int }
 
 ### 泛型
 
-```neve
+```n3v3
 first<T>(xs: List<T>) -> Option<T> = match xs {
     [] -> None,
     [h, ..] -> Some(h),
@@ -233,9 +233,9 @@ identity<T>(x: T) -> T = x
 
 ### 类型推导
 
-Neve 用的是 Hindley-Milner 算法：
+n3v3 用的是 Hindley-Milner 算法：
 
-```neve
+```n3v3
 double = |x| x * 2     -- 推导出：Int -> Int
 id = |x| x             -- 推导出：forall a. a -> a
 ```
@@ -248,7 +248,7 @@ id = |x| x             -- 推导出：forall a. a -> a
 
 ### Basics
 
-```neve
+```n3v3
 describe(x) = match x {
     0 -> "zero",
     1 -> "one",
@@ -258,7 +258,7 @@ describe(x) = match x {
 
 ### Lists
 
-```neve
+```n3v3
 sum(xs) = match xs {
     [] -> 0,
     [h, ..t] -> h + sum(t),
@@ -267,20 +267,21 @@ sum(xs) = match xs {
 
 ### Records
 
-```neve
+```n3v3
 getName(user) = match user {
     { name, .. } -> name,
+    _ -> "unknown",
 }
 
 isAdult(user) = match user {
-    { age } if age >= 18 -> true,
+    { age, .. } if age >= 18 -> true,
     _ -> false,
 }
 ```
 
 ### Option and Result
 
-```neve
+```n3v3
 divide(a, b) = {
     if b == 0 -> Err("div by zero")
     else Ok(a / b)
@@ -297,7 +298,7 @@ match divide(10, 2) {
 
 ### 基础
 
-```neve
+```n3v3
 describe(x) = match x {
     0 -> "零",
     1 -> "一",
@@ -307,7 +308,7 @@ describe(x) = match x {
 
 ### 列表匹配
 
-```neve
+```n3v3
 sum(xs) = match xs {
     [] -> 0,
     [h, ..t] -> h + sum(t),
@@ -316,20 +317,21 @@ sum(xs) = match xs {
 
 ### 记录匹配
 
-```neve
+```n3v3
 getName(user) = match user {
     { name, .. } -> name,
+    _ -> "未知",
 }
 
 isAdult(user) = match user {
-    { age } if age >= 18 -> true,
+    { age, .. } if age >= 18 -> true,
     _ -> false,
 }
 ```
 
 ### Option 和 Result
 
-```neve
+```n3v3
 divide(a, b) = {
     if b == 0 -> Err("除以零了")
     else Ok(a / b)
@@ -349,33 +351,29 @@ match divide(10, 2) {
 
 ### Define
 
-```neve
+```n3v3
 trait Show {
-    show(self) -> String
+    fn show(self) -> String;
 }
 
 trait Eq {
-    eq(self, other: Self) -> Bool
+    fn eq(self, other: Self) -> Bool;
 }
-```
 
-### Implement
-
-```neve
-type Point = { x: Int, y: Int }
+type Point = Int;
 
 impl Show for Point {
-    show(self) = `Point({self.x}, {self.y})`
+    fn show(self) -> String = `Point({self})`;
 }
 
 impl Eq for Point {
-    eq(self, other) = self.x == other.x && self.y == other.y
+    fn eq(self, other: Self) -> Bool = self == other;
 }
 ```
 
 ### Bounds
 
-```neve
+```n3v3
 print_all<T: Show>(items: List<T>) = {
     -- T must implement Show
 }
@@ -386,33 +384,29 @@ print_all<T: Show>(items: List<T>) = {
 
 ### 定义
 
-```neve
+```n3v3
 trait Show {
-    show(self) -> String
+    fn show(self) -> String;
 }
 
 trait Eq {
-    eq(self, other: Self) -> Bool
+    fn eq(self, other: Self) -> Bool;
 }
-```
 
-### 实现
-
-```neve
-type Point = { x: Int, y: Int }
+type Point = Int;
 
 impl Show for Point {
-    show(self) = `Point({self.x}, {self.y})`
+    fn show(self) -> String = `Point({self})`;
 }
 
 impl Eq for Point {
-    eq(self, other) = self.x == other.x && self.y == other.y
+    fn eq(self, other: Self) -> Bool = self == other;
 }
 ```
 
 ### 约束
 
-```neve
+```n3v3
 print_all<T: Show>(items: List<T>) = {
     -- T 必须实现 Show
 }
@@ -426,15 +420,15 @@ print_all<T: Show>(items: List<T>) = {
 
 ### Define
 
-```neve
--- utils.neve
+```n3v3
+-- utils.n3v3
 add(x, y) = x + y
-helper() = 42  -- private
 ```
+Since v4.0, n3v3 has no private-binding syntax: all bindings are public.
 
 ### Import
 
-```neve
+```n3v3
 use utils
 r = utils.add(1, 2)
 
@@ -448,15 +442,15 @@ r = add(1, 2)
 
 ### 定义
 
-```neve
--- utils.neve
+```n3v3
+-- utils.n3v3
 add(x, y) = x + y
-helper() = 42  -- 私有的
 ```
+从 v4.0 起，n3v3 不再有私有绑定语法：所有绑定都是 public。
 
 ### 导入
 
-```neve
+```n3v3
 use utils
 r = utils.add(1, 2)
 
@@ -477,16 +471,24 @@ r = add(1, 2)
 4. **Use pipes** for data transformation chains
 5. **Match exhaustively** — handle all cases
 
-```neve
-use std.list (filter, map, fold)
+```n3v3
+use std.list = list
 
--- Good: clear data flow
+let data = [1, 2, 3, 4]
+let valid = |x| x % 2 == 0
+let transform = |x| x * 2
+let add = |acc, x| acc + x
+
+filter_valid(xs) = list.filter(valid, xs)
+map_transform(xs) = list.map(transform, xs)
+fold_sum(xs) = list.fold(0, add, xs)
+
 result = data
-    |> filter(valid)
-    |> map(transform)
-    |> fold(0, add)
-```
+    |> filter_valid
+    |> map_transform
+    |> fold_sum
 
+```
 ---
 
 
@@ -496,16 +498,24 @@ result = data
 4. **数据变换用管道**，看着清楚
 5. **匹配要穷尽**，别漏情况
 
-```neve
-use std.list (filter, map, fold)
+```n3v3
+use std.list = list
 
--- 这样写清楚
+let data = [1, 2, 3, 4]
+let valid = |x| x % 2 == 0
+let transform = |x| x * 2
+let add = |acc, x| acc + x
+
+filter_valid(xs) = list.filter(valid, xs)
+map_transform(xs) = list.map(transform, xs)
+fold_sum(xs) = list.fold(0, add, xs)
+
 result = data
-    |> filter(valid)
-    |> map(transform)
-    |> fold(0, add)
-```
+    |> filter_valid
+    |> map_transform
+    |> fold_sum
 
+```
 ---
 
 

@@ -1,9 +1,9 @@
 //! Syntax policy tests to protect "zero ambiguity" guarantees.
 
-use neve_parser::parse;
-use neve_syntax::{ExprKind, ItemKind};
+use n3v3_parser::parse;
+use n3v3_syntax::{ExprKind, ItemKind};
 
-fn parse_single_item(source: &str) -> neve_syntax::Item {
+fn parse_single_item(source: &str) -> n3v3_syntax::Item {
     let (file, diags) = parse(source);
     assert!(diags.is_empty(), "parse diagnostics: {diags:?}");
     assert_eq!(file.items.len(), 1, "expected a single item");

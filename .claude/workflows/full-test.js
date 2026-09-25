@@ -1,49 +1,29 @@
 export const meta = {
   name: 'full-test',
-  description: 'Run full test suite: unit + integration + E2E + clippy + fmt + compatibility audit',
+  description: 'Run the canonical validation gate and mechanically verify repository counts',
   phases: [
-    { title: 'Unit + Integration', detail: 'cargo test --workspace' },
-    { title: 'E2E', detail: 'cargo test --test end_to_end -- --nocapture' },
-    { title: 'Clippy', detail: 'cargo clippy --workspace --all-targets -- -D warnings' },
-    { title: 'Format', detail: 'cargo fmt --all -- --check' },
-    { title: 'Compatibility audit', detail: 'Count ignored/deprecated tests and code paths' },
+    { title: 'CI validation', detail: 'scripts/validate.sh --ci' },
+    { title: 'Canonical counts', detail: 'scripts/counts.sh --json with mechanical declaration comparison' },
   ],
 }
 
-phase('Unit + Integration')
-const unitResult = await agent('Run `cargo test --workspace` and report any failures.', {
-  label: 'unit-test'
-})
-log(unitResult || 'Unit tests: no output captured')
+phase('CI validation')
+const validation = await agent(
+  'From the repository root, run `scripts/validate.sh --ci`. Use the runner-configured timeout; expose a timeout, cancellation, unavailable tool, or non-zero exit as a non-empty failure or explicitly unverified result. Do not replace failures with a success summary.',
+  { label: 'validate-ci' },
+)
+log(validation)
 
-phase('E2E')
-const e2eResult = await agent('Run `cargo test --test end_to_end -- --nocapture` and count passed/failed/ignored.', {
-  label: 'e2e-test'
-})
-log(e2eResult || 'E2E tests: no output captured')
-
-phase('Clippy')
-const clippyResult = await agent('Run `cargo clippy --workspace --all-targets -- -D warnings` and report any warnings or errors.', {
-  label: 'clippy'
-})
-log(clippyResult || 'Clippy: clean')
-
-phase('Format')
-const fmtResult = await agent('Run `cargo fmt --all -- --check` and report if any files would be reformatted.', {
-  label: 'fmt'
-})
-log(fmtResult || 'Format: clean')
-
-phase('Compatibility audit')
-const diffResult = await agent('Count the number of `#[ignore]` tests and `#[deprecated]` usages across `tests/` and `crates/`. Report findings.', {
-  label: 'compatibility-audit'
-})
-log(diffResult || 'Compatibility audit: no output captured')
+phase('Canonical counts')
+const counts = await agent(
+  'From the repository root, run `scripts/counts.sh --json`, then run `scripts/check-docs.sh --strict` to mechanically compare every emitted key/value with the repository declarations. Use the runner-configured timeout; report missing sources, mismatches, timeout, cancellation, or either non-zero exit as failures or explicitly unverified results, not as an informational number report. Do not swallow a non-zero exit.',
+  { label: 'counts-check' },
+)
+log(counts)
 
 return {
-  unit: unitResult,
-  e2e: e2eResult,
-  clippy: clippyResult,
-  fmt: fmtResult,
-  differential: diffResult,
+  validation,
+  counts,
 }
+
+

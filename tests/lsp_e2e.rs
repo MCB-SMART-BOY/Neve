@@ -3,13 +3,13 @@
 
 #[cfg(test)]
 mod tests {
-    use neve_lsp::Document;
+    use n3v3_lsp::Document;
 
-    /// Test that a complete analysis pipeline works for a realistic Neve program.
+    /// Test that a complete analysis pipeline works for a realistic n3v3 program.
     #[test]
     fn test_e2e_analysis_pipeline() {
         let source = r#"
-let name = "Neve";
+let name = "n3v3";
 let version = 1;
 
 fn greet(person) = 42;
@@ -29,7 +29,7 @@ let items = [1, 2, 3];
 let total = 1 + 2 + 3;
 "#;
 
-        let doc = Document::new("file:///e2e.neve".to_string(), source.to_string());
+        let doc = Document::new("file:///e2e.n3v3".to_string(), source.to_string());
 
         // 1. Parse succeeded
         assert!(doc.ast.is_some(), "AST should be produced");
@@ -72,7 +72,7 @@ let total = 1 + 2 + 3;
         let errors: Vec<_> = doc
             .diagnostics
             .iter()
-            .filter(|d| matches!(d.severity, neve_lsp::DiagnosticSeverity::Error))
+            .filter(|d| matches!(d.severity, n3v3_lsp::DiagnosticSeverity::Error))
             .collect();
         assert!(
             errors.is_empty(),
@@ -89,12 +89,12 @@ let x: Int = "not an int";
 let y = x + 1;
 "#;
 
-        let doc = Document::new("file:///error.neve".to_string(), source.to_string());
+        let doc = Document::new("file:///error.n3v3".to_string(), source.to_string());
 
         let errors: Vec<_> = doc
             .diagnostics
             .iter()
-            .filter(|d| matches!(d.severity, neve_lsp::DiagnosticSeverity::Error))
+            .filter(|d| matches!(d.severity, n3v3_lsp::DiagnosticSeverity::Error))
             .collect();
         assert!(!errors.is_empty(), "Type errors should produce diagnostics");
     }
@@ -112,7 +112,7 @@ struct Point { x: Int, y: Int };
 let p = Point { x = 1, y = 2 };
 "#;
 
-        let doc = Document::new("file:///codelens.neve".to_string(), source.to_string());
+        let doc = Document::new("file:///codelens.n3v3".to_string(), source.to_string());
         let index = doc.symbol_index.as_ref().expect("symbol index");
 
         // greet() is called 3 times
@@ -129,7 +129,7 @@ let p = Point { x = 1, y = 2 };
         assert!(
             greet_defs
                 .iter()
-                .any(|s| matches!(s.kind, neve_lsp::symbol_index::SymbolKind::Function)),
+                .any(|s| matches!(s.kind, n3v3_lsp::symbol_index::SymbolKind::Function)),
             "greet should be a Function"
         );
     }
@@ -183,7 +183,7 @@ fn distance(a, b) = {
 import std.io as io;
 "#;
 
-        let tokens = neve_lsp::generate_semantic_tokens_from_ast(source);
+        let tokens = n3v3_lsp::generate_semantic_tokens_from_ast(source);
         assert!(!tokens.is_empty(), "Should produce semantic tokens");
         // Should have at least: Point (type), Color (type), Show (type),
         // distance (function), io (variable/import), x/y fields, Red/Green/Blue
@@ -203,7 +203,7 @@ fn identity(a) = a;
 let y = identity(x);
 "#;
 
-        let doc = Document::new("file:///hover.neve".to_string(), source.to_string());
+        let doc = Document::new("file:///hover.n3v3".to_string(), source.to_string());
 
         assert!(
             !doc.definition_hovers.is_empty(),
@@ -227,7 +227,7 @@ fn outer(a) = {
 let result = outer(x);
 "#;
 
-        let doc = Document::new("file:///scope.neve".to_string(), source.to_string());
+        let doc = Document::new("file:///scope.n3v3".to_string(), source.to_string());
         let index = doc
             .symbol_index
             .as_ref()
@@ -263,7 +263,7 @@ let result = outer(x);
     fn test_e2e_method_completion_types() {
         // String operations
         let string_doc = Document::new(
-            "file:///string.neve".to_string(),
+            "file:///string.n3v3".to_string(),
             r#"let s = "hello"; let upper = s.upper();"#.to_string(),
         );
         assert!(string_doc.semantics.is_some());
@@ -277,7 +277,7 @@ let result = outer(x);
 
         // List operations
         let list_doc = Document::new(
-            "file:///list.neve".to_string(),
+            "file:///list.n3v3".to_string(),
             r#"let xs = [1,2,3]; let len = xs.len();"#.to_string(),
         );
         assert!(list_doc.semantics.is_some());
@@ -293,7 +293,7 @@ let result = outer(x);
     #[test]
     fn test_e2e_formatter() {
         let input = "x=42\ny =x+1\n";
-        let formatted = neve_fmt::format(input).expect("Format should succeed");
+        let formatted = n3v3_fmt::format(input).expect("Format should succeed");
         assert!(!formatted.is_empty());
         assert!(formatted.contains("x = 42"));
     }
@@ -303,7 +303,7 @@ let result = outer(x);
     fn test_e2e_completion_specs_not_empty() {
         // Verify that the completion specs module loads correctly
         let doc = Document::new(
-            "file:///completions.neve".to_string(),
+            "file:///completions.n3v3".to_string(),
             "let _ = 1;\n".to_string(),
         );
         // Document analysis should succeed
@@ -315,7 +315,7 @@ let result = outer(x);
     #[test]
     fn test_e2e_user_type_resolution() {
         let doc = Document::new(
-            "file:///user_type.neve".to_string(),
+            "file:///user_type.n3v3".to_string(),
             r#"
 struct Point { x: Int, y: Int };
 let p = #{ x = 1, y = 2 };

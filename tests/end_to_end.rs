@@ -1,15 +1,15 @@
 //! Integration smoke tests for the real frontend/runtime paths.
 //!
-//! These tests cover: parse + lower + type check + HIR evaluation via `neve_frontend`.
+//! These tests cover: parse + lower + type check + HIR evaluation via `n3v3_frontend`.
 
 mod support;
 
-use neve_common::Int;
-use neve_derive::Hash;
-use neve_diagnostic::{DiagnosticKind, ErrorCode, Severity};
-use neve_eval::{EvalError, Evaluator, Value};
-use neve_frontend::{AnalysisResult, analyze_source};
-use neve_std::stdlib;
+use n3v3_common::Int;
+use n3v3_derive::Hash;
+use n3v3_diagnostic::{DiagnosticKind, ErrorCode, Severity};
+use n3v3_eval::{EvalError, Evaluator, Value};
+use n3v3_frontend::{AnalysisResult, analyze_source};
+use n3v3_std::stdlib;
 use std::fs;
 use std::rc::Rc;
 use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
@@ -29,7 +29,7 @@ fn analyze_without_diagnostics(source: &str) -> AnalysisResult {
     let errors: Vec<_> = analysis
         .diagnostics
         .iter()
-        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .filter(|d| d.severity == n3v3_diagnostic::Severity::Error)
         .collect();
     assert!(
         errors.is_empty(),
@@ -513,7 +513,7 @@ fn test_end_to_end_method_call_fallback_runtime_parity() {
         fn twice(x: Int) -> Int = x + x;
         let y = 21.twice();
     ";
-    let analysis = neve_frontend::analyze_source(source);
+    let analysis = n3v3_frontend::analyze_source(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
     assert_eq!(hir_value, Value::Int(int(42)));
     // Verify a warning was emitted about method fallback
@@ -688,10 +688,10 @@ fn test_end_to_end_std_typed_path_adapter_runtime_parity() {
     assert_runtime_parity(
         "
         use std.path = path;
-        let nested = path.joinPath(path.fromString(\"/tmp\"), \"neve.txt\");
+        let nested = path.joinPath(path.fromString(\"/tmp\"), \"n3v3.txt\");
         let name = path.filenamePath(nested) ?? \"missing\";
         let ext = path.extensionPath(nested) ?? \"missing\";
-        let x = if name == \"neve.txt\" && ext == \"txt\" -> \"ok\" else \"nope\";
+        let x = if name == \"n3v3.txt\" && ext == \"txt\" -> \"ok\" else \"nope\";
         ",
         Value::String("ok".to_string().into()),
     );
@@ -742,7 +742,7 @@ fn test_end_to_end_std_io_current_dir_runtime_parity() {
 
 #[test]
 fn test_end_to_end_std_io_get_env_runtime_parity() {
-    let missing = "__NEVE_TEST_MISSING_ENV_37C93B7C__";
+    let missing = "__N3V3_TEST_MISSING_ENV_37C93B7C__";
     assert!(
         std::env::var_os(missing).is_none(),
         "test environment unexpectedly defines {missing}"
@@ -983,7 +983,7 @@ fn test_end_to_end_std_io_exec_with_matches_canonical_process_projection() {
 #[test]
 fn test_end_to_end_std_io_read_file_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("io-read-path.neve.txt");
+    let file_path = temp_dir.path().join("io-read-path.n3v3.txt");
     fs::write(&file_path, "hello-path").unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -1004,7 +1004,7 @@ fn test_end_to_end_std_io_read_file_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_read_file_bytes_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("io-read-bytes-path.neve.bin");
+    let file_path = temp_dir.path().join("io-read-bytes-path.n3v3.bin");
     std::fs::write(&file_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -1026,7 +1026,7 @@ fn test_end_to_end_std_io_read_file_bytes_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_read_dir_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let dir_path = temp_dir.path().join("io-read-dir-path.neve");
+    let dir_path = temp_dir.path().join("io-read-dir-path.n3v3");
     fs::create_dir_all(dir_path.join("nested")).unwrap();
     fs::write(dir_path.join("alpha.txt"), "a").unwrap();
     fs::write(dir_path.join("beta.txt"), "b").unwrap();
@@ -1060,7 +1060,7 @@ fn test_end_to_end_std_io_read_dir_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_read_dir_entry_paths_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let dir_path = temp_dir.path().join("io-read-dir-entry-paths.neve");
+    let dir_path = temp_dir.path().join("io-read-dir-entry-paths.n3v3");
     let file_path = dir_path.join("alpha.txt");
     let nested_path = dir_path.join("nested");
     fs::create_dir_all(&dir_path).unwrap();
@@ -1095,8 +1095,8 @@ fn test_end_to_end_std_io_read_dir_entry_paths_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_write_file_bytes_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let src_path = temp_dir.path().join("io-write-bytes-src.neve.bin");
-    let dst_path = temp_dir.path().join("io-write-bytes-dst.neve.bin");
+    let src_path = temp_dir.path().join("io-write-bytes-src.n3v3.bin");
+    let dst_path = temp_dir.path().join("io-write-bytes-dst.n3v3.bin");
     std::fs::write(&src_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
     let escaped_src = src_path
         .to_string_lossy()
@@ -1126,7 +1126,7 @@ fn test_end_to_end_std_io_write_file_bytes_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_write_file_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-write-path-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-write-path-dst.n3v3.txt");
     let escaped_dst = dst_path
         .to_string_lossy()
         .replace('\\', "\\\\")
@@ -1148,7 +1148,7 @@ fn test_end_to_end_std_io_write_file_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_write_file_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-write-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-write-dst.n3v3.txt");
     let escaped_dst = dst_path
         .to_string_lossy()
         .replace('\\', "\\\\")
@@ -1168,7 +1168,7 @@ fn test_end_to_end_std_io_write_file_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_append_file_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-append-path-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-append-path-dst.n3v3.txt");
     let escaped_dst = dst_path
         .to_string_lossy()
         .replace('\\', "\\\\")
@@ -1191,7 +1191,7 @@ fn test_end_to_end_std_io_append_file_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_append_file_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-append-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-append-dst.n3v3.txt");
     std::fs::write(&dst_path, "hello").unwrap();
     let escaped_dst = dst_path
         .to_string_lossy()
@@ -1213,10 +1213,10 @@ fn test_end_to_end_std_io_append_file_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_append_file_bytes_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let init_path = temp_dir.path().join("io-append-bytes-init.neve.bin");
-    let append_path = temp_dir.path().join("io-append-bytes-src.neve.bin");
-    let dst_path = temp_dir.path().join("io-append-bytes-dst.neve.bin");
-    let expected_path = temp_dir.path().join("io-append-bytes-expected.neve.bin");
+    let init_path = temp_dir.path().join("io-append-bytes-init.n3v3.bin");
+    let append_path = temp_dir.path().join("io-append-bytes-src.n3v3.bin");
+    let dst_path = temp_dir.path().join("io-append-bytes-dst.n3v3.bin");
+    let expected_path = temp_dir.path().join("io-append-bytes-expected.n3v3.bin");
     std::fs::write(&init_path, [0xaa]).unwrap();
     std::fs::write(&append_path, [0xde, 0xad, 0xbe]).unwrap();
     std::fs::write(&expected_path, [0xaa, 0xde, 0xad, 0xbe]).unwrap();
@@ -1381,7 +1381,7 @@ fn test_end_to_end_std_io_remove_dir_all_runtime_parity() {
 fn test_end_to_end_std_io_path_exists_runtime_parity() {
     let temp = TempDir::new().unwrap();
     let file = temp.path().join("exists.txt");
-    fs::write(&file, "neve").unwrap();
+    fs::write(&file, "n3v3").unwrap();
     let escaped = file.to_string_lossy().replace('\\', "\\\\");
     assert_runtime_parity(
         &format!(
@@ -1415,7 +1415,7 @@ fn test_end_to_end_std_io_is_dir_runtime_parity() {
 fn test_end_to_end_std_io_is_file_runtime_parity() {
     let temp = TempDir::new().unwrap();
     let file = temp.path().join("nested.txt");
-    fs::write(&file, "neve").unwrap();
+    fs::write(&file, "n3v3").unwrap();
     let escaped = file.to_string_lossy().replace('\\', "\\\\");
     assert_runtime_parity(
         &format!(
@@ -1433,7 +1433,7 @@ fn test_end_to_end_std_io_command_runtime_parity() {
     assert_runtime_parity(
         "
         use std.io = io;
-        let cmd = io.command(\"printf\", [\"neve\"]);
+        let cmd = io.command(\"printf\", [\"n3v3\"]);
         let x = if typeOf(cmd) == \"Command\" -> toString(cmd) else \"nope\";
         ",
         Value::String("<command:printf 1 arg(s)>".to_string().into()),
@@ -1445,7 +1445,7 @@ fn test_end_to_end_std_io_command_with_runtime_parity() {
     assert_runtime_parity(
         "
         use std.io = io;
-        let cmd = io.commandWith(#{ program = \"printf\", args = [\"neve\"], cwd = \"/tmp\" });
+        let cmd = io.commandWith(#{ program = \"printf\", args = [\"n3v3\"], cwd = \"/tmp\" });
         let x = if typeOf(cmd) == \"Command\" -> toString(cmd) else \"nope\";
         ",
         Value::String("<command:printf 1 arg(s), configured>".to_string().into()),
@@ -1457,7 +1457,7 @@ fn test_end_to_end_std_io_pipeline_runtime_parity() {
     assert_runtime_parity(
         "
         use std.io = io;
-        let pipe = io.pipeline([io.command(\"printf\", [\"neve\"]), io.command(\"cat\", [])]);
+        let pipe = io.pipeline([io.command(\"printf\", [\"n3v3\"]), io.command(\"cat\", [])]);
         let x = if typeOf(pipe) == \"Pipeline\" -> toString(pipe) else \"nope\";
         ",
         Value::String("<pipeline:2 command(s)>".to_string().into()),
@@ -1471,8 +1471,8 @@ fn test_end_to_end_std_io_pipeline_with_redirects_runtime_parity() {
         use std.io = io;
         use std.path = path;
         let pipe = io.pipelineWithRedirects(
-            io.pipeline([io.command(\"printf\", [\"neve\"]), io.command(\"cat\", [])]),
-            [io.redirectStdoutPath(path.fromString(\"/tmp/neve.out\"))]
+            io.pipeline([io.command(\"printf\", [\"n3v3\"]), io.command(\"cat\", [])]),
+            [io.redirectStdoutPath(path.fromString(\"/tmp/n3v3.out\"))]
         );
         let x = if typeOf(pipe) == \"Pipeline\" -> toString(pipe) else \"nope\";
         ",
@@ -1499,8 +1499,8 @@ fn test_end_to_end_std_io_exec_pipeline_with_redirect_runtime_parity() {
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("cmd", ["/C", "echo neve"]),
-                    io.command("cmd", ["/C", "findstr neve"])
+                    io.command("cmd", ["/C", "echo n3v3"]),
+                    io.command("cmd", ["/C", "findstr n3v3"])
                 ]),
                 [io.redirectStdoutPath(target)]
             )
@@ -1523,8 +1523,8 @@ fn test_end_to_end_std_io_exec_pipeline_with_redirect_runtime_parity() {
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("sh", ["-c", "printf neve"]),
-                    io.command("sh", ["-c", "grep neve"])
+                    io.command("sh", ["-c", "printf n3v3"]),
+                    io.command("sh", ["-c", "grep n3v3"])
                 ]),
                 [io.redirectStdoutPath(target)]
             )
@@ -1548,7 +1548,7 @@ fn test_end_to_end_std_io_redirect_stdout_path_runtime_parity() {
         "
         use std.io = io;
         use std.path = path;
-        let redirect = io.redirectStdoutPath(path.fromString(\"/tmp/neve.out\"));
+        let redirect = io.redirectStdoutPath(path.fromString(\"/tmp/n3v3.out\"));
         let x = if typeOf(redirect) == \"Redirect\" -> toString(redirect) else \"nope\";
         ",
         Value::String("<redirect:stdout:path>".to_string().into()),
@@ -1561,7 +1561,7 @@ fn test_end_to_end_std_io_redirect_stderr_path_runtime_parity() {
         "
         use std.io = io;
         use std.path = path;
-        let redirect = io.redirectStderrPath(path.fromString(\"/tmp/neve.err\"));
+        let redirect = io.redirectStderrPath(path.fromString(\"/tmp/n3v3.err\"));
         let x = if typeOf(redirect) == \"Redirect\" -> toString(redirect) else \"nope\";
         ",
         Value::String("<redirect:stderr:path>".to_string().into()),
@@ -1574,7 +1574,7 @@ fn test_end_to_end_std_io_redirect_stdin_path_runtime_parity() {
         "
         use std.io = io;
         use std.path = path;
-        let redirect = io.redirectStdinPath(path.fromString(\"/tmp/neve.in\"));
+        let redirect = io.redirectStdinPath(path.fromString(\"/tmp/n3v3.in\"));
         let x = if typeOf(redirect) == \"Redirect\" -> toString(redirect) else \"nope\";
         ",
         Value::String("<redirect:stdin:path>".to_string().into()),
@@ -1613,7 +1613,7 @@ fn test_end_to_end_std_io_exec_command_with_redirect_runtime_parity() {
 fn test_end_to_end_std_io_exec_command_with_stdin_redirect_runtime_parity() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
         format!(
@@ -1623,7 +1623,7 @@ fn test_end_to_end_std_io_exec_command_with_stdin_redirect_runtime_parity() {
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("cmd", ["/C", "findstr neve"]),
+                io.command("cmd", ["/C", "findstr n3v3"]),
                 [io.redirectStdinPath(target)]
             )
         );
@@ -1642,7 +1642,7 @@ fn test_end_to_end_std_io_exec_command_with_stdin_redirect_runtime_parity() {
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("sh", ["-c", "grep neve"]),
+                io.command("sh", ["-c", "grep n3v3"]),
                 [io.redirectStdinPath(target)]
             )
         );
@@ -1662,7 +1662,7 @@ fn test_end_to_end_std_io_exec_command_with_redirects_runtime_parity() {
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("stdin.txt");
     let stdout_path = temp.path().join("stdout.txt");
-    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
@@ -1674,7 +1674,7 @@ fn test_end_to_end_std_io_exec_command_with_redirects_runtime_parity() {
         let output = path.fromString("{stdout_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("cmd", ["/C", "findstr neve"]),
+                io.command("cmd", ["/C", "findstr n3v3"]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
         );
@@ -1696,7 +1696,7 @@ fn test_end_to_end_std_io_exec_command_with_redirects_runtime_parity() {
         let output = path.fromString("{stdout_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("sh", ["-c", "grep neve"]),
+                io.command("sh", ["-c", "grep n3v3"]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
         );
@@ -1717,7 +1717,7 @@ fn test_end_to_end_std_io_exec_command_with_redirects_runtime_parity() {
 fn test_end_to_end_std_io_exec_pipeline_with_stdin_redirect_runtime_parity() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("pipeline-stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
         format!(
@@ -1728,8 +1728,8 @@ fn test_end_to_end_std_io_exec_pipeline_with_stdin_redirect_runtime_parity() {
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("cmd", ["/C", "findstr neve"]),
-                    io.command("cmd", ["/C", "findstr neve"])
+                    io.command("cmd", ["/C", "findstr n3v3"]),
+                    io.command("cmd", ["/C", "findstr n3v3"])
                 ]),
                 [io.redirectStdinPath(target)]
             )
@@ -1750,8 +1750,8 @@ fn test_end_to_end_std_io_exec_pipeline_with_stdin_redirect_runtime_parity() {
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("sh", ["-c", "grep neve"]),
-                    io.command("sh", ["-c", "grep neve"])
+                    io.command("sh", ["-c", "grep n3v3"]),
+                    io.command("sh", ["-c", "grep n3v3"])
                 ]),
                 [io.redirectStdinPath(target)]
             )
@@ -1772,7 +1772,7 @@ fn test_end_to_end_std_io_exec_pipeline_with_redirects_runtime_parity() {
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("pipeline-stdin.txt");
     let stdout_path = temp.path().join("pipeline-stdout.txt");
-    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
@@ -1785,8 +1785,8 @@ fn test_end_to_end_std_io_exec_pipeline_with_redirects_runtime_parity() {
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("cmd", ["/C", "findstr neve"]),
-                    io.command("cmd", ["/C", "findstr neve"])
+                    io.command("cmd", ["/C", "findstr n3v3"]),
+                    io.command("cmd", ["/C", "findstr n3v3"])
                 ]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
@@ -1810,8 +1810,8 @@ fn test_end_to_end_std_io_exec_pipeline_with_redirects_runtime_parity() {
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("sh", ["-c", "grep neve"]),
-                    io.command("sh", ["-c", "grep neve"])
+                    io.command("sh", ["-c", "grep n3v3"]),
+                    io.command("sh", ["-c", "grep n3v3"])
                 ]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
@@ -1883,7 +1883,7 @@ fn test_end_to_end_std_io_pipeline_with_redirects_rejects_final_stage_stdout_con
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
+                    io.command("printf", ["n3v3"]),
                     [io.redirectStdoutPath(output)]
                 )
             ]),
@@ -1911,7 +1911,7 @@ fn test_end_to_end_std_io_exec_pipeline_rejects_non_final_stage_stdout_redirect(
         let result = io.execPipeline(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
+                    io.command("printf", ["n3v3"]),
                     [io.redirectStdoutPath(out)]
                 ),
                 io.command("cat", [])
@@ -1938,7 +1938,7 @@ fn test_end_to_end_std_io_pipeline_with_redirects_rejects_boundary_stdin_conflic
         let input = path.fromString("{stdin_path_source}");
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
-                io.commandWith(#{{ program = "cat", stdin = "neve" }})
+                io.commandWith(#{{ program = "cat", stdin = "n3v3" }})
             ]),
             [io.redirectStdinPath(input)]
         );
@@ -1957,8 +1957,8 @@ fn test_end_to_end_std_io_command_with_redirects_runtime_parity() {
         use std.io = io;
         use std.path = path;
         let cmd = io.commandWithRedirects(
-            io.command("printf", ["neve"]),
-            [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            io.command("printf", ["n3v3"]),
+            [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
         );
         let x =
             typeOf(cmd) == "Command" &&
@@ -1981,10 +1981,10 @@ fn test_end_to_end_std_io_exec_pipeline_honors_stage_local_redirects_runtime_par
         let result = io.execPipeline(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("cmd", ["/C", "(echo neve) & (echo err 1>&2)"]),
+                    io.command("cmd", ["/C", "(echo n3v3) & (echo err 1>&2)"]),
                     [io.redirectStderrPath(err)]
                 ),
-                io.command("cmd", ["/C", "findstr neve"])
+                io.command("cmd", ["/C", "findstr n3v3"])
             ])
         );
         let redirected = io.readFilePath(err);
@@ -2005,10 +2005,10 @@ fn test_end_to_end_std_io_exec_pipeline_honors_stage_local_redirects_runtime_par
         let result = io.execPipeline(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("sh", ["-c", "printf neve && printf err >&2"]),
+                    io.command("sh", ["-c", "printf n3v3 && printf err >&2"]),
                     [io.redirectStderrPath(err)]
                 ),
-                io.command("sh", ["-c", "grep neve"])
+                io.command("sh", ["-c", "grep n3v3"])
             ])
         );
         let redirected = io.readFilePath(err);
@@ -2057,7 +2057,7 @@ fn test_end_to_end_std_io_task_command_runtime_parity() {
     assert_runtime_parity(
         "
         use std.io = io;
-        let task = io.taskCommand(io.command(\"printf\", [\"neve\"]));
+        let task = io.taskCommand(io.command(\"printf\", [\"n3v3\"]));
         let x = if typeOf(task) == \"Task\" -> toString(task) else \"nope\";
         ",
         Value::String("<task:command->ProcessResult>".to_string().into()),
@@ -2070,7 +2070,7 @@ fn test_end_to_end_std_io_task_pipeline_runtime_parity() {
         "
         use std.io = io;
         let task = io.taskPipeline(io.pipeline([
-            io.command(\"printf\", [\"neve\"]),
+            io.command(\"printf\", [\"n3v3\"]),
             io.command(\"cat\", [])
         ]));
         let x = if typeOf(task) == \"Task\" -> toString(task) else \"nope\";
@@ -2098,7 +2098,7 @@ fn test_end_to_end_std_io_await_tasks_runtime_parity() {
         "
         use std.io = io;
         let results = io.awaitTasks([
-            io.taskCommand(io.command(\"printf\", [\"neve\"])),
+            io.taskCommand(io.command(\"printf\", [\"n3v3\"])),
             io.taskPipeline(io.pipeline([
                 io.command(\"printf\", [\"lang\"]),
                 io.command(\"cat\", [])
@@ -2106,7 +2106,7 @@ fn test_end_to_end_std_io_await_tasks_runtime_parity() {
         ]);
         match results {
             [first, second] ->
-                io.processStdout(first) == \"neve\" &&
+                io.processStdout(first) == \"n3v3\" &&
                 io.processStdout(second) == \"lang\" &&
                 io.processSuccess(first) &&
                 io.processSuccess(second),
@@ -2123,7 +2123,7 @@ fn test_end_to_end_std_io_await_pipeline_task_runtime_parity() {
         "
         use std.io = io;
         let pipeline = io.pipeline([
-            io.command(\"printf\", [\"neve\"]),
+            io.command(\"printf\", [\"n3v3\"]),
             io.command(\"cat\", [])
         ]);
         let result = io.awaitTask(io.taskPipeline(pipeline));
@@ -2205,7 +2205,7 @@ fn test_end_to_end_std_io_process_stderr_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_path_exists_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("exists-path.neve.txt");
+    let file_path = temp_dir.path().join("exists-path.n3v3.txt");
     std::fs::write(&file_path, "exists").unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -2247,7 +2247,7 @@ fn test_end_to_end_std_io_is_dir_path_runtime_parity() {
 #[test]
 fn test_end_to_end_std_io_is_file_path_runtime_parity() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("file-path.neve.txt");
+    let file_path = temp_dir.path().join("file-path.n3v3.txt");
     std::fs::write(&file_path, "file").unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -2354,10 +2354,10 @@ fn test_end_to_end_write_read_roundtrip() {
         r#"
         use std.io = io;
         use std.string = string;
-        let _ = io.writeFile("/tmp/neve_e2e_rt.txt", "roundtrip data");
-        string.trim(io.readFile("/tmp/neve_e2e_rt.txt"))
+        let _ = io.writeFile("/tmp/n3v3_e2e_rt.txt", "roundtrip data");
+        string.trim(io.readFile("/tmp/n3v3_e2e_rt.txt"))
         "#,
-        neve_eval::Value::String("roundtrip data".to_string().into()),
+        n3v3_eval::Value::String("roundtrip data".to_string().into()),
     );
 }
 
@@ -2365,7 +2365,7 @@ fn test_end_to_end_write_read_roundtrip() {
 fn test_end_to_end_io_which_finds_sh() {
     assert_runtime_parity(
         r#"use std.io = io; match io.which("sh") { Some(_) -> true, None -> false }"#,
-        neve_eval::Value::Bool(true),
+        n3v3_eval::Value::Bool(true),
     );
 }
 
@@ -2378,19 +2378,19 @@ fn test_end_to_end_full_scripting_workflow() {
         use std.string = string;
         
         -- Write a test file
-        let _ = io.writeFile("/tmp/neve_workflow_test.txt", "line1\nline2\nline3");
+        let _ = io.writeFile("/tmp/n3v3_workflow_test.txt", "line1\nline2\nline3");
         
         -- Read it back
-        let content = io.readFile("/tmp/neve_workflow_test.txt");
+        let content = io.readFile("/tmp/n3v3_workflow_test.txt");
         
         -- Count lines via external command
-        let wc = io.execCommand(io.command("wc", ["-l", "/tmp/neve_workflow_test.txt"]));
+        let wc = io.execCommand(io.command("wc", ["-l", "/tmp/n3v3_workflow_test.txt"]));
         
         -- Verify everything worked
         let lines = string.lines(string.trim(content));
         io.processSuccess(wc)
         "#,
-        neve_eval::Value::Bool(true),
+        n3v3_eval::Value::Bool(true),
     );
 }
 
@@ -2407,13 +2407,13 @@ fn test_end_to_end_pipeline_with_timeout_completes() {
             None -> false
         }
         "#,
-        neve_eval::Value::Bool(true),
+        n3v3_eval::Value::Bool(true),
     );
 }
 
 #[test]
 fn test_end_to_end_effect_annotation_is_checked() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> String = io.readFile("/etc/hostname");
@@ -2432,7 +2432,7 @@ fn test_end_to_end_effect_annotation_is_checked() {
 
 #[test]
 fn test_end_to_end_effect_annotation_passes_with_effect_kw() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn good() -> String = io.readFile("/etc/hostname");
@@ -2461,13 +2461,13 @@ fn test_end_to_end_io_exec_command_streaming_returns_process_result() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_exec_command_streaming_effect_checking() {
     // Verify that io.execCommandStreaming is recognized as effectful.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> ProcessResult = io.execCommandStreaming(
@@ -2502,7 +2502,7 @@ fn test_end_to_end_io_exec_command_streaming_with_stdin() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2519,7 +2519,7 @@ fn test_end_to_end_io_exec_pipeline_streaming_returns_process_result() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2546,13 +2546,57 @@ line3
     );
     let analysis = analyze_without_diagnostics(&source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_read_file_lines_path_reads_file() {
+    // The Path-typed variant dispatches to `builtin_read_file_lines_path`, which
+    // requires a Path value: a String argument is a type error, so reaching the
+    // expected result proves the Path variant ran.
+    // Path 变体走 `builtin_read_file_lines_path`，要求 Path 值；传 String 会类型错误，
+    // 因此得到期望结果即证明 Path 变体确实执行。
+    let temp = TempDir::new().expect("temp dir should exist");
+    let file_path = temp.path().join("path-read.txt");
+    let file_path_source = file_path.to_string_lossy().replace("\\", "/");
+    std::fs::write(&file_path, "line1\nline2\nline3\n").expect("write should succeed");
+
+    let source = format!(
+        r#"
+        use std.io = io;
+        use std.path = path;
+        let _ = io.readFileLinesPath(path.fromString("{file_path_source}"), fn(line) {{ () }});
+        let x = true;
+        "#
+    );
+    assert_runtime_parity(&source, n3v3_eval::Value::Bool(true));
+}
+
+#[test]
+fn test_end_to_end_io_read_file_lines_path_missing_file_errors() {
+    let source = r#"
+        use std.io = io;
+        use std.path = path;
+        let _ = io.readFileLinesPath(path.fromString("/nonexistent/n3v3-missing-file.txt"), fn(line) { () });
+        let x = true;
+        "#;
+    assert_runtime_error_parity(source, "readFileLinesPath");
+}
+
+#[test]
+fn test_end_to_end_io_read_file_lines_missing_file_errors() {
+    let source = r#"
+        use std.io = io;
+        let _ = io.readFileLines("/nonexistent/n3v3-missing-file.txt", fn(line) { () });
+        let x = true;
+        "#;
+    assert_runtime_error_parity(source, "readFileLines");
 }
 
 #[test]
 fn test_end_to_end_io_exec_pipeline_streaming_effect_checking() {
     // Verify that io.execPipelineStreaming is recognized as effectful.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> ProcessResult = io.execPipelineStreaming(
@@ -2575,7 +2619,7 @@ fn test_end_to_end_io_exec_pipeline_streaming_effect_checking() {
 #[test]
 fn test_end_to_end_lambda_in_effect_fn_allows_effectful_calls() {
     // Regression: lambdas inside `effect` functions should inherit the effect context.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn good() -> ProcessResult = io.execCommandStreaming(
@@ -2602,7 +2646,7 @@ fn test_end_to_end_lambda_in_pure_fn_rejects_effectful_calls() {
     // is itself effectful, so lambdas inside it ARE allowed.
     // This test verifies that a truly pure function (no effectful calls in
     // its direct body) correctly rejects effectful calls in nested lambdas.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         // bad() calls io.execCommandStreaming, so it IS effectful.
@@ -2629,7 +2673,7 @@ fn test_end_to_end_lambda_in_pure_fn_rejects_effectful_calls() {
 #[test]
 fn test_end_to_end_impl_method_with_effect_allows_io() {
     // Impl method with `effect` should allow io calls.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         trait Logger { fn log(msg: String) -> Unit; };
@@ -2653,7 +2697,7 @@ fn test_end_to_end_impl_method_with_effect_allows_io() {
 #[test]
 fn test_end_to_end_impl_method_without_effect_rejects_io() {
     // Impl method without `effect` should reject io calls.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         trait Logger { fn log(msg: String) -> Unit; };
@@ -2690,7 +2734,7 @@ fn test_end_to_end_io_exec_command_streaming_with_timeout_returns_some() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2707,7 +2751,7 @@ fn test_end_to_end_io_exec_command_streaming_with_timeout_returns_none_on_timeou
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2727,7 +2771,7 @@ fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_returns_some() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2747,13 +2791,13 @@ fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_returns_none_on_timeo
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_exec_command_streaming_with_timeout_effect_checking() {
     // Verify that io.execCommandStreamingWithTimeout is recognized as effectful.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> Option = io.execCommandStreamingWithTimeout(
@@ -2777,7 +2821,7 @@ fn test_end_to_end_io_exec_command_streaming_with_timeout_effect_checking() {
 #[test]
 fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_effect_checking() {
     // Verify that io.execPipelineStreamingWithTimeout is recognized as effectful.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> Option = io.execPipelineStreamingWithTimeout(
@@ -2810,7 +2854,7 @@ fn test_end_to_end_io_on_signal_registers_handler() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2836,7 +2880,7 @@ fn test_end_to_end_io_on_signal_rejects_unknown_signal() {
 #[test]
 fn test_end_to_end_io_on_signal_effect_checking() {
     // Verify that io.onSignal is recognized as effectful.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> Unit = io.onSignal("INT", fn() { () });
@@ -2866,7 +2910,7 @@ fn test_end_to_end_io_event_map_transforms_event() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -2880,13 +2924,13 @@ fn test_end_to_end_io_event_filter_chains_predicate() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_event_map_effect_checking() {
     // Verify that io.eventMap is NOT effectful (it's a pure constructor).
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn ok() -> Event = io.eventMap(io.every(1), fn(x) { x + 1 });
@@ -2906,7 +2950,7 @@ fn test_end_to_end_io_event_map_effect_checking() {
 #[test]
 fn test_end_to_end_io_event_filter_effect_checking() {
     // Verify that io.eventFilter is NOT effectful (it's a pure constructor).
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn ok() -> Event = io.eventFilter(io.every(1), fn(x) { x > 0 });
@@ -2928,7 +2972,7 @@ fn test_end_to_end_io_event_filter_effect_checking() {
 #[test]
 fn test_frontend_suggests_names_for_undefined_global() {
     // Verify that undefined globals produce suggestions when known names exist.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         fn greet(name: String) -> String = name;
         let x = greeter("world");
@@ -2949,7 +2993,7 @@ fn test_frontend_suggests_names_for_undefined_global() {
 #[test]
 fn test_frontend_levenshtein_suggests_close_match() {
     // Verify that typos of known functions get "did you mean?" suggestions.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         fn greet(name: String) -> String = name;
         let x = greete("world");
@@ -2969,7 +3013,7 @@ fn test_frontend_levenshtein_suggests_close_match() {
 #[test]
 fn test_frontend_levenshtein_suggests_builtin_typo() {
     // Verify that typos of builtins get "did you mean?" suggestions.
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = pront("hello");
         "#,
@@ -2998,7 +3042,7 @@ fn test_end_to_end_io_spawn_returns_int_id() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3014,7 +3058,7 @@ fn test_end_to_end_io_spawn_and_poll_returns_result() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3029,12 +3073,12 @@ fn test_end_to_end_io_cancel_removes_task() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_spawn_effect_checking() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> Int = io.spawn(io.taskCommand(io.command("echo", ["x"])));
@@ -3064,7 +3108,7 @@ fn test_end_to_end_command_pipe_creates_pipeline() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3079,7 +3123,7 @@ fn test_end_to_end_command_pipe_executes() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3088,7 +3132,7 @@ fn test_end_to_end_function_pipe_still_works() {
     fn double(x: Int) -> Int = x * 2;
     let x = 21 |> double;
     "#;
-    assert_runtime_parity(source, neve_eval::Value::Int(42.into()));
+    assert_runtime_parity(source, n3v3_eval::Value::Int(42.into()));
 }
 
 // === Bytes module tests ===
@@ -3124,7 +3168,7 @@ fn test_end_to_end_bytes_concat() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3138,7 +3182,7 @@ fn test_end_to_end_bytes_from_string_roundtrip() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3151,7 +3195,7 @@ fn test_end_to_end_bytes_is_empty() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3165,7 +3209,7 @@ fn test_end_to_end_bytes_from_list_roundtrip() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === Match exhaustiveness tests for List/Tuple ===
@@ -3173,7 +3217,7 @@ fn test_end_to_end_bytes_from_list_roundtrip() {
 #[test]
 fn test_frontend_list_match_exhaustive_with_empty_and_nonempty() {
     // match with [] and [_..] should be exhaustive for lists
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = match [] { [] -> 0, [..] -> 1 };
         "#,
@@ -3192,7 +3236,7 @@ fn test_frontend_list_match_exhaustive_with_empty_and_nonempty() {
 #[test]
 fn test_frontend_list_match_non_exhaustive_missing_empty() {
     // match with only fixed-length patterns should report non-exhaustive
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = match [] { [a] -> a, [a, b] -> a + b };
         "#,
@@ -3211,7 +3255,7 @@ fn test_frontend_list_match_non_exhaustive_missing_empty() {
 #[test]
 fn test_frontend_list_match_non_exhaustive_missing_nonempty() {
     // match without non-empty coverage should report missing
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = match [] { [] -> 0 };
         "#,
@@ -3230,7 +3274,7 @@ fn test_frontend_list_match_non_exhaustive_missing_nonempty() {
 #[test]
 fn test_frontend_tuple_match_exhaustive() {
     // match covering all tuple positions should be exhaustive
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = match (1, true) { (_, _) -> 0 };
         "#,
@@ -3261,7 +3305,7 @@ fn test_end_to_end_spawn_multiple_tasks() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // -- Command pipe chain --
@@ -3275,7 +3319,7 @@ fn test_end_to_end_pipe_chain_two_commands() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3289,7 +3333,7 @@ fn test_end_to_end_pipe_chain_three_commands() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // -- Nested match with guards --
@@ -3325,7 +3369,7 @@ fn test_end_to_end_bytes_roundtrip_in_memory() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // -- Signal handler type validation --
@@ -3362,7 +3406,7 @@ fn test_end_to_end_tuple_destructure_and_match() {
 // -- List rest pattern in match --
 #[test]
 fn test_end_to_end_list_rest_match_exhaustiveness() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = match [1, 2, 3] {
             [] -> 0,
@@ -3384,7 +3428,7 @@ fn test_end_to_end_list_rest_match_exhaustiveness() {
 // -- Fetch (network) type check --
 #[test]
 fn test_end_to_end_fetch_type_checking() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.fetch = fetch;
         fn get() -> fetch.Result = fetch.url("https://example.com");
@@ -3432,7 +3476,7 @@ fn test_end_to_end_spawn_pipeline() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === Temporal constraint tests (retry/ensure) ===
@@ -3480,7 +3524,7 @@ fn test_end_to_end_io_ensure_eventually_true() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === Full pipeline workflow (spawn + poll) ===
@@ -3497,7 +3541,7 @@ fn test_end_to_end_full_pipeline_spawn_poll_workflow() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === Type-level tests for new features ===
@@ -3505,7 +3549,7 @@ fn test_end_to_end_full_pipeline_spawn_poll_workflow() {
 #[test]
 fn test_end_to_end_bytes_type_is_pure() {
     // bytes constructors should be usable from pure functions
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.bytes = bytes;
         fn ok() -> Bytes = bytes.fromString("hello");
@@ -3525,7 +3569,7 @@ fn test_end_to_end_bytes_type_is_pure() {
 #[test]
 fn test_end_to_end_command_type_is_pure() {
     // Command constructors should be pure
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn ok() -> Command = io.command("echo", ["hello"]);
@@ -3546,7 +3590,7 @@ fn test_end_to_end_command_type_is_pure() {
 #[test]
 fn test_end_to_end_empty_list_match_correctly_reports_non_exhaustive() {
     // [] only covers empty list — missing [..] for non-empty
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let x = match [] {
             [] -> 0,
@@ -3566,7 +3610,7 @@ fn test_end_to_end_empty_list_match_correctly_reports_non_exhaustive() {
 // === Record pattern exhaustiveness ===
 #[test]
 fn test_frontend_record_match_exhaustive() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let r = #{ name = "test", age = 30 };
         let x = match r {
@@ -3587,7 +3631,7 @@ fn test_frontend_record_match_exhaustive() {
 
 #[test]
 fn test_frontend_record_match_non_exhaustive() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         let r = #{ name = "test", age = 30 };
         let x = match r {
@@ -3617,7 +3661,7 @@ fn test_end_to_end_io_spawn_with_timeout_returns_id() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3630,7 +3674,7 @@ fn test_end_to_end_io_spawn_with_timeout_cancels() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === TTY tests ===
@@ -3642,7 +3686,7 @@ fn test_end_to_end_io_is_tty_returns_bool() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3654,14 +3698,14 @@ fn test_end_to_end_io_terminal_size_type() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === Nested destructuring io.args() ===
 
 #[test]
 fn test_end_to_end_io_args_returns_tuple_with_flags() {
-    neve_std::set_script_args(vec![
+    n3v3_std::set_script_args(vec![
         "input.txt".to_string(),
         "-v".to_string(),
         "-j".to_string(),
@@ -3674,12 +3718,12 @@ fn test_end_to_end_io_args_returns_tuple_with_flags() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_args_tuple_destructure() {
-    neve_std::set_script_args(vec!["src.txt".to_string(), "dest.txt".to_string()]);
+    n3v3_std::set_script_args(vec!["src.txt".to_string(), "dest.txt".to_string()]);
     // io.args() returns (List<String>, Record) - destructure as let (files, flags)
     let source = r#"
     use std.io = io;
@@ -3688,12 +3732,12 @@ fn test_end_to_end_io_args_tuple_destructure() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_args_flags_parsed() {
-    neve_std::set_script_args(vec!["-v".to_string()]);
+    n3v3_std::set_script_args(vec!["-v".to_string()]);
     let source = r#"
     use std.io = io;
     let args = io.args();
@@ -3701,12 +3745,12 @@ fn test_end_to_end_io_args_flags_parsed() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_args_named_destructure() {
-    neve_std::set_script_args(vec![
+    n3v3_std::set_script_args(vec![
         "input.txt".to_string(),
         "-v".to_string(),
         "-j".to_string(),
@@ -3725,7 +3769,7 @@ fn test_end_to_end_io_args_named_destructure() {
 
 #[test]
 fn test_end_to_end_io_args_files_and_flags_access() {
-    neve_std::set_script_args(vec!["a.txt".to_string(), "-v".to_string()]);
+    n3v3_std::set_script_args(vec!["a.txt".to_string(), "-v".to_string()]);
     // Access through let binding of io.args()
     let source = r#"
     use std.io = io;
@@ -3734,14 +3778,14 @@ fn test_end_to_end_io_args_files_and_flags_access() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === Edge cases for io.args() ===
 
 #[test]
 fn test_end_to_end_io_args_negative_number_is_positional() {
-    neve_std::set_script_args(vec!["-10".to_string()]);
+    n3v3_std::set_script_args(vec!["-10".to_string()]);
     let source = r#"
     use std.io = io;
     let args = io.args();
@@ -3749,12 +3793,12 @@ fn test_end_to_end_io_args_negative_number_is_positional() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_args_dash_dash_stops() {
-    neve_std::set_script_args(vec!["-v".to_string(), "--".to_string(), "-x".to_string()]);
+    n3v3_std::set_script_args(vec!["-v".to_string(), "--".to_string(), "-x".to_string()]);
     let source = r#"
     use std.io = io;
     let args = io.args();
@@ -3762,12 +3806,12 @@ fn test_end_to_end_io_args_dash_dash_stops() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
 fn test_end_to_end_io_args_single_dash_positional() {
-    neve_std::set_script_args(vec!["-".to_string()]);
+    n3v3_std::set_script_args(vec!["-".to_string()]);
     let source = r#"
     use std.io = io;
     let args = io.args();
@@ -3775,40 +3819,28 @@ fn test_end_to_end_io_args_single_dash_positional() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // === io.tempDir tests ===
 
 #[test]
-fn test_end_to_end_io_temp_dir_type_checks() {
+fn test_end_to_end_io_temp_dir_returns_value_and_cleans_up() {
     let source = r#"
     use std.io = io;
-    let result = io.tempDir(fn(dir) { io.write(dir, "hello"); 42 });
-    let x = result == 42;
+    let result = io.tempDir(fn(dir) { #{ value = 42, path = dir } });
+    let x = result.value == 42 && !io.pathExistsPath(result.path);
     "#;
-    let analysis = analyze_source(source);
-    let _ = eval_hir(&analysis);
+    let analysis = analyze_without_diagnostics(source);
+    let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(hir_value, Value::Bool(true));
 }
 
-#[test]
-fn test_end_to_end_io_temp_dir_is_effectful() {
-    let analysis = neve_frontend::analyze_source(
-        r#"
-        use std.io = io;
-        fn bad() -> Int = io.tempDir(fn(dir) { 42 });
-        "#,
-    );
-    let has_effect_error = analysis
-        .diagnostics
-        .iter()
-        .any(|d| d.message.contains("effectful call") && d.message.contains("effect"));
-    assert!(
-        !has_effect_error,
-        "io.tempDir should be effectful, got {:?}",
-        analysis.diagnostics
-    );
-}
+// `io.tempDir` effect classification is asserted at the CLI level in
+// `n3v3-cli/tests/cli_exit_codes.rs` (the effect gate lives in the CLI, so a
+// frontend-only test cannot observe it).
+// `io.tempDir` 的副作用分类在 CLI 层断言（见 `n3v3-cli/tests/cli_exit_codes.rs`）：
+// 副作用闸门位于 CLI，前端层的测试无法观察到它。
 
 // === io.walk / io.symlink tests ===
 
@@ -3820,7 +3852,7 @@ fn test_end_to_end_io_walk_type_checks() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 #[test]
@@ -3831,7 +3863,7 @@ fn test_end_to_end_io_symlink_type_checks() {
     "#;
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
-    assert_eq!(hir_value, neve_eval::Value::Bool(true));
+    assert_eq!(hir_value, n3v3_eval::Value::Bool(true));
 }
 
 // ============================================================
@@ -3918,7 +3950,7 @@ fn test_match_bool_exhaustive_wildcard() {
 #[test]
 fn test_bytes_read_type_check() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("bytes-type.neve.bin");
+    let file_path = temp_dir.path().join("bytes-type.n3v3.bin");
     std::fs::write(&file_path, [0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
     let path_str = file_path.to_string_lossy().to_string();
 
@@ -4095,7 +4127,7 @@ fn test_pipe_syntax_command_chain() {
 
 #[test]
 fn test_ecosystem_flake_lock_roundtrip() {
-    use neve_config::flake::{FlakeLock, FlakeLockEntry};
+    use n3v3_config::flake::{FlakeLock, FlakeLockEntry};
 
     let mut lock = FlakeLock::new();
     lock.inputs.insert(
@@ -4123,17 +4155,17 @@ fn test_ecosystem_registry_index_format() {
     let index_json = r#"{
         "packages": [
             {
-                "name": "hello-neve",
+                "name": "hello-n3v3",
                 "version": "1.0.0",
-                "description": "A simple Neve package",
-                "author": "Neve Community",
+                "description": "A simple n3v3 package",
+                "author": "n3v3 Community",
                 "license": "MIT"
             },
             {
-                "name": "neve-utils",
+                "name": "n3v3-utils",
                 "version": "2.1.0",
-                "description": "Utility library for Neve",
-                "author": "Neve Community",
+                "description": "Utility library for n3v3",
+                "author": "n3v3 Community",
                 "license": "Apache-2.0"
             }
         ]
@@ -4141,10 +4173,10 @@ fn test_ecosystem_registry_index_format() {
 
     assert!(index_json.contains("\"packages\""));
     assert!(index_json.contains("\"name\""));
-    assert!(index_json.contains("\"hello-neve\""));
+    assert!(index_json.contains("\"hello-n3v3\""));
     assert!(index_json.contains("\"version\""));
     assert!(index_json.contains("\"1.0.0\""));
-    assert!(index_json.contains("\"neve-utils\""));
+    assert!(index_json.contains("\"n3v3-utils\""));
     assert!(index_json.contains("\"2.1.0\""));
 
     let name_count = index_json.match_indices("\"name\"").count();
@@ -4174,14 +4206,14 @@ fn test_ecosystem_flake_manifest_parsing() {
     }
 
     let manifest = r#"
-name = "hello-neve"
+name = "hello-n3v3"
 version = "1.0.0"
 description = "A friendly greeting package"
-author = "Neve Community"
+author = "n3v3 Community"
 license = "MIT"
 "#;
 
-    assert_eq!(extract_field(manifest, "name").unwrap(), "hello-neve");
+    assert_eq!(extract_field(manifest, "name").unwrap(), "hello-n3v3");
     assert_eq!(extract_field(manifest, "version").unwrap(), "1.0.0");
     assert_eq!(
         extract_field(manifest, "description").unwrap(),
@@ -4196,7 +4228,7 @@ license = "MIT"
 
 #[test]
 fn test_effect_pure_function_rejects_effectful_calls_v2() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
 use std.io = io;
 fn bad() -> String = io.readFile("/etc/hostname");
@@ -4205,7 +4237,7 @@ fn bad() -> String = io.readFile("/etc/hostname");
     let has_effect_error = analysis.diagnostics.iter().any(|d| {
         d.message.contains("effectful call")
             && d.message.contains("effect")
-            && d.severity == neve_diagnostic::Severity::Error
+            && d.severity == n3v3_diagnostic::Severity::Error
     });
     assert!(
         !has_effect_error,
@@ -4216,7 +4248,7 @@ fn bad() -> String = io.readFile("/etc/hostname");
 
 #[test]
 fn test_effect_effectful_function_calls_pure_computation() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
 use std.math = math;
 fn ok() -> Int = math.abs(-5);
@@ -4235,7 +4267,7 @@ fn ok() -> Int = math.abs(-5);
 
 #[test]
 fn test_effect_lambda_inherits_enclosing_effect_context() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
 use std.io = io;
 fn outer() -> Unit = {
@@ -4257,7 +4289,7 @@ fn outer() -> Unit = {
 
 #[test]
 fn test_effect_nested_effectful_composition() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
 use std.io = io;
 fn inner(file: String) -> String = io.readFile(file);
@@ -4267,7 +4299,7 @@ fn outer() -> String = inner("/etc/hostname");
     let has_error = analysis
         .diagnostics
         .iter()
-        .any(|d| d.severity == neve_diagnostic::Severity::Error);
+        .any(|d| d.severity == n3v3_diagnostic::Severity::Error);
     assert!(
         !has_error,
         "nested effectful functions should compose, got {:?}",
@@ -4281,7 +4313,7 @@ fn outer() -> String = inner("/etc/hostname");
 
 #[test]
 fn test_error_option_none_question_short_circuits() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
 enum Option { Some(Int), None };
 let x = None?;
@@ -4290,7 +4322,7 @@ let x = None?;
     let has_error = analysis
         .diagnostics
         .iter()
-        .any(|d| d.severity == neve_diagnostic::Severity::Error);
+        .any(|d| d.severity == n3v3_diagnostic::Severity::Error);
     assert!(
         has_error,
         "expected type error for ? on None, got {:?}",
@@ -5359,7 +5391,7 @@ fn test_glob_with_list_len() {
     let temp = TempDir::new().unwrap();
     let dir = temp.path().join("glob-len");
     fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("x.neve"), "x").unwrap();
+    fs::write(dir.join("x.n3v3"), "x").unwrap();
     fs::write(dir.join("y.txt"), "y").unwrap();
     let pattern = format!(
         "{}/glob-len/*",
@@ -5396,7 +5428,7 @@ fn test_glob_nonexistent_pattern() {
 
 #[test]
 fn test_ecosystem_flake_lock_empty() {
-    use neve_config::flake::FlakeLock;
+    use n3v3_config::flake::FlakeLock;
 
     let lock = FlakeLock::new();
     assert!(lock.inputs.is_empty());
@@ -5419,17 +5451,17 @@ fn test_ecosystem_registry_search_filters() {
     }
 
     let index = r#"[
-        {"name": "hello-neve", "version": "1.0.0"},
-        {"name": "neve-utils", "version": "2.1.0"},
-        {"name": "neve-json", "version": "0.5.0"}
+        {"name": "hello-n3v3", "version": "1.0.0"},
+        {"name": "n3v3-utils", "version": "2.1.0"},
+        {"name": "n3v3-json", "version": "0.5.0"}
     ]"#;
 
-    let results = search_packages(index, "neve");
-    assert_eq!(results.len(), 3, "all three packages contain 'neve'");
+    let results = search_packages(index, "n3v3");
+    assert_eq!(results.len(), 3, "all three packages contain 'n3v3'");
 
     let results = search_packages(index, "utils");
-    assert_eq!(results.len(), 1, "only neve-utils contains 'utils'");
-    assert!(results[0].contains("neve-utils"));
+    assert_eq!(results.len(), 1, "only n3v3-utils contains 'utils'");
+    assert!(results[0].contains("n3v3-utils"));
 }
 
 // ============================================================================
@@ -5563,7 +5595,7 @@ fn test_process_result_fields() {
 
 #[test]
 fn test_effect_stream_collect_is_effectful() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> List = io.streamCollect(io.streamList([1]));
@@ -5582,7 +5614,7 @@ fn test_effect_stream_collect_is_effectful() {
 
 #[test]
 fn test_effect_stream_for_each_is_effectful() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> Unit = io.streamForEach(io.streamList([1]), fn(x) { () });
@@ -5601,7 +5633,7 @@ fn test_effect_stream_for_each_is_effectful() {
 
 #[test]
 fn test_effect_stream_pipe_is_effectful() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> ProcessResult = io.streamPipe(
@@ -5897,7 +5929,7 @@ fn test_task_spawn_with_timeout_pipeline() {
 
 #[test]
 fn test_effect_stream_collect_in_pure_fn_rejected() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn bad() -> List = io.streamCollect(io.streamList([1, 2, 3]));
@@ -5916,7 +5948,7 @@ fn test_effect_stream_collect_in_pure_fn_rejected() {
 
 #[test]
 fn test_effect_print_in_effectful_fn_allowed() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         fn ok() -> Unit = print("hello from effectful fn");
         "#,
@@ -5924,7 +5956,7 @@ fn test_effect_print_in_effectful_fn_allowed() {
     let has_effect_error = analysis
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("effectful") && d.severity == neve_diagnostic::Severity::Error);
+        .any(|d| d.message.contains("effectful") && d.severity == n3v3_diagnostic::Severity::Error);
     assert!(
         !has_effect_error,
         "effectful function should be allowed to call print, got {:?}",
@@ -5934,7 +5966,7 @@ fn test_effect_print_in_effectful_fn_allowed() {
 
 #[test]
 fn test_effect_nested_pure_in_effectful() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         fn pureLeaf() -> Int = 42;
         fn pureMid() -> Int = pureLeaf() + 10;
@@ -5944,7 +5976,7 @@ fn test_effect_nested_pure_in_effectful() {
     let has_effect_error = analysis
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("effectful") && d.severity == neve_diagnostic::Severity::Error);
+        .any(|d| d.message.contains("effectful") && d.severity == n3v3_diagnostic::Severity::Error);
     assert!(
         !has_effect_error,
         "effectful calling pure calling pure should be allowed, got {:?}",
@@ -6438,8 +6470,8 @@ fn test_stream_command_with_env() {
     use std.io = io;
     let cmd = io.commandWith(#{
         program = "sh",
-        args = ["-c", "echo $NEVE_STREAM_TEST"],
-        env = #{NEVE_STREAM_TEST = "env-value-42"},
+        args = ["-c", "echo $N3V3_STREAM_TEST"],
+        env = #{N3V3_STREAM_TEST = "env-value-42"},
     });
     let s = io.streamCommand(cmd);
     let result = io.streamCollect(s);
@@ -6659,7 +6691,7 @@ fn test_error_option_chain() {
 
 #[test]
 fn test_effect_stream_collect_requires_effect() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn pureCount() -> Int = {
@@ -6682,19 +6714,19 @@ fn test_effect_stream_collect_requires_effect() {
 
 #[test]
 fn test_effect_nested_effectful_lambda() {
-    let analysis = neve_frontend::analyze_source(
+    let analysis = n3v3_frontend::analyze_source(
         r#"
         use std.io = io;
         fn outer() -> Unit = {
             let inner = fn(file: String) { io.readFile(file); () };
-            inner("/tmp/neve-effect-nested-lambda-test.txt");
+            inner("/tmp/n3v3-effect-nested-lambda-test.txt");
         };
         "#,
     );
     let has_lambda_error = analysis
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("effectful") && d.severity == neve_diagnostic::Severity::Error);
+        .any(|d| d.message.contains("effectful") && d.severity == n3v3_diagnostic::Severity::Error);
     assert!(
         !has_lambda_error,
         "lambda inside effectful fn should inherit effect context, got {:?}",
@@ -7511,14 +7543,14 @@ fn test_stream_performance_100_elements_with_transform() {
 #[test]
 fn test_init_creates_flake_and_main() {
     let temp = TempDir::new().unwrap();
-    let proj_dir = temp.path().join("my-neve-project");
+    let proj_dir = temp.path().join("my-n3v3-project");
 
-    // Simulate `neve init my-neve-project` by writing the expected files.
+    // Simulate `n3v3 init my-n3v3-project` by writing the expected files.
     std::fs::create_dir_all(&proj_dir).unwrap();
 
     let flake_content = format!(
         r#"{{
-    description = "A Neve project",
+    description = "An n3v3 project",
     name = "{}",
     version = "0.1.0",
 
@@ -7536,7 +7568,7 @@ fn test_init_creates_flake_and_main() {
     );
 
     let main_content = format!(
-        r#"#!/usr/bin/env neve run
+        r#"#!/usr/bin/env n3v3 run
 -- {name} — main entry point
 use std.io = io;
 
@@ -7550,73 +7582,73 @@ io.println("Hello, " ++ name ++ "!");
         name = proj_dir.file_name().unwrap().to_string_lossy()
     );
 
-    std::fs::write(proj_dir.join("flake.neve"), &flake_content).unwrap();
-    std::fs::write(proj_dir.join("main.neve"), &main_content).unwrap();
+    std::fs::write(proj_dir.join("flake.n3v3"), &flake_content).unwrap();
+    std::fs::write(proj_dir.join("main.n3v3"), &main_content).unwrap();
     std::fs::write(proj_dir.join(".gitignore"), "result\n.direnv\n").unwrap();
 
     // Verify files exist
     assert!(
-        proj_dir.join("flake.neve").exists(),
-        "flake.neve should exist"
+        proj_dir.join("flake.n3v3").exists(),
+        "flake.n3v3 should exist"
     );
     assert!(
-        proj_dir.join("main.neve").exists(),
-        "main.neve should exist"
+        proj_dir.join("main.n3v3").exists(),
+        "main.n3v3 should exist"
     );
     assert!(
         proj_dir.join(".gitignore").exists(),
         ".gitignore should exist"
     );
 
-    let flake = neve_config::flake::Flake::load(&proj_dir)
+    let flake = n3v3_config::flake::Flake::load(&proj_dir)
         .expect("generated flake should evaluate through frontend/HIR");
-    assert_eq!(flake.description.as_deref(), Some("A Neve project"));
+    assert_eq!(flake.description.as_deref(), Some("An n3v3 project"));
     assert!(
         flake.outputs.is_some(),
         "generated flake should define outputs"
     );
 
-    let flake_source = std::fs::read_to_string(proj_dir.join("flake.neve")).unwrap();
+    let flake_source = std::fs::read_to_string(proj_dir.join("flake.n3v3")).unwrap();
     assert!(
         flake_source.contains("description"),
-        "flake.neve should have description"
+        "flake.n3v3 should have description"
     );
-    assert!(flake_source.contains("name"), "flake.neve should have name");
+    assert!(flake_source.contains("name"), "flake.n3v3 should have name");
     assert!(
         flake_source.contains("version"),
-        "flake.neve should have version"
+        "flake.n3v3 should have version"
     );
 
-    // Verify main.neve contains executable top-level code.
-    let main = std::fs::read_to_string(proj_dir.join("main.neve")).unwrap();
+    // Verify main.n3v3 contains executable top-level code.
+    let main = std::fs::read_to_string(proj_dir.join("main.n3v3")).unwrap();
     assert!(
         main.contains("use std.io = io"),
-        "main.neve should use std.io"
+        "main.n3v3 should use std.io"
     );
     assert!(
         main.contains("let (args, _) = io.args();"),
-        "main.neve should read command arguments"
+        "main.n3v3 should read command arguments"
     );
     assert!(
         !main.contains("fn main() ="),
-        "main.neve should not rely on an implicit function entrypoint"
+        "main.n3v3 should not rely on an implicit function entrypoint"
     );
 
     let analysis = analyze_source(&main);
     let errors: Vec<_> = analysis
         .diagnostics
         .iter()
-        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .filter(|d| d.severity == n3v3_diagnostic::Severity::Error)
         .collect();
     assert!(
         errors.is_empty(),
-        "generated main.neve should type-check: {errors:?}"
+        "generated main.n3v3 should type-check: {errors:?}"
     );
 }
 
 #[test]
 fn test_init_project_typechecks() {
-    // Verify the scaffolded main.neve passes type checking through its
+    // Verify the scaffolded main.n3v3 passes type checking through its
     // executable top-level expressions.
     let source = r#"use std.io = io;
 
@@ -7632,7 +7664,7 @@ io.println("Hello, " ++ name ++ "!");
     let errors: Vec<_> = analysis
         .diagnostics
         .iter()
-        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .filter(|d| d.severity == n3v3_diagnostic::Severity::Error)
         .collect();
     assert!(
         errors.is_empty(),
@@ -7643,11 +7675,11 @@ io.println("Hello, " ++ name ++ "!");
 
 #[test]
 fn test_init_project_runs() {
-    // Verify the scaffolded main.neve core logic runs successfully.
+    // Verify the scaffolded main.n3v3 core logic runs successfully.
     // Since io.args() returns empty by default, the name defaults to "World".
     // Inline the body of main() to test the logic directly.
     // Reset script args to ensure deterministic behavior.
-    neve_std::set_script_args(vec![]);
+    n3v3_std::set_script_args(vec![]);
     let source = r#"use std.io = io;
 
 let name = match io.args().0 {
@@ -7675,8 +7707,8 @@ let name = match io.args().0 {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_neve_eval_arithmetic() {
-    // Verify `neve eval "1+2"` returns 3 via the canonical HIR evaluator.
+fn test_n3v3_eval_arithmetic() {
+    // Verify `n3v3 eval "1+2"` returns 3 via the canonical HIR evaluator.
     let source = "1 + 2";
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("HIR evaluator should succeed");
@@ -7684,9 +7716,9 @@ fn test_neve_eval_arithmetic() {
 }
 
 #[test]
-fn test_neve_check_pure_function() {
+fn test_n3v3_check_pure_function() {
     // Verify a pure function (no `effect`) passes type checking
-    // and evaluates correctly — simulating `neve check` on pure code.
+    // and evaluates correctly — simulating `n3v3 check` on pure code.
     let source = r#"
 fn add(x: Int, y: Int) -> Int = x + y;
 let result = add(40, 2);
@@ -7707,83 +7739,83 @@ let result = add(40, 2);
 }
 
 #[test]
-fn test_neve_fmt_roundtrip() {
+fn test_n3v3_fmt_roundtrip() {
     // Verify formatter produces valid output that can be parsed
-    // and re-formatted — simulating `neve fmt` roundtrip verification.
+    // and re-formatted — simulating `n3v3 fmt` roundtrip verification.
     let source = "fn add(x: Int, y: Int) -> Int = x + y;";
-    let formatted = neve_fmt::format(source).expect("format should succeed");
+    let formatted = n3v3_fmt::format(source).expect("format should succeed");
     assert!(
         !formatted.is_empty(),
         "formatted output should not be empty"
     );
     // Round-trip: format again should produce same output (idempotency)
-    let formatted2 = neve_fmt::format(&formatted).expect("re-format should succeed");
+    let formatted2 = n3v3_fmt::format(&formatted).expect("re-format should succeed");
     assert_eq!(formatted, formatted2, "formatter should be idempotent");
-    // Formatted output should be valid Neve that passes frontend analysis
+    // Formatted output should be valid n3v3 that passes frontend analysis
     let analysis = analyze_without_diagnostics(&formatted);
     let _ = eval_hir(&analysis).expect("formatted output should evaluate");
 }
 
 #[test]
-fn test_neve_test_finds_files() {
-    // Simulate `neve test` discovering test files.
-    // Creates a temp dir with *_test.neve and test/*.neve files.
+fn test_n3v3_test_finds_files() {
+    // Simulate `n3v3 test` discovering test files.
+    // Creates a temp dir with *_test.n3v3 and test/*.n3v3 files.
     let temp = TempDir::new().unwrap();
     let test_dir = temp.path().join("test");
     std::fs::create_dir_all(&test_dir).unwrap();
 
-    // Create test files in locations neve test would discover
-    std::fs::write(temp.path().join("math_test.neve"), "let x = 1; 42").unwrap();
-    std::fs::write(test_dir.join("strings.neve"), "let y = 2; 99").unwrap();
+    // Create test files in locations n3v3 test would discover
+    std::fs::write(temp.path().join("math_test.n3v3"), "let x = 1; 42").unwrap();
+    std::fs::write(test_dir.join("strings.n3v3"), "let y = 2; 99").unwrap();
 
     // Verify files exist in expected locations (simulating discovery)
     let root_files: Vec<_> = std::fs::read_dir(temp.path())
         .unwrap()
         .filter_map(|e| e.ok())
         .map(|e| e.file_name().to_string_lossy().to_string())
-        .filter(|n| n.ends_with("_test.neve"))
+        .filter(|n| n.ends_with("_test.n3v3"))
         .collect();
     let test_dir_files: Vec<_> = std::fs::read_dir(&test_dir)
         .unwrap()
         .filter_map(|e| e.ok())
         .map(|e| e.file_name().to_string_lossy().to_string())
-        .filter(|n| n.ends_with(".neve"))
+        .filter(|n| n.ends_with(".n3v3"))
         .collect();
-    assert!(!root_files.is_empty(), "should find *_test.neve files");
-    assert!(!test_dir_files.is_empty(), "should find test/*.neve files");
+    assert!(!root_files.is_empty(), "should find *_test.n3v3 files");
+    assert!(!test_dir_files.is_empty(), "should find test/*.n3v3 files");
 
-    // Verify test file content is valid Neve that evaluates
+    // Verify test file content is valid n3v3 that evaluates
     let analysis = analyze_without_diagnostics("let x = 1; 42");
     let hir_value = eval_hir(&analysis).expect("test file should evaluate");
     assert_eq!(hir_value, Value::Int(int(42)));
 }
 
 #[test]
-fn test_neve_init_scaffold() {
-    // Verify `neve init` creates a valid project scaffold
+fn test_n3v3_init_scaffold() {
+    // Verify `n3v3 init` creates a valid project scaffold
     // that type-checks and evaluates correctly.
     let temp = TempDir::new().unwrap();
-    let proj_dir = temp.path().join("new-neve-project");
+    let proj_dir = temp.path().join("new-n3v3-project");
     std::fs::create_dir_all(&proj_dir).unwrap();
 
-    // Write scaffolded main.neve
-    let main_content = r#"#!/usr/bin/env neve run
+    // Write scaffolded main.n3v3
+    let main_content = r#"#!/usr/bin/env n3v3 run
 -- main entry point
 use std.io = io;
 
 let (args, _) = io.args();
 let name = match args {
     [n, ..] -> n,
-    [] -> "Neve"
+    [] -> "n3v3"
 };
 io.println("Hello, " ++ name ++ "!");
 "#;
-    std::fs::write(proj_dir.join("main.neve"), main_content).unwrap();
+    std::fs::write(proj_dir.join("main.n3v3"), main_content).unwrap();
 
     // Verify file exists and has expected structure
-    let main = std::fs::read_to_string(proj_dir.join("main.neve")).unwrap();
+    let main = std::fs::read_to_string(proj_dir.join("main.n3v3")).unwrap();
     assert!(
-        main.contains("#!/usr/bin/env neve run"),
+        main.contains("#!/usr/bin/env n3v3 run"),
         "should have shebang"
     );
     assert!(main.contains("use std.io = io"), "should use io");
@@ -7803,7 +7835,7 @@ use std.io = io;
 let (args, _) = io.args();
 let name = match args {
     [n, ..] -> n,
-    [] -> "Neve"
+    [] -> "n3v3"
 };
 io.println("Hello, " ++ name ++ "!");
 "#;
@@ -7815,7 +7847,7 @@ io.println("Hello, " ++ name ++ "!");
         .collect();
     assert!(
         errors.is_empty(),
-        "scaffolded main.neve should type-check: {:?}",
+        "scaffolded main.n3v3 should type-check: {:?}",
         errors
     );
 }
@@ -8234,13 +8266,13 @@ fn test_fmt_preserves_comments() {
     // Formatting a source with comments produces valid, parseable output
     // Comments are lexer-skipped but formatted output remains valid
     let source = "-- this is a comment\nlet x = 42;\n";
-    let formatted = neve_fmt::format(source).expect("format with comments should succeed");
+    let formatted = n3v3_fmt::format(source).expect("format with comments should succeed");
     assert!(
         !formatted.is_empty(),
         "formatted output should not be empty"
     );
     // Round-trip: reformatting should be idempotent
-    let formatted2 = neve_fmt::format(&formatted).expect("re-format should succeed");
+    let formatted2 = n3v3_fmt::format(&formatted).expect("re-format should succeed");
     assert_eq!(
         formatted, formatted2,
         "formatted output should be idempotent"
@@ -8378,7 +8410,7 @@ fn test_tty_readkey_rejects_wrong_arg_count() {
     let errors: Vec<_> = analysis
         .diagnostics
         .iter()
-        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .filter(|d| d.severity == n3v3_diagnostic::Severity::Error)
         .collect();
     assert!(
         !errors.is_empty(),
@@ -8410,22 +8442,22 @@ fn test_tty_setrawmode_type_signature() {
 
 #[test]
 fn test_effect_isatty_classified_as_pure() {
-    assert!(!neve_std::is_effectful_builtin("io.isTTY"));
+    assert!(!n3v3_std::is_effectful_builtin("io.isTTY"));
 }
 
 #[test]
 fn test_effect_terminalsize_classified_as_pure() {
-    assert!(!neve_std::is_effectful_builtin("io.terminalSize"));
+    assert!(!n3v3_std::is_effectful_builtin("io.terminalSize"));
 }
 
 #[test]
 fn test_effect_setrawmode_classified_as_effectful() {
-    assert!(neve_std::is_effectful_builtin("io.setRawMode"));
+    assert!(n3v3_std::is_effectful_builtin("io.setRawMode"));
 }
 
 #[test]
 fn test_effect_readkey_classified_as_effectful() {
-    assert!(neve_std::is_effectful_builtin("io.readKey"));
+    assert!(n3v3_std::is_effectful_builtin("io.readKey"));
 }
 
 #[test]
@@ -8475,37 +8507,37 @@ fn test_registry_search_index_filtering() {
 
 #[test]
 fn test_effect_print_classified_as_effectful() {
-    assert!(neve_std::is_effectful_builtin("print"));
+    assert!(n3v3_std::is_effectful_builtin("print"));
 }
 
 #[test]
 fn test_effect_println_classified_as_effectful() {
-    assert!(neve_std::is_effectful_builtin("println"));
+    assert!(n3v3_std::is_effectful_builtin("println"));
 }
 
 #[test]
 fn test_effect_readfile_classified_as_effectful() {
-    assert!(neve_std::is_effectful_builtin("io.readFile"));
+    assert!(n3v3_std::is_effectful_builtin("io.readFile"));
 }
 
 #[test]
 fn test_effect_command_classified_as_pure() {
-    assert!(!neve_std::is_effectful_builtin("io.command"));
+    assert!(!n3v3_std::is_effectful_builtin("io.command"));
 }
 
 #[test]
 fn test_effect_process_success_classified_as_pure() {
-    assert!(!neve_std::is_effectful_builtin("io.processSuccess"));
+    assert!(!n3v3_std::is_effectful_builtin("io.processSuccess"));
 }
 
 #[test]
 fn test_effect_hashstring_classified_as_pure() {
-    assert!(!neve_std::is_effectful_builtin("io.hashString"));
+    assert!(!n3v3_std::is_effectful_builtin("io.hashString"));
 }
 
 #[test]
 fn test_effect_stream_list_classified_as_pure() {
-    assert!(!neve_std::is_effectful_builtin("io.streamList"));
+    assert!(!n3v3_std::is_effectful_builtin("io.streamList"));
 }
 
 #[test]
@@ -8849,10 +8881,10 @@ fn test_list_comp_filter_map() {
 
 #[test]
 fn test_record_field_dot() {
-    let source = "r = { name = \"Neve\", version = \"3.18\" }; r.name";
+    let source = "r = { name = \"n3v3\", version = \"3.18\" }; r.name";
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("eval");
-    assert_eq!(hir_value, Value::String(Rc::new("Neve".to_string())));
+    assert_eq!(hir_value, Value::String(Rc::new("n3v3".to_string())));
 }
 
 #[test]
@@ -8936,7 +8968,7 @@ fn test_sum_recursive() {
 
 #[test]
 fn test_path_literal_relative() {
-    let source = "p = ./config.neve";
+    let source = "p = ./config.n3v3";
     let analysis = analyze_without_diagnostics(source);
     let hir_value = eval_hir(&analysis).expect("eval");
     assert!(matches!(hir_value, Value::Path(_)));
@@ -9089,7 +9121,7 @@ fn test_gap_pipeline_stdlib() {
             || analysis
                 .diagnostics
                 .iter()
-                .all(|d| d.severity != neve_diagnostic::Severity::Error),
+                .all(|d| d.severity != n3v3_diagnostic::Severity::Error),
         "unexpected errors resolving std.io pipeline: {:?}",
         analysis.diagnostics
     );

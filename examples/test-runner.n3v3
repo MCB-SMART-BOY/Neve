@@ -1,0 +1,25 @@
+#!/usr/bin/env n3v3
+-- Simple test runner: lists .n3v3 test files in a directory and reports them
+-- 简单测试运行器：列出目录中的 .n3v3 测试文件并报告
+use std.io = io;
+use std.string = str;
+
+let dir = match io.args() {
+    (args, _) -> match args {
+        [d, ..] -> d,
+        [] -> "tests"
+    }
+};
+let files = io.glob(str.concat(dir, "/*.n3v3"));
+
+io.println(str.concat("Test files in ", dir, ":"));
+let _ = io.streamForEach(
+    io.streamList(files),
+    fn(f) {
+        io.println(str.concat("  ", f));
+        ()
+    }
+);
+
+io.println(str.concat("\nFound ", toString(len(files)), " test file(s)"));
+0

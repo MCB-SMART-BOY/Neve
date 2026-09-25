@@ -1,7 +1,7 @@
 import Lake
 open Lake DSL
 
-package NeveFormal where
+package n3v3Formal where
 
 @[default_target]
-lean_lib Neve
+lean_lib n3v3

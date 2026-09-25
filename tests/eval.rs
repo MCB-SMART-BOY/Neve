@@ -1,16 +1,16 @@
-//! Integration tests for neve-eval crate.
+//! Integration tests for n3v3-eval crate.
 //!
 //! This file contains extensive edge case tests for the evaluator.
 
 mod support;
 
-use neve_common::Int;
-use neve_derive::Hash;
-use neve_eval::{EvalError, EvaluableModuleRef, Evaluator, Value};
-use neve_frontend::analyze_source;
-use neve_hir::lower;
-use neve_parser::parse;
-use neve_std::stdlib;
+use n3v3_common::Int;
+use n3v3_derive::Hash;
+use n3v3_eval::{EvalError, EvaluableModuleRef, Evaluator, Value};
+use n3v3_frontend::analyze_source;
+use n3v3_hir::lower;
+use n3v3_parser::parse;
+use n3v3_std::stdlib;
 use std::fs;
 use std::rc::Rc;
 use support::fetch_fixtures::{init_local_git_repo, start_local_http_fixture};
@@ -203,10 +203,10 @@ fn test_eval_hir_std_path_from_string_exposes_path_runtime_value() {
 fn test_eval_hir_std_typed_path_adapters() {
     let source = r#"
         use std.path = path;
-        let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
+        let nested = path.joinPath(path.fromString("/tmp"), "n3v3.txt");
         let name = path.filenamePath(nested) ?? "missing";
         let ext = path.extensionPath(nested) ?? "missing";
-        let result = if name == "neve.txt" && ext == "txt" -> "ok" else "nope";
+        let result = if name == "n3v3.txt" && ext == "txt" -> "ok" else "nope";
     "#;
     match eval_checked_hir(source) {
         Ok(Value::String(s)) => assert_eq!(s.as_ref(), "ok"),
@@ -260,7 +260,7 @@ fn test_eval_hir_std_io_current_dir_string_bridge() {
 
 #[test]
 fn test_eval_hir_std_io_get_env_bridge() {
-    let missing = "__NEVE_TEST_MISSING_ENV_37C93B7C__";
+    let missing = "__N3V3_TEST_MISSING_ENV_37C93B7C__";
     assert!(
         std::env::var_os(missing).is_none(),
         "test environment unexpectedly defines {missing}"
@@ -487,7 +487,7 @@ fn test_eval_hir_std_io_hash_file_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_read_file_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("io-read-path.neve.txt");
+    let file_path = temp_dir.path().join("io-read-path.n3v3.txt");
     std::fs::write(&file_path, "hello-path").unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -511,7 +511,7 @@ fn test_eval_hir_std_io_read_file_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_read_file_bytes_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("io-read-bytes-path.neve.bin");
+    let file_path = temp_dir.path().join("io-read-bytes-path.n3v3.bin");
     std::fs::write(&file_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -536,7 +536,7 @@ fn test_eval_hir_std_io_read_file_bytes_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_read_dir_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let dir_path = temp_dir.path().join("io-read-dir-path.neve");
+    let dir_path = temp_dir.path().join("io-read-dir-path.n3v3");
     std::fs::create_dir_all(dir_path.join("nested")).unwrap();
     std::fs::write(dir_path.join("alpha.txt"), "a").unwrap();
     std::fs::write(dir_path.join("beta.txt"), "b").unwrap();
@@ -573,7 +573,7 @@ fn test_eval_hir_std_io_read_dir_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_read_dir_entry_paths_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let dir_path = temp_dir.path().join("io-read-dir-entry-paths.neve");
+    let dir_path = temp_dir.path().join("io-read-dir-entry-paths.n3v3");
     let file_path = dir_path.join("alpha.txt");
     let nested_path = dir_path.join("nested");
     std::fs::create_dir_all(&dir_path).unwrap();
@@ -608,8 +608,8 @@ fn test_eval_hir_std_io_read_dir_entry_paths_bridge() {
 #[test]
 fn test_eval_hir_std_io_write_file_bytes_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let src_path = temp_dir.path().join("io-write-bytes-src.neve.bin");
-    let dst_path = temp_dir.path().join("io-write-bytes-dst.neve.bin");
+    let src_path = temp_dir.path().join("io-write-bytes-src.n3v3.bin");
+    let dst_path = temp_dir.path().join("io-write-bytes-dst.n3v3.bin");
     std::fs::write(&src_path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
     let escaped_src = src_path
         .to_string_lossy()
@@ -642,7 +642,7 @@ fn test_eval_hir_std_io_write_file_bytes_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_write_file_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-write-path-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-write-path-dst.n3v3.txt");
     let escaped_dst = dst_path
         .to_string_lossy()
         .replace('\\', "\\\\")
@@ -667,7 +667,7 @@ fn test_eval_hir_std_io_write_file_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_write_file_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-write-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-write-dst.n3v3.txt");
     let escaped_dst = dst_path
         .to_string_lossy()
         .replace('\\', "\\\\")
@@ -690,7 +690,7 @@ fn test_eval_hir_std_io_write_file_bridge() {
 #[test]
 fn test_eval_hir_std_io_append_file_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-append-path-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-append-path-dst.n3v3.txt");
     std::fs::write(&dst_path, "hello").unwrap();
     let escaped_dst = dst_path
         .to_string_lossy()
@@ -716,7 +716,7 @@ fn test_eval_hir_std_io_append_file_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_append_file_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let dst_path = temp_dir.path().join("io-append-dst.neve.txt");
+    let dst_path = temp_dir.path().join("io-append-dst.n3v3.txt");
     std::fs::write(&dst_path, "hello").unwrap();
     let escaped_dst = dst_path
         .to_string_lossy()
@@ -740,10 +740,10 @@ fn test_eval_hir_std_io_append_file_bridge() {
 #[test]
 fn test_eval_hir_std_io_append_file_bytes_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let init_path = temp_dir.path().join("io-append-bytes-init.neve.bin");
-    let append_path = temp_dir.path().join("io-append-bytes-src.neve.bin");
-    let dst_path = temp_dir.path().join("io-append-bytes-dst.neve.bin");
-    let expected_path = temp_dir.path().join("io-append-bytes-expected.neve.bin");
+    let init_path = temp_dir.path().join("io-append-bytes-init.n3v3.bin");
+    let append_path = temp_dir.path().join("io-append-bytes-src.n3v3.bin");
+    let dst_path = temp_dir.path().join("io-append-bytes-dst.n3v3.bin");
+    let expected_path = temp_dir.path().join("io-append-bytes-expected.n3v3.bin");
     std::fs::write(&init_path, [0xaa]).unwrap();
     std::fs::write(&append_path, [0xde, 0xad, 0xbe]).unwrap();
     std::fs::write(&expected_path, [0xaa, 0xde, 0xad, 0xbe]).unwrap();
@@ -927,7 +927,7 @@ fn test_eval_hir_std_io_remove_dir_all_bridge() {
 fn test_eval_hir_std_io_path_exists_bridge() {
     let temp = TempDir::new().unwrap();
     let file = temp.path().join("exists.txt");
-    fs::write(&file, "neve").unwrap();
+    fs::write(&file, "n3v3").unwrap();
     let escaped = file.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
@@ -965,7 +965,7 @@ fn test_eval_hir_std_io_is_dir_bridge() {
 fn test_eval_hir_std_io_is_file_bridge() {
     let temp = TempDir::new().unwrap();
     let file = temp.path().join("nested.txt");
-    fs::write(&file, "neve").unwrap();
+    fs::write(&file, "n3v3").unwrap();
     let escaped = file.to_string_lossy().replace('\\', "\\\\");
     let source = format!(
         r#"
@@ -984,7 +984,7 @@ fn test_eval_hir_std_io_is_file_bridge() {
 fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
     let source = r#"
         use std.io = io;
-        let cmd = io.command("printf", ["neve"]);
+        let cmd = io.command("printf", ["n3v3"]);
         let shown = if typeOf(cmd) == "Command" -> toString(cmd) else "nope";
     "#;
 
@@ -998,7 +998,7 @@ fn test_eval_hir_std_io_command_bridge_exposes_command_runtime_value() {
 fn test_eval_hir_std_io_command_with_bridge_exposes_configured_command_runtime_value() {
     let source = r#"
         use std.io = io;
-        let cmd = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
+        let cmd = io.commandWith(#{ program = "printf", args = ["n3v3"], cwd = "/tmp" });
         let shown = if typeOf(cmd) == "Command" -> toString(cmd) else "nope";
     "#;
 
@@ -1014,7 +1014,7 @@ fn test_eval_hir_std_io_command_with_bridge_exposes_configured_command_runtime_v
 fn test_eval_hir_std_io_pipeline_bridge_exposes_pipeline_runtime_value() {
     let source = r#"
         use std.io = io;
-        let pipe = io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]);
+        let pipe = io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])]);
         let shown = if typeOf(pipe) == "Pipeline" -> toString(pipe) else "nope";
     "#;
 
@@ -1030,8 +1030,8 @@ fn test_eval_hir_std_io_pipeline_with_redirects_bridge_exposes_pipeline_runtime_
         use std.io = io;
         use std.path = path;
         let pipe = io.pipelineWithRedirects(
-            io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
-            [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])]),
+            [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
         );
         let shown = if typeOf(pipe) == "Pipeline" -> toString(pipe) else "nope";
     "#;
@@ -1064,8 +1064,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_bridge_exposes_process_resul
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("cmd", ["/C", "echo neve"]),
-                    io.command("cmd", ["/C", "findstr neve"])
+                    io.command("cmd", ["/C", "echo n3v3"]),
+                    io.command("cmd", ["/C", "findstr n3v3"])
                 ]),
                 [io.redirectStdoutPath(target)]
             )
@@ -1088,8 +1088,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_bridge_exposes_process_resul
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("sh", ["-c", "printf neve"]),
-                    io.command("sh", ["-c", "grep neve"])
+                    io.command("sh", ["-c", "printf n3v3"]),
+                    io.command("sh", ["-c", "grep n3v3"])
                 ]),
                 [io.redirectStdoutPath(target)]
             )
@@ -1116,7 +1116,7 @@ fn test_eval_hir_std_io_redirect_stdout_path_bridge_exposes_redirect_runtime_val
     let source = r#"
         use std.io = io;
         use std.path = path;
-        let redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
+        let redirect = io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"));
         let shown = if typeOf(redirect) == "Redirect" -> toString(redirect) else "nope";
     "#;
 
@@ -1131,7 +1131,7 @@ fn test_eval_hir_std_io_redirect_stderr_path_bridge_exposes_redirect_runtime_val
     let source = r#"
         use std.io = io;
         use std.path = path;
-        let redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
+        let redirect = io.redirectStderrPath(path.fromString("/tmp/n3v3.err"));
         let shown = if typeOf(redirect) == "Redirect" -> toString(redirect) else "nope";
     "#;
 
@@ -1146,7 +1146,7 @@ fn test_eval_hir_std_io_redirect_stdin_path_bridge_exposes_redirect_runtime_valu
     let source = r#"
         use std.io = io;
         use std.path = path;
-        let redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
+        let redirect = io.redirectStdinPath(path.fromString("/tmp/n3v3.in"));
         let shown = if typeOf(redirect) == "Redirect" -> toString(redirect) else "nope";
     "#;
 
@@ -1224,7 +1224,7 @@ fn test_eval_hir_std_io_exec_command_with_stderr_redirect_writes_stderr_to_file(
 fn test_eval_hir_std_io_exec_command_with_stdin_redirect_reads_stdin_from_file() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
         format!(
@@ -1234,7 +1234,7 @@ fn test_eval_hir_std_io_exec_command_with_stdin_redirect_reads_stdin_from_file()
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("cmd", ["/C", "findstr neve"]),
+                io.command("cmd", ["/C", "findstr n3v3"]),
                 [io.redirectStdinPath(target)]
             )
         );
@@ -1253,7 +1253,7 @@ fn test_eval_hir_std_io_exec_command_with_stdin_redirect_reads_stdin_from_file()
         let target = path.fromString("{redirect_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("sh", ["-c", "grep neve"]),
+                io.command("sh", ["-c", "grep n3v3"]),
                 [io.redirectStdinPath(target)]
             )
         );
@@ -1277,7 +1277,7 @@ fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_pa
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("stdin.txt");
     let stdout_path = temp.path().join("stdout.txt");
-    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
@@ -1289,7 +1289,7 @@ fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_pa
         let output = path.fromString("{stdout_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("cmd", ["/C", "findstr neve"]),
+                io.command("cmd", ["/C", "findstr n3v3"]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
         );
@@ -1311,7 +1311,7 @@ fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_pa
         let output = path.fromString("{stdout_path_source}");
         let result = io.execCommand(
             io.commandWithRedirects(
-                io.command("sh", ["-c", "grep neve"]),
+                io.command("sh", ["-c", "grep n3v3"]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
         );
@@ -1336,7 +1336,7 @@ fn test_eval_hir_std_io_exec_command_with_redirects_composes_stdin_and_stdout_pa
 fn test_eval_hir_std_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file() {
     let temp = TempDir::new().expect("temp dir should exist");
     let redirect_path = temp.path().join("pipeline-stdin.txt");
-    fs::write(&redirect_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&redirect_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let redirect_path_source = redirect_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
         format!(
@@ -1347,8 +1347,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file(
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("cmd", ["/C", "findstr neve"]),
-                    io.command("cmd", ["/C", "findstr neve"])
+                    io.command("cmd", ["/C", "findstr n3v3"]),
+                    io.command("cmd", ["/C", "findstr n3v3"])
                 ]),
                 [io.redirectStdinPath(target)]
             )
@@ -1369,8 +1369,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_stdin_redirect_reads_stdin_from_file(
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("sh", ["-c", "grep neve"]),
-                    io.command("sh", ["-c", "grep neve"])
+                    io.command("sh", ["-c", "grep n3v3"]),
+                    io.command("sh", ["-c", "grep n3v3"])
                 ]),
                 [io.redirectStdinPath(target)]
             )
@@ -1395,7 +1395,7 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_p
     let temp = TempDir::new().expect("temp dir should exist");
     let stdin_path = temp.path().join("pipeline-stdin.txt");
     let stdout_path = temp.path().join("pipeline-stdout.txt");
-    fs::write(&stdin_path, "neve stdin line\n").expect("stdin file should be writable");
+    fs::write(&stdin_path, "n3v3 stdin line\n").expect("stdin file should be writable");
     let stdin_path_source = stdin_path.to_string_lossy().replace('\\', "\\\\");
     let stdout_path_source = stdout_path.to_string_lossy().replace('\\', "\\\\");
     let source = if cfg!(windows) {
@@ -1408,8 +1408,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_p
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("cmd", ["/C", "findstr neve"]),
-                    io.command("cmd", ["/C", "findstr neve"])
+                    io.command("cmd", ["/C", "findstr n3v3"]),
+                    io.command("cmd", ["/C", "findstr n3v3"])
                 ]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
@@ -1433,8 +1433,8 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirects_composes_stdin_and_stdout_p
         let result = io.execPipeline(
             io.pipelineWithRedirects(
                 io.pipeline([
-                    io.command("sh", ["-c", "grep neve"]),
-                    io.command("sh", ["-c", "grep neve"])
+                    io.command("sh", ["-c", "grep n3v3"]),
+                    io.command("sh", ["-c", "grep n3v3"])
                 ]),
                 [io.redirectStdinPath(input), io.redirectStdoutPath(output)]
             )
@@ -1486,7 +1486,7 @@ fn test_eval_hir_std_io_exec_pipeline_with_redirect_rejects_final_stage_stdout_c
             io.pipelineWithRedirects(
                 io.pipeline([
                     io.commandWithRedirects(
-                        io.command("printf", ["neve"]),
+                        io.command("printf", ["n3v3"]),
                         [io.redirectStdoutPath(output)]
                     )
                 ]),
@@ -1520,7 +1520,7 @@ fn test_eval_hir_std_io_pipeline_with_redirects_rejects_final_stage_stdout_confl
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
+                    io.command("printf", ["n3v3"]),
                     [io.redirectStdoutPath(output)]
                 )
             ]),
@@ -1553,7 +1553,7 @@ fn test_eval_hir_std_io_exec_pipeline_rejects_non_final_stage_stdout_redirect() 
         let result = io.execPipeline(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
+                    io.command("printf", ["n3v3"]),
                     [io.redirectStdoutPath(out)]
                 ),
                 io.command("cat", [])
@@ -1583,7 +1583,7 @@ fn test_eval_hir_std_io_pipeline_with_redirects_rejects_boundary_stdin_conflict(
         let input = path.fromString("{stdin_path_source}");
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
-                io.commandWith(#{{ program = "cat", stdin = "neve" }})
+                io.commandWith(#{{ program = "cat", stdin = "n3v3" }})
             ]),
             [io.redirectStdinPath(input)]
         );
@@ -1606,8 +1606,8 @@ fn test_eval_hir_std_io_command_with_redirects_bridge_exposes_command_runtime_va
         use std.io = io;
         use std.path = path;
         let cmd = io.commandWithRedirects(
-            io.command("printf", ["neve"]),
-            [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+            io.command("printf", ["n3v3"]),
+            [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
         );
         let shown = if typeOf(cmd) == "Command" -> toString(cmd) else "nope";
     "#;
@@ -1632,10 +1632,10 @@ fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
         let result = io.execPipeline(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("cmd", ["/C", "(echo neve) & (echo err 1>&2)"]),
+                    io.command("cmd", ["/C", "(echo n3v3) & (echo err 1>&2)"]),
                     [io.redirectStderrPath(err)]
                 ),
-                io.command("cmd", ["/C", "findstr neve"])
+                io.command("cmd", ["/C", "findstr n3v3"])
             ])
         );
         let redirected = io.readFilePath(err);
@@ -1656,10 +1656,10 @@ fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
         let result = io.execPipeline(
             io.pipeline([
                 io.commandWithRedirects(
-                    io.command("sh", ["-c", "printf neve && printf err >&2"]),
+                    io.command("sh", ["-c", "printf n3v3 && printf err >&2"]),
                     [io.redirectStderrPath(err)]
                 ),
-                io.command("sh", ["-c", "grep neve"])
+                io.command("sh", ["-c", "grep n3v3"])
             ])
         );
         let redirected = io.readFilePath(err);
@@ -1683,7 +1683,7 @@ fn test_eval_hir_std_io_exec_pipeline_honors_stage_local_redirects() {
 fn test_eval_hir_std_io_task_command_bridge_exposes_task_runtime_value() {
     let source = r#"
         use std.io = io;
-        let task = io.taskCommand(io.command("printf", ["neve"]));
+        let task = io.taskCommand(io.command("printf", ["n3v3"]));
         let shown = if typeOf(task) == "Task" -> toString(task) else "nope";
     "#;
 
@@ -1698,7 +1698,7 @@ fn test_eval_hir_std_io_task_pipeline_bridge_exposes_task_runtime_value() {
     let source = r#"
         use std.io = io;
         let task = io.taskPipeline(io.pipeline([
-            io.command("printf", ["neve"]),
+            io.command("printf", ["n3v3"]),
             io.command("cat", [])
         ]));
         let shown = if typeOf(task) == "Task" -> toString(task) else "nope";
@@ -1730,7 +1730,7 @@ fn test_eval_hir_std_io_await_tasks_bridge_exposes_process_result_list() {
     let source = r#"
         use std.io = io;
         let results = io.awaitTasks([
-            io.taskCommand(io.command("printf", ["neve"])),
+            io.taskCommand(io.command("printf", ["n3v3"])),
             io.taskPipeline(io.pipeline([
                 io.command("printf", ["lang"]),
                 io.command("cat", [])
@@ -1738,7 +1738,7 @@ fn test_eval_hir_std_io_await_tasks_bridge_exposes_process_result_list() {
         ]);
         match results {
             [first, second] ->
-                io.processStdout(first) == "neve" &&
+                io.processStdout(first) == "n3v3" &&
                 io.processStdout(second) == "lang" &&
                 io.processSuccess(first) &&
                 io.processSuccess(second),
@@ -1757,7 +1757,7 @@ fn test_eval_hir_std_io_await_pipeline_task_matches_exec_pipeline() {
     let source = r#"
         use std.io = io;
         let pipeline = io.pipeline([
-            io.command("printf", ["neve"]),
+            io.command("printf", ["n3v3"]),
             io.command("cat", [])
         ]);
         let awaited = io.awaitTask(io.taskPipeline(pipeline));
@@ -1786,7 +1786,7 @@ fn test_eval_hir_std_io_exec_pipeline_honors_embedded_pipeline_redirects() {
         use std.path = path;
         let pipe = io.pipelineWithRedirects(
             io.pipeline([
-                io.command("printf", ["neve"]),
+                io.command("printf", ["n3v3"]),
                 io.command("cat", [])
             ]),
             [io.redirectStdoutPath(path.fromString("{path_literal}"))]
@@ -1932,7 +1932,7 @@ fn test_eval_hir_std_io_process_stderr_bridge() {
 #[test]
 fn test_eval_hir_std_io_path_exists_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("exists-path.neve.txt");
+    let file_path = temp_dir.path().join("exists-path.n3v3.txt");
     std::fs::write(&file_path, "exists").unwrap();
     let escaped = file_path
         .to_string_lossy()
@@ -1980,7 +1980,7 @@ fn test_eval_hir_std_io_is_dir_path_bridge() {
 #[test]
 fn test_eval_hir_std_io_is_file_path_bridge() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("file-path.neve.txt");
+    let file_path = temp_dir.path().join("file-path.n3v3.txt");
     std::fs::write(&file_path, "file").unwrap();
     let escaped = file_path
         .to_string_lossy()

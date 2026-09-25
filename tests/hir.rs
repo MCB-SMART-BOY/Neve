@@ -1,10 +1,10 @@
-//! Integration tests for neve-hir crate.
+//! Integration tests for n3v3-hir crate.
 
-use neve_hir::{
+use n3v3_hir::{
     BUILTIN_OPTION_NONE_CTOR_ID, BUILTIN_OPTION_SOME_CTOR_ID, BinOp, ExprKind, ItemKind,
     PatternKind, StmtKind, TyKind, lower,
 };
-use neve_parser::parse;
+use n3v3_parser::parse;
 
 #[test]
 fn test_lower_simple_let() {
@@ -394,7 +394,7 @@ fn test_lower_list_rest_pattern_preserves_segments() {
                     assert_eq!(init.len(), 1);
                     assert_eq!(tail.len(), 1);
                     match rest.as_deref() {
-                        Some(neve_hir::Pattern {
+                        Some(n3v3_hir::Pattern {
                             kind: PatternKind::Var(_, name),
                             ..
                         }) => assert_eq!(name, "middle"),

@@ -1,0 +1,93 @@
+# Canonical source: .claude/templates/bug_report.md
+name: Bug report
+description: Report a reproducible problem in n3v3; see .claude/templates/bug_report.md for the canonical fields.
+title: "[Bug]: "
+labels:
+  - bug
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use the canonical bug report structure in [`.claude/templates/bug_report.md`](../../.claude/templates/bug_report.md).
+        Remove secrets and personal data before submitting.
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug description
+      description: What happened? Describe the user-visible failure without including secrets.
+    validations:
+      required: true
+
+  - type: input
+    id: n3v3-version
+    attributes:
+      label: n3v3 version
+      description: Run `n3v3 --version` and paste the complete output.
+      placeholder: "output of n3v3 --version"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Operating system, version, and CPU architecture.
+      placeholder: "Linux, x86_64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: command
+    attributes:
+      label: n3v3 command
+      description: Select the command that reproduces the problem; use an actual file path.
+      options:
+        - "n3v3 check path/to/repro.n3v3"
+        - "n3v3 run path/to/repro.n3v3"
+        - "Other (describe in Additional context)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: minimal-reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Paste the smallest complete n3v3 source file that reproduces the issue.
+      render: n3v3
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should `n3v3 check` or `n3v3 run` do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: What did the command do instead? Include the complete diagnostic when possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: command-output
+    attributes:
+      label: Command output
+      description: Paste relevant output, including diagnostics or a backtrace. Redact secrets.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add relevant configuration or a link to a minimal repository.
+    validations:
+      required: false

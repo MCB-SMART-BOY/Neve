@@ -1,0 +1,11 @@
+use std.io = io
+
+use std.string = str
+
+msg = "hello n3v3"
+
+upper = str.to_upper(msg)
+
+has = str.contains(msg, "n3v3")
+
+content = io.readFile("/etc/hostname")

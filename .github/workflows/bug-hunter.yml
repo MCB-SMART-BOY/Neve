@@ -1,208 +1,278 @@
-name: Bug Hunter (Nightly Security Fuzzing)
+name: Bug Hunter (Nightly Security Fuzzing) / Bug Hunter（夜间安全扩展检查）
+
+# Scope / 职责边界:
+# CI owns the canonical build, test, lint, dependency, and smoke gates.
+# This workflow keeps nightly/manual attack, property, formal, and generated
+# differential checks that are intentionally broader than ci.yml.
+# CI 负责规范构建、测试、lint、依赖和 smoke 闸门；本 workflow 仅保留
+# 比 ci.yml 更广的夜间/手动攻击、属性、形式化和生成差分检查。
 
 on:
   schedule:
-    # 每天 UTC 03:00 运行（北京时间 11:00）
+    # 每天 UTC 03:00 运行（北京时间 11:00）/ Daily at 03:00 UTC
     - cron: '0 3 * * *'
   push:
     branches: [ master, main ]
     paths:
-      - 'crates/neve-std/src/io/**'
-      - 'crates/neve-eval/src/**'
-      - 'neve-cli/examples/bug_hunt.rs'
-      - 'neve-cli/examples/gen_diff_test.rs'
-      - 'formal/Neve/Spec/**'
-      - 'formal/Neve/Verify/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/**'
+      - 'crates/**'
+      - 'tree-sitter-n3v3/**'
+      - 'n3v3-cli/**'
+      - 'crates/n3v3-std/**'
+      - 'crates/n3v3-eval/**'
+      - 'crates/n3v3-frontend/**'
+      - 'n3v3-cli/src/**'
+      - 'n3v3-cli/examples/bug_hunt.rs'
+      - 'n3v3-cli/examples/gen_diff_test.rs'
+      - 'formal/**/*.lean'
+      - 'formal/lakefile.lean'
       - '.github/workflows/bug-hunter.yml'
   pull_request:
     branches: [ master, main ]
     paths:
-      - 'crates/neve-std/src/io/**'
-      - 'crates/neve-eval/src/**'
-      - 'neve-cli/examples/bug_hunt.rs'
-      - 'neve-cli/examples/gen_diff_test.rs'
-      - 'formal/Neve/Spec/**'
-      - 'formal/Neve/Verify/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/**'
+      - 'crates/**'
+      - 'tree-sitter-n3v3/**'
+      - 'n3v3-cli/**'
+      - 'crates/n3v3-std/**'
+      - 'crates/n3v3-eval/**'
+      - 'crates/n3v3-frontend/**'
+      - 'n3v3-cli/src/**'
+      - 'n3v3-cli/examples/bug_hunt.rs'
+      - 'n3v3-cli/examples/gen_diff_test.rs'
+      - 'formal/**/*.lean'
+      - 'formal/lakefile.lean'
       - '.github/workflows/bug-hunter.yml'
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch: # 允许手动触发 / Allow manual runs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bug-hunter-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  ELAN_VERSION: 'v4.1.2'
+  LEAN_TOOLCHAIN: 'leanprover/lean4:v4.29.1'
 
 jobs:
   # ================================================================
   # 安全边界攻击测试 / Security Boundary Attack Testing
-  # 使用 Lean 规范作为预言机，检测 Rust 实现的漏洞
-  # Uses Lean spec as oracle to find Rust implementation bugs
+  # Rust example exits non-zero when an attack regression is detected.
+  # Rust 示例在发现攻击回归时以非零状态退出。
   # ================================================================
   security-attacks:
-    name: Security Attacks (H-1, H-2, M-1, M-4)
+    name: Security attacks / 安全边界攻击
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          shared-key: ${{ runner.os }}-bug-hunter
-          cache-on-failure: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-bug-hunter-security-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bug-hunter-security-
 
-      - name: Build Rust (neve CLI, release mode)
+      - name: Build Rust CLI / 构建 Rust CLI
         run: cargo build -p n3v3 --release
 
-      - name: Run bug hunt (security boundary attacks)
+      - name: Run security boundary attacks / 运行安全边界攻击
         run: cargo run --release -p n3v3 --example bug_hunt
-        env:
-          # 使用 release 构建以获得更快的执行速度
-          CARGO_TARGET_DIR: target
-
-      - name: Check bug hunt results
-        run: |
-          echo "Bug hunt completed. Check logs above for any [BUG] entries."
-          echo "所有安全边界攻击测试完成 / All security boundary attack tests completed."
 
   # ================================================================
   # 效果系统属性测试 / Effects Property Testing
-  # 随机生成 I/O 程序并验证它们遵守安全限制
-  # Randomly generates I/O programs and verifies safety limits
+  # Randomly generated effect programs exercise limits beyond CI's smoke test.
+  # 随机生成的 effect 程序覆盖 CI smoke 之外的限制。
   # ================================================================
   effects-properties:
-    name: Effects Property Tests
+    name: Effects properties / Effects 属性测试
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          shared-key: ${{ runner.os }}-effects-prop
-          cache-on-failure: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-bug-hunter-effects-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bug-hunter-effects-
 
-      - name: Build Rust (neve CLI, release mode)
+      - name: Build Rust CLI / 构建 Rust CLI
         run: cargo build -p n3v3 --release
 
-      - name: Run effects property tests
+      - name: Run effects property tests / 运行 effects 属性测试
         run: cargo run --release -p n3v3 --example gen_diff_test -- --effects -n 50
-        env:
-          CARGO_TARGET_DIR: target
 
   # ================================================================
   # 形式化验证 / Formal Verification
-  # 确保 Lean 证明通过 lake build
-  # Ensures Lean proofs pass lake build
+  # lake build is the real proof check; the follow-up verifies artifacts.
+  # lake build 是真实证明检查；后续步骤验证构建产物。
   # ================================================================
   formal-verify:
-    name: Formal Verification (lake build)
+    name: Formal verification / 形式化验证
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Lean 4 (elan)
+      - name: Install pinned Lean toolchain / 安装固定版本 Lean 工具链
         run: |
-          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain leanprover/lean4:v4.29.1
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          set -euo pipefail
+          installer="$RUNNER_TEMP/elan-init.sh"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_VERSION}/elan-init.sh" \
+            -o "$installer"
+          sh "$installer" -y --default-toolchain "$LEAN_TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Cache Lake build
-        uses: actions/cache@v4
+      - name: Cache Lake build / 缓存 Lake 构建
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             formal/.lake/build
             formal/.lake/packages
-          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/Neve/**/*.lean') }}
-          restore-keys: lake-${{ runner.os }}-
+          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/**/*.lean') }}
+          restore-keys: |
+            lake-${{ runner.os }}-
 
-      - name: Build Lean formal verification
+      - name: Build Lean formal verification / 构建 Lean 形式化验证
         run: |
+          set -euo pipefail
           cd formal
           lake build
 
-      - name: Verify Lean build output
+      - name: Verify Lean build artifacts / 验证 Lean 构建产物
         run: |
-          echo "✅ Lake build successful — all 18 modules verified"
-          echo "   Spec/ (Syntax, Typing, Eval, Effects)"
-          echo "   Proofs/ (Values, Context, Safety)"
-          echo "   Verify/ (Path, Environ, Limits)"
-          echo "   Refinement/ (Types, Path, Environ, Limits)"
-          echo "   Tests/ (Eval)"
+          set -euo pipefail
+          test -d formal/.lake/build
+          source_modules="$(find formal -type f -name '*.lean' | wc -l | tr -d '[:space:]')"
+          built_modules="$(find formal/.lake/build -type f -name '*.olean' | wc -l | tr -d '[:space:]')"
+          test "$source_modules" -gt 0
+          test "$built_modules" -gt 0
+          printf 'Lean source modules: %s; compiled artifacts: %s\n' \
+            "$source_modules" "$built_modules"
 
   # ================================================================
   # 快速差分测试 / Quick Differential Test
-  # Rust vs Lean 求值器一致性检查（轻量级）
-  # Lightweight Rust vs Lean evaluator consistency check
+  # Generated Rust ↔ Lean comparisons complement ci.yml's deterministic smoke.
+  # 生成的 Rust ↔ Lean 比对补充 ci.yml 的确定性 smoke 检查。
   # ================================================================
   quick-diff:
-    name: Quick Diff Test (Rust ↔ Lean)
+    name: Generated differential tests / 生成差分测试
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Lean 4 (elan)
+      - name: Install Rust stable / 安装 Rust stable
         run: |
-          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain leanprover/lean4:v4.29.1
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Install pinned Lean toolchain / 安装固定版本 Lean 工具链
+        run: |
+          set -euo pipefail
+          installer="$RUNNER_TEMP/elan-init.sh"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_VERSION}/elan-init.sh" \
+            -o "$installer"
+          sh "$installer" -y --default-toolchain "$LEAN_TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          shared-key: ${{ runner.os }}-quick-diff
-          cache-on-failure: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-bug-hunter-diff-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bug-hunter-diff-
 
-      - name: Cache Lake build
-        uses: actions/cache@v4
+      - name: Cache Lake build / 缓存 Lake 构建
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             formal/.lake/build
             formal/.lake/packages
-          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/Neve/**/*.lean') }}
-          restore-keys: lake-${{ runner.os }}-
+          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/**/*.lean') }}
+          restore-keys: |
+            lake-${{ runner.os }}-
 
-      - name: Build Rust (neve CLI, debug)
-        run: cargo build -p n3v3
+      - name: Build Rust CLI / 构建 Rust CLI
+        run: cargo build -p n3v3 --release
 
-      - name: Build Lean (lake)
+      - name: Build Lean / 构建 Lean
         run: |
+          set -euo pipefail
           cd formal
           lake build
 
-      - name: Run quick diff test (50 expressions, depth 3)
+      - name: Run generated differential tests / 运行生成差分测试
         run: cargo run --release -p n3v3 --example gen_diff_test -- -n 50 -d 3
-        env:
-          CARGO_TARGET_DIR: target
 
   # ================================================================
   # 汇总报告 / Summary Report
   # ================================================================
   summary:
-    name: Bug Hunter Summary
+    name: Bug Hunter summary / Bug Hunter 汇总
     needs: [security-attacks, effects-properties, formal-verify, quick-diff]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: always()
     steps:
-      - name: Report status
+      - name: Enforce extension results / 强制扩展检查结果
+        env:
+          SECURITY_RESULT: ${{ needs.security-attacks.result }}
+          EFFECTS_RESULT: ${{ needs.effects-properties.result }}
+          FORMAL_RESULT: ${{ needs.formal-verify.result }}
+          DIFF_RESULT: ${{ needs.quick-diff.result }}
         run: |
-          echo "============================================"
-          echo "  Bug Hunter Nightly — Complete"
-          echo "============================================"
-          echo ""
-          echo "  Jobs:"
-          echo "    security-attacks:   ${{ needs.security-attacks.result }}"
-          echo "    effects-properties: ${{ needs.effects-properties.result }}"
-          echo "    formal-verify:      ${{ needs.formal-verify.result }}"
-          echo "    quick-diff:         ${{ needs.quick-diff.result }}"
-          echo ""
-          echo "  If any job failed, check the logs above."
-          echo "============================================"
+          set -euo pipefail
+          failed=0
+          for check in \
+            "security-attacks:$SECURITY_RESULT" \
+            "effects-properties:$EFFECTS_RESULT" \
+            "formal-verify:$FORMAL_RESULT" \
+            "quick-diff:$DIFF_RESULT"; do
+            name="${check%%:*}"
+            result="${check#*:}"
+            printf '%-22s %s\n' "$name" "$result"
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            printf 'One or more Bug Hunter extension checks failed.\n' >&2
+            exit 1
+          fi
+          printf 'All Bug Hunter extension checks passed.\n'

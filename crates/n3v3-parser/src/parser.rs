@@ -1,0 +1,3481 @@
+//! The n3v3 parser.
+//! n3v3 语法解析器。
+//!
+//! This module implements a recursive descent parser that converts
+//! a token stream into an abstract syntax tree (AST).
+//! 本模块实现了一个递归下降解析器，将 token 流转换为抽象语法树（AST）。
+
+use n3v3_common::{Comment, Span, int_to_u32};
+use n3v3_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
+use n3v3_lexer::{Token, TokenKind};
+use n3v3_syntax::*;
+
+use crate::recovery::{
+    DelimiterKind, DelimiterStack, RecoveryMode, STMT_ENDS, is_stmt_end, is_stmt_start,
+    is_sync_token,
+};
+
+/// The n3v3 parser.
+/// n3v3 语法解析器。
+///
+/// Converts a token stream into an abstract syntax tree using
+/// recursive descent parsing with operator precedence.
+/// 使用递归下降解析和运算符优先级将 token 流转换为抽象语法树。
+pub struct Parser {
+    /// The input tokens.
+    /// 输入的 token 序列。
+    tokens: Vec<Token>,
+    /// Comments retained separately from the token stream.
+    /// 从 token 流单独保留的注释。
+    comments: Vec<Comment>,
+    /// Current position in the token stream.
+    /// 在 token 流中的当前位置。
+    pos: usize,
+    /// Accumulated diagnostics (errors and warnings).
+    /// 累积的诊断信息（错误和警告）。
+    diagnostics: Vec<Diagnostic>,
+    /// Delimiter stack for tracking balanced delimiters.
+    /// 用于跟踪平衡定界符的栈。
+    delimiter_stack: DelimiterStack,
+    /// Current recovery mode.
+    /// 当前恢复模式。
+    recovery_mode: RecoveryMode,
+}
+
+impl Parser {
+    /// Create a new parser from a token stream.
+    /// 从 token 流创建新的解析器。
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self::new_with_comments(tokens, Vec::new())
+    }
+
+    /// Create a parser with comments retained by the lexer.
+    /// 使用 lexer 保留的注释创建解析器。
+    pub fn new_with_comments(tokens: Vec<Token>, comments: Vec<Comment>) -> Self {
+        Self {
+            tokens,
+            comments,
+            pos: 0,
+            diagnostics: Vec::new(),
+            delimiter_stack: DelimiterStack::new(),
+            recovery_mode: RecoveryMode::Statement,
+        }
+    }
+    /// 消耗解析器并返回累积的诊断信息。
+    pub fn diagnostics(self) -> Vec<Diagnostic> {
+        self.diagnostics
+    }
+
+    // ========== Top-Level Parsing 顶层解析 ==========
+
+    /// Parse a complete source file.
+    /// 解析完整的源文件。
+    ///
+    /// This is the main entry point for parsing. It parses all top-level
+    /// items in the source file and returns a SourceFile AST node.
+    /// 这是解析的主入口。它解析源文件中的所有顶层项并返回 SourceFile AST 节点。
+    pub fn parse_file(&mut self) -> SourceFile {
+        let start = self.current_span();
+        let mut items = Vec::new();
+        let mut tail_expr = None;
+
+        while !self.at_end() {
+            // Track delimiter state for each token
+            // 为每个 token 跟踪定界符状态
+            let kind = self.current_kind().clone();
+            self.delimiter_stack.update(&kind);
+
+            if let Some(item) = self.parse_item() {
+                items.push(item);
+            } else {
+                // Parse top-level expression
+                let expr = self.parse_expr();
+                let _ = self.eat(TokenKind::Semicolon);
+
+                if !self.at_end() {
+                    // More forms follow → expression statement
+                    let span = expr.span;
+                    items.push(Item {
+                        kind: ItemKind::ExprStmt(expr),
+                        span,
+                    });
+                } else {
+                    // Last expression in file → tail expression
+                    tail_expr = Some(expr);
+                }
+            }
+        }
+
+        let end = self.current_span();
+        SourceFile {
+            items,
+            tail_expr,
+            comments: self.comments.clone(),
+            span: start.merge(end),
+        }
+    }
+
+    /// Parse a top-level item.
+    /// 解析顶层项。
+    ///
+    /// Items include: let bindings, functions, type aliases, structs,
+    /// enums, traits, impl blocks, and imports.
+    /// 项包括：let 绑定、函数、类型别名、结构体、枚举、特征、impl 块和导入。
+    fn parse_item(&mut self) -> Option<Item> {
+        let start = self.current_span();
+        let is_pub = false; // v4.0: all public
+
+        let kind = match self.current_kind() {
+            TokenKind::Let => {
+                self.advance();
+                Some(ItemKind::Let(self.parse_let_def(is_pub)))
+            }
+            TokenKind::Fn => {
+                self.advance();
+                Some(ItemKind::Fn(self.parse_fn_def(is_pub)))
+            }
+            TokenKind::Type | TokenKind::Struct | TokenKind::Enum => {
+                self.advance();
+                Some(self.parse_type_decl(is_pub))
+            }
+            TokenKind::Trait => {
+                self.advance();
+                Some(ItemKind::Trait(self.parse_trait_def(is_pub)))
+            }
+            TokenKind::Impl => {
+                self.advance();
+                Some(ItemKind::Impl(self.parse_impl_def()))
+            }
+            TokenKind::Use => {
+                self.advance();
+                Some(ItemKind::Import(self.parse_import_def(is_pub)))
+            }
+            TokenKind::Ident(name) if name == "pub" => {
+                // Legacy visibility marker; v4 items are public by default.
+                self.advance();
+                self.parse_item().map(|item| item.kind)
+            }
+            TokenKind::Ident(name) if name == "effect" => {
+                // Legacy effect marker; type checking now infers effectfulness.
+                self.advance();
+                if self.eat(TokenKind::Fn) {
+                    let mut function = self.parse_fn_def(is_pub);
+                    function.effect = true;
+                    Some(ItemKind::Fn(function))
+                } else {
+                    self.error_with_code(
+                        "expected `fn` after `effect`",
+                        ErrorCode::UnexpectedToken,
+                    );
+                    None
+                }
+            }
+            TokenKind::Ident(name) if name == "import" => {
+                self.advance();
+                Some(ItemKind::Import(self.parse_import_def(is_pub)))
+            }
+            TokenKind::Ident(_) => self.parse_ident_item(is_pub),
+            _ => {
+                if self.is_start_of_pattern() {
+                    Some(ItemKind::Let(self.parse_let_def(is_pub)))
+                } else {
+                    None
+                }
+            }
+        };
+
+        kind.map(|k| {
+            let end = self.previous_span();
+            Item {
+                kind: k,
+                span: start.merge(end),
+            }
+        })
+    }
+
+    // ========== Item Definitions 项定义 ==========
+
+    /// Check whether a delimited form is an implicit destructuring let.
+    /// 检查定界形式是否是隐式解构 let。
+    fn is_start_of_pattern(&self) -> bool {
+        if !matches!(
+            self.current_kind(),
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace | TokenKind::HashLBrace
+        ) {
+            return false;
+        }
+
+        let mut closing = Vec::new();
+        for index in self.pos..self.tokens.len() {
+            match self.tokens[index].kind.clone() {
+                TokenKind::LParen => closing.push(TokenKind::RParen),
+                TokenKind::LBracket => closing.push(TokenKind::RBracket),
+                TokenKind::LBrace | TokenKind::HashLBrace => closing.push(TokenKind::RBrace),
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    if closing.pop() != Some(self.tokens[index].kind.clone()) {
+                        return false;
+                    }
+                    if closing.is_empty() {
+                        return matches!(
+                            self.tokens.get(index + 1).map(|token| &token.kind),
+                            Some(TokenKind::Eq) | Some(TokenKind::Colon)
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+    /// Parse an identifier-based item (v3.0: keyword-less `fn`/`let`).
+    /// 解析基于标识符的项（v3.0：无关键字 `fn`/`let`）。
+    ///
+    /// Looks ahead to determine if this is a function definition or let binding.
+    /// 向前查看以确定是函数定义还是 let 绑定。
+    fn parse_ident_item(&mut self, _is_pub: bool) -> Option<ItemKind> {
+        let saved = self.pos;
+        let saved_diagnostics = self.diagnostics.len();
+        let name = self.parse_ident();
+        let visibility = Visibility::Public; // v4.0: all public
+        // Check for generics: name<T>
+        if self.eat(TokenKind::Lt) {
+            let generics = self.parse_generics_inline();
+            if self.check(TokenKind::LParen) {
+                // fn def with generics: name<T>(params) = body
+                self.advance(); // consume (
+                let params = self.parse_params();
+                self.expect(TokenKind::RParen);
+                let return_type = if self.eat(TokenKind::Arrow) {
+                    Some(self.parse_type())
+                } else {
+                    None
+                };
+                let effect = false; // v4.0: auto-inferred by typeck
+                if self.eat(TokenKind::Eq) {
+                    let body = self.parse_expr();
+                    self.eat(TokenKind::Semicolon);
+                    return Some(ItemKind::Fn(FnDef {
+                        visibility,
+                        name,
+                        generics,
+                        params,
+                        return_type,
+                        effect,
+                        body,
+                    }));
+                }
+            }
+            // Not a fn def, backtrack without leaking speculative diagnostics.
+            // 不是函数定义，回退且不泄漏试探性诊断。
+            self.pos = saved;
+            self.diagnostics.truncate(saved_diagnostics);
+            return None;
+        }
+
+        // Check for params: name(
+        if self.eat(TokenKind::LParen) {
+            let params = self.parse_params();
+            self.expect(TokenKind::RParen);
+            let return_type = if self.eat(TokenKind::Arrow) {
+                Some(self.parse_type())
+            } else {
+                None
+            };
+            let effect = false;
+            if self.eat(TokenKind::Eq) {
+                let body = self.parse_expr();
+                self.eat(TokenKind::Semicolon);
+                return Some(ItemKind::Fn(FnDef {
+                    visibility,
+                    name,
+                    generics: Vec::new(),
+                    params,
+                    return_type,
+                    effect,
+                    body,
+                }));
+            }
+            // Not a fn def, backtrack without leaking speculative diagnostics.
+            // 不是函数定义，回退且不泄漏试探性诊断。
+            self.pos = saved;
+            self.diagnostics.truncate(saved_diagnostics);
+            return None;
+        }
+
+        // Check for let binding: name = value
+        if self.eat(TokenKind::Eq) {
+            let value = self.parse_expr();
+            self.eat(TokenKind::Semicolon);
+            let pattern = Pattern::new(PatternKind::Var(name.clone()), name.span);
+            return Some(ItemKind::Let(LetDef {
+                visibility,
+                pattern,
+                ty: None,
+                value,
+            }));
+        }
+
+        // Check for let binding with type: name: Type = value
+        if self.eat(TokenKind::Colon) {
+            let ty = self.parse_type();
+            if self.eat(TokenKind::Eq) {
+                let value = self.parse_expr();
+                self.eat(TokenKind::Semicolon);
+                let pattern = Pattern::new(PatternKind::Var(name.clone()), name.span);
+                return Some(ItemKind::Let(LetDef {
+                    visibility,
+                    pattern,
+                    ty: Some(ty),
+                    value,
+                }));
+            }
+            // Not a let binding, backtrack without leaking speculative diagnostics.
+            // 不是 let 绑定，回退且不泄漏试探性诊断。
+            self.pos = saved;
+            self.diagnostics.truncate(saved_diagnostics);
+            return None;
+        }
+
+        // Not a recognizable item form.
+        // 不是可识别的项形式。
+        self.pos = saved;
+        self.diagnostics.truncate(saved_diagnostics);
+        None
+    }
+
+    /// Parse generic parameters after `<` has already been consumed.
+    /// 在 `<` 已被消耗后解析泛型参数。
+    fn parse_generics_inline(&mut self) -> Vec<GenericParam> {
+        let mut params = Vec::new();
+        loop {
+            let start = self.current_span();
+            let name = self.parse_ident();
+            let bounds = if self.eat(TokenKind::Colon) {
+                let mut bounds = vec![self.parse_type()];
+                while self.eat(TokenKind::Plus) {
+                    bounds.push(self.parse_type());
+                }
+                bounds
+            } else {
+                Vec::new()
+            };
+            let end = self.previous_span();
+            params.push(GenericParam {
+                name,
+                bounds,
+                span: start.merge(end),
+            });
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::Gt);
+        params
+    }
+
+    /// Skip a balanced parenthesized block `( ... )`, tracking nesting.
+    /// 跳过平衡的括号块 `( ... )`，跟踪嵌套。
+    #[allow(dead_code)]
+    fn skip_balanced_paren(&mut self) {
+        self.advance(); // consume (
+        let mut depth = 1;
+        while !self.at_end() && depth > 0 {
+            match self.current_kind() {
+                TokenKind::LParen => depth += 1,
+                TokenKind::RParen => depth -= 1,
+                _ => {}
+            }
+            self.advance();
+        }
+    }
+
+    // ========== Item Definitions 项定义 ==========
+
+    /// Parse a let binding definition.
+    /// 解析 let 绑定定义。
+    ///
+    /// Syntax: `[let] pattern [: type] = expr[;]`
+    /// 语法：`[let] 模式 [: 类型] = 表达式[;]`
+    fn parse_let_def(&mut self, _is_pub: bool) -> LetDef {
+        let _ = self.eat(TokenKind::Let);
+        let pattern = self.parse_pattern();
+        let ty = if self.eat(TokenKind::Colon) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+        self.expect(TokenKind::Eq);
+        let value = self.parse_expr();
+        self.eat(TokenKind::Semicolon);
+
+        LetDef {
+            visibility: Visibility::Public, // v4.0: all public
+            pattern,
+            ty,
+            value,
+        }
+    }
+
+    /// Parse a function definition.
+    /// 解析函数定义。
+    ///
+    /// Syntax: `[fn] name[<generics>](params) [-> return_type] = body[;]`
+    /// 语法：`[fn] 名称[<泛型>](参数) [-> 返回类型] = 函数体[;]`
+    fn parse_fn_def(&mut self, _is_pub: bool) -> FnDef {
+        let _ = self.eat(TokenKind::Fn);
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LParen);
+        let params = self.parse_params();
+        self.expect(TokenKind::RParen);
+
+        let return_type = if self.eat(TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        // Parse optional effect annotation (legacy syntax: `effect`).
+        let effect = self.eat_legacy_effect_annotation();
+
+        self.expect(TokenKind::Eq);
+        let body = self.parse_expr();
+        self.eat(TokenKind::Semicolon);
+
+        FnDef {
+            visibility: Visibility::Public, // v4.0: all public
+            name,
+            generics,
+            params,
+            return_type,
+            effect,
+            body,
+        }
+    }
+
+    fn eat_legacy_effect_annotation(&mut self) -> bool {
+        if matches!(self.current_kind(), TokenKind::Ident(name) if name == "effect") {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+    /// Parse a type alias definition.
+    /// 解析类型别名定义。
+    ///
+    /// Syntax: `type Name[<generics>] = Type;`
+    /// 语法：`type 名称[<泛型>] = 类型;`
+    #[allow(dead_code)]
+    fn parse_type_alias(&mut self, _is_pub: bool) -> TypeAlias {
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::Eq);
+        let ty = self.parse_type();
+        self.eat(TokenKind::Semicolon);
+
+        TypeAlias {
+            visibility: Visibility::Public, // v4.0: all public
+            name,
+            generics,
+            ty,
+        }
+    }
+
+    /// Parse a unified type declaration (v3.0).
+    /// 解析统一的类型声明（v3.0）。
+    ///
+    /// Handles type aliases, struct definitions, and enum definitions
+    /// from a single `type` (or `struct`/`enum` for backward compat) keyword.
+    /// 从单个 `type` 关键字（或向后兼容的 `struct`/`enum`）处理类型别名、结构体和枚举定义。
+    fn parse_type_decl(&mut self, _is_pub: bool) -> ItemKind {
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        let visibility = Visibility::Public; // v4.0: all public
+
+        if self.eat(TokenKind::Eq) {
+            if self.eat(TokenKind::LBrace) {
+                // v3.0 syntax: type Foo = { ... }
+                if self.peek_brace_is_enum() {
+                    ItemKind::Enum(self.parse_enum_def_body(name, generics, visibility))
+                } else {
+                    ItemKind::Struct(self.parse_struct_def_body(name, generics, visibility))
+                }
+            } else if self.eat(TokenKind::Pipe) {
+                // v3.0 bare enum pipe syntax: type Foo = | Red | Green | Blue
+                let variants = self.parse_variants();
+                self.eat(TokenKind::Semicolon);
+                ItemKind::Enum(EnumDef {
+                    visibility,
+                    name,
+                    generics,
+                    variants,
+                })
+            } else {
+                // type alias: type Foo = Type
+                let ty = self.parse_type();
+                self.eat(TokenKind::Semicolon);
+                ItemKind::TypeAlias(TypeAlias {
+                    visibility,
+                    name,
+                    generics,
+                    ty,
+                })
+            }
+        } else if self.eat(TokenKind::LBrace) {
+            // legacy syntax: type Foo { ... }
+            if self.peek_brace_is_enum() {
+                ItemKind::Enum(self.parse_enum_def_body(name, generics, visibility))
+            } else {
+                ItemKind::Struct(self.parse_struct_def_body(name, generics, visibility))
+            }
+        } else {
+            // bare type declaration without body
+            let name_span = name.span;
+            self.eat(TokenKind::Semicolon);
+            ItemKind::TypeAlias(TypeAlias {
+                visibility,
+                name,
+                generics,
+                ty: Type {
+                    kind: TypeKind::Infer,
+                    span: name_span,
+                },
+            })
+        }
+    }
+
+    /// Parse a struct body after `{` has been consumed.
+    /// 在 `{` 已被消耗后解析结构体体。
+    fn parse_struct_def_body(
+        &mut self,
+        name: Ident,
+        generics: Vec<GenericParam>,
+        visibility: Visibility,
+    ) -> StructDef {
+        let fields = self.parse_field_defs();
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+        StructDef {
+            visibility,
+            name,
+            generics,
+            fields,
+        }
+    }
+
+    /// Parse an enum body after `{` has been consumed.
+    /// 在 `{` 已被消耗后解析枚举体。
+    fn parse_enum_def_body(
+        &mut self,
+        name: Ident,
+        generics: Vec<GenericParam>,
+        visibility: Visibility,
+    ) -> EnumDef {
+        let variants = self.parse_variants();
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+        EnumDef {
+            visibility,
+            name,
+            generics,
+            variants,
+        }
+    }
+
+    /// Peek inside `{ ... }` to determine if it contains enum variants or struct fields.
+    /// 在 `{ ... }` 内部窥视以确定包含枚举变体还是结构体字段。
+    ///
+    /// Assumes the current position is inside the brace (after `{` was consumed).
+    /// Restores position after peeking.
+    /// 假设当前位置在大括号内（`{` 已被消耗）。窥视后恢复位置。
+    fn peek_brace_is_enum(&mut self) -> bool {
+        let saved = self.pos;
+
+        // Leading `|` indicates v3.0 enum syntax
+        if self.eat(TokenKind::Pipe) {
+            self.pos = saved;
+            return true;
+        }
+
+        // Check first identifier: if followed by `:`, it's a struct field.
+        // If followed by `,`, `|`, `(`, `{`, or `}`, it's an enum variant.
+        if matches!(self.current_kind(), TokenKind::Ident(_)) {
+            self.advance();
+            let is_enum = matches!(
+                self.current_kind(),
+                TokenKind::Comma
+                    | TokenKind::Pipe
+                    | TokenKind::LParen
+                    | TokenKind::LBrace
+                    | TokenKind::HashLBrace
+                    | TokenKind::RBrace
+            );
+            self.pos = saved;
+            return is_enum;
+        }
+
+        // Empty or unexpected — default to struct
+        self.pos = saved;
+        false
+    }
+
+    /// Parse a struct definition.
+    /// 解析结构体定义。
+    ///
+    /// Syntax: `struct Name[<generics>] { fields };`
+    /// 语法：`struct 名称[<泛型>] { 字段列表 };`
+    #[allow(dead_code)]
+    fn parse_struct_def(&mut self, _is_pub: bool) -> StructDef {
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LBrace);
+        let fields = self.parse_field_defs();
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+
+        StructDef {
+            visibility: Visibility::Public, // v4.0: all public
+            name,
+            generics,
+            fields,
+        }
+    }
+
+    /// Parse an enum definition.
+    /// 解析枚举定义。
+    ///
+    /// Syntax: `enum Name[<generics>] { variants };`
+    /// 语法：`enum 名称[<泛型>] { 变体列表 };`
+    #[allow(dead_code)]
+    fn parse_enum_def(&mut self, _is_pub: bool) -> EnumDef {
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LBrace);
+        let variants = self.parse_variants();
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+
+        EnumDef {
+            visibility: Visibility::Public, // v4.0: all public
+            name,
+            generics,
+            variants,
+        }
+    }
+
+    /// Parse a trait definition.
+    /// 解析特征定义。
+    ///
+    /// Syntax: `trait Name[<generics>] { items };`
+    /// 语法：`trait 名称[<泛型>] { 方法和关联类型 };`
+    fn parse_trait_def(&mut self, _is_pub: bool) -> TraitDef {
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LBrace);
+
+        let mut items = Vec::new();
+        let mut assoc_types = Vec::new();
+
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            if self.check(TokenKind::Type) {
+                assoc_types.push(self.parse_assoc_type_def());
+            } else {
+                items.push(self.parse_trait_item());
+            }
+        }
+
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+
+        TraitDef {
+            visibility: Visibility::Public, // v4.0: all public
+            name,
+            generics,
+            items,
+            assoc_types,
+        }
+    }
+
+    /// Parse an impl block.
+    /// 解析 impl 块。
+    ///
+    /// Syntax: `impl[<generics>] [Trait for] Type { items };`
+    /// 语法：`impl[<泛型>] [特征 for] 类型 { 方法实现 };`
+    fn parse_impl_def(&mut self) -> ImplDef {
+        let generics = self.parse_generics();
+        let first_type = self.parse_type();
+
+        let (trait_, target) = if matches!(
+            self.current_kind(),
+            TokenKind::Ident(name) if name == "for"
+        ) {
+            self.advance();
+            (Some(first_type), self.parse_type())
+        } else {
+            (None, first_type)
+        };
+
+        self.expect(TokenKind::LBrace);
+
+        let mut items = Vec::new();
+        let mut assoc_type_impls = Vec::new();
+
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            if self.check(TokenKind::Type) {
+                assoc_type_impls.push(self.parse_assoc_type_impl());
+            } else {
+                items.push(self.parse_impl_item());
+            }
+        }
+
+        self.expect(TokenKind::RBrace);
+        self.eat(TokenKind::Semicolon);
+
+        ImplDef {
+            generics,
+            trait_,
+            target,
+            items,
+            assoc_type_impls,
+        }
+    }
+
+    /// Parse a `use` import definition.
+    /// 解析 `use` 导入定义。
+    ///
+    /// Syntax: `use [prefix.]path[.(items)] [= alias];`
+    /// Legacy `import ... [as alias]` spelling is accepted for compatibility.
+    fn parse_import_def(&mut self, _is_pub: bool) -> ImportDef {
+        // Parse optional path prefix (self, super, crate)
+        // 解析可选的路径前缀（self、super、crate）
+        let prefix = match self.current().kind {
+            TokenKind::SelfLower => {
+                self.advance();
+                self.expect(TokenKind::Dot);
+                PathPrefix::Self_
+            }
+            TokenKind::Super => {
+                self.advance();
+                self.expect(TokenKind::Dot);
+                PathPrefix::Super
+            }
+            TokenKind::Crate => {
+                self.advance();
+                self.expect(TokenKind::Dot);
+                PathPrefix::Crate
+            }
+            _ => PathPrefix::Absolute,
+        };
+
+        // Parse the path segments
+        // 解析路径段
+        let mut path = vec![self.parse_ident()];
+        while self.eat(TokenKind::Dot) {
+            // Check if next token is '(' for import items, not a path segment
+            // 检查下一个 token 是否为 '('（导入项），而非路径段
+            if matches!(self.current().kind, TokenKind::LParen) {
+                break;
+            }
+            path.push(self.parse_ident());
+        }
+
+        // Parse import items: module, all (*), or specific items
+        // 解析导入项：模块、全部（*）或特定项
+        let items = if self.eat(TokenKind::LParen) {
+            if self.eat(TokenKind::Star) {
+                self.expect(TokenKind::RParen);
+                ImportItems::All
+            } else {
+                let mut items = vec![self.parse_ident()];
+                while self.eat(TokenKind::Comma) {
+                    items.push(self.parse_ident());
+                }
+                self.expect(TokenKind::RParen);
+                ImportItems::Items(items)
+            }
+        } else {
+            ImportItems::Module
+        };
+
+        // Parse optional alias (v4.0: `=`, legacy: `as`)
+        // 解析可选的别名（v4.0: `=`, 旧: `as`）
+        let alias = if self.eat(TokenKind::Eq) {
+            Some(self.parse_ident())
+        } else if matches!(
+            self.current_kind(),
+            TokenKind::Ident(name) if name == "as"
+        ) {
+            self.advance();
+            Some(self.parse_ident())
+        } else {
+            None
+        };
+
+        self.eat(TokenKind::Semicolon);
+
+        ImportDef {
+            prefix,
+            path,
+            items,
+            alias,
+            visibility: Visibility::Public, // v4.0: all public
+        }
+    }
+
+    // ========== Helper Parsers 辅助解析器 ==========
+
+    /// Parse generic parameters.
+    /// 解析泛型参数。
+    ///
+    /// Syntax: `<T, U: Bound, V: A + B>`
+    /// 语法：`<T, U: 约束, V: A + B>`
+    fn parse_generics(&mut self) -> Vec<GenericParam> {
+        if !self.eat(TokenKind::Lt) {
+            return Vec::new();
+        }
+
+        let mut params = Vec::new();
+        loop {
+            let start = self.current_span();
+            let name = self.parse_ident();
+            // Parse optional bounds: `T: Bound1 + Bound2`
+            // 解析可选的约束：`T: Bound1 + Bound2`
+            let bounds = if self.eat(TokenKind::Colon) {
+                let mut bounds = vec![self.parse_type()];
+                while self.eat(TokenKind::Plus) {
+                    bounds.push(self.parse_type());
+                }
+                bounds
+            } else {
+                Vec::new()
+            };
+            let end = self.previous_span();
+
+            params.push(GenericParam {
+                name,
+                bounds,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::Gt);
+        params
+    }
+
+    /// Parse function parameters.
+    /// 解析函数参数。
+    ///
+    /// Syntax: `pattern [: type], ...`
+    /// 语法：`模式 [: 类型], ...`
+    fn parse_params(&mut self) -> Vec<Param> {
+        let mut params = Vec::new();
+        if self.check(TokenKind::RParen) {
+            return params;
+        }
+
+        loop {
+            // Check for trailing comma before RParen
+            // 检查右括号前的尾随逗号
+            if self.check(TokenKind::RParen) {
+                break;
+            }
+
+            let start = self.current_span();
+            let is_lazy = self.eat(TokenKind::Tilde);
+            let pattern = self.parse_pattern();
+            // Type annotation is optional - inferred if not provided
+            // 类型注解是可选的 - 如果未提供则推断
+            let ty = if self.eat(TokenKind::Colon) {
+                self.parse_type()
+            } else {
+                Type {
+                    kind: TypeKind::Infer,
+                    span: self.current_span(),
+                }
+            };
+            let end = self.previous_span();
+
+            params.push(Param {
+                pattern,
+                ty,
+                is_lazy,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        params
+    }
+
+    /// Parse struct field definitions.
+    /// 解析结构体字段定义。
+    ///
+    /// Syntax: `name: type [= default], ...`
+    /// 语法：`名称: 类型 [= 默认值], ...`
+    fn parse_field_defs(&mut self) -> Vec<FieldDef> {
+        let mut fields = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            let start = self.current_span();
+            let name = self.parse_ident();
+            self.expect(TokenKind::Colon);
+            let ty = self.parse_type();
+            // Parse optional default value
+            // 解析可选的默认值
+            // effect auto-inferred
+            let default = if self.eat(TokenKind::Eq) {
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+            let end = self.previous_span();
+
+            fields.push(FieldDef {
+                name,
+                ty,
+                default,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        fields
+    }
+
+    /// Parse enum variants.
+    /// 解析枚举变体。
+    ///
+    /// Variants can be: unit, tuple, or record.
+    /// Separators: `,` (legacy) or `|` (v3.0). Optional leading/trailing `|`.
+    /// 变体可以是：单元、元组或记录。分隔符：`,`（旧）或 `|`（v3.0）。可选前导/尾随 `|`。
+    fn parse_variants(&mut self) -> Vec<Variant> {
+        let mut variants = Vec::new();
+
+        // Optional leading `|` (v3.0 syntax)
+        // 可选的前导 `|`（v3.0 语法）
+        self.eat(TokenKind::Pipe);
+
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Semicolon) && !self.at_end()
+        {
+            let start = self.current_span();
+
+            // Skip leading `|` separator between variants (v3.0)
+            // 跳过变体之间的前导 `|` 分隔符（v3.0）
+            self.eat(TokenKind::Pipe);
+
+            let name = self.parse_ident();
+
+            // Parse variant kind: unit, tuple, or record
+            // 解析变体类型：单元、元组或记录
+            let kind = if self.eat(TokenKind::LParen) {
+                // Tuple variant: Variant(Type1, Type2)
+                // 元组变体：Variant(Type1, Type2)
+                let mut types = Vec::new();
+                if !self.check(TokenKind::RParen) {
+                    loop {
+                        types.push(self.parse_type());
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(TokenKind::RParen);
+                VariantKind::Tuple(types)
+            } else if self.eat(TokenKind::HashLBrace) || self.eat(TokenKind::LBrace) {
+                // Record variant: Variant { field: Type }.
+                // Legacy `#{ ... }` remains accepted for compatibility.
+                // 记录变体：Variant { 字段: 类型 }。
+                // 旧语法 `#{ ... }` 继续为兼容性保留。
+                let fields = self.parse_field_defs();
+                self.expect(TokenKind::RBrace);
+                VariantKind::Record(fields)
+            } else {
+                // Unit variant: Variant
+                // 单元变体：Variant
+                VariantKind::Unit
+            };
+
+            let end = self.previous_span();
+            variants.push(Variant {
+                name,
+                kind,
+                span: start.merge(end),
+            });
+
+            // Accept `,` (legacy) or `|` (v3.0) as separator
+            // 接受 `,`（旧）或 `|`（v3.0）作为分隔符
+            if !self.eat(TokenKind::Comma) && !self.eat(TokenKind::Pipe) {
+                break;
+            }
+        }
+        variants
+    }
+
+    /// Parse a trait item (method signature).
+    /// 解析特征项（方法签名）。
+    fn parse_trait_item(&mut self) -> TraitItem {
+        let start = self.current_span();
+        self.eat(TokenKind::Fn);
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LParen);
+        let params = self.parse_params();
+        self.expect(TokenKind::RParen);
+
+        let return_type = if self.eat(TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        // Parse optional effect annotation (legacy syntax: `effect`).
+        let effect = self.eat_legacy_effect_annotation();
+
+        let default = if self.eat(TokenKind::Eq) {
+            Some(self.parse_expr())
+        } else {
+            None
+        };
+
+        self.eat(TokenKind::Semicolon);
+        let end = self.previous_span();
+
+        TraitItem {
+            name,
+            effect,
+            generics,
+            params,
+            return_type,
+            default,
+            span: start.merge(end),
+        }
+    }
+
+    /// Parse an impl item (method implementation).
+    /// 解析 impl 项（方法实现）。
+    fn parse_impl_item(&mut self) -> ImplItem {
+        let start = self.current_span();
+        self.eat(TokenKind::Fn);
+        let name = self.parse_ident();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LParen);
+        let params = self.parse_params();
+        self.expect(TokenKind::RParen);
+
+        let return_type = if self.eat(TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        // Parse optional effect annotation (legacy syntax: `effect`).
+        let effect = self.eat_legacy_effect_annotation();
+
+        self.expect(TokenKind::Eq);
+        let body = self.parse_expr();
+        self.eat(TokenKind::Semicolon);
+        let end = self.previous_span();
+
+        ImplItem {
+            name,
+            generics,
+            params,
+            return_type,
+            effect,
+            body,
+            span: start.merge(end),
+        }
+    }
+
+    /// Parse an associated type definition in a trait.
+    /// 解析特征中的关联类型定义。
+    ///
+    /// Syntax: `type Name [: Bounds] [= Default];`
+    /// 语法：`type 名称 [: 约束] [= 默认值];`
+    fn parse_assoc_type_def(&mut self) -> AssocTypeDef {
+        let start = self.current_span();
+        self.expect(TokenKind::Type);
+        let name = self.parse_ident();
+
+        // Parse bounds: `type Item: Eq + Show`
+        // 解析约束：`type Item: Eq + Show`
+        let bounds = if self.eat(TokenKind::Colon) {
+            let mut bounds = vec![self.parse_type()];
+            while self.eat(TokenKind::Plus) {
+                bounds.push(self.parse_type());
+            }
+            bounds
+        } else {
+            Vec::new()
+        };
+
+        // Parse default: `type Item = Int`
+        // 解析默认值：`type Item = Int`
+        // effect auto-inferred
+        let default = if self.eat(TokenKind::Eq) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        self.eat(TokenKind::Semicolon);
+        let end = self.previous_span();
+
+        AssocTypeDef {
+            name,
+            bounds,
+            default,
+            span: start.merge(end),
+        }
+    }
+
+    /// Parse an associated type implementation in an impl block.
+    /// 解析 impl 块中的关联类型实现。
+    ///
+    /// Syntax: `type Name = Type;`
+    /// 语法：`type 名称 = 类型;`
+    fn parse_assoc_type_impl(&mut self) -> AssocTypeImpl {
+        let start = self.current_span();
+        self.expect(TokenKind::Type);
+        let name = self.parse_ident();
+        self.expect(TokenKind::Eq);
+        let ty = self.parse_type();
+        self.eat(TokenKind::Semicolon);
+        let end = self.previous_span();
+
+        AssocTypeImpl {
+            name,
+            ty,
+            span: start.merge(end),
+        }
+    }
+
+    /// Parse an identifier.
+    /// 解析标识符。
+    fn parse_ident(&mut self) -> Ident {
+        let span = self.current_span();
+        match self.current_kind() {
+            TokenKind::Ident(name) => {
+                let name = name.clone();
+                self.advance();
+                Ident::new(name, span)
+            }
+            _ => {
+                self.error_with_code("expected identifier", ErrorCode::ExpectedIdentifier);
+                Ident::new("", span)
+            }
+        }
+    }
+
+    // ========== Expression Parsing 表达式解析 ==========
+    //
+    // Expressions are parsed using operator precedence climbing.
+    // 表达式使用运算符优先级爬升法解析。
+    //
+    // Precedence (lowest to highest) 优先级（从低到高）:
+    // 1. Merge: & (legacy //) 合并
+    // 2. Pipe: |>              管道
+    // 3. Coalesce: ??          空值合并
+    // 4. Or: ||                逻辑或
+    // 5. And: &&               逻辑与
+    // 6. Comparison: == != < <= > >=  比较
+    // 7. Concat: ++             连接
+    // 8. Additive: + -          加减
+    // 9. Multiplicative: * / % 乘除取模
+    // 10. Unary: ! -            一元运算
+    // 11. Power: ^              幂运算
+    // 12. Postfix: . [] ()      后缀运算
+    //
+    // Unary binds tighter than power: `-2 ^ 2` is `-(2 ^ 2)`.
+
+    /// Parse an expression.
+    /// 解析表达式。
+    fn parse_expr(&mut self) -> Expr {
+        self.parse_merge_expr()
+    }
+
+    /// Parse merge expression: expr & expr (legacy `//` also accepted).
+    /// 解析合并表达式：expr & expr（旧语法 `//` 也接受）。
+    fn parse_merge_expr(&mut self) -> Expr {
+        let mut left = self.parse_pipe_expr();
+
+        while self.eat(TokenKind::Amp) || self.eat(TokenKind::SlashSlash) {
+            let right = self.parse_pipe_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op: BinOp::Merge,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse pipe expression: expr |> expr
+    /// 解析管道表达式：expr |> expr
+    fn parse_pipe_expr(&mut self) -> Expr {
+        let mut left = self.parse_coalesce_expr();
+
+        while self.eat(TokenKind::PipeGt) {
+            let right = self.parse_coalesce_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op: BinOp::Pipe,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse coalesce expression: expr ?? expr
+    /// 解析空值合并表达式：expr ?? expr
+    fn parse_coalesce_expr(&mut self) -> Expr {
+        let mut left = self.parse_or_expr();
+
+        while self.eat(TokenKind::QuestionQuestion) {
+            let right = self.parse_or_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Coalesce {
+                    value: Box::new(left),
+                    default: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse logical or expression: expr || expr
+    /// 解析逻辑或表达式：expr || expr
+    fn parse_or_expr(&mut self) -> Expr {
+        let mut left = self.parse_and_expr();
+
+        while self.eat(TokenKind::OrOr) {
+            let right = self.parse_and_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op: BinOp::Or,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse logical and expression: expr && expr
+    /// 解析逻辑与表达式：expr && expr
+    fn parse_and_expr(&mut self) -> Expr {
+        let mut left = self.parse_comparison_expr();
+
+        while self.eat(TokenKind::AndAnd) {
+            let right = self.parse_comparison_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op: BinOp::And,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse comparison expression: expr (== | != | < | <= | > | >=) expr
+    /// 解析比较表达式：expr (== | != | < | <= | > | >=) expr
+    fn parse_comparison_expr(&mut self) -> Expr {
+        let mut left = self.parse_concat_expr();
+
+        loop {
+            let op = match self.current_kind() {
+                TokenKind::EqEq => BinOp::Eq,
+                TokenKind::BangEq => BinOp::Ne,
+                TokenKind::Lt => BinOp::Lt,
+                TokenKind::LtEq => BinOp::Le,
+                TokenKind::Gt => BinOp::Gt,
+                TokenKind::GtEq => BinOp::Ge,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_concat_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse concatenation expression: expr ++ expr
+    /// 解析连接表达式：expr ++ expr
+    fn parse_concat_expr(&mut self) -> Expr {
+        let mut left = self.parse_additive_expr();
+
+        while self.eat(TokenKind::PlusPlus) {
+            let right = self.parse_additive_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op: BinOp::Concat,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse additive expression: expr (+ | -) expr
+    /// 解析加法表达式：expr (+ | -) expr
+    fn parse_additive_expr(&mut self) -> Expr {
+        let mut left = self.parse_multiplicative_expr();
+
+        loop {
+            let op = match self.current_kind() {
+                TokenKind::Plus => BinOp::Add,
+                TokenKind::Minus => BinOp::Sub,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_multiplicative_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse multiplicative expression: expr (* | / | %) expr
+    /// 解析乘法表达式：expr (* | / | %) expr
+    fn parse_multiplicative_expr(&mut self) -> Expr {
+        let mut left = self.parse_unary_expr();
+
+        loop {
+            let op = match self.current_kind() {
+                TokenKind::Star => BinOp::Mul,
+                TokenKind::Slash => BinOp::Div,
+                TokenKind::Percent => BinOp::Mod,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_unary_expr();
+            let span = left.span.merge(right.span);
+            left = Expr::new(
+                ExprKind::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        left
+    }
+
+    /// Parse power expression: expr ^ expr (right associative)
+    /// 解析幂表达式：expr ^ expr（右结合）
+    fn parse_power_expr(&mut self) -> Expr {
+        let left = self.parse_postfix_expr();
+
+        if self.eat(TokenKind::Caret) {
+            // Right associative: 2^3^4 = 2^(3^4)
+            // 右结合：2^3^4 = 2^(3^4)
+            let right = self.parse_unary_expr();
+            let span = left.span.merge(right.span);
+            Expr::new(
+                ExprKind::Binary {
+                    op: BinOp::Pow,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            )
+        } else {
+            left
+        }
+    }
+
+    /// Parse unary expression: (! | -) unary | power.
+    /// 解析一元表达式：(! | -) unary | 幂表达式。
+    fn parse_unary_expr(&mut self) -> Expr {
+        let start = self.current_span();
+
+        if self.eat(TokenKind::Bang) {
+            let operand = self.parse_unary_expr();
+            let span = start.merge(operand.span);
+            return Expr::new(
+                ExprKind::Unary {
+                    op: UnaryOp::Not,
+                    operand: Box::new(operand),
+                },
+                span,
+            );
+        }
+
+        if self.eat(TokenKind::Minus) {
+            let operand = self.parse_unary_expr();
+            let span = start.merge(operand.span);
+            return Expr::new(
+                ExprKind::Unary {
+                    op: UnaryOp::Neg,
+                    operand: Box::new(operand),
+                },
+                span,
+            );
+        }
+
+        self.parse_power_expr()
+    }
+
+    /// Parse postfix expression: expr (. | ?. | [] | () | ?)
+    /// 解析后缀表达式：expr (. | ?. | [] | () | ?)
+    fn parse_postfix_expr(&mut self) -> Expr {
+        let mut expr = self.parse_primary_expr();
+
+        loop {
+            if self.eat(TokenKind::Question) {
+                // Try operator: expr?
+                // 尝试运算符：expr?
+                let span = expr.span.merge(self.previous_span());
+                expr = Expr::new(ExprKind::Try(Box::new(expr)), span);
+            } else if self.eat(TokenKind::Dot) {
+                // Field access or method call: expr.field or expr.method()
+                // 字段访问或方法调用：expr.field 或 expr.method()
+                if let TokenKind::Int(n) = self.current_kind() {
+                    // Tuple index: expr.0
+                    // 元组索引：expr.0
+                    let n = int_to_u32(n).unwrap_or_else(|| {
+                        self.error_with_code(
+                            "tuple index out of range",
+                            ErrorCode::InvalidTupleIndex,
+                        );
+                        0
+                    });
+                    self.advance();
+                    let span = expr.span.merge(self.previous_span());
+                    expr = Expr::new(
+                        ExprKind::TupleIndex {
+                            base: Box::new(expr),
+                            index: n,
+                        },
+                        span,
+                    );
+                } else {
+                    let field = self.parse_ident();
+                    if self.check(TokenKind::LParen) {
+                        // Method call: expr.method(args)
+                        // 方法调用：expr.method(args)
+                        self.advance();
+                        let args = self.parse_args();
+                        self.expect(TokenKind::RParen);
+                        let span = expr.span.merge(self.previous_span());
+                        expr = Expr::new(
+                            ExprKind::MethodCall {
+                                receiver: Box::new(expr),
+                                method: field,
+                                args,
+                            },
+                            span,
+                        );
+                    } else {
+                        // Field access: expr.field
+                        // 字段访问：expr.field
+                        let span = expr.span.merge(field.span);
+                        expr = Expr::new(
+                            ExprKind::Field {
+                                base: Box::new(expr),
+                                field,
+                            },
+                            span,
+                        );
+                    }
+                }
+            } else if self.eat(TokenKind::QuestionDot) {
+                // Safe field access: expr?.field
+                // 安全字段访问：expr?.field
+                let field = self.parse_ident();
+                let span = expr.span.merge(field.span);
+                expr = Expr::new(
+                    ExprKind::SafeField {
+                        base: Box::new(expr),
+                        field,
+                    },
+                    span,
+                );
+            } else if self.eat(TokenKind::LBracket) {
+                // Index access: expr[index]
+                // 索引访问：expr[index]
+                let index = self.parse_expr();
+                self.expect(TokenKind::RBracket);
+                let span = expr.span.merge(self.previous_span());
+                expr = Expr::new(
+                    ExprKind::Index {
+                        base: Box::new(expr),
+                        index: Box::new(index),
+                    },
+                    span,
+                );
+            } else if self.check(TokenKind::LParen) {
+                // Function call: expr(args)
+                // 函数调用：expr(args)
+                self.advance();
+                let args = self.parse_args();
+                self.expect(TokenKind::RParen);
+                let span = expr.span.merge(self.previous_span());
+                expr = Expr::new(
+                    ExprKind::Call {
+                        func: Box::new(expr),
+                        args,
+                    },
+                    span,
+                );
+            } else if self.check(TokenKind::HashLBrace)
+                || (self.check(TokenKind::LBrace) && self.brace_starts_record_argument())
+            {
+                // Function call with a record argument: `func { ... }`.
+                // Legacy `func #{ ... }` remains accepted for compatibility.
+                // 带记录/代码块参数的函数调用：`func { ... }`。
+                // 旧语法 `func #{ ... }` 继续为兼容性保留。
+                let argument = if self.check(TokenKind::HashLBrace) {
+                    self.parse_record()
+                } else {
+                    self.parse_brace_expr()
+                };
+                let span = expr.span.merge(argument.span);
+                expr = Expr::new(
+                    ExprKind::Call {
+                        func: Box::new(expr),
+                        args: vec![argument],
+                    },
+                    span,
+                );
+            } else {
+                break;
+            }
+        }
+
+        expr
+    }
+
+    /// Parse a primary expression.
+    /// 解析基本表达式。
+    ///
+    /// Primary expressions are the "atoms" of the expression grammar.
+    /// 基本表达式是表达式语法的"原子"。
+    fn parse_primary_expr(&mut self) -> Expr {
+        let start = self.current_span();
+
+        match self.current_kind().clone() {
+            // Literals 字面量
+            TokenKind::Int(n) => {
+                self.advance();
+                Expr::new(ExprKind::Int(n), start)
+            }
+            TokenKind::Float(f) => {
+                self.advance();
+                Expr::new(ExprKind::Float(f), start)
+            }
+            TokenKind::String(s) => {
+                self.advance();
+                Expr::new(ExprKind::String(s), start)
+            }
+            TokenKind::Char(c) => {
+                self.advance();
+                Expr::new(ExprKind::Char(c), start)
+            }
+            TokenKind::True => {
+                self.advance();
+                Expr::new(ExprKind::Bool(true), start)
+            }
+            TokenKind::False => {
+                self.advance();
+                Expr::new(ExprKind::Bool(false), start)
+            }
+            // Legacy lazy prefix: `lazy expr`.
+            // 旧惰性前缀：`lazy expr`。
+            TokenKind::Ident(name) if name == "lazy" => {
+                self.advance();
+                let expr = self.parse_expr();
+                let span = start.merge(expr.span);
+                Expr::new(ExprKind::Lazy(Box::new(expr)), span)
+            }
+            // Identifier or path
+            // 标识符或路径
+            TokenKind::Ident(_) => self.parse_ident_expr(),
+            // 在方法体中将 'self' 作为变量表达式处理
+            TokenKind::SelfLower => {
+                self.advance();
+                let ident = Ident {
+                    name: "self".to_string(),
+                    span: start,
+                };
+                Expr::new(ExprKind::Var(ident), start)
+            }
+            // Parenthesized expression or tuple
+            // 括号表达式或元组
+            TokenKind::LParen => self.parse_paren_or_tuple(),
+            // List literal or comprehension
+            // 列表字面量或列表推导
+            TokenKind::LBracket => self.parse_list(),
+            // Record literal
+            // 记录字面量
+            TokenKind::HashLBrace => self.parse_record(),
+            // Block or record brace expression (v3.0)
+            // 块或记录大括号表达式（v3.0）
+            TokenKind::LBrace => self.parse_brace_expr(),
+            // If expression
+            // if 表达式
+            TokenKind::If => self.parse_if(),
+            // Match expression
+            // match 表达式
+            TokenKind::Match => self.parse_match(),
+            // Lambda expression (fn syntax)
+            // Lambda 表达式（fn 语法）
+            TokenKind::Fn => self.parse_lambda_fn(),
+            // Lambda expression (pipe syntax, v3.0)
+            // Lambda 表达式（管道语法，v3.0）
+            TokenKind::Pipe => self.parse_lambda_pipe(),
+            // Lazy expression (v4.0: ~expr, legacy: lazy expr)
+            // 惰性表达式（v4.0: ~expr, 旧: lazy expr）
+            TokenKind::Tilde => {
+                self.advance();
+                let expr = self.parse_expr();
+                let span = start.merge(expr.span);
+                Expr::new(ExprKind::Lazy(Box::new(expr)), span)
+            }
+            // Interpolated string
+            // 插值字符串
+            TokenKind::InterpolatedStart => self.parse_interpolated_string(),
+            // Path literal
+            // 路径字面量
+            TokenKind::PathLit(p) => {
+                self.advance();
+                Expr::new(ExprKind::PathLit(p), start)
+            }
+            _ => {
+                self.error_with_code("expected expression", ErrorCode::ExpectedExpression);
+                self.recover_expr()
+            }
+        }
+    }
+
+    /// Parse an identifier expression (variable or path).
+    /// 解析标识符表达式（变量或路径）。
+    fn parse_ident_expr(&mut self) -> Expr {
+        let start = self.current_span();
+        let first = self.parse_ident();
+
+        // Keep a dotted name as a path unless the complete dotted name is
+        // immediately called. The latter must stay in postfix parsing so
+        // `x.foo()` becomes a MethodCall rather than Call(Path(...)).
+        // 除非完整点链紧接调用，否则保留点名为路径。后者必须交给后缀解析，
+        // 使 `x.foo()` 生成 MethodCall，而不是 Call(Path(...))。
+        if self.check(TokenKind::Dot) && !self.dotted_path_is_called() {
+            let mut path = vec![first];
+            while self.eat(TokenKind::Dot) {
+                if let TokenKind::Ident(_) = self.current_kind() {
+                    path.push(self.parse_ident());
+                } else {
+                    break;
+                }
+            }
+            let end = self.previous_span();
+            Expr::new(ExprKind::Path(path), start.merge(end))
+        } else {
+            Expr::new(ExprKind::Var(first.clone()), first.span)
+        }
+    }
+
+    /// Return whether the remaining dotted name ends in a call.
+    /// 判断剩余点链是否以调用开始。
+    fn dotted_path_is_called(&self) -> bool {
+        let mut cursor = self.pos;
+        let mut saw_dot = false;
+
+        while matches!(
+            self.tokens.get(cursor).map(|token| &token.kind),
+            Some(TokenKind::Dot)
+        ) {
+            saw_dot = true;
+            cursor += 1;
+            if !matches!(
+                self.tokens.get(cursor).map(|token| &token.kind),
+                Some(TokenKind::Ident(_))
+            ) {
+                return false;
+            }
+            cursor += 1;
+        }
+
+        saw_dot
+            && matches!(
+                self.tokens.get(cursor).map(|token| &token.kind),
+                Some(TokenKind::LParen)
+            )
+    }
+
+    /// Parse a parenthesized expression or tuple.
+    /// 解析括号表达式或元组。
+    ///
+    /// Syntax: `()` (unit), `(expr)` (grouping), `(a, b, ...)` (tuple)
+    /// 语法：`()` (单元), `(expr)` (分组), `(a, b, ...)` (元组)
+    fn parse_paren_or_tuple(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // (
+
+        // Empty parentheses: unit type
+        // 空括号：单元类型
+        if self.eat(TokenKind::RParen) {
+            return Expr::new(ExprKind::Unit, start.merge(self.previous_span()));
+        }
+
+        let first = self.parse_expr();
+
+        // Check for tuple (comma after first element)
+        // 检查是否为元组（第一个元素后有逗号）
+        if self.eat(TokenKind::Comma) {
+            let mut elements = vec![first];
+            if !self.check(TokenKind::RParen) {
+                loop {
+                    elements.push(self.parse_expr());
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen);
+            let span = start.merge(self.previous_span());
+            Expr::new(ExprKind::Tuple(elements), span)
+        } else {
+            // Just a parenthesized expression
+            // 只是一个括号表达式
+            self.expect(TokenKind::RParen);
+            first
+        }
+    }
+
+    /// Parse a list literal or list comprehension.
+    /// 解析列表字面量或列表推导。
+    ///
+    /// Syntax: `[a, b, ...]` (list) or `[expr | generators]` (comprehension)
+    /// 语法：`[a, b, ...]` (列表) 或 `[expr | 生成器]` (推导)
+    fn parse_list(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // [
+
+        // Empty list
+        // 空列表
+        if self.eat(TokenKind::RBracket) {
+            return Expr::new(
+                ExprKind::List(Vec::new()),
+                start.merge(self.previous_span()),
+            );
+        }
+
+        let first = self.parse_expr();
+
+        // Check for list comprehension
+        // 检查是否为列表推导
+        if self.eat(TokenKind::Pipe) {
+            let generators = self.parse_generators();
+            self.expect(TokenKind::RBracket);
+            let span = start.merge(self.previous_span());
+            return Expr::new(
+                ExprKind::ListComp {
+                    body: Box::new(first),
+                    generators,
+                },
+                span,
+            );
+        }
+
+        // Regular list
+        // 普通列表
+        let mut elements = vec![first];
+        while self.eat(TokenKind::Comma) {
+            if self.check(TokenKind::RBracket) {
+                break;
+            }
+            elements.push(self.parse_expr());
+        }
+
+        self.expect(TokenKind::RBracket);
+        let span = start.merge(self.previous_span());
+        Expr::new(ExprKind::List(elements), span)
+    }
+
+    /// Parse list comprehension generators.
+    /// 解析列表推导的生成器。
+    ///
+    /// Syntax: `pattern <- iter [, condition]`
+    /// 语法：`模式 <- 迭代器 [, 条件]`
+    fn parse_generators(&mut self) -> Vec<Generator> {
+        let mut generators = Vec::new();
+
+        loop {
+            let start = self.current_span();
+            let pattern = self.parse_pattern();
+
+            // Check for `<-`
+            // 检查 `<-`
+            self.expect(TokenKind::Lt);
+            self.expect(TokenKind::Minus);
+
+            let iter = self.parse_expr();
+
+            // A comma separates either a filter or the next generator.
+            // Distinguish them by looking for a top-level `<-` after the
+            // candidate pattern. This keeps `x <- xs, y <- ys` from being
+            // parsed as the filter expression `y < -ys`.
+            // 逗号后可能是过滤条件，也可能是下一个生成器。通过查找候选模式
+            // 后的顶层 `<-` 区分，避免把 `x <- xs, y <- ys` 解析成
+            // `y < -ys` 过滤表达式。
+            let condition = if self.check(TokenKind::Comma) && !self.comma_starts_generator() {
+                self.advance();
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+
+            let end = self.previous_span();
+            generators.push(Generator {
+                pattern,
+                iter,
+                condition,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        generators
+    }
+
+    /// Check whether the current comma introduces another generator.
+    /// 检查当前逗号是否引入另一个生成器。
+    fn comma_starts_generator(&self) -> bool {
+        if !self.check(TokenKind::Comma) {
+            return false;
+        }
+
+        let mut cursor = self.pos + 1;
+        let mut delimiters = Vec::new();
+
+        while let Some(token) = self.tokens.get(cursor) {
+            match &token.kind {
+                TokenKind::LParen => delimiters.push(TokenKind::RParen),
+                TokenKind::LBracket => delimiters.push(TokenKind::RBracket),
+                TokenKind::LBrace | TokenKind::HashLBrace => delimiters.push(TokenKind::RBrace),
+                TokenKind::RBracket if delimiters.is_empty() => return false,
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    if delimiters.pop() != Some(token.kind.clone()) {
+                        return false;
+                    }
+                }
+                TokenKind::Comma if delimiters.is_empty() => return false,
+                TokenKind::Lt
+                    if delimiters.is_empty()
+                        && matches!(
+                            self.tokens.get(cursor + 1).map(|next| &next.kind),
+                            Some(TokenKind::Minus)
+                        ) =>
+                {
+                    return true;
+                }
+                TokenKind::Eof => return false,
+                _ => {}
+            }
+            cursor += 1;
+        }
+
+        false
+    }
+
+    /// Parse a record literal or record update.
+    /// 解析记录字面量或记录更新。
+    ///
+    /// Syntax: `{ field = value, ... }` or `{ base | field = value }`.
+    /// Legacy syntax `#{ ... }` is parsed by the same AST constructors.
+    /// 语法：`{ 字段 = 值, ... }` 或 `{ 基础 | 字段 = 值 }`。
+    /// 旧语法 `#{ ... }` 使用相同的 AST 构造。
+    fn parse_record(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // #{
+
+        // Empty record
+        // 空记录
+        if self.eat(TokenKind::RBrace) {
+            return Expr::new(
+                ExprKind::Record(Vec::new()),
+                start.merge(self.previous_span()),
+            );
+        }
+
+        // Check for record update: #{ base | field = value }
+        // 检查记录更新：#{ base | field = value }
+        let first_ident = self.parse_ident();
+
+        if self.eat(TokenKind::Pipe) {
+            // Record update syntax
+            // 记录更新语法
+            let base = Expr::new(ExprKind::Var(first_ident.clone()), first_ident.span);
+            let fields = self.parse_record_fields();
+            self.expect(TokenKind::RBrace);
+            let span = start.merge(self.previous_span());
+            return Expr::new(
+                ExprKind::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                span,
+            );
+        }
+
+        // Regular record
+        // 普通记录
+        let first_value = if self.eat(TokenKind::Eq) {
+            Some(self.parse_expr())
+        } else {
+            None
+        };
+
+        let first_field = RecordField {
+            name: first_ident.clone(),
+            value: first_value,
+            span: first_ident.span,
+        };
+
+        let mut fields = vec![first_field];
+        while self.eat(TokenKind::Comma) {
+            if self.check(TokenKind::RBrace) {
+                break;
+            }
+            let name = self.parse_ident();
+            let value = if self.eat(TokenKind::Eq) {
+                Some(self.parse_expr())
+            } else {
+                // Shorthand: `#{ x }` is equivalent to `#{ x = x }`
+                // 简写：`#{ x }` 等价于 `#{ x = x }`
+                None
+            };
+            fields.push(RecordField {
+                span: name.span,
+                name,
+                value,
+            });
+        }
+
+        self.expect(TokenKind::RBrace);
+        let span = start.merge(self.previous_span());
+        Expr::new(ExprKind::Record(fields), span)
+    }
+
+    /// Parse record fields for record update.
+    /// 解析记录更新的字段。
+    fn parse_record_fields(&mut self) -> Vec<RecordField> {
+        let mut fields = Vec::new();
+        loop {
+            let name = self.parse_ident();
+            let value = if self.eat(TokenKind::Eq) {
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+            fields.push(RecordField {
+                span: name.span,
+                name,
+                value,
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        fields
+    }
+
+    /// Check whether a brace after a callable starts a record argument.
+    /// 检查可调用表达式后的大括号是否开始记录参数。
+    fn brace_starts_record_argument(&self) -> bool {
+        let Some(first) = self.tokens.get(self.pos + 1) else {
+            return false;
+        };
+        if matches!(first.kind, TokenKind::RBrace) {
+            return true;
+        }
+        if !matches!(first.kind, TokenKind::Ident(_)) {
+            return false;
+        }
+
+        matches!(
+            self.tokens.get(self.pos + 2).map(|token| &token.kind),
+            Some(TokenKind::Eq)
+                | Some(TokenKind::Comma)
+                | Some(TokenKind::Pipe)
+                | Some(TokenKind::RBrace)
+        )
+    }
+
+    /// Parse a brace-delimited expression: record or block (v3.0).
+    /// 解析大括号表达式：记录或块（v3.0）。
+    ///
+    /// In v3.0, `{ ... }` is first tried as a record. If that fails,
+    /// it falls back to block parsing.
+    /// 在 v3.0 中，`{ ... }` 首先尝试作为记录解析。如果失败，回退到块解析。
+    fn parse_brace_expr(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // consume {
+
+        let prev_recovery = self.recovery_mode;
+        self.recovery_mode = RecoveryMode::Delimiter(DelimiterKind::Brace);
+
+        // Empty braces → empty record
+        if self.eat(TokenKind::RBrace) {
+            self.recovery_mode = prev_recovery;
+            return Expr::new(
+                ExprKind::Record(Vec::new()),
+                start.merge(self.previous_span()),
+            );
+        }
+
+        // Try the record parser speculatively. This is necessary because a
+        // block may begin with an unkeyworded binding such as `a = 1`.
+        // 先试探性地运行记录解析器。因为块也可以从 `a = 1` 这样的无关键字
+        // 绑定开始，所以仅凭首个 token 无法区分二者。
+        let saved = self.pos;
+        let saved_diagnostics = self.diagnostics.len();
+        let _ = self.parse_record_brace();
+        let looks_like_record = self.check(TokenKind::RBrace);
+        self.pos = saved;
+        self.diagnostics.truncate(saved_diagnostics);
+
+        if looks_like_record {
+            let mut record = self.parse_record_brace();
+            self.expect(TokenKind::RBrace);
+            self.recovery_mode = prev_recovery;
+            record.span = start.merge(self.previous_span());
+            return record;
+        }
+
+        // Parse as block
+        let mut block = self.parse_block_after_brace();
+        self.expect(TokenKind::RBrace);
+        self.recovery_mode = prev_recovery;
+        let span = start.merge(self.previous_span());
+        block.span = span;
+        block
+    }
+
+    /// Parse `{ field = value, ... }` record (brace already consumed).
+    /// 解析 `{ 字段 = 值, ... }` 记录（大括号已消耗）。
+    fn parse_record_brace(&mut self) -> Expr {
+        let start = self.current_span();
+        let first_ident = self.parse_ident();
+
+        if self.eat(TokenKind::Pipe) {
+            let base = Expr::new(ExprKind::Var(first_ident.clone()), first_ident.span);
+            let fields = self.parse_record_fields();
+            return Expr::new(
+                ExprKind::RecordUpdate {
+                    base: Box::new(base),
+                    fields,
+                },
+                start,
+            );
+        }
+
+        let first_value = if self.eat(TokenKind::Eq) {
+            Some(self.parse_expr())
+        } else {
+            // Shorthand: `{ x }` is equivalent to `{ x = x }`.
+            // 简写：`{ x }` 等价于 `{ x = x }`。
+            None
+        };
+
+        let first_field = RecordField {
+            name: first_ident.clone(),
+            value: first_value,
+            span: first_ident.span,
+        };
+
+        let mut fields = vec![first_field];
+        while self.eat(TokenKind::Comma) {
+            if self.check(TokenKind::RBrace) {
+                break;
+            }
+            let name = self.parse_ident();
+            let value = if self.eat(TokenKind::Eq) {
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+            fields.push(RecordField {
+                span: name.span,
+                name,
+                value,
+            });
+        }
+
+        Expr::new(ExprKind::Record(fields), start)
+    }
+
+    /// Check whether the current tokens start a keyword-less binding.
+    /// 检查当前 token 是否以无关键字绑定开始。
+    fn is_implicit_let_start(&mut self) -> bool {
+        let saved_pos = self.pos;
+        let saved_diagnostics = self.diagnostics.len();
+        let _ = self.parse_pattern();
+        let is_binding = self.check(TokenKind::Eq) || self.check(TokenKind::Colon);
+        self.pos = saved_pos;
+        self.diagnostics.truncate(saved_diagnostics);
+        is_binding
+    }
+
+    /// Parse block statements after `{` has been consumed.
+    /// 在 `{` 已被消耗后解析块语句。
+    fn parse_block_after_brace(&mut self) -> Expr {
+        let start = self.current_span();
+        let mut stmts = Vec::new();
+        let mut final_expr = None;
+
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            if self.check(TokenKind::Let) || self.is_implicit_let_start() {
+                let stmt_start = self.current_span();
+                self.eat(TokenKind::Let);
+                let pattern = self.parse_pattern();
+                let ty = if self.eat(TokenKind::Colon) {
+                    Some(self.parse_type())
+                } else {
+                    None
+                };
+                if !self.expect_recover(TokenKind::Eq, RecoveryMode::Statement) {
+                    let _ = self.recover_stmt();
+                    continue;
+                }
+                let value = self.parse_expr();
+                // v4 allows statement terminators to be omitted between
+                // adjacent bindings; the next binding is recognized by
+                // `is_implicit_let_start`.
+                // v4 允许相邻绑定省略语句终止符；下一个绑定由
+                // `is_implicit_let_start` 识别。
+                self.eat(TokenKind::Semicolon);
+                let stmt_end = self.previous_span();
+                stmts.push(Stmt {
+                    kind: StmtKind::Let { pattern, ty, value },
+                    span: stmt_start.merge(stmt_end),
+                });
+            } else {
+                let expr = self.parse_expr();
+                if self.eat(TokenKind::Semicolon) {
+                    let stmt_span = expr.span;
+                    stmts.push(Stmt {
+                        kind: StmtKind::Expr(expr),
+                        span: stmt_span,
+                    });
+                } else {
+                    final_expr = Some(Box::new(expr));
+                    break;
+                }
+            }
+        }
+
+        Expr::new(
+            ExprKind::Block {
+                stmts,
+                expr: final_expr,
+            },
+            start,
+        )
+    }
+
+    /// Parse a block expression.
+    /// 解析块表达式。
+    ///
+    /// Syntax: `{ stmt; ... expr }`
+    /// 语法：`{ 语句; ... 表达式 }`
+    #[allow(dead_code)]
+    fn parse_block(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // {
+
+        // Save previous recovery mode and set block-appropriate mode
+        // 保存之前的恢复模式并设置适合块的模式
+        let prev_recovery = self.recovery_mode;
+        self.recovery_mode = RecoveryMode::Delimiter(DelimiterKind::Brace);
+
+        let mut stmts = Vec::new();
+        let mut final_expr = None;
+
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            if self.check(TokenKind::Let) {
+                // Let statement
+                // let 语句
+                let stmt_start = self.current_span();
+                self.advance();
+                let pattern = self.parse_pattern();
+                let ty = if self.eat(TokenKind::Colon) {
+                    Some(self.parse_type())
+                } else {
+                    None
+                };
+                if !self.expect_recover(TokenKind::Eq, RecoveryMode::Statement) {
+                    let _ = self.recover_stmt();
+                    continue;
+                }
+                let value = self.parse_expr();
+                self.expect_recover(TokenKind::Semicolon, RecoveryMode::Statement);
+                let stmt_end = self.previous_span();
+                stmts.push(Stmt {
+                    kind: StmtKind::Let { pattern, ty, value },
+                    span: stmt_start.merge(stmt_end),
+                });
+            } else {
+                // Expression (statement or final expression)
+                // 表达式（语句或最终表达式）
+                let expr = self.parse_expr();
+                if self.eat(TokenKind::Semicolon) {
+                    // Expression statement
+                    // 表达式语句
+                    let stmt_span = expr.span;
+                    stmts.push(Stmt {
+                        kind: StmtKind::Expr(expr),
+                        span: stmt_span,
+                    });
+                } else {
+                    // Final expression (no semicolon)
+                    // 最终表达式（无分号）
+                    final_expr = Some(Box::new(expr));
+                    break;
+                }
+            }
+        }
+
+        self.expect(TokenKind::RBrace);
+        self.recovery_mode = prev_recovery;
+        let span = start.merge(self.previous_span());
+        Expr::new(
+            ExprKind::Block {
+                stmts,
+                expr: final_expr,
+            },
+            span,
+        )
+    }
+
+    /// Parse an if expression.
+    /// 解析 if 表达式。
+    ///
+    /// Syntax: `if condition -> then_branch else else_branch` (v4.0)
+    /// Legacy: `if condition then then_branch else else_branch`
+    /// 语法：`if 条件 -> 真分支 else 假分支`（v4.0）
+    fn parse_if(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // if
+
+        let condition = self.parse_expr();
+        // Accept canonical `->` and legacy `then`.
+        if !self.eat(TokenKind::Arrow)
+            && !matches!(self.current_kind(), TokenKind::Ident(name) if name == "then")
+        {
+            self.expect(TokenKind::Arrow);
+        } else if matches!(self.current_kind(), TokenKind::Ident(name) if name == "then") {
+            self.advance();
+        }
+        let then_branch = self.parse_expr();
+        self.expect(TokenKind::Else);
+        let else_branch = self.parse_expr();
+
+        let span = start.merge(else_branch.span);
+        Expr::new(
+            ExprKind::If {
+                condition: Box::new(condition),
+                then_branch: Box::new(then_branch),
+                else_branch: Box::new(else_branch),
+            },
+            span,
+        )
+    }
+
+    /// Parse a match expression.
+    /// 解析 match 表达式。
+    ///
+    /// Syntax: `match scrutinee { pattern [if guard] => body, ... }`
+    /// 语法：`match 被匹配值 { 模式 [if 守卫] => 分支体, ... }`
+    fn parse_match(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // match
+
+        let scrutinee = self.parse_expr();
+        self.expect(TokenKind::LBrace);
+
+        let mut arms = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.at_end() {
+            let arm_start = self.current_span();
+            let pattern = self.parse_pattern();
+
+            // Optional guard
+            // 可选的守卫条件
+            let guard = if self.eat(TokenKind::If) {
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+
+            self.expect(TokenKind::Arrow);
+            let body = self.parse_expr();
+
+            let arm_end = self.previous_span();
+            arms.push(MatchArm {
+                pattern,
+                guard,
+                body,
+                span: arm_start.merge(arm_end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::RBrace);
+        let span = start.merge(self.previous_span());
+        Expr::new(
+            ExprKind::Match {
+                scrutinee: Box::new(scrutinee),
+                arms,
+            },
+            span,
+        )
+    }
+
+    /// Parse a lambda expression.
+    /// 解析 lambda 表达式。
+    ///
+    /// Syntax: `fn(params) body`
+    /// 语法：`fn(参数) 函数体`
+    fn parse_lambda_fn(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // fn
+
+        self.expect(TokenKind::LParen);
+        let params = self.parse_lambda_params();
+        self.expect(TokenKind::RParen);
+        let return_type = self.parse_optional_lambda_return_type();
+
+        let body = self.parse_lambda_body();
+        let span = start.merge(body.span);
+
+        Expr::new(
+            ExprKind::Lambda {
+                params,
+                return_type,
+                body: Box::new(body),
+            },
+            span,
+        )
+    }
+
+    /// Parse an optional lambda return annotation.
+    /// 解析可选的 lambda 返回类型注解。
+    fn parse_optional_lambda_return_type(&mut self) -> Option<Type> {
+        if self.eat(TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        }
+    }
+
+    /// Parse a lambda body, treating a leading brace as a block.
+    /// 解析 lambda 函数体；以左大括号开头时按代码块处理。
+    fn parse_lambda_body(&mut self) -> Expr {
+        if !self.check(TokenKind::LBrace) {
+            return self.parse_expr();
+        }
+
+        let start = self.current_span();
+        self.advance();
+        let previous_recovery = self.recovery_mode;
+        self.recovery_mode = RecoveryMode::Delimiter(DelimiterKind::Brace);
+        let mut block = self.parse_block_after_brace();
+        self.expect(TokenKind::RBrace);
+        self.recovery_mode = previous_recovery;
+        block.span = start.merge(self.previous_span());
+        block
+    }
+
+    /// Parse lambda parameters.
+    /// 解析 lambda 参数。
+    fn parse_lambda_params(&mut self) -> Vec<LambdaParam> {
+        let mut params = Vec::new();
+        if self.check(TokenKind::RParen) {
+            return params;
+        }
+
+        loop {
+            let start = self.current_span();
+            let pattern = self.parse_pattern();
+            let ty = if self.eat(TokenKind::Colon) {
+                Some(self.parse_type())
+            } else {
+                None
+            };
+            let end = self.previous_span();
+
+            params.push(LambdaParam {
+                pattern,
+                ty,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        params
+    }
+
+    fn parse_lambda_pipe(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // consume first |
+
+        let params = self.parse_lambda_params_pipe();
+        let return_type = self.parse_optional_lambda_return_type();
+        let body = self.parse_lambda_body();
+        let span = start.merge(body.span);
+
+        Expr::new(
+            ExprKind::Lambda {
+                params,
+                return_type,
+                body: Box::new(body),
+            },
+            span,
+        )
+    }
+
+    /// Parse pipe-style lambda parameters: `param1, param2 |`
+    /// 解析管道式 lambda 参数：`参数1, 参数2 |`
+    fn parse_lambda_params_pipe(&mut self) -> Vec<LambdaParam> {
+        let mut params = Vec::new();
+
+        if self.check(TokenKind::Pipe) {
+            return params;
+        }
+
+        loop {
+            let start = self.current_span();
+            // Parse just the name (not full pattern — or-pattern would eat closing |)
+            let name = self.parse_ident();
+            let pattern = Pattern::new(PatternKind::Var(name.clone()), name.span);
+            let ty = if self.eat(TokenKind::Colon) {
+                Some(self.parse_type())
+            } else {
+                None
+            };
+            let end = self.previous_span();
+
+            params.push(LambdaParam {
+                pattern,
+                ty,
+                span: start.merge(end),
+            });
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        // Expect closing `|`
+        self.expect(TokenKind::Pipe);
+        params
+    }
+
+    /// Parse an interpolated string.
+    /// 解析插值字符串。
+    ///
+    /// Syntax: `"text ${expr} more text"`
+    /// 语法：`"文本 ${表达式} 更多文本"`
+    fn parse_interpolated_string(&mut self) -> Expr {
+        let start = self.current_span();
+        self.advance(); // InterpolatedStart
+
+        let mut parts = Vec::new();
+
+        loop {
+            match self.current_kind().clone() {
+                TokenKind::InterpolatedPart(s) => {
+                    // Literal text part
+                    // 字面文本部分
+                    self.advance();
+                    parts.push(StringPart::Literal(s));
+                }
+                TokenKind::InterpolationStart => {
+                    // Expression interpolation: ${expr}
+                    // 表达式插值：${expr}
+                    self.advance();
+                    let expr = self.parse_expr();
+                    parts.push(StringPart::Expr(expr));
+                    if !self.eat(TokenKind::InterpolationEnd) {
+                        self.error_with_code(
+                            "expected `}` to close interpolation",
+                            ErrorCode::UnclosedDelimiter,
+                        );
+                    }
+                }
+                TokenKind::InterpolatedEnd => {
+                    // End of interpolated string
+                    // 插值字符串结束
+                    self.advance();
+                    break;
+                }
+                TokenKind::Eof => {
+                    self.error("unterminated interpolated string");
+                    break;
+                }
+                _ => {
+                    self.error("unexpected token in interpolated string");
+                    self.advance();
+                }
+            }
+        }
+
+        let span = start.merge(self.previous_span());
+        Expr::new(ExprKind::Interpolated(parts), span)
+    }
+
+    /// Parse function call arguments.
+    /// 解析函数调用参数。
+    fn parse_args(&mut self) -> Vec<Expr> {
+        self.parse_comma_list(TokenKind::RParen, |parser| Some(parser.parse_expr()))
+    }
+
+    // ========== Pattern Parsing 模式解析 ==========
+
+    /// Parse a pattern.
+    /// 解析模式。
+    fn parse_pattern(&mut self) -> Pattern {
+        self.parse_or_pattern()
+    }
+
+    /// Parse an or-pattern: pattern | pattern
+    /// 解析或模式：模式 | 模式
+    fn parse_or_pattern(&mut self) -> Pattern {
+        let mut patterns = vec![self.parse_binding_pattern()];
+
+        while self.eat(TokenKind::Pipe) {
+            patterns.push(self.parse_binding_pattern());
+        }
+
+        if patterns.len() == 1 {
+            // Safe: we just checked len == 1
+            // 安全：我们刚检查过 len == 1
+            patterns.pop().expect("patterns has exactly one element")
+        } else {
+            // Safe: patterns has at least 2 elements (len != 1 and we parsed at least one)
+            // 安全：patterns 至少有 2 个元素（len != 1 且我们至少解析了一个）
+            let span = patterns
+                .first()
+                .expect("patterns is non-empty")
+                .span
+                .merge(patterns.last().expect("patterns is non-empty").span);
+            Pattern::new(PatternKind::Or(patterns), span)
+        }
+    }
+
+    /// Parse a binding pattern: name @ pattern
+    /// 解析绑定模式：名称 @ 模式
+    fn parse_binding_pattern(&mut self) -> Pattern {
+        let start = self.current_span();
+        if matches!(self.current_kind(), TokenKind::Ident(name) if name == "_") {
+            return self.parse_primary_pattern();
+        }
+
+        if let TokenKind::Ident(_) = self.current_kind() {
+            let ident = self.parse_ident();
+
+            if self.eat(TokenKind::At) {
+                // Binding pattern: name @ pattern
+                // 绑定模式：名称 @ 模式
+                let pattern = self.parse_primary_pattern();
+                let span = start.merge(pattern.span);
+                return Pattern::new(
+                    PatternKind::Binding {
+                        name: ident,
+                        pattern: Box::new(pattern),
+                    },
+                    span,
+                );
+            }
+
+            if self.check(TokenKind::LParen) {
+                // Constructor pattern: Name(args)
+                // 构造器模式：Name(args)
+                self.advance(); // consume '('
+                let mut args = Vec::new();
+                if !self.check(TokenKind::RParen) {
+                    loop {
+                        args.push(self.parse_pattern());
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(TokenKind::RParen);
+                let span = start.merge(self.previous_span());
+                return Pattern::new(
+                    PatternKind::Constructor {
+                        path: vec![ident],
+                        args,
+                    },
+                    span,
+                );
+            }
+
+            if ident
+                .name
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_uppercase())
+                .unwrap_or(false)
+            {
+                // Constructor pattern with no args: Name
+                // 构造器模式（无参数）：Name
+                return Pattern::new(
+                    PatternKind::Constructor {
+                        path: vec![ident],
+                        args: Vec::new(),
+                    },
+                    start,
+                );
+            }
+
+            // Just a variable pattern
+            // 只是一个变量模式
+            return Pattern::new(PatternKind::Var(ident.clone()), ident.span);
+        }
+
+        self.parse_primary_pattern()
+    }
+
+    /// Parse a primary pattern.
+    /// 解析基本模式。
+    fn parse_primary_pattern(&mut self) -> Pattern {
+        let start = self.current_span();
+
+        match self.current_kind().clone() {
+            // Wildcard pattern: _
+            // 通配符模式：_
+            TokenKind::Ident(name) if name == "_" => {
+                self.advance();
+                Pattern::new(PatternKind::Wildcard, start)
+            }
+            // Handle 'self' as a special variable pattern in method parameters
+            // 在方法参数中将 'self' 作为特殊变量模式处理
+            TokenKind::SelfLower => {
+                self.advance();
+                let ident = Ident {
+                    name: "self".to_string(),
+                    span: start,
+                };
+                Pattern::new(PatternKind::Var(ident), start)
+            }
+            // Variable or constructor pattern
+            // 变量或构造器模式
+            TokenKind::Ident(_) => {
+                let ident = self.parse_ident();
+                if self.check(TokenKind::LParen) {
+                    // Constructor pattern
+                    // 构造器模式
+                    self.advance();
+                    let mut args = Vec::new();
+                    if !self.check(TokenKind::RParen) {
+                        loop {
+                            args.push(self.parse_pattern());
+                            if !self.eat(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RParen);
+                    let span = start.merge(self.previous_span());
+                    Pattern::new(
+                        PatternKind::Constructor {
+                            path: vec![ident],
+                            args,
+                        },
+                        span,
+                    )
+                } else if ident
+                    .name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_uppercase())
+                    .unwrap_or(false)
+                {
+                    Pattern::new(
+                        PatternKind::Constructor {
+                            path: vec![ident],
+                            args: Vec::new(),
+                        },
+                        start,
+                    )
+                } else {
+                    Pattern::new(PatternKind::Var(ident.clone()), ident.span)
+                }
+            }
+            // Literal patterns
+            // 字面量模式
+            TokenKind::Int(n) => {
+                self.advance();
+                Pattern::new(PatternKind::Literal(LiteralPattern::Int(n)), start)
+            }
+            TokenKind::Float(f) => {
+                self.advance();
+                Pattern::new(PatternKind::Literal(LiteralPattern::Float(f)), start)
+            }
+            TokenKind::String(s) => {
+                self.advance();
+                Pattern::new(PatternKind::Literal(LiteralPattern::String(s)), start)
+            }
+            TokenKind::Char(c) => {
+                self.advance();
+                Pattern::new(PatternKind::Literal(LiteralPattern::Char(c)), start)
+            }
+            TokenKind::True => {
+                self.advance();
+                Pattern::new(PatternKind::Literal(LiteralPattern::Bool(true)), start)
+            }
+            TokenKind::False => {
+                self.advance();
+                Pattern::new(PatternKind::Literal(LiteralPattern::Bool(false)), start)
+            }
+            // Tuple pattern: (a, b, ...)
+            // 元组模式：(a, b, ...)
+            TokenKind::LParen => {
+                self.advance();
+                if self.eat(TokenKind::RParen) {
+                    return Pattern::new(
+                        PatternKind::Tuple(Vec::new()),
+                        start.merge(self.previous_span()),
+                    );
+                }
+                let first = self.parse_pattern();
+                if self.eat(TokenKind::Comma) {
+                    let mut elements = vec![first];
+                    if !self.check(TokenKind::RParen) {
+                        loop {
+                            elements.push(self.parse_pattern());
+                            if !self.eat(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RParen);
+                    let span = start.merge(self.previous_span());
+                    Pattern::new(PatternKind::Tuple(elements), span)
+                } else {
+                    self.expect(TokenKind::RParen);
+                    first
+                }
+            }
+            // List pattern: [a, b, ..rest, c]
+            // 列表模式：[a, b, ..rest, c]
+            TokenKind::LBracket => {
+                self.advance();
+                if self.eat(TokenKind::RBracket) {
+                    return Pattern::new(
+                        PatternKind::List(Vec::new()),
+                        start.merge(self.previous_span()),
+                    );
+                }
+
+                let mut init = Vec::new();
+                let mut rest = None;
+                let mut tail = Vec::new();
+                let mut seen_rest = false;
+
+                loop {
+                    if self.eat(TokenKind::DotDot) {
+                        // Rest pattern: ..name or just ..
+                        // 剩余模式：..名称 或仅 ..
+                        if !seen_rest {
+                            if let TokenKind::Ident(_) = self.current_kind() {
+                                rest = Some(Box::new(self.parse_pattern()));
+                            }
+                            seen_rest = true;
+                        }
+                    } else {
+                        let pattern = self.parse_pattern();
+                        if seen_rest {
+                            tail.push(pattern);
+                        } else {
+                            init.push(pattern);
+                        }
+                    }
+
+                    if !self.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+
+                self.expect(TokenKind::RBracket);
+                let span = start.merge(self.previous_span());
+
+                if seen_rest {
+                    Pattern::new(PatternKind::ListRest { init, rest, tail }, span)
+                } else {
+                    Pattern::new(PatternKind::List(init), span)
+                }
+            }
+            // Record pattern: `{ field, field = pattern, .. }`.
+            // Legacy `#{ ... }` remains accepted for compatibility.
+            // 记录模式：`{ 字段, 字段 = 模式, ..`。
+            // 旧语法 `#{ ... }` 继续为兼容性保留。
+            TokenKind::HashLBrace | TokenKind::LBrace => {
+                self.advance();
+                let mut fields = Vec::new();
+                let mut rest = false;
+
+                if !self.check(TokenKind::RBrace) {
+                    loop {
+                        if self.eat(TokenKind::DotDot) {
+                            // Rest pattern: ignore remaining fields
+                            // 剩余模式：忽略剩余字段
+                            rest = true;
+                            break;
+                        }
+
+                        let name = self.parse_ident();
+                        let pattern = if self.eat(TokenKind::Eq) {
+                            Some(self.parse_pattern())
+                        } else {
+                            None
+                        };
+                        fields.push(RecordPatternField {
+                            span: name.span,
+                            name,
+                            pattern,
+                        });
+
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                self.expect(TokenKind::RBrace);
+                let span = start.merge(self.previous_span());
+                Pattern::new(PatternKind::Record { fields, rest }, span)
+            }
+            _ => {
+                self.error_with_code("expected pattern", ErrorCode::ExpectedPattern);
+                // Advance to prevent infinite loop on unexpected tokens
+                // 前进以防止在意外 token 上无限循环
+                self.advance();
+                Pattern::new(PatternKind::Wildcard, start)
+            }
+        }
+    }
+
+    // ========== Type Parsing 类型解析 ==========
+
+    /// Parse a type.
+    /// 解析类型。
+    fn parse_type(&mut self) -> Type {
+        self.parse_function_type()
+    }
+
+    /// Parse a function type: Type -> Type
+    /// 解析函数类型：类型 -> 类型
+    fn parse_function_type(&mut self) -> Type {
+        let first = self.parse_primary_type();
+
+        if self.eat(TokenKind::Arrow) {
+            let result = self.parse_function_type();
+            let span = first.span.merge(result.span);
+            Type::new(
+                TypeKind::Function {
+                    params: vec![first],
+                    result: Box::new(result),
+                },
+                span,
+            )
+        } else {
+            first
+        }
+    }
+
+    /// Parse a primary type.
+    /// 解析基本类型。
+    fn parse_primary_type(&mut self) -> Type {
+        let start = self.current_span();
+
+        match self.current_kind().clone() {
+            // Named type with optional path and generics: a.b.Type<T, U>
+            // 带可选路径和泛型的命名类型：a.b.Type<T, U>
+            TokenKind::Ident(_) => {
+                let mut path = vec![self.parse_ident()];
+                while self.eat(TokenKind::Dot) {
+                    path.push(self.parse_ident());
+                }
+
+                // Parse optional generic arguments
+                // 解析可选的泛型参数
+                let args = if self.eat(TokenKind::Lt) {
+                    let mut args = vec![self.parse_type()];
+                    while self.eat(TokenKind::Comma) {
+                        args.push(self.parse_type());
+                    }
+                    self.expect(TokenKind::Gt);
+                    args
+                } else {
+                    Vec::new()
+                };
+
+                let span = start.merge(self.previous_span());
+                Type::new(TypeKind::Named { path, args }, span)
+            }
+            // Unit type or tuple type: () or (A, B, ...)
+            // 单元类型或元组类型：() 或 (A, B, ...)
+            TokenKind::LParen => {
+                self.advance();
+                if self.eat(TokenKind::RParen) {
+                    return Type::new(TypeKind::Unit, start.merge(self.previous_span()));
+                }
+
+                let first = self.parse_type();
+                if self.eat(TokenKind::Comma) {
+                    let mut elements = vec![first];
+                    loop {
+                        elements.push(self.parse_type());
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect(TokenKind::RParen);
+                    let span = start.merge(self.previous_span());
+                    Type::new(TypeKind::Tuple(elements), span)
+                } else {
+                    self.expect(TokenKind::RParen);
+                    first
+                }
+            }
+            // Record type: `{ field: Type, ... }`.
+            // Legacy `#{ ... }` remains accepted for compatibility.
+            // 记录类型：`{ 字段: 类型, ... }`。
+            // 旧语法 `#{ ... }` 继续为兼容性保留。
+            TokenKind::HashLBrace | TokenKind::LBrace => {
+                self.advance();
+                let mut fields = Vec::new();
+
+                if !self.check(TokenKind::RBrace) {
+                    loop {
+                        let name = self.parse_ident();
+                        self.expect(TokenKind::Colon);
+                        let ty = self.parse_type();
+                        fields.push(RecordTypeField {
+                            span: name.span.merge(ty.span),
+                            name,
+                            ty,
+                        });
+
+                        if !self.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                self.expect(TokenKind::RBrace);
+                let span = start.merge(self.previous_span());
+                Type::new(TypeKind::Record(fields), span)
+            }
+            _ => {
+                self.error_with_code("expected type", ErrorCode::ExpectedType);
+                Type::new(TypeKind::Infer, start)
+            }
+        }
+    }
+
+    // ========== Token Helpers Token 辅助方法 ==========
+
+    /// Get the current token.
+    /// 获取当前 token。
+    fn current(&self) -> &Token {
+        self.tokens
+            .get(self.pos)
+            .unwrap_or(&self.tokens[self.tokens.len() - 1])
+    }
+
+    /// Get the kind of the current token.
+    /// 获取当前 token 的类型。
+    fn current_kind(&self) -> &TokenKind {
+        &self.current().kind
+    }
+
+    /// Get the span of the current token.
+    /// 获取当前 token 的位置信息。
+    fn current_span(&self) -> Span {
+        self.current().span
+    }
+
+    /// Get the span of the previous token.
+    /// 获取前一个 token 的位置信息。
+    fn previous_span(&self) -> Span {
+        if self.pos > 0 {
+            self.tokens[self.pos - 1].span
+        } else {
+            Span::DUMMY
+        }
+    }
+
+    /// Check if we're at the end of the token stream.
+    /// 检查是否已到达 token 流末尾。
+    fn at_end(&self) -> bool {
+        matches!(self.current_kind(), TokenKind::Eof)
+    }
+
+    /// Check if the current token matches the given kind.
+    /// 检查当前 token 是否匹配给定类型。
+    fn check(&self, kind: TokenKind) -> bool {
+        std::mem::discriminant(self.current_kind()) == std::mem::discriminant(&kind)
+    }
+
+    /// Advance to the next token.
+    /// 前进到下一个 token。
+    fn advance(&mut self) {
+        if !self.at_end() {
+            self.pos += 1;
+        }
+    }
+
+    /// Consume the current token if it matches the given kind.
+    /// 如果当前 token 匹配给定类型则消耗它。
+    ///
+    /// Returns true if the token was consumed.
+    /// 如果 token 被消耗则返回 true。
+    fn eat(&mut self, kind: TokenKind) -> bool {
+        if self.check(kind) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Expect the current token to match the given kind.
+    /// 期望当前 token 匹配给定类型。
+    ///
+    /// Reports an error if the token doesn't match.
+    /// 如果 token 不匹配则报告错误。
+    fn expect(&mut self, kind: TokenKind) {
+        if !self.eat(kind.clone()) {
+            let code = self.expect_token_code(&kind);
+            self.error_with_code(&format!("expected {:?}", kind), code);
+        }
+    }
+
+    /// Map a token kind to the appropriate error code when `expect()` fails.
+    /// 当 `expect()` 失败时将 token 类型映射到适当的错误代码。
+    fn expect_token_code(&self, kind: &TokenKind) -> ErrorCode {
+        match kind {
+            TokenKind::Semicolon => ErrorCode::MissingSemicolon,
+            TokenKind::Ident(_) => ErrorCode::ExpectedIdentifier,
+            TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                ErrorCode::UnclosedDelimiter
+            }
+            _ => ErrorCode::UnexpectedToken,
+        }
+    }
+
+    /// Report a parse error at the current position (fallback, uses E0100).
+    /// 在当前位置报告解析错误（回退，使用 E0100）。
+    fn error(&mut self, message: &str) {
+        self.error_with_code(message, ErrorCode::UnexpectedToken);
+    }
+
+    /// Report a parse error with a specific error code.
+    /// 使用特定的错误代码报告解析错误。
+    fn error_with_code(&mut self, message: &str, code: ErrorCode) {
+        let span = self.current_span();
+        let mut diag = Diagnostic::error(DiagnosticKind::Parser, span, message)
+            .with_code(code)
+            .with_label(Label::new(span, "here"));
+
+        // Add context-specific help for common errors
+        match code {
+            ErrorCode::MissingSemicolon => {
+                diag = diag.with_help("add a `;` at the end of this statement");
+            }
+            ErrorCode::UnclosedDelimiter => {
+                diag = diag.with_help("add the matching closing delimiter");
+            }
+            ErrorCode::ExpectedExpression => {
+                diag = diag.with_help("add an expression after this");
+            }
+            ErrorCode::ExpectedIdentifier => {
+                diag = diag.with_help("an identifier (name) is required here");
+            }
+            _ => {}
+        }
+
+        self.diagnostics.push(diag);
+    }
+
+    /// Expect a token with a specific error code (for use when the generic
+    /// `expect_token_code` mapping is insufficient).
+    /// 使用特定的错误代码期望一个 token。
+    #[allow(dead_code)]
+    fn expect_with_code(&mut self, kind: TokenKind, code: ErrorCode) {
+        if !self.eat(kind.clone()) {
+            self.error_with_code(&format!("expected {:?}", kind), code);
+        }
+    }
+
+    /// Expect a semicolon (reports E0105 MissingSemicolon).
+    /// 期望一个分号（报告 E0105）。
+    #[allow(dead_code)]
+    fn expect_semicolon(&mut self) {
+        self.expect_with_code(TokenKind::Semicolon, ErrorCode::MissingSemicolon);
+    }
+
+    /// Expect an expression (reports E0101 ExpectedExpression).
+    /// 期望一个表达式（报告 E0101）。
+    #[allow(dead_code)]
+    fn expect_expr(&mut self) {
+        self.error_with_code("expected expression", ErrorCode::ExpectedExpression);
+    }
+
+    // ========== Error Recovery 错误恢复 ==========
+
+    /// Synchronize to the next statement boundary.
+    /// 同步到下一个语句边界。
+    ///
+    /// This skips tokens until we find a synchronization point.
+    /// 跳过 token 直到找到同步点。
+    fn synchronize(&mut self) {
+        // Must advance at least once to avoid infinite loop when we can't parse current token
+        // 必须至少前进一次以避免在无法解析当前 token 时无限循环
+        let mut advanced = false;
+
+        while !self.at_end() {
+            // If we just passed a statement-ending token, we're at a statement boundary
+            // 如果我们刚经过一个语句结束 token，我们就在语句边界
+            if self.pos > 0 {
+                let prev = &self.tokens[self.pos - 1].kind;
+                if is_stmt_end(prev) {
+                    // Only return if we've advanced, otherwise we'd loop forever
+                    // 只有在已前进的情况下才返回，否则会永远循环
+                    if advanced {
+                        return;
+                    }
+                }
+            }
+
+            // If current token starts a new statement, stop here
+            // 如果当前 token 开始一个新语句，在此停止
+            if is_stmt_start(self.current_kind()) {
+                return;
+            }
+
+            // Update delimiter tracking and advance
+            // 更新定界符跟踪并前进
+            let kind = self.current_kind().clone();
+            self.delimiter_stack.update(&kind);
+            self.advance();
+            advanced = true;
+        }
+    }
+
+    /// Check if we're at the end of a statement.
+    /// 检查是否在语句末尾。
+    fn at_stmt_end(&self) -> bool {
+        STMT_ENDS
+            .iter()
+            .any(|k| std::mem::discriminant(self.current_kind()) == std::mem::discriminant(k))
+    }
+
+    /// Synchronize to a specific token or statement boundary.
+    /// 同步到特定 token 或语句边界。
+    fn synchronize_to(&mut self, target: TokenKind) {
+        while !self.at_end() {
+            if self.check(target.clone()) {
+                return;
+            }
+
+            // Stop at statement-ending tokens
+            // 在语句结束 token 处停止
+            if self.at_stmt_end() {
+                return;
+            }
+
+            // Also stop at statement boundaries (sync tokens like keywords)
+            // 也在语句边界停止（如关键字等同步 token）
+            if is_sync_token(self.current_kind()) {
+                return;
+            }
+
+            let kind = self.current_kind().clone();
+            self.delimiter_stack.update(&kind);
+            self.advance();
+        }
+    }
+
+    /// Skip until we find a closing delimiter, respecting nesting.
+    /// 跳过直到找到闭合定界符，同时尊重嵌套。
+    fn skip_to_closing_delimiter(&mut self, kind: DelimiterKind) {
+        let target = kind.closing_token();
+        let mut depth = 1;
+
+        while !self.at_end() && depth > 0 {
+            let current = self.current_kind().clone();
+
+            if current == kind.opening_token() {
+                depth += 1;
+            } else if current == target {
+                depth -= 1;
+                if depth == 0 {
+                    return; // Don't consume the closing delimiter / 不消耗闭合定界符
+                }
+            }
+
+            self.advance();
+        }
+    }
+
+    /// Try to recover from an error in an expression context.
+    /// 尝试从表达式上下文中的错误恢复。
+    fn recover_expr(&mut self) -> Expr {
+        let span = self.current_span();
+        self.synchronize();
+        // Return a placeholder error expression (unit)
+        // 返回一个占位符错误表达式（单元）
+        Expr::new(ExprKind::Unit, span)
+    }
+
+    /// Try to recover from an error in a statement context.
+    /// 尝试从语句上下文中的错误恢复。
+    fn recover_stmt(&mut self) -> Option<Stmt> {
+        self.synchronize();
+        None
+    }
+
+    /// Expect a token, with recovery on failure.
+    /// 期望一个 token，失败时进行恢复。
+    fn expect_recover(&mut self, kind: TokenKind, recovery: RecoveryMode) -> bool {
+        if self.eat(kind.clone()) {
+            true
+        } else {
+            let code = self.expect_token_code(&kind);
+            self.error_with_code(&format!("expected {:?}", kind), code);
+            match recovery {
+                RecoveryMode::Statement => self.synchronize(),
+                RecoveryMode::Expression => {
+                    // Skip to common expression terminators
+                    // 跳过到常见的表达式终结符
+                    self.synchronize_to(TokenKind::Semicolon);
+                }
+                RecoveryMode::Delimiter(delim) => {
+                    self.skip_to_closing_delimiter(delim);
+                }
+                RecoveryMode::None => {}
+            }
+            false
+        }
+    }
+
+    /// Parse a comma-separated list with error recovery.
+    /// 解析带有错误恢复的逗号分隔列表。
+    fn parse_comma_list<T, F>(&mut self, closing: TokenKind, mut parse_item: F) -> Vec<T>
+    where
+        F: FnMut(&mut Self) -> Option<T>,
+    {
+        let mut items = Vec::new();
+
+        while !self.check(closing.clone()) && !self.at_end() {
+            if let Some(item) = parse_item(self) {
+                items.push(item);
+            } else {
+                // Recovery: skip to comma or closing delimiter
+                // 恢复：跳过到逗号或闭合定界符
+                while !self.check(TokenKind::Comma)
+                    && !self.check(closing.clone())
+                    && !self.at_end()
+                {
+                    self.advance();
+                }
+            }
+
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        items
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_associated_types() {
+        let source = r#"
+trait Iterator {
+    type Item;
+    fn next(self) -> Option<Self.Item>;
+};
+
+trait Container {
+    type Item: Show;
+    type Error = String;
+};
+
+impl<T> Iterator for List<T> {
+    type Item = T;
+    fn next(self) -> Option<T> = None;
+};
+"#;
+
+        let lexer = n3v3_lexer::Lexer::new(source);
+        let (tokens, _diags) = lexer.tokenize();
+        let mut parser = Parser::new(tokens);
+        let source_file = parser.parse_file();
+
+        // Check for no errors
+        // 检查是否无错误
+        let diagnostics = parser.diagnostics();
+        if !diagnostics.is_empty() {
+            for diag in &diagnostics {
+                eprintln!("Error: {:?}", diag);
+            }
+            panic!("Parser should not produce errors");
+        }
+
+        // Verify we parsed 3 items
+        // 验证我们解析了 3 个项
+        assert_eq!(source_file.items.len(), 3);
+
+        // Check first trait (Iterator)
+        // 检查第一个特征（Iterator）
+        if let ItemKind::Trait(trait_def) = &source_file.items[0].kind {
+            assert_eq!(trait_def.name.name, "Iterator");
+            assert_eq!(trait_def.assoc_types.len(), 1);
+            assert_eq!(trait_def.assoc_types[0].name.name, "Item");
+            assert_eq!(trait_def.assoc_types[0].bounds.len(), 0);
+            assert!(trait_def.assoc_types[0].default.is_none());
+            assert_eq!(trait_def.items.len(), 1);
+        } else {
+            panic!("First item should be a trait");
+        }
+
+        // Check second trait (Container)
+        // 检查第二个特征（Container）
+        if let ItemKind::Trait(trait_def) = &source_file.items[1].kind {
+            assert_eq!(trait_def.name.name, "Container");
+            assert_eq!(trait_def.assoc_types.len(), 2);
+
+            // First assoc type with bound
+            // 第一个带约束的关联类型
+            assert_eq!(trait_def.assoc_types[0].name.name, "Item");
+            assert_eq!(trait_def.assoc_types[0].bounds.len(), 1);
+            assert!(trait_def.assoc_types[0].default.is_none());
+
+            // Second assoc type with default
+            // 第二个带默认值的关联类型
+            assert_eq!(trait_def.assoc_types[1].name.name, "Error");
+            assert_eq!(trait_def.assoc_types[1].bounds.len(), 0);
+            assert!(trait_def.assoc_types[1].default.is_some());
+        } else {
+            panic!("Second item should be a trait");
+        }
+
+        // Check impl block
+        // 检查 impl 块
+        if let ItemKind::Impl(impl_def) = &source_file.items[2].kind {
+            assert_eq!(impl_def.assoc_type_impls.len(), 1);
+            assert_eq!(impl_def.assoc_type_impls[0].name.name, "Item");
+            assert_eq!(impl_def.items.len(), 1);
+        } else {
+            panic!("Third item should be an impl");
+        }
+    }
+
+    #[test]
+    fn test_parse_trailing_top_level_expression() {
+        let source = r#"
+fn greet(name) = `Hello, {name}!`;
+
+fn factorial(n) = {
+    if n <= 1 -> 1
+    else n * factorial(n - 1)
+};
+
+#{
+    greeting = greet("World"),
+    magic = factorial(5),
+}
+"#;
+
+        let lexer = n3v3_lexer::Lexer::new(source);
+        let (tokens, _diags) = lexer.tokenize();
+        let mut parser = Parser::new(tokens);
+        let source_file = parser.parse_file();
+
+        let diagnostics = parser.diagnostics();
+        if !diagnostics.is_empty() {
+            for diag in &diagnostics {
+                eprintln!("Error: {:?}", diag);
+            }
+            panic!("Parser should not produce errors");
+        }
+
+        assert_eq!(source_file.items.len(), 2);
+        assert!(source_file.tail_expr.is_some());
+    }
+}

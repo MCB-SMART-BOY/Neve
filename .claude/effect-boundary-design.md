@@ -1,4 +1,4 @@
-# Neve Effect Boundary Design Document
+# n3v3 Effect Boundary Design Document
 
 <div align="center">
 
@@ -17,7 +17,7 @@
 
 本文档是 **G4 决策门**（Effect Boundary / 副作用边界）的设计文档。它定义：
 
-1. Neve 语言中 **纯函数**（pure）与 **副作用函数**（effectful）的边界在哪里
+1. n3v3 语言中 **纯函数**（pure）与 **副作用函数**（effectful）的边界在哪里
 2. 所有副作用操作的**完整清单**及其语义
 3. Rust 实现与 Lean 形式规范的**逐条对应关系**
 4. 安全边界（H-1, H-2, M-1, M-4）在设计层面的体现
@@ -45,7 +45,7 @@
 
 ### 2.1 什么是"纯" / Pure
 
-一个 Neve 表达式是**纯的**当且仅当：
+一个 n3v3 表达式是**纯的**当且仅当：
 
 1. 它的求值不依赖任何外部状态（文件系统、网络、环境变量、时间、随机数）
 2. 它的求值不产生任何外部可观察的副作用（输出、文件写入、进程启动）
@@ -55,7 +55,7 @@
 
 ### 2.2 什么是"有副作用的" / Effectful
 
-一个 Neve 表达式是**有效果的**当且仅当它满足以下任一条件：
+一个 n3v3 表达式是**有效果的**当且仅当它满足以下任一条件：
 
 1. **进程执行**：启动外部进程（execCommand, execPipeline）
 2. **文件 I/O**：读写文件系统（readFile, writeFile, readFileLines）
@@ -68,10 +68,10 @@
 
 ### 2.3 边界判定函数
 
-在 Rust 实现中，`neve_common::is_effectful_builtin(name)` 是**单一的、规范的效果判定函数**：
+在 Rust 实现中，`n3v3_common::is_effectful_builtin(name)` 是**单一的、规范的效果判定函数**：
 
 ```rust
-// crates/neve-common/src/lib.rs
+// crates/n3v3-common/src/lib.rs
 pub fn is_effectful_builtin(name: &str) -> bool {
     // 顶层输出函数
     if name == "print" || name == "println" { return true; }
@@ -249,7 +249,7 @@ IOState (效果状态，在 EffectEval 中传递)
 **D-009: Effects are explicit and runtime-mediated**
 - 效果不是隐式的（不像 Haskell 的 IO monad）
 - 效果通过类型系统自动推断（`effect` 关键字在 v4.0 中已可选）
-- 纯函数不能调用有效果的 builtin（`neve check --pure` 强制检查）
+- 纯函数不能调用有效果的 builtin（`n3v3 check --pure` 强制检查）
 
 **D-012: Process control is modeled, not inferred**
 - `Command` 是一等运行时对象，不是裸字符串
@@ -293,7 +293,7 @@ MAX_OUTPUT_BYTES = 50 * 1024 * 1024
 **任何包含 `..` 组件的重定向路径被替换为安全哨兵**：
 
 ```
-/dev/null/neve-blocked-traversal
+/dev/null/n3v3-blocked-traversal
 ```
 
 - Rust: `resolve_redirect_path()` 检查 `Path.components().any(|c| c == ParentDir)`
@@ -349,7 +349,7 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 
 每个 EffectEval 规则对应 Rust 中的一个 `builtin_*` 函数：
 
-| EffectEval 规则 | Rust 函数（`crates/neve-eval/src/eval.rs`） | 阻塞路径数 |
+| EffectEval 规则 | Rust 函数（`crates/n3v3-eval/src/eval.rs`） | 阻塞路径数 |
 |----------------|------------------------------------------|-----------|
 | `execCommand` | `builtin_exec_command` | 5 个阻塞路径 |
 | `execPipeline` | `builtin_exec_pipeline` | 5 个阻塞路径 |
@@ -440,15 +440,15 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 
 | 层次 | 文件 | 职责 |
 |------|------|------|
-| 效果判定（Rust） | `crates/neve-common/src/lib.rs` | `is_effectful_builtin()` — 单一权威来源 |
-| 进程执行（Rust） | `crates/neve-std/src/io/mod.rs` | 所有 `builtin_exec_*` + 安全检查 |
-| 文件 I/O（Rust） | `crates/neve-std/src/io/fs.rs` | `builtin_read_file`, `builtin_write_file` |
-| 求值器接入（Rust） | `crates/neve-eval/src/eval.rs` | builtin 分发 |
-| 纯语义（Lean） | `formal/Neve/Spec/Eval.lean` | `BigStep` — 大步操作语义 |
-| 效果语义（Lean） | `formal/Neve/Spec/Effects.lean` | `EffectEval` — 15 条规则 |
-| 安全证明（Lean） | `formal/Neve/Verify/` | Path, Environ, Limits |
-| 精化桥（Lean） | `formal/Neve/Refinement/` | Rust ↔ Lean 对应 |
-| 类型安全（Lean） | `formal/Neve/Proofs/Safety.lean` | `progress_preservation` + `type_safety` |
+| 效果判定（Rust） | `crates/n3v3-common/src/lib.rs` | `is_effectful_builtin()` — 单一权威来源 |
+| 进程执行（Rust） | `crates/n3v3-std/src/io/mod.rs` | 所有 `builtin_exec_*` + 安全检查 |
+| 文件 I/O（Rust） | `crates/n3v3-std/src/io/fs.rs` | `builtin_read_file`, `builtin_write_file` |
+| 求值器接入（Rust） | `crates/n3v3-eval/src/eval.rs` | builtin 分发 |
+| 纯语义（Lean） | `formal/n3v3/Spec/Eval.lean` | `BigStep` — 大步操作语义 |
+| 效果语义（Lean） | `formal/n3v3/Spec/Effects.lean` | `EffectEval` — 15 条规则 |
+| 安全证明（Lean） | `formal/n3v3/Verify/` | Path, Environ, Limits |
+| 精化桥（Lean） | `formal/n3v3/Refinement/` | Rust ↔ Lean 对应 |
+| 类型安全（Lean） | `formal/n3v3/Proofs/Safety.lean` | `progress_preservation` + `type_safety` |
 
 ### 9.2 安全审计闭合状态
 
@@ -469,7 +469,7 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 
 当新增一个效果 builtin 时，必须：
 
-1. [ ] 在 `neve_common::is_effectful_builtin()` 中注册
+1. [ ] 在 `n3v3_common::is_effectful_builtin()` 中注册
 2. [ ] 在 `Spec/Effects.lean` 中添加对应的 `EffectEval` 规则
 3. [ ] 在 Rust 实现中添加安全检查（大小限制、路径安全、环境过滤）
 4. [ ] 在 `Verify/` 中添加安全定理（如果涉及新的安全属性）
@@ -490,7 +490,7 @@ LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH
 
 ## 附录 A：EffectEval 规则完整签名
 
-见 `formal/Neve/Spec/Effects.lean`。每条规则的完整签名包含：
+见 `formal/n3v3/Spec/Effects.lean`。每条规则的完整签名包含：
 
 - 求值环境 `env` 和 I/O 状态 `σ`（输入/输出）
 - 参数的纯求值前提（`BigStep` 子推导）

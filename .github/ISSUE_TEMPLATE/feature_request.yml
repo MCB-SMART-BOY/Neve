@@ -1,0 +1,103 @@
+# Canonical source: .claude/templates/feature_request.md
+name: Feature request
+description: Propose a n3v3 feature; see .claude/templates/feature_request.md for the canonical acceptance checklist.
+title: "[Feature]: "
+labels:
+  - enhancement
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use the canonical feature request structure in [`.claude/templates/feature_request.md`](../../.claude/templates/feature_request.md).
+        Explain observable behavior, boundaries, diagnostics, and error handling.
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature description
+      description: What should n3v3 be able to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Why do you need this, and what problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-syntax
+    attributes:
+      label: Proposed syntax
+      description: Show a representative n3v3 snippet, if this feature has syntax.
+      render: n3v3
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: pipeline-impact
+    attributes:
+      label: Canonical pipeline impact
+      description: Select every affected stage in Lexer → Parser → AST → HIR → Typeck → Eval, or state that the proposal is outside the pipeline.
+      options:
+        - label: Lexer
+        - label: Parser
+        - label: AST (`n3v3-syntax`)
+        - label: HIR lowering
+        - label: Type checker
+        - label: HIR evaluator
+        - label: Standard library
+        - label: No pipeline impact (explain below)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: effectful-builtin-parity
+    attributes:
+      label: Effectful builtin parity (if applicable)
+      description: Every new effectful builtin needs each integration point below; otherwise select not applicable.
+      options:
+        - label: Not an effectful builtin
+        - label: Typeck entry
+        - label: Frontend wire-up
+        - label: HIR eval
+        - label: REPL `:type`
+        - label: LSP hover
+        - label: E2E parity
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: tooling-impact
+    attributes:
+      label: Tooling impact
+      description: Evaluate formatter and LSP impact explicitly.
+      options:
+        - label: Formatter impact evaluated (syntax, formatting, or round-trip behavior)
+        - label: LSP impact evaluated (diagnostics, hover, completion, or semantic tokens)
+        - label: Formatter and LSP are not affected (explain below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Describe the observable behavior, boundaries, diagnostics, and error handling. Explain any not-applicable selections above.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acceptance-checklist
+    attributes:
+      label: Acceptance checklist
+      options:
+        - label: Proposed syntax and user-visible behavior are specified.
+        - label: Canonical pipeline impact is addressed, or a not-applicable rationale is provided.
+        - label: Effectful builtin parity is complete, or a not-applicable rationale is provided.
+        - label: Formatter and LSP impact is addressed, or a not-applicable rationale is provided.
+    validations:
+      required: true

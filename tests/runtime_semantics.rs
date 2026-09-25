@@ -1,15 +1,15 @@
 //! Regression coverage for lazy parameters and evaluator scope recovery.
 
-use neve_eval::{EvalError, EvaluableModuleRef, Evaluator, Value};
-use neve_frontend::analyze_source;
-use neve_std::stdlib;
+use n3v3_eval::{EvalError, EvaluableModuleRef, Evaluator, Value};
+use n3v3_frontend::analyze_source;
+use n3v3_std::stdlib;
 
 fn evaluate(source: &str) -> Result<Value, EvalError> {
     let analysis = analyze_source(source);
     let errors: Vec<_> = analysis
         .diagnostics
         .iter()
-        .filter(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
+        .filter(|diagnostic| diagnostic.severity == n3v3_diagnostic::Severity::Error)
         .collect();
     assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
     let mut evaluator = Evaluator::new().with_extra_builtins(
@@ -93,44 +93,44 @@ fn lazy_parameter_captures_callers_local_binding() {
     assert_eq!(result.unwrap(), Value::Int(42.into()));
 }
 
-const SCOPED_LOCAL: neve_hir::LocalId = neve_hir::LocalId(0);
+const SCOPED_LOCAL: n3v3_hir::LocalId = n3v3_hir::LocalId(0);
 
-fn make_expr(kind: neve_hir::ExprKind) -> neve_hir::Expr {
-    let span = neve_common::Span::default();
-    neve_hir::Expr {
+fn make_expr(kind: n3v3_hir::ExprKind) -> n3v3_hir::Expr {
+    let span = n3v3_common::Span::default();
+    n3v3_hir::Expr {
         kind,
-        ty: neve_hir::Ty {
-            kind: neve_hir::TyKind::Unknown,
+        ty: n3v3_hir::Ty {
+            kind: n3v3_hir::TyKind::Unknown,
             span,
         },
         span,
     }
 }
 
-fn make_int(value: i64) -> neve_hir::Expr {
-    make_expr(neve_hir::ExprKind::Literal(neve_hir::Literal::Int(
+fn make_int(value: i64) -> n3v3_hir::Expr {
+    make_expr(n3v3_hir::ExprKind::Literal(n3v3_hir::Literal::Int(
         value.into(),
     )))
 }
 
-fn make_scoped_pattern() -> neve_hir::Pattern {
-    neve_hir::Pattern {
-        kind: neve_hir::PatternKind::Var(SCOPED_LOCAL, "scoped".to_string()),
-        span: neve_common::Span::default(),
+fn make_scoped_pattern() -> n3v3_hir::Pattern {
+    n3v3_hir::Pattern {
+        kind: n3v3_hir::PatternKind::Var(SCOPED_LOCAL, "scoped".to_string()),
+        span: n3v3_common::Span::default(),
     }
 }
 
-fn make_failure() -> neve_hir::Expr {
-    make_expr(neve_hir::ExprKind::Binary(
-        neve_hir::BinOp::Div,
+fn make_failure() -> n3v3_hir::Expr {
+    make_expr(n3v3_hir::ExprKind::Binary(
+        n3v3_hir::BinOp::Div,
         Box::new(make_int(1)),
         Box::new(make_int(0)),
     ))
 }
 
-fn make_call(body: neve_hir::Expr) -> neve_hir::Expr {
-    make_expr(neve_hir::ExprKind::Call(
-        Box::new(make_expr(neve_hir::ExprKind::Lambda {
+fn make_call(body: n3v3_hir::Expr) -> n3v3_hir::Expr {
+    make_expr(n3v3_hir::ExprKind::Call(
+        Box::new(make_expr(n3v3_hir::ExprKind::Lambda {
             params: Vec::new(),
             body: Box::new(body),
             return_ty: None,
@@ -139,19 +139,19 @@ fn make_call(body: neve_hir::Expr) -> neve_hir::Expr {
     ))
 }
 
-fn make_scoped_match(guard: Option<neve_hir::Expr>, body: neve_hir::Expr) -> neve_hir::Expr {
-    make_expr(neve_hir::ExprKind::Match(
+fn make_scoped_match(guard: Option<n3v3_hir::Expr>, body: n3v3_hir::Expr) -> n3v3_hir::Expr {
+    make_expr(n3v3_hir::ExprKind::Match(
         Box::new(make_int(42)),
-        vec![neve_hir::MatchArm {
+        vec![n3v3_hir::MatchArm {
             pattern: make_scoped_pattern(),
             guard,
             body,
-            span: neve_common::Span::default(),
+            span: n3v3_common::Span::default(),
         }],
     ))
 }
 
-fn assert_scope_restored(expression: neve_hir::Expr, should_fail: bool) {
+fn assert_scope_restored(expression: n3v3_hir::Expr, should_fail: bool) {
     let mut evaluator = Evaluator::new();
     let result = evaluator.eval(&expression);
     if should_fail {
@@ -162,7 +162,7 @@ fn assert_scope_restored(expression: neve_hir::Expr, should_fail: bool) {
     } else {
         assert_eq!(result.unwrap(), Value::Int(42.into()));
     }
-    let lookup = make_expr(neve_hir::ExprKind::Var(SCOPED_LOCAL));
+    let lookup = make_expr(n3v3_hir::ExprKind::Var(SCOPED_LOCAL));
     assert!(matches!(
         evaluator.eval(&lookup),
         Err(EvalError::UnboundVariable)
@@ -172,14 +172,14 @@ fn assert_scope_restored(expression: neve_hir::Expr, should_fail: bool) {
 
 #[test]
 fn block_error_does_not_leak_local_binding() {
-    let expression = make_expr(neve_hir::ExprKind::Block(
-        vec![neve_hir::Stmt {
-            kind: neve_hir::StmtKind::Let {
+    let expression = make_expr(n3v3_hir::ExprKind::Block(
+        vec![n3v3_hir::Stmt {
+            kind: n3v3_hir::StmtKind::Let {
                 pattern: make_scoped_pattern(),
                 ty: None,
                 value: make_int(42),
             },
-            span: neve_common::Span::default(),
+            span: n3v3_common::Span::default(),
         }],
         Some(Box::new(make_failure())),
     ));
@@ -190,7 +190,7 @@ fn block_error_does_not_leak_local_binding() {
 #[test]
 fn let_error_does_not_leak_local_binding() {
     assert_scope_restored(
-        make_expr(neve_hir::ExprKind::Let {
+        make_expr(n3v3_hir::ExprKind::Let {
             pattern: make_scoped_pattern(),
             ty: None,
             value: Box::new(make_int(42)),
@@ -216,20 +216,20 @@ fn match_body_error_does_not_leak_local_binding() {
 
 #[test]
 fn match_tail_call_preserves_argument_and_restores_scope() {
-    let body = make_call(make_expr(neve_hir::ExprKind::Var(SCOPED_LOCAL)));
+    let body = make_call(make_expr(n3v3_hir::ExprKind::Var(SCOPED_LOCAL)));
     assert_scope_restored(make_call(make_scoped_match(None, body)), false);
 }
 
 #[test]
 fn comprehension_condition_error_does_not_leak_local_binding() {
     assert_scope_restored(
-        make_expr(neve_hir::ExprKind::ListComp {
+        make_expr(n3v3_hir::ExprKind::ListComp {
             body: Box::new(make_int(42)),
-            generators: vec![neve_hir::Generator {
+            generators: vec![n3v3_hir::Generator {
                 pattern: make_scoped_pattern(),
-                iter: make_expr(neve_hir::ExprKind::List(vec![make_int(42)])),
+                iter: make_expr(n3v3_hir::ExprKind::List(vec![make_int(42)])),
                 condition: Some(make_failure()),
-                span: neve_common::Span::default(),
+                span: n3v3_common::Span::default(),
             }],
         }),
         true,

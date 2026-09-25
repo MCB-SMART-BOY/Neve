@@ -10,7 +10,7 @@
 - Find References
 - Rename symbol
 - Signature Help
-- Code Formatting (`neve fmt`)
+- Code Formatting (`n3v3 fmt`)
 - Code Lens (reference counts)
 - Document Symbols (outline)
 - Workspace Symbols

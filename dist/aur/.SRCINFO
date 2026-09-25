@@ -1,8 +1,8 @@
-pkgbase = neve
+pkgbase = n3v3
 	pkgdesc = A strongly-typed systems scripting language with formal verification
 	pkgver = 3.17.0
 	pkgrel = 1
-	url = https://github.com/MCB-SMART-BOY/Neve
+	url = https://github.com/MCB-SMART-BOY/n3v3
 	arch = x86_64
 	arch = aarch64
 	license = MIT
@@ -11,7 +11,7 @@ pkgbase = neve
 	makedepends = cargo
 	makedepends = git
 	optdepends = lean4: formal verification
-	source = neve-3.7.0.tar.gz::https://github.com/MCB-SMART-BOY/Neve/archive/v3.7.0.tar.gz
+	source = n3v3-3.7.0.tar.gz::https://github.com/MCB-SMART-BOY/n3v3/archive/v3.7.0.tar.gz
 	sha256sums = SKIP
 
-pkgname = neve
+pkgname = n3v3

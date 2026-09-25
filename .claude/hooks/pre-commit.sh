@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
-# Pre-commit hook — runs formatting, linting, and fast checks
+# Run the repository quick quality gate. / 运行仓库快速质量门禁。
 set -euo pipefail
 
-echo "==> Running cargo fmt --check..."
-cargo fmt --all -- --check
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "$ROOT"
 
-echo "==> Running cargo check..."
-cargo check --workspace
+if [ ! -f Cargo.toml ] || [ ! -d .claude/hooks ]; then
+    printf '[FAIL] not at repository root / 当前不在仓库根目录\n' >&2
+    exit 1
+fi
+if [ ! -f scripts/validate.sh ]; then
+    printf '[FAIL] scripts/validate.sh missing / 缺少 scripts/validate.sh\n' >&2
+    exit 1
+fi
 
-echo "==> Running cargo clippy (warnings as errors)..."
-cargo clippy --workspace --all-targets -- -D warnings
-
-echo "==> Running cargo test..."
-cargo test --workspace 2>&1 | tail -5
-
-echo "==> Pre-commit checks passed ✅"
+if bash scripts/validate.sh --quick; then
+    printf '[PASS] pre-commit quick gate / pre-commit 快速门禁通过\n'
+else
+    status=$?
+    printf '[FAIL] pre-commit quick gate failed (exit %d) / 快速门禁失败（退出码 %d）\n' \
+        "$status" "$status" >&2
+    exit "$status"
+fi

@@ -5,9 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-GRAMMAR_DIR="$REPO_ROOT/tree-sitter-neve"
+GRAMMAR_DIR="$REPO_ROOT/tree-sitter-n3v3"
 
-echo "=== Neve Tree-sitter Grammar Builder ==="
+echo "=== n3v3 Tree-sitter Grammar Builder ==="
 echo "Platform: $(uname -s) $(uname -m)"
 echo ""
 
@@ -43,7 +43,7 @@ $TREE_SITTER generate --no-bindings 2>&1 | tail -1
 $TREE_SITTER build 2>&1
 
 # 4. Verify output
-GRAMMAR_SO="$GRAMMAR_DIR/neve.so"
+GRAMMAR_SO="$GRAMMAR_DIR/n3v3.so"
 if [ -f "$GRAMMAR_SO" ]; then
     SIZE=$(ls -la "$GRAMMAR_SO" | awk '{print $5}')
     echo ""
@@ -62,12 +62,12 @@ fi
 echo ""
 case "$(uname -s)" in
     Linux)
-        echo "Install: cp $GRAMMAR_SO ~/.config/helix/runtime/grammars/neve.so"
-        echo "Or run:  neve setup helix"
+        echo "Install: cp $GRAMMAR_SO ~/.config/helix/runtime/grammars/n3v3.so"
+        echo "Or run:  n3v3 setup helix"
         ;;
     Darwin)
-        echo "Install: cp $GRAMMAR_SO ~/.config/helix/runtime/grammars/neve.dylib"
-        echo "Or run:  neve setup helix"
+        echo "Install: cp $GRAMMAR_SO ~/.config/helix/runtime/grammars/n3v3.dylib"
+        echo "Or run:  n3v3 setup helix"
         ;;
     *)
         echo "Install manually to Helix runtime/grammars directory"

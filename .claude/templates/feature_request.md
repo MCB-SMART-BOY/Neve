@@ -1,27 +1,45 @@
 ## Feature Description
-<!-- What should Neve be able to do? -->
+<!-- What should n3v3 be able to do? -->
 
 ## Use Case
 <!-- Why do you need this? What problem does it solve? -->
 
 ## Proposed Syntax
-```neve
+```n3v3
 <!-- How would you use this feature? -->
 ```
 
 ## Affected Pipeline Stages
+<!--
+Trace the proposal through the canonical pipeline:
+Lexer → Parser → AST → HIR → Typeck → Eval.
+Select every affected stage and explain the impact in the sections below.
+-->
 - [ ] Lexer
-- [ ] Parser (neve-syntax AST)
+- [ ] Parser
+- [ ] AST (`n3v3-syntax`)
 - [ ] HIR lowering
 - [ ] Type checker
 - [ ] HIR evaluator
-- [ ] Formatter
-- [ ] LSP
 - [ ] Standard library
-- [ ] Documentation
+
+## Effectful Builtin Parity (if applicable)
+<!-- Every new effectful builtin needs all of these integration points. -->
+- [ ] Not an effectful builtin
+- [ ] Typeck entry
+- [ ] Frontend wire-up
+- [ ] HIR eval
+- [ ] REPL `:type`
+- [ ] LSP hover
+- [ ] E2E parity
+
+## Tooling Impact
+- [ ] Formatter impact evaluated (syntax, formatting, or round-trip behavior)
+- [ ] LSP impact evaluated (diagnostics, hover, completion, or semantic tokens)
 
 ## Acceptance Criteria
-<!-- How would we know this is done? -->
-- [ ] Tests pass
-- [ ] Documentation updated
-- [ ] Feature matrix updated
+<!-- Describe observable behavior, boundaries, diagnostics, and error handling. -->
+- [ ] The proposed syntax and user-visible behavior are specified above.
+- [ ] Canonical pipeline impact is addressed, or explicitly marked not applicable with rationale.
+- [ ] Effectful builtin parity is complete, or explicitly marked not applicable with rationale.
+- [ ] Formatter and LSP impact is addressed, or explicitly marked not applicable with rationale.

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>5-Minute Quick Start</h1>
 
@@ -22,49 +22,51 @@
 
 ```bash
 # Pre-built binary
-curl -fsSL https://github.com/MCB-SMART-BOY/neve/releases/latest/download/neve-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv neve /usr/local/bin/
+curl -fsSL https://github.com/MCB-SMART-BOY/n3v3/releases/latest/download/n3v3-x86_64-unknown-linux-gnu.tar.gz | tar xz
+sudo mv n3v3 /usr/local/bin/
 
 # Or Arch Linux
-yay -S neve-git
+yay -S n3v3
 
-# Or from source
-git clone https://github.com/MCB-SMART-BOY/Neve.git && cd Neve
-cargo build --release
-```
+# From source / 从源码安装
+git clone https://github.com/MCB-SMART-BOY/n3v3.git && cd n3v3
+cargo install --path n3v3-cli --locked
+
+# Or build without installing into PATH / 或仅构建二进制而不安装到 PATH
+# cargo build --release
+# ./target/release/n3v3 repl
 
 ## Step 2: Play with REPL (1 min) / 第二步：玩玩 REPL（1 分钟）
 
 ```bash
-$ neve repl
-neve> 1 + 2 * 3
+$ n3v3 repl
+n3v3> 1 + 2 * 3
 7
-neve> double = |x| x * 2
-neve> double(21)
+n3v3> double = |x| x * 2
+n3v3> double(21)
 42
-neve> { name = "hacker", power = 9001 }
+n3v3> { name = "hacker", power = 9001 }
 {power = 9001, name = "hacker"}
-neve> { a = 10; b = 20; a + b }
+n3v3> { a = 10; b = 20; a + b }
 30
-neve> :quit
+n3v3> :quit
 ```
 
-**REPL Commands / 常用命令:** `:help` `:env` `:clear` `:load file.neve` `:quit`
+**REPL Commands / 常用命令:** `:help` `:env` `:clear` `:load file.n3v3` `:quit`
 
 ## Step 3: Write a File (1 min) / 第三步：写个文件（1 分钟）
 
-Create `hello.neve`:
-创建 `hello.neve`：
+Create `hello.n3v3`:
+创建 `hello.n3v3`：
 
-```neve
-greet(name) = `Hello, {name}!`
+```n3v3-check
+greet(name: String) -> String = `Hello, {name}!`
 
-factorial(n) = {
-    if n <= 1 -> 1
-    else n * factorial(n - 1)
+factorial(n: Int) -> Int = {
+    if n <= 1 -> 1 else n * factorial(n - 1)
 }
 
-{
+let result = {
     greeting = greet("World"),
     magic = factorial(5),
 }
@@ -74,15 +76,17 @@ Run it:
 运行：
 
 ```bash
-$ neve run hello.neve
-{magic = 120, greeting = "Hello, World!"}
+$ n3v3 run hello.n3v3
+[OK] #{greeting = "Hello, World!", magic = 120}
 
-$ neve check hello.neve   # Type check (no output = OK)
+$ n3v3 check hello.n3v3
+[OK] OK - No errors found
+# Effect checking is enabled by default; use --allow-effects for effectful examples.
 ```
 
 ## Step 4: Types (1 min) / 第四步：类型系统（1 分钟）
 
-```neve
+```n3v3
 -- Inferred
 x = 42                -- x: Int
 f = |n| n * 2       -- f: Int -> Int
@@ -96,7 +100,7 @@ identity<T>(x: T) -> T = x
 
 ## Step 5: Pattern Matching (1 min) / 第五步：模式匹配（1 分钟）
 
-```neve
+```n3v3
 describe(opt) = match opt {
     Some(x) -> `Got: {x}`,
     None    -> "Nothing",
@@ -110,7 +114,7 @@ sum(xs) = match xs {
 
 ## Cheat Sheet / 语法速查
 
-| What / 项目 | Neve |
+| What / 项目 | n3v3 |
 |------------|------|
 | Record | `{ x = 1 }` |
 | Lambda | `\|x\| x + 1` |

@@ -1,0 +1,25 @@
+use std.io = io
+
+io.writeFile("/tmp/n3v3-example.txt", "Hello from n3v3!\n");
+
+content = io.readFile("/tmp/n3v3-example.txt")
+
+println(content);
+
+io.appendFile("/tmp/n3v3-example.txt", "Second line\n");
+
+lines = io.lines("/tmp/n3v3-example.txt")
+
+println(lines);
+
+println(io.pathExists("/tmp/n3v3-example.txt"));
+
+println(io.pathExists("/tmp/does-not-exist"));
+
+io.createDirAll("/tmp/n3v3-demo/nested");
+
+io.writeFile("/tmp/n3v3-demo/nested/data.txt", "nested file");
+
+entries = io.readDir("/tmp/n3v3-demo")
+
+println(entries);

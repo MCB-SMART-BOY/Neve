@@ -1,6 +1,6 @@
 # 反应式 & 触发器 & 时序 —— 设计笔记
 
-写这份文档是要厘清一件事：Neve 能不能把 "监控-告警-自愈" 这条链路做成语言内置的能力，而不是靠外部脚本拼凑。
+写这份文档是要厘清一件事：n3v3 能不能把 "监控-告警-自愈" 这条链路做成语言内置的能力，而不是靠外部脚本拼凑。
 
 ---
 
@@ -18,7 +18,7 @@
 - 没有取消机制 —— 后台脚本忘了 kill 就一直跑
 - 没有组合能力 —— 两个检查脚本想合并？重写
 
-Neve 有 effect system、有 Task<T>、有 timeout。缺的是把它们串起来的语义层。
+n3v3 有 effect system、有 Task<T>、有 timeout。缺的是把它们串起来的语义层。
 
 ---
 
@@ -30,7 +30,7 @@ Neve 有 effect system、有 Task<T>、有 timeout。缺的是把它们串起来
 
 搞清楚"有什么东西发生了变化"。
 
-```neve
+```n3v3
 -- 文件变了
 let changes = watchFile(./config.toml);
 
@@ -45,7 +45,7 @@ let exits = watchProcess(myApp);
 
 事件流的操作（map、filter、merge、debounce）全部 pure —— 它们只是在描述"怎么处理事件"，不产生新的副作用。真正 effectful 的是创建事件源和消费事件。
 
-```neve
+```n3v3
 -- 这些全是 pure
 let important = changes.filter(|c| { c.kind == Write });
 let deduped  = important.debounce(500.millis);
@@ -58,7 +58,7 @@ deduped.forEach(|_| { reload() });
 
 这一层解决"在什么时候做什么"。
 
-```neve
+```n3v3
 -- before: 可以拦截和修改
 before write ./config.toml = |content: String| -> Result<String, String> {
     if !validToml(content) { Err("bad config") }
@@ -80,7 +80,7 @@ around write ./config.toml = |inner, content| {
 
 钩子绑定到作用域生命周期。出了 `scope { }` 自动卸载，不会泄漏。
 
-```neve
+```n3v3
 scope {
     before write ./config.toml = validate;
     -- 只在 scope 内有效
@@ -92,7 +92,7 @@ scope {
 
 "在 5 分钟内、重试 3 次、指数退避" —— 这是运维里最常见的句式。
 
-```neve
+```n3v3
 ensure service.healthy within 5.minutes
     retry 3 times backoff exponential(1.second, 2.0, 30.seconds)
     onViolation { notifyPagerDuty("service down") }
@@ -101,7 +101,7 @@ ensure service.healthy within 5.minutes
 
 语法糖，底下就是 `every + filter + timeout`。
 
-```neve
+```n3v3
 -- ensure 本质上是这个的简写：
 let check = every(1.second).map(|_| { http.get("/health").status == 200 });
 let deadline = now() + 5.minutes;
@@ -113,7 +113,7 @@ loop {
 
 ### 第四层：状态机 & 级联（长期目标）
 
-```neve
+```n3v3
 transition ServiceState {
     Stopped  -> Starting;
     Starting -> Running | Failed(timeout: 30.seconds);
@@ -144,7 +144,7 @@ cascade service.stop() {
 
 ## 跟数据库触发的对比
 
-| 数据库里的 | 在 Neve 里 |
+| 数据库里的 | 在 n3v3 里 |
 |-----------|-----------|
 | `BEFORE INSERT` — 写入前校验 | `before write file = |x| -> Result<x, Err>` |
 | `AFTER UPDATE` — 更新后级联 | `after write file = { reload(); }` |
@@ -154,7 +154,7 @@ cascade service.stop() {
 | 状态机（应用层） | `transition ServiceState { ... }` |
 | 物化视图 | `reactive { watch x; compute() }` |
 
-数据库触发是行级粒度的。Neve 不需要行级——系统运维里需要的是文件级、进程级、时间级。
+数据库触发是行级粒度的。n3v3 不需要行级——系统运维里需要的是文件级、进程级、时间级。
 
 ---
 

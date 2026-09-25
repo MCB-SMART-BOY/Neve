@@ -1,6 +1,6 @@
-//! Integration tests for neve-derive crate.
+//! Integration tests for n3v3-derive crate.
 
-use neve_derive::{
+use n3v3_derive::{
     Dependency, Derivation, Hash, HashMode, Hasher, MemoryRegistry, Output, PackageId,
     PackageMetadata, ResolveError, Resolver, StorePath, Version, VersionConstraint,
 };

@@ -1,0 +1,27 @@
+# gitleaks configuration — secret scanning over source, not build output.
+# 密钥扫描配置：扫描源码与仓库内容，跳过构建产物。
+#
+# The gate is `scripts/validate.sh` (`secrets`); see
+# docs/contributor/contributing.md § Documentation Standards.
+# 闸门为 `scripts/validate.sh` 的 `secrets`；见文档标准章节。
+#
+# Rationale / 理由: `target/` and `.lake/` hold derived artifacts (compiled
+# metadata, incremental bitcode) that embed third-party test vectors and keys,
+# not repository secrets. Scanning them costs minutes and produces false
+# positives. Source patterns keep the default ruleset unchanged.
+# `target/`、`.lake/` 是派生构建产物（编译元数据、增量 bitcode），其中可能内嵌第三方
+# 测试向量/密钥，并非仓库密钥；扫描它们既慢又产生误报。源码规则保持默认集不变。
+
+title = "n3v3"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "derived build artifacts and tool caches / 派生构建产物与工具缓存"
+paths = [
+  '''(^|/)target/''',
+  '''(^|/)\.lake/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.git/''',
+]

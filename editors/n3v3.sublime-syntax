@@ -1,0 +1,78 @@
+%YAML 1.2
+---
+# n3v3 v3.0 syntax highlighting for Sublime Text / VS Code / Helix
+name: n3v3
+scope: source.n3v3
+file_extensions: [n3v3]
+
+contexts:
+  main:
+    - match: '--.*'
+      scope: comment.line.n3v3
+
+    # Keywords (v3.0: 9 keywords)
+    - match: \b(if|then|else|match|use|as|type|trait|impl|pub|effect|lazy)\b
+      scope: keyword.control.n3v3
+
+    # Boolean literals
+    - match: \b(true|false)\b
+      scope: constant.language.n3v3
+
+    # Builtin types
+    - match: \b(Int|Float|Bool|String|Char|Unit|List|Record|Option|Result|Path|Bytes|Command|Pipeline|ProcessResult|Stream|Task|Job)\b
+      scope: storage.type.n3v3
+
+    # Numbers
+    - match: \b[0-9][0-9_]*(\.[0-9]+)?\b
+      scope: constant.numeric.n3v3
+
+    # Operators (v3.0: & replaces //)
+    - match: '(\+|\-|\*|\/|\%|\^|==|!=|<=|>=|<|>|&&|\|\||\+\+|&|\?\?|\?\.|\|>|->|=>|\!|=)'
+      scope: keyword.operator.n3v3
+
+    # Punctuation / delimiters
+    - match: '[(){}\[\],;:\.@]'
+      scope: punctuation.n3v3
+
+    # Strings
+    - match: '"'
+      push: string
+
+    # Characters
+    - match: "'"
+      push: char
+
+    # Interpolated strings
+    - match: '`'
+      push: interpolation
+
+    # Path literals
+    - match: '(\.\/|\.\.\/|\/)[a-zA-Z0-9_\-\.\/]+'
+      scope: string.unquoted.n3v3
+
+  string:
+    - meta_scope: string.quoted.double.n3v3
+    - match: '\\.'
+      scope: constant.character.escape.n3v3
+    - match: '"'
+      pop: true
+
+  char:
+    - meta_scope: string.quoted.single.n3v3
+    - match: '\\.'
+      scope: constant.character.escape.n3v3
+    - match: "'"
+      pop: true
+
+  interpolation:
+    - meta_scope: string.interpolated.n3v3
+    - match: '\{'
+      push: interpolation_expr
+    - match: '`'
+      pop: true
+
+  interpolation_expr:
+    - meta_scope: string.interpolated.n3v3
+    - match: '\}'
+      pop: true
+    - include: main

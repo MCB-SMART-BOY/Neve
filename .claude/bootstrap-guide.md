@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Bootstrap Package Examples</h1>
 
@@ -20,9 +20,9 @@ This document describes the bootstrap package examples kept under `examples/boot
 
 ## 什么是 Bootstrap 基础包? / What Are Bootstrap Packages?
 
-这些示例代表从零启动工具链时最早期的一批基础构件，用来表达 Neve 将来如何描述自举过程。
+这些示例代表从零启动工具链时最早期的一批基础构件，用来表达 n3v3 将来如何描述自举过程。
 
-These examples represent the earliest building blocks of a future bootstrap chain and show how Neve may describe that process.
+These examples represent the earliest building blocks of a future bootstrap chain and show how n3v3 may describe that process.
 
 ## Bootstrap 顺序 / Bootstrap Order
 
@@ -37,9 +37,9 @@ These examples represent the earliest building blocks of a future bootstrap chai
 
 ## 包定义结构 / Package Definition Structure
 
-每个 `.neve` 文件定义一个包,使用 Neve 的 derivation 语法:
+每个 `.n3v3` 文件定义一个包,使用 n3v3 的 derivation 语法:
 
-```neve
+```n3v3
 {
     name = "package-name",
     version = "1.0.0",
@@ -125,19 +125,19 @@ Bootstrap 包应该尽可能少地依赖其他包，理想情况下只依赖更�
 ### 构建单个包 / Build a Single Package
 
 ```bash
-neve build examples/bootstrap/musl.neve
+n3v3 build examples/bootstrap/musl.n3v3
 ```
 
 ### 构建整个工具链 / Build Entire Toolchain
 
 ```bash
-neve build examples/bootstrap/gcc.neve  # 会自动构建依赖
+n3v3 build examples/bootstrap/gcc.n3v3  # 会自动构建依赖
 ```
 
 ### 查看包信息 / Show Package Info
 
 ```bash
-neve show examples/bootstrap/musl.neve
+n3v3 show examples/bootstrap/musl.n3v3
 ```
 
 ## 哈希值获取 / Getting Hashes
@@ -155,9 +155,9 @@ sha256sum musl-1.2.4.tar.gz
 
 ## 与 Nix 的区别 / Differences from Nix
 
-虽然 Neve 参考了 Nix 的设计,但有关键区别:
+虽然 n3v3 参考了 Nix 的设计,但有关键区别:
 
-1. **语法**: Neve 使用现代化的零歧义语法
+1. **语法**: n3v3 使用现代化的零歧义语法
 2. **类型系统**: 强类型,Hindley-Milner 推导
 3. **兼容性**: 不兼容 nixpkgs,从零构建生态
 
@@ -165,7 +165,7 @@ sha256sum musl-1.2.4.tar.gz
 
 添加新的 bootstrap 示例包:
 
-1. 在 `examples/bootstrap/` 创建 `.neve` 文件
+1. 在 `examples/bootstrap/` 创建 `.n3v3` 文件
 2. 遵循现有包的结构
 3. 确保包含所有必要的元数据
 4. 测试构建过程
@@ -179,4 +179,4 @@ sha256sum musl-1.2.4.tar.gz
 
 ---
 
-*Describe bootstrap packages in Neve.*
+*Describe bootstrap packages in n3v3.*

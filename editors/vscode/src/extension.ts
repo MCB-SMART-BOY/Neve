@@ -10,8 +10,8 @@ import {
 let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext) {
-    // The server is a separate `neve lsp` process.
-    const serverCommand = 'neve';
+    // The server is a separate `n3v3 lsp` process.
+    const serverCommand = 'n3v3';
     const serverArgs = ['lsp'];
 
     const serverOptions: ServerOptions = {
@@ -21,22 +21,22 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'neve' }],
+        documentSelector: [{ scheme: 'file', language: 'n3v3' }],
         synchronize: {
-            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.neve'),
+            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.n3v3'),
         },
     };
 
     client = new LanguageClient(
-        'neve-lsp',
-        'Neve Language Server',
+        'n3v3-lsp',
+        'n3v3 Language Server',
         serverOptions,
         clientOptions,
     );
 
     client.start();
 
-    vscode.window.showInformationMessage('Neve LSP started');
+    vscode.window.showInformationMessage('n3v3 LSP started');
 }
 
 export function deactivate(): Thenable<void> | undefined {

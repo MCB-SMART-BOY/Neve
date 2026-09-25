@@ -1,0 +1,17 @@
+{
+  "grammars": [
+    {
+      "name": "n3v3",
+      "path": ".",
+      "scope": "source.n3v3",
+      "file-types": ["n3v3"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "description": "n3v3 grammar for tree-sitter",
+    "authors": [],
+    "license": "MPL-2.0"
+  }
+}

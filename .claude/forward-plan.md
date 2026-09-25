@@ -1,54 +1,104 @@
-# Neve Forward Plan — 2026-06-17
+# n3v3 Forward Plan — 2026-09-25
 
-## Current State
 
-```
-v5.0.0 | canonical HIR pipeline | AST/HIR/tooling boundary audit closed
-Core parser, HIR, typeck, eval, LSP and smoke checks pass locally.
-```
+## Current State / 当前状态
 
-The historical release and audit numbers below are preserved as release history,
-not as a claim that every AST/HIR boundary is currently closed.
+The v5.0.0 canonical HIR pipeline is the current implementation baseline. Current facts are owned by `scripts/counts.sh`:
+
+| Fact | Current value |
+|------|---------------|
+| Product version | v5.0.0 |
+| E2E tests | 556 E2E tests |
+| LSP surface | 26 LSP methods |
+| Diagnostics | 55 diagnostic codes |
+| Canonical syntax | 12 canonical keywords |
+| Stream surface | 13 Stream<T> APIs |
+| Formalization | 21 Lean modules |
+
+The AST/HIR/tooling boundary cutover is implemented. Open follow-up work is:
+
+- MSRV / `rust-version` remains undeclared.
+- CI coverage, benchmark, and fuzz gates are still absent.
+- `json_to_value` still has no explicit recursion-depth limit.
+- `kill_process` still has a PID-reuse window.
+- Trait fallback selection remains nondeterministic for multiple candidates.
+- The tree-sitter grammar remains v3.x-shaped.
+- `io.tempDir` is Implemented through evaluator-owned dispatch; it returns the callback value and cleans up afterward (`crates/n3v3-eval/src/eval.rs:1712-1717,2658-2678`; `tests/end_to_end.rs::test_end_to_end_io_temp_dir_returns_value_and_cleans_up`).
+- `io.readFileLines` has E2E coverage for both variants: the String form (`tests/end_to_end.rs::test_end_to_end_io_read_file_lines_calls_callback`) and the Path form (`…::test_end_to_end_io_read_file_lines_path_reads_file`, `…::test_end_to_end_io_read_file_lines_path_missing_file_errors`). The Path variant is implemented by the evaluator (`crates/n3v3-eval/src/eval.rs:1724-1729` dispatch → `builtin_read_file_lines_path`); the `n3v3-std` entry (`crates/n3v3-std/src/io/fs.rs:1228-1240`) is only a name/arity registration stub. An earlier note here claimed the Path variant was unavailable because std reports evaluator-owned; that was wrong.
+- `n3v3 fmt` drops shebang lines: the parser strips `#!` before parsing (`crates/n3v3-parser/src/lib.rs:39-41`), so the AST cannot carry it and `n3v3 fmt file --write` removes it from executable scripts (6 files under `examples/` are affected). Fixing needs parser/AST plumbing; not yet scheduled.
+- A bare `{ ... }` record cannot be a lambda body: after lambda parameters `{` starts a block (`crates/n3v3-parser/src/parser.rs::parse_lambda_body`), so `|x| { a = 1, b = 2 }` is a parse error while `|x| ({ ... })` and `|x| #{ ... }` work. The formatter now prints the parenthesized form; whether the language should accept the bare form is an open language decision (needs grammar/spec/tree-sitter/Lean agreement).
+- 17 of 25 `examples/**/*.n3v3` files are not in canonical form (`.claude/hooks/fmt-all.sh` reports them; 6 carry a shebang, whose loss the formatter cannot avoid yet). Reformatting them is a repo-wide change that needs approval, and it should happen after shebang preservation is implemented - otherwise `n3v3 fmt --write` would strip the shebang from the executable examples.
+- `io.streamLines` and `io.streamBytes` retain a runtime-only Path acceptance extension; the typeck/docs contract remains `String` (`crates/n3v3-typeck/src/check/builtin_type.rs:1459-1472`).
+- `io.jobs` and `io.waitAnyJob` are present in runtime, docs, and E2E but missing typed declarations; Experimental until typed declaration is added (`crates/n3v3-std/src/io/mod.rs:814-874`, `crates/n3v3-typeck/src/check/builtin_type.rs:1389-1424` as the nearby declaration comparison).
+- CLI gate fidelity: `--release` now builds the release CLI in its `build` gate and drives `cli-smoke`/`docs` with that binary (`N3V3_BIN` for the docs checker), and `.claude/skills/run-n3v3/driver.sh` rebuilds before every run. Before this, a stale `target/release/n3v3` still produced `[PASS]` for those gates - the stale binary reported `type error(s) found`/exit 3 for a lexer error that current code classifies as `parse error`/exit 2. `cargo build --release -p n3v3` in release mode costs ~80 s cold, ~0 s warm.
+- `.claude/skills/run-n3v3/driver.sh:86` has a pre-existing `shellcheck` SC2086 (unquoted `$BIN` in `timeout 3 $BIN lsp --check`). No gate runs `shellcheck`, so it is informational; `scripts/validate.sh` and `scripts/check-docs.sh` are clean.
+
+For these typeck/runtime mismatches, typeck declarations are canonical; the
+runtime is either more permissive or not implemented. Use `scripts/validate.sh`
+as the project-wide quality-gate entry point; use `scripts/counts.sh` for facts
+and `scripts/check-docs.sh` for documentation checks.
 
 **Latest review (2026-09-25)**: a full lexer → parser → AST → HIR → typeck → eval
 re-check against the v4.0/v5.0 syntax settled nine defects — slash-vs-division
 lexing, enum-variant name conflicts, zero-parameter binding semantics, per-frame
 `io.defer`, thunk failure caching, method-call TCO, the native stack budget,
 UTF-16 semantic token positions, and one tautological defer test. See
-`audit-report.md` → "AST/HIR/IR Review (2026-09-25)" for evidence and the
-remaining boundaries (ASCII-only identifiers, expression-depth stack budget,
-zero-parameter call semantics).
+[`audit-report.md`](audit-report.md) → "AST/HIR/IR Review (2026-09-25)" for
+evidence and the remaining boundaries (ASCII-only identifiers, expression-depth
+stack budget, zero-parameter call semantics).
 
-## v4.0 Exit Criteria
+**Second review round (2026-09-25, same day)**: a critical pass over the review
+itself, the quality gates, and the formatter found and fixed eleven issues —
+a dependency gate that always passed, two zero-input false PASS paths in the
+docs checker, a formatting hook that could not fail, three formatter defects
+whose output did not re-parse (`[x, ..]` separator, `||` zero-parameter lambda,
+record-typed lambda bodies), lexer errors reported as type errors (exit 3
+instead of 2), `n3v3 run` exiting 1 on syntax errors, a false typeck comment
+about `io.readFileLinesPath`, an effect test that could not fail, a release gate
+that bypassed the single entry point while tag pushes skip `ci.yml`, and a
+`--quiet` help text that did not match its behaviour. See
+[`audit-report.md`](audit-report.md) → "评审修复记录 (2026-09-25 · 第二轮)" for
+per-item evidence; the open decisions are the shebang loss in `n3v3 fmt` and the
+bare-record lambda body grammar question.
+
+
+## Release Exit Criteria / 发布退出标准
+
 
 | # | Criterion | Status |
 |---|-----------|--------|
-| 1 | AST compat path fully removed | ✅ Done (2026-06-16) — ast_eval.rs deleted |
-| 2 | All 6 implementation gaps closed | ✅ Done — shebang now handled by parser (M22) |
-| 3 | Lean axioms documented | ✅ 3 axioms documented (blocked on Lean 4.29+) |
-| 4 | Release policy stable for 2+ minor versions | ✅ v3.18 → v3.19 → v4.0 → v4.0.4 → v5.0.0 |
-| 5 | External contribution policy published | ✅ Done — docs/contributor/contributing.md |
-| 6 | Semantic convergence verified | ✅ 12 E2E gap tests resolved |
+| 1 | AST compat path fully removed | Implemented (2026-06-16) — `ast_eval.rs` deleted |
+| 2 | All 6 implementation gaps closed | Implemented — shebang is handled by parser |
+| 3 | Lean axioms documented | Implemented — 3 axioms documented (Lean 4.29+ remains an external prerequisite) |
+| 4 | Release policy stable for 2+ minor versions | Implemented — v3.18 → v3.19 → v4.0 → v4.0.4 → v5.0.0 |
+| 5 | External contribution policy published | Implemented — `docs/contributor/contributing.md` |
+| 6 | Semantic convergence verified | Implemented — the 12 historical E2E gaps were resolved |
 
-## Phase Plan
 
-### Phase A: Audit Completion ✅ DONE (6/7, cache.rs deferred)
+## Completed Milestones / 已完成里程碑
+
+
+### Audit Completion — Implemented (historical milestone)
+
 
 **Goal**: Close remaining audit items. Grade: B+ → A-.
 
 | ID | Task | Effort | Status |
 |----|------|--------|--------|
-| A1 | Close unicode char escape `\u{...}` in lexer | Small | ✅ Done |
-| A2 | Fix C1: `store/src/cache.rs` unwrap() → Result | Large | ✅ N/A — all 225 in test code |
-| A3 | Centralize `libc` dependency — workspace deps, 5 crates | Small | ✅ Done |
-| A4 | Fix tree-sitter-neve edition 2021→2024 | Small | ✅ Done |
-| A5 | Add missing Map/Set/math to api.md (D12) | Small | ✅ Done — already present |
-| A6 | Fix spec Nix comparison (D14) | Trivial | ✅ Done |
-| A7 | Fix stability.md version example (D16) | Trivial | ✅ Done |
+| A1 | Close unicode char escape `\u{...}` in lexer | Small | Implemented |
+| A2 | Fix C1: `store/src/cache.rs` unwrap() → Result | Large | Not applicable — all 225 were in test code |
+| A3 | Centralize `libc` dependency — workspace deps, 5 crates | Small | Implemented |
+| A4 | Fix tree-sitter-n3v3 edition 2021→2024 | Small | Implemented |
+| A5 | Add missing Map/Set/math to api.md (D12) | Small | Implemented — already present |
+| A6 | Fix spec Nix comparison (D14) | Trivial | Implemented |
+| A7 | Fix stability.md version example (D16) | Trivial | Implemented |
 
-**Phase A deliverables**: 7/7 items resolved. Audit: 62/62 = 100%. Grade: B+ → A-.
 
-### Phase B: Gap Closure ✅ COMPLETE (12/12 — 2026-06-16)
+**Milestone deliverables**: 7/7 items resolved. Historical audit total: 62/62. Current open items are tracked in `audit-report.md`.
+
+
+### Gap Closure — Implemented (2026-06-16)
+
 
 **Goal**: Close the 12 E2E gap tests. These represent real missing features.
 
@@ -56,62 +106,79 @@ The 12 gaps, ordered by impact:
 
 | # | Gap | Crate to fix | Status |
 |---|-----|-------------|--------|
-| B1 | v3.0 enum pipe syntax (`\| Red \| Green \| Blue`) | neve-parser | ✅ Done (2026-06-16) |
-| B2 | TupleIndex expression | neve-eval (HIR) | ✅ Done (already worked, test added) |
-| B3 | Block-with-let lowering | neve-hir | ✅ Done (already worked, test added) |
-| B4 | Nested blocks lowering | neve-hir | ✅ Done (already worked, test added) |
-| B5 | Generic identity inference | neve-typeck | ✅ Done (2026-06-16) — generalize + instantiate fix |
-| B6 | Option match pattern lowering | neve-hir | ✅ Done (already worked, test added) |
-| B7 | Record match pattern lowering | neve-hir | ✅ Done (works with #{ } syntax; v3.0 { } pattern is parser gap) |
-| B8 | `?.` safe access lowering | neve-hir | ✅ Done (already worked, test added) |
-| B9 | Impl method dispatch | neve-hir + neve-typeck | ✅ Done (2026-06-16) — impl Int method dispatch |
-| B10 | Stdlib pipeline module resolution | neve-frontend | ✅ Done (2026-06-16) |
-| B11 | List comprehension HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
-| B12 | Match Option HIR/AST parity | neve-eval | ✅ Done (already worked, test added) |
+| B1 | v3.0 enum pipe syntax (`\| Red \| Green \| Blue`) | n3v3-parser | Implemented (2026-06-16) |
+| B2 | TupleIndex expression | n3v3-eval (HIR) | Implemented (already worked, test added) |
+| B3 | Block-with-let lowering | n3v3-hir | Implemented (already worked, test added) |
+| B4 | Nested blocks lowering | n3v3-hir | Implemented (already worked, test added) |
+| B5 | Generic identity inference | n3v3-typeck | Implemented (2026-06-16) — generalize + instantiate fix |
+| B6 | Option match pattern lowering | n3v3-hir | Implemented (already worked, test added) |
+| B7 | Record match pattern lowering | n3v3-hir | Implemented with current record syntax; v3.0 syntax remains historical |
+| B8 | `?.` safe access lowering | n3v3-hir | Implemented (already worked, test added) |
+| B9 | Impl method dispatch | n3v3-hir + n3v3-typeck | Implemented (2026-06-16) — impl Int method dispatch |
+| B10 | Stdlib pipeline module resolution | n3v3-frontend | Implemented (2026-06-16) |
+| B11 | List comprehension HIR/AST parity | n3v3-eval | Implemented (already worked, test added) |
+| B12 | Match Option HIR/AST parity | n3v3-eval | Implemented (already worked, test added) |
 
-**Phase B deliverables**: 12/12 gap tests un-ignored. Phase B complete (2026-06-16). E2E: 539 pass, 2 flaky, 0 ignored.
 
-### Phase C: Ecosystem Readiness ✅ 5/5 done
+**Milestone deliverables**: all historical gap tests were un-ignored and the milestone was completed. The current E2E count is owned by `scripts/counts.sh`.
+
+
+### Ecosystem Readiness — Implemented
+
 
 **Goal**: Decision gates Q6 + Q7.
 
-| ID | Task | Effort |
+| ID | Task | Status |
 |----|------|--------|
-| C1 | Q6: Registry internal validation period | ✅ Done — docs/project/registry.md |
-| C2 | Q7: External contribution policy | ✅ Done |
-| C3 | Q6: Registry public launch plan | ✅ Done — phased plan in registry.md |
-| C4 | CONTRIBUTING.md update | ✅ Done (comprehensive guide) |
-| C5 | CLA/DCO decision | Deferred (MPL-2.0 is inbound-only) |
+| C1 | Q6: Registry internal validation period | Implemented — `docs/project/registry.md` |
+| C2 | Q7: External contribution policy | Implemented |
+| C3 | Q6: Registry public launch plan | Implemented — phased plan in `registry.md` |
+| C4 | CONTRIBUTING.md update | Implemented (comprehensive guide) |
+| C5 | CLA/DCO decision | Planned — decision remains open; MPL-2.0 is inbound-only |
 
-### Phase D: v5.0 API Cutover ✅ COMPLETE (v5.0.0 workspace release)
+
+
+
+### v5.0 API Cutover — Implemented (v5.0.0 workspace release)
+
 
 **Goal**: Seal the public AST boundary and preserve future syntax additions across the canonical pipeline.
 
 | ID | Task | Status |
 |----|------|--------|
-| D1 | Add `#[non_exhaustive]` to public AST enums | ✅ Done |
-| D2 | Migrate all workspace AST matches to wildcard handling | ✅ Done |
-| D3 | Add AST/HIR unsupported-node diagnostics | ✅ Done |
-| D4 | Version workspace and internal requirements to v5.0.0 | ✅ Done |
-| D5 | Add external-consumer compile-fail regression | ✅ Done |
-| D6 | Update stability and migration documentation | ✅ Done |
+| D1 | Add `#[non_exhaustive]` to public AST enums | Implemented |
+| D2 | Migrate all workspace AST matches to wildcard handling | Implemented |
+| D3 | Add AST/HIR unsupported-node diagnostics | Implemented |
+| D4 | Version workspace and internal requirements to v5.0.0 | Implemented |
+| D5 | Add external-consumer compile-fail regression | Implemented |
+| D6 | Update stability and migration documentation | Implemented |
 
-## Immediate Priority
+## Next Steps / 下一步
+
 
 ```
-✅ Core parser/HIR/typeck/eval checks
-✅ AST/HIR/tooling boundary audit: non-exhaustive AST and explicit unsupported-node handling
-✅ Global quality gates: gitleaks/trivy/cargo audit/cargo deny pass; v5 API cutover verified
+Implemented: canonical parser/HIR/typeck/eval pipeline and AST/HIR/tooling boundary handling.
+Implemented: v5.0.0 API cutover and documented contributor/workflow contracts.
+Planned: close the open follow-up boundaries listed in Current State and `audit-report.md`.
+Verification entry point: `scripts/validate.sh` (use `--ci` or `--release` for the corresponding gate set).
 ```
+
 
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Lean 4.29+ delayed beyond v4.1 window | Medium | Low | v4.0 shipped with 3 documented axioms |
-| Parser expect() fix destabilizes error messages | Low | High | Defer to post-v4.1 |
+|------|------------|--------|------------|
+| MSRV remains undeclared | Medium | Medium | Add and validate `rust-version` in a dedicated change |
+| CI has no coverage/benchmark/fuzz gates | Medium | Medium | Plan dedicated CI coverage and performance work |
+| tree-sitter grammar diverges from v4.0 | High | Medium | Update `grammar.js`, regenerate, and validate through `scripts/validate.sh` |
+| JSON depth and PID reuse remain open | Medium | High | Add explicit depth bounds and process-identity-safe termination |
+| `io.readFileLines` Path variant unavailable | Medium | High | Keep typeck callback→`Unit` declarations in `builtin_type.rs:1040-1062`; String variant has E2E coverage, while std reports evaluator-owned for Path at `fs.rs:1221-1235` |
+| `io.streamLines` / `io.streamBytes` runtime-only Path extension | Medium | Medium | Keep typeck/docs `String` declarations in `builtin_type.rs:1459-1472` canonical; reconcile runtime acceptance at `fs.rs:1577-1586,1706-1714` |
+| `io.jobs` / `io.waitAnyJob` missing typeck declarations | Medium | High | Add typed declarations; runtime/docs/E2E exist, and nearby typeck declarations are at `builtin_type.rs:1389-1424` |
 
-## Decision Gates Remaining
+
+## Decision Gates / 决策门
+
 
 ```
 ✅ Q4 (Windows)  ✅ Q5 (Release)  ✅ Q6 (Registry)  ✅ Q7 (Contributions)  ✅ Q8 (AST)  ✅ Q9 (Parser)
@@ -119,9 +186,11 @@ The 12 gaps, ordered by impact:
 **All decision gates cleared.**
 ```
 
-Q6 + Q7 were the last two gates before v4.0; v5.0.0 AST API cutover is complete.
+Q6 + Q7 were the last gates before v4.0; the v5.0.0 AST API cutover is complete. These gates are historical release evidence, not a second current quality contract.
 
-## 2026-06-16: Comprehensive Design Audit (62 findings)
+
+## 2026-06-16: Comprehensive Design Audit (historical snapshot, 62 findings)
+
 
 6-agent sweep across architecture, safety, type system, tests, API, and CLI/LSP.
 
@@ -132,33 +201,35 @@ Q6 + Q7 were the last two gates before v4.0; v5.0.0 AST API cutover is complete.
 | ID | Finding | Status |
 |----|---------|--------|
 | C1 | reqwest TLS features overwritten → HTTPS broken | ✅ Fixed |
-| H1 | neve-eval unused dep on neve-parser | ✅ Removed |
-| H2 | neve-config 3 unused deps | ✅ Removed |
-| M1 | neve-derive unused dep on neve-common | ✅ Removed |
-| M2 | neve-store unused dep on neve-common | ✅ Removed |
-| M3 | neve-fetch duplicate dep declarations | ✅ → workspace refs |
+| H1 | n3v3-eval unused dep on n3v3-parser | ✅ Removed |
+| H2 | n3v3-config 3 unused deps | ✅ Removed |
+| M1 | n3v3-derive unused dep on n3v3-common | ✅ Removed |
+| M2 | n3v3-store unused dep on n3v3-common | ✅ Removed |
+| M3 | n3v3-fetch duplicate dep declarations | ✅ → workspace refs |
 | M4 | Orphan deps (glob, rpassword, termimad) | ✅ Noted for later |
-| M5 | neve-builder nix feature duplication | ✅ → workspace ref |
-| L13 | neve-cli unused dep on neve-lexer | ✅ Removed |
+| M5 | n3v3-builder nix feature duplication | ✅ → workspace ref |
+| L13 | n3v3-cli unused dep on n3v3-lexer | ✅ Removed |
 | C4 | README syntax drift (lazy, then, effect, ||) | ✅ v4.0 syntax |
 | C5 | Examples legacy syntax (import, then, as) | ✅ 25 files fixed |
 | H12 | fmt.rs UTF-8 path panic | ✅ to_string_lossy() |
 | M16 | CLI error messages generic | ✅ Diagnostic counts |
 
-**Remaining priority (Top 10):**
+**Historical priority list (superseded):** current open items are maintained in `audit-report.md`, not this historical table.
 
-| ID | Finding | Severity |
-|----|---------|----------|
-| C2 | AST nodes unsealed (no #[non_exhaustive]) | Critical |
-| C3 | 10+ pub types → pub(crate) | Critical |
-| C7 | CacheStats → HirCacheStats | ✅ Fixed |
-| C6 | Formatter drops all comments | Critical |
-| H3 | Trait bounds never enforced at call sites | ✅ Fixed |
-| H4 | types_match ignores type args | ✅ Fixed |
-| H5 | Enum generics always empty args | High |
-| H6 | 42 lock().unwrap() mutex poison | ✅ Fixed |
-| H8 | No recursion depth limit | ✅ Fixed |
-| H9 | Occurs check bypassed for dynamic records | ✅ Fixed |
+
+| ID | Finding | Current status |
+|----|---------|----------------|
+| C2 | AST nodes unsealed (no `#[non_exhaustive]`) | Implemented |
+| C3 | 10+ pub types → pub(crate) | Planned |
+| C7 | CacheStats → HirCacheStats | Implemented |
+| C6 | Formatter drops all comments | Implemented |
+| H3 | Trait bounds never enforced at call sites | Implemented |
+| H4 | types_match ignores type args | Implemented |
+| H5 | Enum generics always empty args | Planned |
+| H6 | Mutex poisoning | Implemented |
+| H8 | Recursion stack protection | Implemented |
+| H9 | Occurs check in dynamic records | Implemented |
+
 
 See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
 
@@ -170,7 +241,7 @@ See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
 
 **D-001: Single semantic authority** — The canonical execution pipeline is `Parser -> Resolved HIR -> Typed HIR -> HIR Evaluation`. AST evaluation has been fully removed (v4.0). Differential/oracle testing and temporary bootstrap paths are now HIR-native.
 
-**D-002: No implicit fallback** — `neve eval` and `neve run` must not silently fall back to AST. Any AST path must be explicitly requested and visible in output and tests. `neve check`, REPL, and LSP must not use AST fallback at all.
+**D-002: No implicit fallback** — `n3v3 eval` and `n3v3 run` must not silently fall back to AST. Any AST path must be explicitly requested and visible in output and tests. `n3v3 check`, REPL, and LSP must not use AST fallback at all.
 
 **D-003: One shared frontend driver** — CLI, REPL, and LSP must converge on one shared frontend/driver result. Consumers should not hand-roll `ModuleLoader + TypeChecker + diagnostics rewrite`.
 
@@ -196,7 +267,7 @@ See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
 
 ### Target Architecture
 
-**Layer boundaries** — The kernel owns parsing, HIR lowering, name resolution, type checking, typed side tables, and pure HIR evaluation (no host effects). The frontend driver (`neve-frontend`) is the sole public orchestration entrypoint: source loading, module graph assembly, diagnostics aggregation, and typed artifact publication. The effect runtime is the only layer allowed to execute host-side effects: process spawning, filesystem, environment, cancellation/timeout/signal mediation. System platform consumers (`build`, `config`, `package`, `fetch`, `store`) consume canonical frontend artifacts and explicit effect runtime APIs.
+**Layer boundaries** — The kernel owns parsing, HIR lowering, name resolution, type checking, typed side tables, and pure HIR evaluation (no host effects). The frontend driver (`n3v3-frontend`) is the sole public orchestration entrypoint: source loading, module graph assembly, diagnostics aggregation, and typed artifact publication. The effect runtime is the only layer allowed to execute host-side effects: process spawning, filesystem, environment, cancellation/timeout/signal mediation. System platform consumers (`build`, `config`, `package`, `fetch`, `store`) consume canonical frontend artifacts and explicit effect runtime APIs.
 
 **Canonical artifacts** — `ParsedProgram`, `ResolvedProgram`, `TypedProgram`, `ProgramDiagnostics`, `ModuleSemantics`, `AttributedDiagnosticSet`. Typed HIR aggregates resolved HIR, normalized global/local/expression types, method resolutions, associated-type projections, readable display-name map, and merged diagnostics.
 
@@ -256,7 +327,7 @@ See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
 | WP-5B | Scoped env/cwd | ✅ |
 | WP-5C | Timeout/retry/cancel/bg | ✅ |
 | WP-5D | Signal/TTY/shebang | ✅ |
-| WP-5E | Port validation corpus to Neve | ⚠️ |
+| WP-5E | Port validation corpus to n3v3 | ⚠️ |
 | WP-6A | Lockfile/resolver | ✅ |
 | WP-6B | Registry/package metadata | ⚠️ |
 | WP-6C | Stdlib stability tiers | ✅ |
@@ -280,7 +351,7 @@ See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
 | Real E2E count | Programs through real pipeline |
 | Lossy lowering count | Constructs degrading during HIR lowering |
 | Stringly API count | System APIs as raw strings |
-| Script port count | Shell scripts replaced by Neve |
+| Script port count | Shell scripts replaced by n3v3 |
 
 ### What Must Not Happen / 不可触碰的红线
 

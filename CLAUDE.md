@@ -4,38 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Neve is a pure functional language for system configuration, built in Rust. 17 crates in a Cargo workspace. The CLI binary is `neve` (at `neve-cli/`). Published on crates.io as `n3v3`. Install: `cargo install n3v3`. Usage: `neve`.
+n3v3 is a pure functional language for system configuration, built in Rust. 17 crates in a Cargo workspace. The CLI binary is `n3v3` (at `n3v3-cli/`). Published on crates.io as `n3v3`. Install: `cargo install n3v3`. Usage: `n3v3`.
 
 ## Build & Test
 
 cargo build -p n3v3                     # build CLI
 cargo check --workspace                 # fast validation
 cargo test --workspace                  # all tests
-cargo test --test end_to_end -- --nocapture  # 550 E2E tests
+cargo test --test end_to_end -- --nocapture  # 556 E2E tests
 cargo test --test parser                # 234 parser tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-.claude/skills/run-neve/driver.sh       # smoke-test all CLI paths
+.claude/skills/run-n3v3/driver.sh       # smoke-test all CLI paths
 ```
 
 ## Architecture
 
-The canonical pipeline is `Lexer → Parser → HIR → Typeck → Eval`. All tooling (CLI, LSP, REPL) goes through `neve-frontend`.
+The canonical pipeline is `Lexer → Parser → HIR → Typeck → Eval`. All tooling (CLI, LSP, REPL) goes through `n3v3-frontend`.
 
 ```
-crates/neve-lexer/     logos tokenizer
-crates/neve-parser/    recursive descent LL(1)
-crates/neve-syntax/    AST definitions
-crates/neve-hir/       name resolution + lowering
-crates/neve-typeck/    Hindley-Milner + traits
-crates/neve-frontend/  pipeline facade (shared by CLI/LSP/REPL)
-crates/neve-eval/      tree-walking interpreter (HIR canonical, AST deprecated)
-crates/neve-std/       standard library (I/O, Stream<T>, collections)
-crates/neve-lsp/       Language Server (21 methods)
-crates/neve-fmt/       formatter
+crates/n3v3-lexer/     logos tokenizer
+crates/n3v3-parser/    recursive descent LL(1)
+crates/n3v3-syntax/    AST definitions
+crates/n3v3-hir/       name resolution + lowering
+crates/n3v3-typeck/    Hindley-Milner + traits
+crates/n3v3-frontend/  pipeline facade (shared by CLI/LSP/REPL)
+crates/n3v3-eval/      tree-walking interpreter (HIR canonical; AST from n3v3-syntax is lowered through HIR; AST compat path removed in v5.0)
+crates/n3v3-std/       standard library (I/O, Stream<T>, collections)
+crates/n3v3-lsp/       Language Server (26 methods)
+crates/n3v3-fmt/       formatter
 ```
 
-## Syntax v4.0
+## Syntax (v4 grammar, product v5.0.0)
 
 `let`/`fn`/`;` optional at top level. `use` not `import`. `|x|` not `fn(x)`. `{ }` records (no `#` prefix). `&` record merge and line comments. `type Foo = | A | B` for enums. 12 canonical keywords. The parser retains 10 legacy spellings for source compatibility; only `struct`, `enum`, `super`, and `crate` are emitted as dedicated lexer tokens.
 
@@ -44,21 +44,39 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 ## Key Rules
 
 - **Code is truth.** Skills in `.claude/skills/` must match actual code. Run `.claude/hooks/verify-skills.sh` after API changes.
-- **Canonical pipeline only.** Do not introduce new AST fallback paths. AST compat path (`neve_eval::compat`) has been removed in v4.0.
-- **Every effectful builtin** needs: typeck entry + frontend wire-up + HIR eval + REPL `:type` + LSP hover + E2E parity. Update `is_effectful_builtin()` in `neve-std`.
+- **Canonical pipeline only.** Do not introduce new AST fallback paths. AST compatibility path (`n3v3_eval::compat`) was removed in v5.0; AST definitions come from `n3v3-syntax` and are lowered through HIR.
+- **Every effectful builtin** needs: typeck entry + frontend wire-up + HIR eval + REPL `:type` + LSP hover + E2E parity. Update `is_effectful_builtin()` in `n3v3-std`.
 - **Match must be exhaustive.** Use `if-else` for non-exhaustive conditions.
 - **Conventional Commits:** `feat(scope):`, `fix(scope):`, `docs:`, `refactor:`, `release:`.
 
 ## Agent Infrastructure
 
 `.claude/` contains the full development toolchain:
-- `rules.md` — code-is-truth policy, verification requirements
-- `skills/` — per-crate architecture references (parser, typeck, hir, eval, std, lsp, test, effect, lean)
-- `skills/run-neve/` — smoke-test driver
-- `hooks/` — pre-commit, verify-skills, check-regressions
-- `forward-plan.md` — current status and Phase A→D roadmap
-- `audit-report.md` — design audit findings (100% resolved, 62/62 ✅)
+- `.claude/rules.md` — hard rules: code-is-truth, `.claude/` synchronization, verifiability, the driver, the single quality-gate entry point, and documentation standards
+- `.claude/skills/` — per-crate and cross-cutting architecture references
+- `.claude/skills/run-n3v3/` — smoke-test driver
+- `.claude/workflows/README.md` — workflow DSL contracts and result schemas (`full-test.js`, `pre-release.js`), loaded by the harness in CJS style
+- `.claude/templates/` — commit, PR, and issue templates
+- `.claude/hooks/` — pre-commit (`scripts/validate.sh --quick`), verify-skills, check-regressions, fmt-all (checks that `examples/**/*.n3v3` are canonically formatted; it does not rewrite files)
+- `scripts/validate.sh` — the single quality-gate entry point
+- `scripts/check-docs.sh` — documentation standards validator
+- `scripts/counts.sh` — canonical project facts and counts
+- `scripts/install-gate-tools.sh` — pinned external gate tools (gitleaks, trivy, cargo-audit, cargo-deny); the single version source for CI and release gates
+- `docs/contributor/contributing.md` § Documentation Standards — human-readable documentation standard
+- `.claude/forward-plan.md` — current status and roadmap
+- `.claude/audit-report.md` — design audit findings (100% resolved, 62/62 ✅)
+
+Use this map before changing a repository surface:
+
+| Change | Read first |
+| --- | --- |
+| Quality gates and project facts | `scripts/validate.sh`, `scripts/counts.sh` |
+| Documentation structure and claims | `scripts/check-docs.sh`, `docs/contributor/contributing.md` § Documentation Standards |
+| Workflow automation | `.claude/workflows/README.md`, `.claude/hooks/` |
+
+Do not hand-write counts or versions; use `scripts/counts.sh` as the source of
+truth. `scripts/check-docs.sh` mechanically checks documentation claims.
 
 ## Current Status
 
-v5.0.0. 550 E2E tests (all pass). 21 LSP methods. 14 Stream<T> APIs. 55 error codes. 12 canonical keywords. Public AST enums are `#[non_exhaustive]`; AST/HIR unsupported-node handling is explicit. Audit grade B+ → A- (62/62 fixed). All phases complete. Published on crates.io as `n3v3` (`cargo install n3v3`).
+v5.0.0. 556 E2E tests (all pass). 26 LSP methods (19 requests + 7 notifications; `did_change_configuration` and `did_change_watched_files` are stubs and require a server restart). 13 Stream<T> APIs. 55 error codes. 12 canonical keywords. Public AST enums are `#[non_exhaustive]`; AST/HIR unsupported-node handling is explicit. Audit grade B+ → A- (62/62 fixed). All milestones complete. Published on crates.io as `n3v3` (`cargo install n3v3`).

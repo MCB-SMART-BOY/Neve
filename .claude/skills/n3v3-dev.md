@@ -1,0 +1,119 @@
+# n3v3-dev: Project Architecture & Development
+
+## Crate Dependency Graph
+
+```
+n3v3-cli ──────┬── n3v3-frontend ───┬── n3v3-parser ─── n3v3-lexer
+               │                    │                   n3v3-syntax
+               │                    ├── n3v3-hir
+               │                    ├── n3v3-typeck
+               │                    └── n3v3-eval ───── n3v3-std
+               │
+               ├── n3v3-lsp ──────── n3v3-frontend
+               ├── n3v3-fmt ──────── n3v3-parser + n3v3-lexer
+               ├── n3v3-config ───── n3v3-eval
+               ├── n3v3-builder ──── n3v3-store + n3v3-fetch + n3v3-derive
+               └── n3v3-diagnostic ─ (all crates)
+```
+
+**Dependency law**: `n3v3-frontend` is the **single entry point** for the language pipeline. No crate except `n3v3-cli`, `n3v3-lsp`, and `n3v3-config` should directly construct the parser + HIR + typeck chain.
+
+## Data Flow Through the Pipeline
+
+```
+User Input (.n3v3 file or REPL line)
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  n3v3-frontend (Driver + Session)             │
+│  ┌─────────────────────────────────────────┐ │
+│  │ 1. Lex  → [Token]                       │ │
+│  │ 2. Parse → AST Module                   │ │
+│  │ 3. Lower → Resolved HIR                 │ │
+│  │ 4. Check → Typed HIR                    │ │
+│  │ 5. Eval  → Value                        │ │
+│  └─────────────────────────────────────────┘ │
+│  Side tables: diagnostics, type map, def map  │
+└──────────────────────────────────────────────┘
+       │
+       ├──→ CLI output (run/eval/check)
+       ├──→ LSP responses (hover/completion/diag)
+       └──→ Config evaluation (flake.nix-like)
+```
+
+For multi-module analysis, the frontend first finalizes one shared
+`TraitResolver` from all loaded HIR modules, then gives each module a cloned
+resolver and a fresh `TypeChecker`. Module-local definition and diagnostic
+state is never reused across dependency and current-module checks.
+
+The `n3v3 check` purity gate walks canonical HIR with the frontend's method
+resolution table. Resolved trait methods are checked by their method identity;
+unresolved targets retain builtin fallback checking, and index operands,
+guards, comprehension conditions, lambdas, and interpolations are traversed.
+
+## Build Commands
+
+cargo build -p n3v3         # CLI binary (CI target)
+cargo check --workspace     # Fast validation (no codegen)
+cargo test --workspace      # Unit + integration
+cargo test --test end_to_end -- --nocapture  # E2E
+cargo fmt --all             # Format (enforced in CI)
+cargo clippy --workspace --all-targets -- -D warnings  # Lint
+./scripts/test.sh --clippy  # Pre-commit pipeline
+```
+
+## Current CLI and diagnostic facts
+
+- `n3v3 check` treats only `Severity::Error` diagnostics as errors. Warnings do
+  not cause a failure; a clean check prints `[OK] OK - No errors found`.
+- Typeck emits `duplicate definition of \`name\` shadows previous` as a
+  `DiagnosticKind::Type` warning, not a parser diagnostic.
+- `n3v3 doc --list` exposes 17 topics: `index`, `quickstart`, `tutorial`, `spec`,
+  `api`, `diagnostics`, `philosophy`, `install`, `architecture`, `onboarding`,
+  `contributing`, `feature-matrix`, `lsp`, `stability`, `ecosystem-design`,
+  `registry`, and `changelog`.
+
+## Commit Conventions
+
+```
+feat(repl): add history persistence    # New feature
+fix(ci): correct script paths          # Bug fix
+docs: update changelog                 # Documentation
+refactor(typeck): simplify unification # Refactor
+style(fmt): trailing commas            # Style only
+release: bump version to 3.20.0        # Release
+```
+
+## Feature Addition Checklist
+
+Every new effectful builtin:
+1. `n3v3-std`: Register in `is_effectful_builtin()`
+2. `n3v3-typeck`: Add type signature
+3. `n3v3-frontend`: Wire into pipeline
+4. `n3v3-eval`: Implement HIR evaluation
+5. REPL: `:type` support
+6. LSP: hover + completion
+7. `tests/end_to_end.rs`: E2E parity test
+8. `docs/reference/api.md`: Document
+9. `docs/project/feature-matrix.md`: Update status
+
+## Architecture Decisions
+
+| Decision | When | Why |
+|----------|------|-----|
+| HIR as canonical pipeline | v1.2 | Single semantic truth, no AST/HIR divergence |
+| `n3v3-frontend` as facade | v1.2 | Share analysis across CLI + LSP + REPL |
+| AST compat path removed | v4.0 (2026-06) | HIR evaluator is the only path; ~3500 lines deleted |
+| SemVer-hybrid release | v3.19 | Rapid evolution with clear deprecation lifecycle |
+| `match` must be exhaustive | v3.18+ | Compiler-grade safety; if-else for non-exhaustive |
+
+## Project Status
+
+| Phase | Status | Key Deliverable |
+|-------|--------|----------------|
+| Syntax v4.0 | ✅ | 12 canonical keywords, `if->`, `use=`, `~expr`, effect auto |
+| Phase 5 (Ecosystem) | ✅ | Flake/lock/store, Registry v1, crates.io |
+| Phase 4 (Shell) | ✅ | 13 Stream<T> APIs, Task, TTY |
+| Phase 3 (Runtime) | ✅ | Path/Bytes/Command/ProcessResult |
+| Phase 2 (Type) | ✅ | Exhaustive match, trait dispatch |
+| Phase 1 (Convergence) | ✅ | Canonical HIR pipeline |

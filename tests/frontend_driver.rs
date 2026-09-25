@@ -3,8 +3,8 @@
 
 mod support;
 
-use neve_diagnostic::{DiagnosticKind, Severity};
-use neve_frontend::{DiagnosticStats, FrontendDriver, parse_module_file};
+use n3v3_diagnostic::{DiagnosticKind, Severity};
+use n3v3_frontend::{DiagnosticStats, FrontendDriver, parse_module_file};
 use support::module_fixtures::create_test_module;
 use tempfile::TempDir;
 
@@ -191,11 +191,11 @@ fn test_frontend_driver_returns_dependency_first_diagnostic_modules() {
                 .to_string()
         })
         .collect();
-    assert_eq!(paths, vec!["bad_parse.neve", "bad_type.neve", "main.neve"]);
+    assert_eq!(paths, vec!["bad_parse.n3v3", "bad_type.n3v3", "main.n3v3"]);
 
     let parse_entry = diagnostic_modules
         .iter()
-        .find(|entry| entry.file_path.ends_with("bad_parse.neve"))
+        .find(|entry| entry.file_path.ends_with("bad_parse.n3v3"))
         .expect("expected parse-broken module diagnostics");
     assert!(
         parse_entry
@@ -213,7 +213,7 @@ fn test_frontend_driver_returns_dependency_first_diagnostic_modules() {
 
     let type_entry = diagnostic_modules
         .iter()
-        .find(|entry| entry.file_path.ends_with("bad_type.neve"))
+        .find(|entry| entry.file_path.ends_with("bad_type.n3v3"))
         .expect("expected type-broken module diagnostics");
     assert!(
         type_entry
@@ -226,7 +226,7 @@ fn test_frontend_driver_returns_dependency_first_diagnostic_modules() {
 }
 
 #[test]
-fn test_frontend_driver_returns_only_parser_diagnostic_modules_in_dependency_order() {
+fn test_frontend_driver_returns_only_syntax_diagnostic_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();
 
@@ -260,16 +260,13 @@ fn test_frontend_driver_returns_only_parser_diagnostic_modules_in_dependency_ord
         .analyze_module_path(&["main".into()])
         .unwrap();
 
-    let parser_paths: Vec<_> = analysis
-        .parser_diagnostic_modules_in_order()
+    let syntax_paths: Vec<_> = analysis
+        .syntax_diagnostic_modules_in_order()
         .into_iter()
         .map(|entry| {
             assert!(
-                entry
-                    .diagnostics
-                    .iter()
-                    .all(|diag| diag.kind == DiagnosticKind::Parser),
-                "expected parser-only diagnostics, got {:?}",
+                entry.diagnostics.iter().all(|diag| diag.kind.is_syntax()),
+                "expected syntax-only diagnostics, got {:?}",
                 entry.diagnostics
             );
             entry
@@ -281,7 +278,7 @@ fn test_frontend_driver_returns_only_parser_diagnostic_modules_in_dependency_ord
         })
         .collect();
 
-    assert_eq!(parser_paths, vec!["bad_parse_a.neve", "bad_parse_b.neve"]);
+    assert_eq!(syntax_paths, vec!["bad_parse_a.n3v3", "bad_parse_b.n3v3"]);
 }
 
 #[test]
@@ -324,7 +321,7 @@ fn test_frontend_driver_returns_only_parse_clean_modules_in_dependency_order() {
         })
         .collect();
 
-    assert_eq!(parsed_paths, vec!["util.neve", "main.neve"]);
+    assert_eq!(parsed_paths, vec!["util.n3v3", "main.n3v3"]);
 }
 
 #[test]
@@ -384,7 +381,7 @@ fn test_frontend_driver_returns_only_lowered_modules_in_dependency_order() {
 
     assert_eq!(
         lowered_paths,
-        vec!["util.neve", "bad_type.neve", "warn_only.neve", "main.neve"]
+        vec!["util.n3v3", "bad_type.n3v3", "warn_only.n3v3", "main.n3v3"]
     );
     assert!(
         lowered_modules
@@ -403,7 +400,7 @@ fn test_frontend_driver_returns_only_lowered_modules_in_dependency_order() {
 
     let bad_type = lowered_modules
         .iter()
-        .find(|entry| entry.file_path.ends_with("bad_type.neve"))
+        .find(|entry| entry.file_path.ends_with("bad_type.n3v3"))
         .expect("expected type-broken lowered module");
     assert!(
         bad_type
@@ -416,7 +413,7 @@ fn test_frontend_driver_returns_only_lowered_modules_in_dependency_order() {
 
     let warn_only = lowered_modules
         .iter()
-        .find(|entry| entry.file_path.ends_with("warn_only.neve"))
+        .find(|entry| entry.file_path.ends_with("warn_only.n3v3"))
         .expect("expected warning-only lowered module");
     assert!(
         warn_only
@@ -485,7 +482,7 @@ fn test_frontend_driver_diagnostic_stats_distinguish_errors_and_warnings() {
     let warning_entry = analysis
         .diagnostic_modules_in_order()
         .into_iter()
-        .find(|entry| entry.file_path.ends_with("warn_only.neve"))
+        .find(|entry| entry.file_path.ends_with("warn_only.n3v3"))
         .expect("expected warning-only module diagnostics");
     assert!(
         warning_entry
@@ -544,21 +541,21 @@ fn test_frontend_driver_blocking_diagnostic_messages_preserve_order_and_exclude_
         messages
     );
     assert!(
-        messages[0].contains("bad_parse.neve"),
+        messages[0].contains("bad_parse.n3v3"),
         "expected parse-broken module first, got {:?}",
         messages
     );
     assert!(
         messages
             .iter()
-            .any(|message| message.contains("bad_type.neve")),
+            .any(|message| message.contains("bad_type.n3v3")),
         "expected type-broken module message, got {:?}",
         messages
     );
     assert!(
         !messages
             .iter()
-            .any(|message| message.contains("warn_only.neve")),
+            .any(|message| message.contains("warn_only.n3v3")),
         "warning-only module should not produce blocking messages: {:?}",
         messages
     );
@@ -570,7 +567,7 @@ fn test_frontend_parse_module_file_returns_parse_clean_ast_payload() {
     let root = temp_dir.path();
 
     create_test_module(root, &["std", "mod"], "let result = 42;");
-    let parsed = parse_module_file(root.join("std").join("mod.neve"), &["std".into()]).unwrap();
+    let parsed = parse_module_file(root.join("std").join("mod.n3v3"), &["std".into()]).unwrap();
 
     assert!(
         parsed.diagnostics.is_empty(),
@@ -625,5 +622,5 @@ fn test_frontend_driver_returns_only_evaluable_modules_in_dependency_order() {
         .map(|entry| names_by_module_id.get(&entry.module_id).unwrap().clone())
         .collect();
 
-    assert_eq!(evaluable_paths, vec!["util.neve", "main.neve"]);
+    assert_eq!(evaluable_paths, vec!["util.n3v3", "main.n3v3"]);
 }

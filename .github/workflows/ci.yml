@@ -1,91 +1,89 @@
 name: CI
 
+# 持续集成职责 / Continuous integration scope:
+# every push and pull request runs the repository quality gates and the
+# platform matrix. Release packaging is handled only by release.yml.
+# 每次 push 与 pull request 执行仓库质量闸门和平台矩阵；发布打包仅由
+# release.yml 负责。
+
 on:
   push:
     branches: [ master, main ]
   pull_request:
     branches: [ master, main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # 非默认分支取消旧运行；默认分支保留每次提交的结果。
+  # Cancel stale runs on non-default branches; keep every default-branch run.
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  CROSS_VERSION: '0.2.5'
+  ELAN_VERSION: 'v4.1.2'
+  LEAN_TOOLCHAIN: 'leanprover/lean4:v4.29.1'
+  # Gate-tool versions are pinned in `scripts/install-gate-tools.sh` (single source).
+  # 闸门工具版本固定在 `scripts/install-gate-tools.sh`（唯一来源）。
 
 jobs:
+# Platform matrix proof / 平台证明：
+# this job owns only CLI build and complete workspace test coverage.
+# 规范 format/lint/docs/security gates are owned exclusively by validate.
+
   test:
-    name: Test on ${{ matrix.os }}
+    name: Test matrix / 测试矩阵 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          components: rustfmt, clippy
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-ci-
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ runner.os }}-ci
-          cache-on-failure: true
-
-      - name: Build
+      - name: Build CLI / 构建 CLI
         run: cargo build --verbose -p n3v3
 
-      - name: Run tests (Unix)
+      - name: Run all workspace tests (Unix) / 运行 Unix 全工作区测试
         if: matrix.os != 'windows-latest'
-        run: cargo test --verbose -- --nocapture
+        run: cargo test --workspace --all-targets --verbose -- --nocapture
 
-      - name: Run tests (Windows - language crates only)
+      - name: Run all language crates and tree-sitter binding tests (Windows) / 运行 Windows 全部语言 crate 与 tree-sitter 绑定测试
         if: matrix.os == 'windows-latest'
-        run: cargo test --verbose -p neve-lexer -p neve-parser -p neve-eval -p neve-typeck -p neve-fmt -- --nocapture
+        # Full workspace coverage includes every crate under crates/ and
+        # tree-sitter-n3v3/bindings/rust; no platform-specific test is silently omitted.
+        # 全工作区覆盖 crates/ 下全部 crate 与 tree-sitter-n3v3/bindings/rust，
+        # 不静默排除任何平台测试。
+        run: cargo test --workspace --all-targets --verbose -- --nocapture
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-        if: matrix.os == 'ubuntu-latest'
 
-      - name: Run doc tests (L9)
-        run: cargo test --doc --workspace
-        if: matrix.os == 'ubuntu-latest'
-
-      - name: Run clippy (all workspace crates)
-        run: cargo clippy --workspace --all-targets -- -D warnings
-        if: matrix.os == 'ubuntu-latest'
-
-  # Security audit for dependency vulnerabilities
-  # 依赖安全审计
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ runner.os }}-security
-          cache-on-failure: true
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Run security audit
-        # NOTE(L8): continue-on-error is intentional — audit warnings from
-        # unmaintained or yanked dependencies should be reviewed but do not
-        # necessarily indicate exploitable vulnerabilities in our usage.
-        run: cargo audit
-        continue-on-error: true
 
   build-check:
-    name: Build check on ${{ matrix.target }}
+    name: Workspace target check / 工作区目标检查 (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -107,101 +105,174 @@ jobs:
             cross: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          targets: ${{ matrix.target }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-build-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-build-
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ runner.os }}-${{ matrix.target }}-build
-          cache-on-failure: true
+      - name: Install pinned cross / 安装固定版本 cross
+        if: ${{ matrix.cross }}
+        run: cargo install cross --version "$CROSS_VERSION" --locked
 
-      - name: Install cross
-        if: matrix.cross
-        uses: taiki-e/install-action@cross
-
-      - name: Check build (native)
+      - name: Check CLI target (native) / 检查原生 CLI 目标
         if: ${{ !matrix.cross }}
         run: cargo check --target ${{ matrix.target }} -p n3v3
 
-      - name: Check build (cross)
-        if: matrix.cross
+      - name: Check CLI target (cross) / 检查 cross CLI 目标
+        if: ${{ matrix.cross }}
         run: cross check --target ${{ matrix.target }} -p n3v3
 
-  # Differential testing: Rust vs Lean spec
-  # 差分测试：比对 Rust 求值器与 Lean 规范
-  diff-test:
-    name: Differential Test (Rust ↔ Lean)
+      - name: Check full workspace target (native) / 检查原生完整工作区目标
+        if: ${{ !matrix.cross }}
+        run: cargo check --workspace --all-targets --target ${{ matrix.target }}
+
+      - name: Check full workspace target (cross) / 检查 cross 完整工作区目标
+        if: ${{ matrix.cross }}
+        run: cross check --workspace --all-targets --target ${{ matrix.target }}
+
+      - name: Check workspace on canonical Linux / 检查规范 Linux 完整工作区
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: cargo check --workspace --all-targets
+
+  # This job is the Linux single-entry gate; the visible jobs above retain
+  # platform-specific diagnostics while this script owns the canonical gate set.
+  # 此 Linux job 是单一闸门入口；上方 job 保留平台诊断，本脚本拥有规范闸门集合。
+  validate:
+    name: Canonical CI gate / 规范 CI 闸门
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ runner.os }}-diff-test
-          cache-on-failure: true
-
-      - name: Install Lean 4
+      - name: Install Rust stable / 安装 Rust stable
         run: |
-          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain leanprover/lean4:v4.29.1
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup component add rustfmt clippy
 
-      - name: Cache Lake build
-        uses: actions/cache@v4
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-validate-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-validate-
+
+      - name: Install pinned CI gate tools / 安装固定版本 CI 闸门工具
+        run: scripts/install-gate-tools.sh
+
+      - name: Prepare CLI for strict smoke and docs gates / 为严格 smoke 与文档闸门准备 CLI
+        run: cargo build -p n3v3
+
+      - name: Run canonical validation / 运行规范验证入口
+        run: scripts/validate.sh --ci
+
+  # Differential testing against the formal evaluator is intentionally kept
+  # separate from the canonical gate for a readable failure signal.
+  # 与形式化求值器的差分测试独立运行，便于定位失败。
+  diff-test:
+    name: Differential test / 差分测试 (Rust ↔ Lean)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-diff-test-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-diff-test-
+
+      - name: Install pinned Lean toolchain / 安装固定版本 Lean 工具链
+        run: |
+          set -euo pipefail
+          installer="$RUNNER_TEMP/elan-init.sh"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_VERSION}/elan-init.sh" \
+            -o "$installer"
+          sh "$installer" -y --default-toolchain "$LEAN_TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build / 缓存 Lake 构建
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             formal/.lake/build
             formal/.lake/packages
-          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/Neve/**/*.lean') }}
-          restore-keys: lake-${{ runner.os }}-
+          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.lean', 'formal/n3v3/**/*.lean') }}
+          restore-keys: |
+            lake-${{ runner.os }}-
 
-      - name: Build Rust (neve CLI)
+      - name: Build Rust CLI / 构建 Rust CLI
         run: cargo build -p n3v3 --release
 
-      - name: Build Lean (lake)
+      - name: Build Lean / 构建 Lean
         run: |
           cd formal
           lake build
 
-      - name: Run differential tests
+      - name: Run differential tests / 运行差分测试
         run: |
           export PATH="$PWD/target/release:$PATH"
-          cargo run -p n3v3 --release -- run scripts/diff-test.neve -- -n 100 -d 4
+          cargo run -p n3v3 --release -- run scripts/diff-test.n3v3 -- -n 100 -d 4
 
-  # 轻量级 Bug Hunt：每次 push/PR 运行安全边界攻击测试
-  # Lightweight Bug Hunt: security boundary attacks on every push/PR
+  # Lightweight per-push attack coverage; the nightly workflow owns extended
+  # property, formal, and generated differential suites.
+  # 每次 push 的轻量攻击覆盖；扩展属性、形式化和生成差分套件由夜间 workflow 负责。
   bug-hunt-light:
-    name: Bug Hunt (Security Boundary)
+    name: Lightweight bug hunt / 轻量 Bug Hunt
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust stable / 安装 Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo / 缓存 cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          shared-key: ${{ runner.os }}-bug-hunt-light
-          cache-on-failure: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-bug-hunt-light-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bug-hunt-light-
 
-      - name: Build Rust (neve CLI, release)
+      - name: Build Rust CLI / 构建 Rust CLI
         run: cargo build -p n3v3 --release
 
-      - name: Run bug hunt (security boundary attacks)
+      - name: Run security boundary checks / 运行安全边界检查
         run: |
           export PATH="$PWD/target/release:$PATH"
-          cargo run -p n3v3 --release -- run scripts/bug-hunt.neve
-
-      - name: Report
-        run: |
-          echo "Bug hunt completed — no security boundary violations"
+          cargo run -p n3v3 --release -- run scripts/bug-hunt.n3v3

@@ -1,5 +1,5 @@
 [package]
-name = "neve-workspace"
+name = "n3v3-workspace"
 version = "5.0.0"
 edition = "2024"
 license = "MPL-2.0"
@@ -8,15 +8,15 @@ license = "MPL-2.0"
 resolver = "2"
 members = [
     "crates/*",
-    "neve-cli",
-    "tree-sitter-neve/bindings/rust",
+    "n3v3-cli",
+    "tree-sitter-n3v3/bindings/rust",
 ]
 
 [workspace.package]
 version = "5.0.0"
 edition = "2024"
 license = "MPL-2.0"
-repository = "https://github.com/MCB-SMART-BOY/neve"
+repository = "https://github.com/MCB-SMART-BOY/n3v3"
 
 # Optimized release profile for smaller, faster binaries
 # 优化的 release profile，生成更小更快的二进制文件
@@ -41,23 +41,23 @@ opt-level = 2
 
 [workspace.dependencies]
 # Internal crates
-neve-common = { path = "crates/neve-common" }
-neve-diagnostic = { path = "crates/neve-diagnostic" }
-neve-lexer = { path = "crates/neve-lexer" }
-neve-syntax = { path = "crates/neve-syntax" }
-neve-parser = { path = "crates/neve-parser" }
-neve-hir = { path = "crates/neve-hir" }
-neve-typeck = { path = "crates/neve-typeck" }
-neve-eval = { path = "crates/neve-eval" }
-neve-std = { path = "crates/neve-std" }
-neve-derive = { path = "crates/neve-derive" }
-neve-frontend = { path = "crates/neve-frontend" }
-neve-store = { path = "crates/neve-store" }
-neve-fetch = { path = "crates/neve-fetch" }
-neve-builder = { path = "crates/neve-builder" }
-neve-config = { path = "crates/neve-config" }
-neve-lsp = { path = "crates/neve-lsp" }
-neve-fmt = { path = "crates/neve-fmt" }
+n3v3-common = { path = "crates/n3v3-common" }
+n3v3-diagnostic = { path = "crates/n3v3-diagnostic" }
+n3v3-lexer = { path = "crates/n3v3-lexer" }
+n3v3-syntax = { path = "crates/n3v3-syntax" }
+n3v3-parser = { path = "crates/n3v3-parser" }
+n3v3-hir = { path = "crates/n3v3-hir" }
+n3v3-typeck = { path = "crates/n3v3-typeck" }
+n3v3-eval = { path = "crates/n3v3-eval" }
+n3v3-std = { path = "crates/n3v3-std" }
+n3v3-derive = { path = "crates/n3v3-derive" }
+n3v3-frontend = { path = "crates/n3v3-frontend" }
+n3v3-store = { path = "crates/n3v3-store" }
+n3v3-fetch = { path = "crates/n3v3-fetch" }
+n3v3-builder = { path = "crates/n3v3-builder" }
+n3v3-config = { path = "crates/n3v3-config" }
+n3v3-lsp = { path = "crates/n3v3-lsp" }
+n3v3-fmt = { path = "crates/n3v3-fmt" }
 
 # External dependencies
 ariadne = "0.4"
@@ -91,21 +91,21 @@ libc = "0.2"
 
 # Dependencies for integration tests
 [dev-dependencies]
-neve-common = { path = "crates/neve-common" }
-neve-diagnostic = { path = "crates/neve-diagnostic" }
-neve-lexer = { path = "crates/neve-lexer" }
-neve-syntax = { path = "crates/neve-syntax" }
-neve-parser = { path = "crates/neve-parser" }
-neve-hir = { path = "crates/neve-hir" }
-neve-typeck = { path = "crates/neve-typeck" }
-neve-eval = { path = "crates/neve-eval" }
-neve-std = { path = "crates/neve-std" }
-neve-derive = { path = "crates/neve-derive" }
-neve-frontend = { path = "crates/neve-frontend" }
-neve-store = { path = "crates/neve-store" }
-neve-fetch = { path = "crates/neve-fetch" }
-neve-builder = { path = "crates/neve-builder" }
-neve-config = { path = "crates/neve-config" }
-neve-lsp = { path = "crates/neve-lsp" }
-neve-fmt = { path = "crates/neve-fmt" }
+n3v3-common = { path = "crates/n3v3-common" }
+n3v3-diagnostic = { path = "crates/n3v3-diagnostic" }
+n3v3-lexer = { path = "crates/n3v3-lexer" }
+n3v3-syntax = { path = "crates/n3v3-syntax" }
+n3v3-parser = { path = "crates/n3v3-parser" }
+n3v3-hir = { path = "crates/n3v3-hir" }
+n3v3-typeck = { path = "crates/n3v3-typeck" }
+n3v3-eval = { path = "crates/n3v3-eval" }
+n3v3-std = { path = "crates/n3v3-std" }
+n3v3-derive = { path = "crates/n3v3-derive" }
+n3v3-frontend = { path = "crates/n3v3-frontend" }
+n3v3-store = { path = "crates/n3v3-store" }
+n3v3-fetch = { path = "crates/n3v3-fetch" }
+n3v3-builder = { path = "crates/n3v3-builder" }
+n3v3-config = { path = "crates/n3v3-config" }
+n3v3-lsp = { path = "crates/n3v3-lsp" }
+n3v3-fmt = { path = "crates/n3v3-fmt" }
 tempfile = "3"

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "n3v3",
+  "scopeName": "source.n3v3",
+  "fileTypes": ["n3v3"],
+  "patterns": [
+    {
+      "name": "comment.line.n3v3",
+      "match": "--.*"
+    },
+    {
+      "name": "keyword.control.n3v3",
+      "match": "\\b(if|then|else|match|use|as|type|trait|impl|pub|effect|lazy)\\b"
+    },
+    {
+      "name": "constant.language.n3v3",
+      "match": "\\b(true|false)\\b"
+    },
+    {
+      "name": "storage.type.n3v3",
+      "match": "\\b(Int|Float|Bool|String|Char|Unit|List|Record|Option|Result|Path|Bytes|Command|Pipeline|ProcessResult|Stream|Task|Job)\\b"
+    },
+    {
+      "name": "constant.numeric.n3v3",
+      "match": "\\b[0-9][0-9_]*(\\.[0-9]+)?\\b"
+    },
+    {
+      "name": "keyword.operator.n3v3",
+      "match": "(\\+|\\-|\\*|\\/|\\%|\\^|==|!=|<=|>=|<|>|&&|\\|\\||\\+\\+|&|\\?\\?|\\?\\.|\\|>|->|=>|\\!|=)"
+    },
+    {
+      "name": "punctuation.n3v3",
+      "match": "[(){}\\[\\],;:\\.@]"
+    },
+    {
+      "name": "punctuation.section.n3v3",
+      "match": "#\\{"
+    },
+    {
+      "name": "string.quoted.double.n3v3",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.n3v3",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.n3v3",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.n3v3",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.interpolated.n3v3",
+      "begin": "`",
+      "end": "`",
+      "patterns": [
+        {
+          "name": "meta.embedded.n3v3",
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "string.unquoted.n3v3",
+      "match": "(\\.\\/|\\.\\.\\/|\\/)[a-zA-Z0-9_\\-\\.\\/]+"
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 //! Integration tests for the frontend analysis pipeline.
 //! 前端分析管线的集成测试。
 
-use neve_diagnostic::{DiagnosticKind, ErrorCode};
-use neve_frontend::{DiagnosticStats, analyze_snippet_ast, analyze_source};
-use neve_hir::ItemKind;
-use neve_parser::parse;
+use n3v3_diagnostic::{DiagnosticKind, ErrorCode};
+use n3v3_frontend::{DiagnosticStats, analyze_snippet_ast, analyze_source};
+use n3v3_hir::ItemKind;
+use n3v3_parser::parse;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
@@ -109,7 +109,7 @@ fn test_frontend_accepts_record_field_access_after_record_binding() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -135,7 +135,7 @@ fn test_frontend_accepts_lazy_force_pipeline() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -161,7 +161,7 @@ fn test_frontend_accepts_or_and_binding_patterns() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -192,7 +192,7 @@ fn test_frontend_accepts_list_rest_patterns() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -266,7 +266,7 @@ fn test_frontend_accepts_self_and_assoc_type_use_sites() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -298,7 +298,7 @@ fn test_frontend_accepts_assoc_bound_through_canonical_self_assoc_binding() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -369,7 +369,7 @@ fn test_frontend_exposes_assoc_projection_resolutions_for_explicit_self_item_use
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -402,11 +402,11 @@ fn test_frontend_exposes_assoc_projection_resolutions_for_explicit_self_item_use
         .expect("return Self.Item projection should be recorded");
 
     assert_eq!(
-        neve_frontend::format_type_in_module(fallback_ty, &result.hir),
+        n3v3_frontend::format_type_in_module(fallback_ty, &result.hir),
         "String"
     );
     assert_eq!(
-        neve_frontend::format_type_in_module(return_ty, &result.hir),
+        n3v3_frontend::format_type_in_module(return_ty, &result.hir),
         "String"
     );
 }
@@ -432,7 +432,7 @@ fn test_frontend_keeps_trait_self_assoc_spans_source_level_when_impl_is_present(
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -489,11 +489,11 @@ fn test_frontend_keeps_trait_self_assoc_spans_source_level_when_impl_is_present(
         .expect("impl return Self.Item projection should be recorded");
 
     assert_eq!(
-        neve_frontend::format_type_in_module(impl_param_ty, &result.hir),
+        n3v3_frontend::format_type_in_module(impl_param_ty, &result.hir),
         "String"
     );
     assert_eq!(
-        neve_frontend::format_type_in_module(impl_return_ty, &result.hir),
+        n3v3_frontend::format_type_in_module(impl_return_ty, &result.hir),
         "String"
     );
 }
@@ -576,7 +576,7 @@ fn test_frontend_accepts_try_on_option_and_result_like_enums() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -604,7 +604,7 @@ fn test_frontend_accepts_coalesce_on_safe_field_and_option_enum() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -697,7 +697,7 @@ fn test_frontend_reports_invalid_io_read_file_path_message_and_code() {
 #[test]
 fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("math.neve"), "fn add(x, y) = x + y;").unwrap();
+    fs::write(temp_dir.path().join("math.n3v3"), "fn add(x, y) = x + y;").unwrap();
 
     let source = "use math (add); let result = add(1, 2);";
     let (ast, diagnostics) = parse(source);
@@ -718,7 +718,7 @@ fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
         analysis
             .loaded_modules
             .iter()
-            .any(|entry| entry.file_path.ends_with("math.neve") && entry.diagnostics.is_empty()),
+            .any(|entry| entry.file_path.ends_with("math.n3v3") && entry.diagnostics.is_empty()),
         "expected successfully loaded dependency module, got {:?}",
         analysis.loaded_modules
     );
@@ -727,7 +727,7 @@ fn test_frontend_snippet_accepts_local_imports_against_root_dir() {
 #[test]
 fn test_frontend_snippet_reports_loaded_module_diagnostics() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("math.neve"), "fn add(x, y) = ;").unwrap();
+    fs::write(temp_dir.path().join("math.n3v3"), "fn add(x, y) = ;").unwrap();
 
     let source = "use math (add); let result = add(1, 2);";
     let (ast, diagnostics) = parse(source);
@@ -753,9 +753,9 @@ fn test_frontend_snippet_reports_loaded_module_diagnostics() {
 #[test]
 fn test_frontend_snippet_preserves_dependency_first_loaded_module_order() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("util.neve"), "fn inc(x) = x + 1;").unwrap();
+    fs::write(temp_dir.path().join("util.n3v3"), "fn inc(x) = x + 1;").unwrap();
     fs::write(
-        temp_dir.path().join("math.neve"),
+        temp_dir.path().join("math.n3v3"),
         "use util (inc); fn add_one(x) = inc(x);",
     )
     .unwrap();
@@ -783,20 +783,20 @@ fn test_frontend_snippet_preserves_dependency_first_loaded_module_order() {
         })
         .collect();
 
-    assert_eq!(loaded_paths, vec!["util.neve", "math.neve"]);
+    assert_eq!(loaded_paths, vec!["util.n3v3", "math.n3v3"]);
 }
 
 #[test]
 fn test_frontend_snippet_loaded_diagnostic_stats_distinguish_errors_and_warnings() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("bad_parse.neve"), "fn broken(x) =").unwrap();
+    fs::write(temp_dir.path().join("bad_parse.n3v3"), "fn broken(x) =").unwrap();
     fs::write(
-        temp_dir.path().join("bad_type.neve"),
+        temp_dir.path().join("bad_type.n3v3"),
         "fn bad() = 1 + true;",
     )
     .unwrap();
     fs::write(
-        temp_dir.path().join("warn_only.neve"),
+        temp_dir.path().join("warn_only.n3v3"),
         r#"
             use std.option = option;
             fn warned() = match option.some(1) {
@@ -872,13 +872,13 @@ fn test_frontend_snippet_current_diagnostic_stats_report_blocking_type_errors() 
 #[test]
 fn test_frontend_snippet_returns_only_evaluable_loaded_modules_in_dependency_order() {
     let temp_dir = TempDir::new().unwrap();
-    fs::write(temp_dir.path().join("util.neve"), "fn inc(x) = x + 1;").unwrap();
+    fs::write(temp_dir.path().join("util.n3v3"), "fn inc(x) = x + 1;").unwrap();
     fs::write(
-        temp_dir.path().join("math.neve"),
+        temp_dir.path().join("math.n3v3"),
         "use util (inc); fn add_one(x) = inc(x);",
     )
     .unwrap();
-    fs::write(temp_dir.path().join("broken.neve"), "fn bad() = 1 + true;").unwrap();
+    fs::write(temp_dir.path().join("broken.n3v3"), "fn bad() = 1 + true;").unwrap();
 
     let source = "use math (add_one); use broken (bad); let result = add_one(1);";
     let (ast, diagnostics) = parse(source);
@@ -892,7 +892,7 @@ fn test_frontend_snippet_returns_only_evaluable_loaded_modules_in_dependency_ord
         analyze_snippet_ast(&ast, temp_dir.path()).expect("snippet analysis should succeed");
     assert!(
         analysis.loaded_modules.iter().any(|entry| {
-            entry.file_path.ends_with("broken.neve")
+            entry.file_path.ends_with("broken.n3v3")
                 && entry
                     .diagnostics
                     .iter()
@@ -923,7 +923,7 @@ fn test_frontend_snippet_returns_only_evaluable_loaded_modules_in_dependency_ord
         .map(|entry| names_by_module_id.get(&entry.module_id).unwrap().clone())
         .collect();
 
-    assert_eq!(evaluable_paths, vec!["util.neve", "math.neve"]);
+    assert_eq!(evaluable_paths, vec!["util.n3v3", "math.n3v3"]);
     assert!(
         analysis
             .evaluable_loaded_modules
@@ -952,7 +952,7 @@ fn test_frontend_accepts_trait_method_call_analysis() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -982,7 +982,7 @@ fn test_frontend_method_dispatch_precedence_records_method_resolution() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1013,7 +1013,7 @@ fn test_frontend_callable_target_fallback_does_not_record_method_resolution() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1062,7 +1062,7 @@ fn test_frontend_accepts_std_item_and_module_imports() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1088,7 +1088,7 @@ fn test_frontend_accepts_std_glob_imports() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1117,7 +1117,7 @@ fn test_frontend_accepts_std_option_and_result_builtins() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1144,7 +1144,7 @@ fn test_frontend_accepts_std_math_constants() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1171,7 +1171,7 @@ fn test_frontend_accepts_std_math_conversion_bridges() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1198,7 +1198,7 @@ fn test_frontend_accepts_std_math_float_predicates() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1226,7 +1226,7 @@ fn test_frontend_accepts_std_math_rounding_bridges() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1255,7 +1255,7 @@ fn test_frontend_accepts_std_math_unary_float_transforms() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1283,7 +1283,7 @@ fn test_frontend_accepts_std_math_trigonometric_bridges() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1309,7 +1309,7 @@ fn test_frontend_accepts_std_math_function_pending_explicit_surface() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1339,7 +1339,7 @@ fn test_frontend_accepts_std_path_builtins() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1355,7 +1355,7 @@ fn test_frontend_accepts_std_typed_path_adapters() {
     let result = analyze_source(
         r#"
             use std.path = path;
-            let nested = path.joinPath(path.fromString("/tmp"), "neve.txt");
+            let nested = path.joinPath(path.fromString("/tmp"), "n3v3.txt");
             let parent = path.parentPath(nested) ?? path.fromString("/");
             let name = path.filenamePath(nested) ?? "missing";
             let ext = path.extensionPath(nested) ?? "missing";
@@ -1370,7 +1370,7 @@ fn test_frontend_accepts_std_typed_path_adapters() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1396,7 +1396,7 @@ fn test_frontend_accepts_std_fetch_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1425,7 +1425,7 @@ fn test_frontend_accepts_std_fetch_path_with_hash_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1451,7 +1451,7 @@ fn test_frontend_accepts_std_fetch_url_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1480,7 +1480,7 @@ fn test_frontend_accepts_std_fetch_url_with_hash_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1506,7 +1506,7 @@ fn test_frontend_accepts_std_fetch_git_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1532,7 +1532,7 @@ fn test_frontend_accepts_std_fetch_git_with_hash_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1558,7 +1558,7 @@ fn test_frontend_accepts_std_io_current_system_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1584,7 +1584,7 @@ fn test_frontend_accepts_std_io_current_dir_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1610,7 +1610,7 @@ fn test_frontend_accepts_std_io_get_env_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1636,7 +1636,7 @@ fn test_frontend_accepts_std_io_hash_file_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1662,7 +1662,7 @@ fn test_frontend_accepts_std_io_hash_string_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1688,7 +1688,7 @@ fn test_frontend_accepts_std_io_read_file_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1715,7 +1715,7 @@ fn test_frontend_accepts_std_io_read_dir_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1742,7 +1742,7 @@ fn test_frontend_accepts_std_io_hash_file_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1769,7 +1769,7 @@ fn test_frontend_accepts_std_io_exec_migrated_process_result_surface() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1796,7 +1796,7 @@ fn test_frontend_accepts_std_io_explicit_shell_command_process_result_surface() 
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1823,7 +1823,7 @@ fn test_frontend_accepts_std_io_exec_with_migrated_process_result_surface() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1850,7 +1850,7 @@ fn test_frontend_accepts_std_io_read_file_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1878,7 +1878,7 @@ fn test_frontend_accepts_std_io_read_file_bytes_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1907,7 +1907,7 @@ fn test_frontend_accepts_std_io_read_dir_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1937,7 +1937,7 @@ fn test_frontend_accepts_std_list_sort_and_extrema_builtins() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1969,7 +1969,7 @@ fn test_frontend_accepts_std_list_structural_helpers() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -1998,7 +1998,7 @@ fn test_frontend_accepts_std_list_get_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2027,7 +2027,7 @@ fn test_frontend_accepts_std_list_cons_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2056,7 +2056,7 @@ fn test_frontend_accepts_std_list_take_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2085,7 +2085,7 @@ fn test_frontend_accepts_std_list_drop_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2114,7 +2114,7 @@ fn test_frontend_accepts_std_list_contains_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2143,7 +2143,7 @@ fn test_frontend_accepts_std_list_index_of_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2169,7 +2169,7 @@ fn test_frontend_accepts_std_list_sum_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2195,7 +2195,7 @@ fn test_frontend_accepts_std_list_product_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2222,7 +2222,7 @@ fn test_frontend_accepts_std_list_replicate_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2253,7 +2253,7 @@ fn test_frontend_accepts_std_list_zip_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2284,7 +2284,7 @@ fn test_frontend_accepts_std_list_unzip_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2311,7 +2311,7 @@ fn test_frontend_accepts_std_list_fold_right_builtin() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2339,7 +2339,7 @@ fn test_frontend_accepts_std_io_read_dir_entry_paths_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2367,7 +2367,7 @@ fn test_frontend_accepts_std_io_write_file_bytes_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2394,7 +2394,7 @@ fn test_frontend_accepts_std_io_write_file_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2420,7 +2420,7 @@ fn test_frontend_accepts_std_io_write_file_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2446,7 +2446,7 @@ fn test_frontend_accepts_std_io_append_file_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2473,7 +2473,7 @@ fn test_frontend_accepts_std_io_append_file_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2501,7 +2501,7 @@ fn test_frontend_accepts_std_io_append_file_bytes_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2528,7 +2528,7 @@ fn test_frontend_accepts_std_io_current_dir_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2555,7 +2555,7 @@ fn test_frontend_accepts_std_io_home_dir_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2582,7 +2582,7 @@ fn test_frontend_accepts_std_io_home_dir_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2598,7 +2598,7 @@ fn test_frontend_accepts_std_io_create_dir_all_bridge() {
     let result = analyze_source(
         r#"
             use std.io = io;
-            let done = io.createDirAll("/tmp/neve-dir");
+            let done = io.createDirAll("/tmp/n3v3-dir");
         "#,
     );
     // Filter out known warnings (not errors):
@@ -2608,7 +2608,7 @@ fn test_frontend_accepts_std_io_create_dir_all_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2625,7 +2625,7 @@ fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
         r#"
             use std.io = io;
             use std.path = path;
-            let done = io.createDirAllPath(path.fromString("/tmp/neve-dir"));
+            let done = io.createDirAllPath(path.fromString("/tmp/n3v3-dir"));
         "#,
     );
     // Filter out known warnings (not errors):
@@ -2635,7 +2635,7 @@ fn test_frontend_accepts_std_io_create_dir_all_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2652,7 +2652,7 @@ fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
         r#"
             use std.io = io;
             use std.path = path;
-            let done = io.removeDirAllPath(path.fromString("/tmp/neve-dir"));
+            let done = io.removeDirAllPath(path.fromString("/tmp/n3v3-dir"));
         "#,
     );
     // Filter out known warnings (not errors):
@@ -2662,7 +2662,7 @@ fn test_frontend_accepts_std_io_remove_dir_all_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2678,7 +2678,7 @@ fn test_frontend_accepts_std_io_remove_dir_all_bridge() {
     let result = analyze_source(
         r#"
             use std.io = io;
-            let done = io.removeDirAll("/tmp/neve-dir");
+            let done = io.removeDirAll("/tmp/n3v3-dir");
         "#,
     );
     // Filter out known warnings (not errors):
@@ -2688,7 +2688,7 @@ fn test_frontend_accepts_std_io_remove_dir_all_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2714,7 +2714,7 @@ fn test_frontend_accepts_std_io_path_exists_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2740,7 +2740,7 @@ fn test_frontend_accepts_std_io_is_dir_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2766,7 +2766,7 @@ fn test_frontend_accepts_std_io_is_file_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2782,7 +2782,7 @@ fn test_frontend_accepts_std_io_command_bridge() {
     let result = analyze_source(
         r#"
             use std.io = io;
-            let cmd = io.command("printf", ["neve"]);
+            let cmd = io.command("printf", ["n3v3"]);
             let shown = toString(cmd);
         "#,
     );
@@ -2793,7 +2793,7 @@ fn test_frontend_accepts_std_io_command_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2809,7 +2809,7 @@ fn test_frontend_accepts_std_io_command_with_bridge() {
     let result = analyze_source(
         r#"
             use std.io = io;
-            let cmd = io.commandWith(#{ program = "printf", args = ["neve"], cwd = "/tmp" });
+            let cmd = io.commandWith(#{ program = "printf", args = ["n3v3"], cwd = "/tmp" });
             let shown = toString(cmd);
         "#,
     );
@@ -2820,7 +2820,7 @@ fn test_frontend_accepts_std_io_command_with_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2847,7 +2847,7 @@ fn test_frontend_accepts_std_io_exec_command_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2863,7 +2863,7 @@ fn test_frontend_accepts_std_io_pipeline_bridge() {
     let result = analyze_source(
         r#"
             use std.io = io;
-            let pipe = io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]);
+            let pipe = io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])]);
             let shown = toString(pipe);
         "#,
     );
@@ -2874,7 +2874,7 @@ fn test_frontend_accepts_std_io_pipeline_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2892,8 +2892,8 @@ fn test_frontend_accepts_std_io_pipeline_with_redirects_bridge() {
             use std.io = io;
             use std.path = path;
             let pipe = io.pipelineWithRedirects(
-                io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
-                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])]),
+                [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
             );
             let shown = toString(pipe);
         "#,
@@ -2905,7 +2905,7 @@ fn test_frontend_accepts_std_io_pipeline_with_redirects_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2922,7 +2922,7 @@ fn test_frontend_accepts_std_io_exec_pipeline_bridge() {
         r#"
             use std.io = io;
             let result = io.execPipeline(
-                io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])])
+                io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])])
             );
             let shown = io.processStdout(result);
         "#,
@@ -2934,7 +2934,7 @@ fn test_frontend_accepts_std_io_exec_pipeline_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2953,8 +2953,8 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirect_bridge() {
             use std.path = path;
             let result = io.execPipeline(
                 io.pipelineWithRedirects(
-                    io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
-                    [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                    io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])]),
+                    [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
                 )
             );
             let shown = io.processCode(result);
@@ -2967,7 +2967,7 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirect_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -2986,10 +2986,10 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirects_bridge() {
             use std.path = path;
             let result = io.execPipeline(
                 io.pipelineWithRedirects(
-                    io.pipeline([io.command("printf", ["neve"]), io.command("cat", [])]),
+                    io.pipeline([io.command("printf", ["n3v3"]), io.command("cat", [])]),
                     [
-                        io.redirectStdoutPath(path.fromString("/tmp/neve.out")),
-                        io.redirectStderrPath(path.fromString("/tmp/neve.err"))
+                        io.redirectStdoutPath(path.fromString("/tmp/n3v3.out")),
+                        io.redirectStderrPath(path.fromString("/tmp/n3v3.err"))
                     ]
                 )
             );
@@ -3003,7 +3003,7 @@ fn test_frontend_accepts_std_io_exec_pipeline_with_redirects_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3021,8 +3021,8 @@ fn test_frontend_accepts_std_io_command_with_redirects_bridge() {
             use std.io = io;
             use std.path = path;
             let cmd = io.commandWithRedirects(
-                io.command("printf", ["neve"]),
-                [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                io.command("printf", ["n3v3"]),
+                [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
             );
             let shown = toString(cmd);
         "#,
@@ -3034,7 +3034,7 @@ fn test_frontend_accepts_std_io_command_with_redirects_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3051,7 +3051,7 @@ fn test_frontend_accepts_std_io_redirect_stdout_path_bridge() {
         r#"
             use std.io = io;
             use std.path = path;
-            let redirect = io.redirectStdoutPath(path.fromString("/tmp/neve.out"));
+            let redirect = io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"));
             let shown = toString(redirect);
         "#,
     );
@@ -3062,7 +3062,7 @@ fn test_frontend_accepts_std_io_redirect_stdout_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3079,7 +3079,7 @@ fn test_frontend_accepts_std_io_redirect_stderr_path_bridge() {
         r#"
             use std.io = io;
             use std.path = path;
-            let redirect = io.redirectStderrPath(path.fromString("/tmp/neve.err"));
+            let redirect = io.redirectStderrPath(path.fromString("/tmp/n3v3.err"));
             let shown = toString(redirect);
         "#,
     );
@@ -3090,7 +3090,7 @@ fn test_frontend_accepts_std_io_redirect_stderr_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3107,7 +3107,7 @@ fn test_frontend_accepts_std_io_redirect_stdin_path_bridge() {
         r#"
             use std.io = io;
             use std.path = path;
-            let redirect = io.redirectStdinPath(path.fromString("/tmp/neve.in"));
+            let redirect = io.redirectStdinPath(path.fromString("/tmp/n3v3.in"));
             let shown = toString(redirect);
         "#,
     );
@@ -3118,7 +3118,7 @@ fn test_frontend_accepts_std_io_redirect_stdin_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3137,8 +3137,8 @@ fn test_frontend_accepts_std_io_exec_command_with_redirect_bridge() {
             use std.path = path;
             let result = io.execCommand(
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
-                    [io.redirectStdoutPath(path.fromString("/tmp/neve.out"))]
+                    io.command("printf", ["n3v3"]),
+                    [io.redirectStdoutPath(path.fromString("/tmp/n3v3.out"))]
                 )
             );
             let shown = io.processCode(result);
@@ -3151,7 +3151,7 @@ fn test_frontend_accepts_std_io_exec_command_with_redirect_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3170,10 +3170,10 @@ fn test_frontend_accepts_std_io_exec_command_with_redirects_bridge() {
             use std.path = path;
             let result = io.execCommand(
                 io.commandWithRedirects(
-                    io.command("printf", ["neve"]),
+                    io.command("printf", ["n3v3"]),
                     [
-                        io.redirectStdoutPath(path.fromString("/tmp/neve.out")),
-                        io.redirectStderrPath(path.fromString("/tmp/neve.err"))
+                        io.redirectStdoutPath(path.fromString("/tmp/n3v3.out")),
+                        io.redirectStderrPath(path.fromString("/tmp/n3v3.err"))
                     ]
                 )
             );
@@ -3187,7 +3187,7 @@ fn test_frontend_accepts_std_io_exec_command_with_redirects_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3203,7 +3203,7 @@ fn test_frontend_accepts_std_io_task_command_bridge() {
     let result = analyze_source(
         r#"
             use std.io = io;
-            let task = io.taskCommand(io.command("printf", ["neve"]));
+            let task = io.taskCommand(io.command("printf", ["n3v3"]));
             let shown = toString(task);
         "#,
     );
@@ -3214,7 +3214,7 @@ fn test_frontend_accepts_std_io_task_command_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3231,7 +3231,7 @@ fn test_frontend_accepts_std_io_task_pipeline_bridge() {
         r#"
             use std.io = io;
             let task = io.taskPipeline(io.pipeline([
-                io.command("printf", ["neve"]),
+                io.command("printf", ["n3v3"]),
                 io.command("cat", [])
             ]));
             let shown = toString(task);
@@ -3244,7 +3244,7 @@ fn test_frontend_accepts_std_io_task_pipeline_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3272,7 +3272,7 @@ fn test_frontend_accepts_std_io_await_task_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3289,7 +3289,7 @@ fn test_frontend_accepts_std_io_await_tasks_bridge() {
         r#"
             use std.io = io;
             let results = io.awaitTasks([
-                io.taskCommand(io.command("printf", ["neve"])),
+                io.taskCommand(io.command("printf", ["n3v3"])),
                 io.taskPipeline(io.pipeline([io.command("printf", ["lang"]), io.command("cat", [])]))
             ]);
             let shown = toString(results);
@@ -3302,7 +3302,7 @@ fn test_frontend_accepts_std_io_await_tasks_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3328,7 +3328,7 @@ fn test_frontend_accepts_std_io_process_success_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3354,7 +3354,7 @@ fn test_frontend_accepts_std_io_process_stdout_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3380,7 +3380,7 @@ fn test_frontend_accepts_std_io_process_code_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3406,7 +3406,7 @@ fn test_frontend_accepts_std_io_process_stderr_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3433,7 +3433,7 @@ fn test_frontend_accepts_std_io_path_exists_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3460,7 +3460,7 @@ fn test_frontend_accepts_std_io_is_dir_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3487,7 +3487,7 @@ fn test_frontend_accepts_std_io_is_file_path_bridge() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3515,7 +3515,7 @@ fn test_frontend_accepts_std_map_and_set_builtins() {
         .diagnostics
         .iter()
         .filter(|d| {
-            d.severity == neve_diagnostic::Severity::Error
+            d.severity == n3v3_diagnostic::Severity::Error
                 && !d.message.contains("callable fallback")
         })
         .collect();
@@ -3584,7 +3584,7 @@ fn assert_typeck_effect_diagnostics(source: &str, expected_effect_site: Option<&
     let (effect_errors, other_errors): (Vec<_>, Vec<_>) = result
         .diagnostics
         .iter()
-        .filter(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error)
+        .filter(|diagnostic| diagnostic.severity == n3v3_diagnostic::Severity::Error)
         .partition(|diagnostic| {
             diagnostic.message.contains("effectful call")
                 && diagnostic.message.contains("in lambda")

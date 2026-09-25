@@ -1,4 +1,4 @@
-# Neve Stream<T> Design Document
+# n3v3 Stream<T> Design Document
 
 <div align="center">
 
@@ -16,9 +16,9 @@
 
 ### 1.1 问题陈述
 
-当前 Neve 的流式 I/O 仅支持**回调模式**：
+当前 n3v3 的流式 I/O 仅支持**回调模式**：
 
-```neve
+```n3v3
 -- 当前唯一可用的流式 API
 io.execCommandStreaming(cmd, fn(line) { io.print(line) });
 io.execPipelineStreaming(pipe, fn(line) { io.print(line) });
@@ -48,9 +48,9 @@ io.readFileLines(path, fn(line) { io.print(line) });
 
 ## 2. 类型定义 / Type Definition
 
-### 2.1 Neve 语言层
+### 2.1 n3v3 语言层
 
-```neve
+```n3v3
 -- Stream<T> 是一等类型
 -- T 是流中元素的类型
 
@@ -80,7 +80,7 @@ io.streamWithTimeout(s: Stream<T>, ms: Int): Stream<Option<T>>  -- 元素级超�
 ### 2.2 Rust 实现层
 
 ```rust
-// crates/neve-eval/src/value.rs
+// crates/n3v3-eval/src/value.rs
 
 /// Opaque stream runtime object.
 /// The generic parameter is erased at runtime; type checking ensures safety.
@@ -164,7 +164,7 @@ Value (运行时值)
 
 ### 3.4 超时控制
 
-```neve
+```n3v3
 -- io.streamWithTimeout: 每个元素等待不超过 ms 毫秒
 -- 超时返回 None，正常返回 Some(value)
 io.streamWithTimeout(s: Stream<String>, ms: Int): Stream<Option<String>>
@@ -176,9 +176,9 @@ io.streamWithTimeout(s: Stream<String>, ms: Int): Stream<Option<String>>
 
 ### 4.1 Command → Stream → Command 管道
 
-```neve
+```n3v3
 -- Bash:  cmd1 | grep "error" | wc -l
--- Neve:
+-- n3v3:
 import std.io as io;
 import std.string as str;
 
@@ -192,7 +192,7 @@ let result = io.streamPipe(filtered, cmd2);
 
 ### 4.2 `|>` 管道语法集成
 
-```neve
+```n3v3
 -- 语法糖目标 (Phase 4.5):
 let result = io.command("journalctl", ["-n", "100"])
     |> io.streamCommand
@@ -266,7 +266,7 @@ StreamValue(变换包装)
 沿用现有常量：
 
 ```rust
-// crates/neve-std/src/io/mod.rs (现有)
+// crates/n3v3-std/src/io/mod.rs (现有)
 const MAX_STDIN_BYTES: usize = 10 * 1024 * 1024;     // 10 MB
 const MAX_OUTPUT_BYTES: usize = 50 * 1024 * 1024;    // 50 MB
 const MAX_STREAM_LINES: usize = 100_000;              // 100k lines
@@ -300,7 +300,7 @@ const MAX_STREAM_LINES: usize = 100_000;              // 100k lines
 ### 6.2 `is_effectful_builtin()` 更新
 
 ```rust
-// crates/neve-common/src/lib.rs
+// crates/n3v3-common/src/lib.rs
 
 pub fn is_effectful_builtin(name: &str) -> bool {
     // ... 现有逻辑 ...

@@ -1,0 +1,10 @@
+[package]
+name = "n3v3-syntax"
+description = "AST and syntax definitions for n3v3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+n3v3-common = { version = "5.0.0", path = "../n3v3-common" }

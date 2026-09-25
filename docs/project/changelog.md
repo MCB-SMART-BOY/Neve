@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../../assets/logo.svg" width="120" alt="Neve logo">
+<img src="../../assets/logo.svg" width="120" alt="n3v3 logo">
 
 <h1>Changelog</h1>
 
@@ -23,6 +23,11 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Breaking — project renamed to `n3v3`**: the CLI binary is `n3v3` (was `neve`), the crates are `n3v3-*` (was `neve-*`), environment variables are `N3V3_*` (was `NEVE_*`), and source files use the `.n3v3` extension — `.neve` is no longer accepted. The published package stays `n3v3`; the GitHub repository, docs, examples, CI, and editor integrations use the new name. On-disk state moves with the name (for example `~/.config/n3v3/` instead of `~/.config/neve/`).
+- **Lean formalization**: `formal/Neve/` → `formal/n3v3/` with the `n3v3.*` module prefix and the `n3v3Formal` lakefile package; `lake build` builds all 21 modules.
+- **Unchanged external identities**: the `neve-lang` organization, its `neve-lang/std` import path, the `nevepkgs` package repository, the VS Code marketplace publisher `neve-lang`, and the `neve-lang.org` maintainer address keep their names.
+
 ### Fixed
 - **Lexer**: `/` is a path literal only when the previous token cannot end an operand, so `6/2` lexes as division instead of an absolute path. Postfix `?` also ends an operand, so `total?/2` is division.
 - **HIR**: Enum variant registration reports the real conflict — `enum Only { Only(Int) }` now reports that the variant conflicts with the enum name instead of claiming a duplicate variant.
@@ -41,6 +46,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Docs
 - Syntax spec documents the slash disambiguation, the identifier character rule (ASCII start, Unicode continuation), and zero-parameter value bindings.
 - Skills synchronized with the checks above; `.claude/hooks/verify-skills.sh` now verifies the parser/AST/common source paths it previously let drift.
+- **Docs**: User/project documentation now reflects the v5.0.0 install flow, effect-checking output, public bindings, 554 E2E tests, 26 LSP methods, and 13 Stream<T> APIs.
 
 ## [5.0.0] - 2026-09-24
 
@@ -54,24 +60,24 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [4.0.4] - 2026-06-17
 
 ### Changed
-- **Docs refresh**: All 17 documentation files synchronized to v4.0.4 — version numbers, syntax examples, status claims, and links updated throughout. Fixed stale E2E test counts and clarified binary/package name distinction (`neve` binary, `n3v3` package on crates.io).
+- **Docs refresh**: All 17 documentation files synchronized to v4.0.4 — version numbers, syntax examples, status claims, and links updated throughout. Fixed stale E2E test counts and clarified binary/package name distinction (`n3v3` binary, `n3v3` package on crates.io).
 - **Version bump**: Workspace version 4.0.3 → 4.0.4.
 
 ## [4.0.3] - 2026-06-17
 
 ### Changed
-- **Binary/package split**: Binary name is `neve`, package name on crates.io is `n3v3`. `cargo install n3v3` installs the `neve` binary.
+- **Binary/package split**: Binary name is `n3v3`, package name on crates.io is `n3v3`. `cargo install n3v3` installs the `n3v3` binary.
 - **Version bump**: Workspace version 4.0.2 → 4.0.3.
 
 ### Fixed
-- **CI**: Package name references updated from `neve` to `n3v3` in CI workflows.
+- **CI**: Package name references updated from `n3v3` to `n3v3` in CI workflows.
 - **Clippy**: Fixed `manual Iterator::find` warning.
 - **Formatting**: `cargo fmt --all` applied across entire workspace.
 
 ## [4.0.2] - 2026-06-17
 
 ### Changed
-- **Crates.io publish**: Renamed package from `neve` to `n3v3` to resolve crates.io name conflict. Added explicit `version`+`path` fields to internal workspace dependencies for publish compatibility.
+- **Crates.io publish**: Renamed package from `n3v3` to `n3v3` to resolve crates.io name conflict. Added explicit `version`+`path` fields to internal workspace dependencies for publish compatibility.
 - **Version bump**: Workspace version 4.0.1 → 4.0.2.
 
 ## [4.0.1] - 2026-06-17
@@ -87,9 +93,9 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [4.0.0] - 2026-06-16
 
 ### Changed
-- **v4.0 syntax is canonical**: `let`/`fn`/`;` optional at top level, `use` not `import`, `if -> else` not `then/else`, `~` not `lazy`, `{ }` records, `&` line comments, `pub` removed (all public by default). 12 canonical keywords remain; the parser accepts 10 legacy spellings for source compatibility, with only `struct`, `enum`, `super`, and `crate` emitted as dedicated lexer tokens.
+- **v4.0.0 historical**: v4.0 syntax was canonical: `let`/`fn`/`;` optional at top level, `use` not `import`, `if -> else` not `then/else`, `~` not `lazy`, `{ }` records, `&` line comments, `pub` removed (all public by default). The v4.0.0 release had 12 canonical keywords; the parser accepted 10 legacy spellings for source compatibility, with only `struct`, `enum`, `super`, and `crate` emitted as dedicated lexer tokens.
 - **Phase D complete**: AST compatibility path (`ast_eval.rs`, `AstClosure`, `AstEnv`) fully removed (~3500 lines). All evaluation goes through canonical HIR pipeline.
-- **Phase B gap closure: 12/12**: All 12 E2E gap tests now pass. Phase B complete.
+- **v4.0.0 historical**: Phase B gap closure was 12/12; all 12 E2E gap tests passed at that release.
 - **Generic identity inference**: Functions without explicit generics (`id = |x| x`) now get polymorphic types via `generalize` + `instantiate` fix.
 - **Dependency cleanup**: Removed 6 unused crate dependencies. Normalized workspace references for tar, flate2, xz2, tempfile, nix.
 
@@ -123,9 +129,9 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **LSP**: `code_action` now shows actual diagnostic message instead of generic label.
 - **Fmt**: `debug_assert!` replaced with `Result`-based indentation check, works in release builds.
 - **Fmt**: Basic line wrapping for function/method calls using `max_width` + `would_exceed_width`.
-- **Parser**: Shebang stripping (`#!/usr/bin/env neve`) now built into parser.
+- **Parser**: Shebang stripping (`#!/usr/bin/env n3v3`) now built into parser.
 - **CLI**: REPL history save/load errors now reported via `eprintln!` instead of silently discarded.
-- **CLI**: `neve run` and `neve test` public functions now have doc comments.
+- **CLI**: `n3v3 run` and `n3v3 test` public functions now have doc comments.
 - **Config**: `ServiceUnit.service_type`/`restart` converted from `String` to `ServiceType`/`RestartPolicy` enums.
 - **Config**: `panic = "abort"` documented with `catch_unwind` caveat.
 - **Store**: NAR `u64 → usize` truncation guarded with `try_from`.
@@ -138,19 +144,19 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [3.18.0] - 2026-05-27
 
 ### Added
-- **Short I/O aliases**: 14 short I/O aliases — `read`, `write`, `exec`, `cmd`, `env`, `run`, `sh`, `ls`, `exists`, `ok`, `stdout`, `stderr`, `code`, `pwd`, `home`.
-- **Shebang stripping**: Shebang lines (`#!neve`) are now automatically stripped in `frontend` and `fmt` commands.
-- **AST evaluator deprecation**: `AstEnv` and `AstEvaluator` marked `#[deprecated]` with removal target v4.0. Use HIR evaluator (`neve_eval::Evaluator`) for all new code.
+- **v3.18.0 historical**: Short I/O aliases included 14 names — `read`, `write`, `exec`, `cmd`, `env`, `run`, `sh`, `ls`, `exists`, `ok`, `stdout`, `stderr`, `code`, `pwd`, `home`.
+- **Shebang stripping**: Shebang lines (`#!n3v3`) are now automatically stripped in `frontend` and `fmt` commands.
+- **AST evaluator deprecation**: `AstEnv` and `AstEvaluator` marked `#[deprecated]` with removal target v4.0. Use HIR evaluator (`n3v3_eval::Evaluator`) for all new code.
 - **Parser gap closure**: Tuple index `t.0` test un-ignored (confirmed working in parser + lowering + typeck + eval).
 - **Match exhaustiveness**: Spec updated to require exhaustive `match`; `if-else` as non-exhaustive alternative.
 - **Release policy formalized**: SemVer-hybrid model with v4.0 exit criteria (`docs/reference/stability.md`).
-- **Skills suite**: 10 development skills in `.claude/skills/` covering parser, typeck, HIR, eval, LSP, std, testing, effects, Lean verification.
+- **v3.18.0 historical**: The skills suite had 10 development skills covering parser, typeck, HIR, eval, LSP, std, testing, effects, and Lean verification.
 - **Formal verification skill**: Lean 4 workflow, theorem coverage, Rust↔Lean refinement bridge.
 
 ### Changed
 - **Spec v3.0**: Symbol reference, definitions, closures, records, modules, Nix comparison all updated to v3.0 syntax.
 - **Spec gap table**: 3 of 6 gaps confirmed closed (`crate::`, multi-line comment, tuple index). 2 remain (`\u{...}`, shebang parser).
-- **Feature matrix**: High-level truth + bottom line updated to reflect Phase 6 completion.
+- **v3.18.0 historical**: The feature matrix was updated to reflect Phase 6 completion.
 - **Stability tiers**: Versioning policy updated with deprecation lifecycle and v4.0 exit criteria.
 - **CLAUDE.md**: Decision log added for G2, pattern match, Lean, AST deprecation, release policy.
 
@@ -163,9 +169,9 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - **Delimiter-driven `{ }` container theory**: Unified container syntax based on `{ }` delimiters.
 - **Lambda syntax**: `|params| expr` — Rust-style closures replace `fn(x) body`.
-- **Path `/` operator**: `/` operator for path joining (e.g. `base / "file.neve"`).
+- **Path `/` operator**: `/` operator for path joining (e.g. `base / "file.n3v3"`).
 - **Pipeline combinator builtins**: `map`, `filter`, `fold`, `flatMap`, `take`, `drop`, `collect`.
-- **Keyword reduction: 21 → 17**: `type`, `trait`, `impl`, `if`, `then`, `else`, `match`, `use`, `pub`, `as`, `lazy`, `true`, `false`, `effect`, `self`, `super`, `crate`. Legacy `struct`/`enum`/`import` retained.
+- **v3.17.0 historical**: Keyword reduction was 21 → 17: `type`, `trait`, `impl`, `if`, `then`, `else`, `match`, `use`, `pub`, `as`, `lazy`, `true`, `false`, `effect`, `self`, `super`, `crate`. Legacy `struct`/`enum`/`import` were retained.
 - **Unified type declaration**: `struct`/`enum` → `type`, with `|` separator and optional leading `|`.
 - **Selective import**: `import` → `use` with `.{}` selective import syntax.
 - **Record values without `#` prefix**: `#{ }` → `{ }`.
@@ -181,14 +187,14 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [3.15.0] - 2026-05-22
 
 ### Added
-- **LSP overhaul**: 19 LSP methods implemented -- hover, completion (type-aware), signatureHelp, definition, references, documentHighlight, rename, formatting, documentSymbol, semanticTokens (AST-based), inlayHint, foldingRange, codeAction, completionItem/resolve.
+- **v3.15.0 historical**: 19 LSP methods were implemented — hover, completion (type-aware), signatureHelp, definition, references, documentHighlight, rename, formatting, documentSymbol, semanticTokens (AST-based), inlayHint, foldingRange, codeAction, completionItem/resolve.
 - **Type-aware completion**: Methods filtered by receiver type (List:32, String:16, Option:11, Result:9, Record:3). Uses DefId resolution via ModuleSemantics.global_names.
 - **Signature help**: 80 builtin function signatures + user-defined functions via AST inspection.
 - **Completion documentation**: 77 functions with docs via completionItem/resolve.
 - **AST-based semantic tokens**: 8 node kinds (fn, struct/enum/trait/impl items, fields, variants, params, imports).
-- **Helix integration**: 6 query files (22 highlight scopes), `neve setup helix` one-shot install.
-- **VS Code extension**: TextMate grammar, LSP client, `neve setup vscode`.
-- **CLI**: `neve lsp --check` (10-point health check), `neve lsp --version`.
+- **Helix integration**: 6 query files (22 highlight scopes), `n3v3 setup helix` one-shot install.
+- **VS Code extension**: TextMate grammar, LSP client, `n3v3 setup vscode`.
+- **CLI**: `n3v3 lsp --check` (10-point health check), `n3v3 lsp --version`.
 - **Scripts**: build-grammar.sh (cross-platform), dev-setup.sh (one-shot).
 - **Docs**: docs/reference/lsp.md.
 
@@ -210,41 +216,41 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [3.8.0] - 2026-05-12
 
 ### Added / 新增
-- **Phase 4 complete**: Shell Capability Replacement — Stream<T> 14 APIs, TTY 4 APIs, Job control 2 APIs.
-- **Stream<T>**: 14/14 APIs implemented (Phase A-C): streamList/streamLines/streamCommand/streamBytes, streamMap/streamFilter/streamTake/streamDrop, streamCollect/streamPipe/streamWrite/streamForEach/streamFold, streamWithTimeout.
+- **v3.8.0 historical**: Shell Capability Replacement was declared complete with Stream<T> 14 APIs, TTY 4 APIs, and Job control 2 APIs.
+- **v3.8.0 historical**: 14/14 Stream<T> APIs were listed as implemented (Phase A-C): streamList/streamLines/streamCommand/streamBytes, streamMap/streamFilter/streamTake/streamDrop, streamCollect/streamPipe/streamWrite/streamForEach/streamFold, streamWithTimeout.
 - **Task APIs**: 7 (spawn/poll/cancel/await/awaitTasks/awaitAny/awaitTaskWithTimeout).
 - **TTY APIs**: 4 (isTTY/terminalSize/setRawMode/resetTerminal).
 - **Job control**: 2 (jobs/waitAnyJob).
-- **Formal verification v4**: 19 Lean modules, EffectEval v4.3 (34 rules, +5 stream Phase C), BinOp 12/12 proved.
+- **v3.8.0 historical**: Formal verification listed 19 Lean modules, EffectEval v4.3 (34 rules, +5 stream Phase C), and BinOp 12/12 proved.
 - **Bytes type formalization**: Ty.Bytes, Value.bytes, canonical forms, EffectEval rules, refinement bridge.
 - **BigStep v2**: matchOn_fallthrough rule, div_zero/mod_zero rules (27 total rules).
 - **SafetyLemmas**: 5 verified pattern matching lemmas (wildcard, lit_int, bool_full, unit, bool_first_arm).
 - **Effect boundary document**: docs/project/effect-boundary.md v1.0 (G4 decision gate closed).
 - **CI bug hunter**: .github/workflows/bug-hunter.yml (nightly + push/PR + manual trigger).
-- **Formatter idempotency**: 37/37 tests pass (crates/neve-fmt/tests/idempotency.rs).
+- **Formatter idempotency**: 37/37 tests pass (crates/n3v3-fmt/tests/idempotency.rs).
 - **Pipeline**: |> syntax (AST=HIR=typeck parity).
-- **Example scripts**: examples/test-runner.neve, examples/ci-bootstrap.neve.
+- **Example scripts**: examples/test-runner.n3v3, examples/ci-bootstrap.n3v3.
 - **CHANGELOG.md**: Added at repository root.
-- **Phase 5 items**: Ecosystem design doc, stability tiers (Tier 1/2/3), flake/lock/store, registry CLI (17 commands).
+- **v3.8.0 historical**: Phase 5 items listed the ecosystem design doc, stability tiers, flake/lock/store, and a registry CLI with 17 commands.
 
 ### Changed / 变更
 - **EnvMatches**: Refactored to predicate-parameterized EnvMatches(P) in Values.lean.
 - **Type safety v18**: env_preservation lemma extracted; app/pipe non-lam cases documented.
-- **EffectEval**: v4.3 (34 rules): +5 stream Phase C, +cancel/awaitAny, +retry/ensure, +awaitTasks/timeout.
+- **v3.8.0 historical**: EffectEval v4.3 (34 rules) listed +5 stream Phase C, +cancel/awaitAny, +retry/ensure, and +awaitTasks/timeout.
 - **Retry/Ensure**: EffectEval rules added (retry_success, retry_failure, ensure_success, ensure_timeout).
-- **kill_process**: Moved to neve-common as single source of truth (M-2 unified kill mechanism).
+- **kill_process**: Moved to n3v3-common as single source of truth (M-2 unified kill mechanism).
 - **G5 (Bash Replacement)**: Decision gate closed ✅.
 - **Clippy**: 0 warnings across workspace.
 
 ### Tests / 测试
-- **E2E**: 400 (+180 from 220): Stream Phase C (7), Job control (2), TTY (2), plus prior Stream/Task/pipe/redirect expansion; Phase 5 ecosystem (77 from 323→400).
+- **v3.8.0 historical**: E2E coverage was reported as 400 (+180 from 220), including Stream Phase C and Phase 5 ecosystem work.
 - **Formatter**: 37 idempotency tests (37/37 pass).
 - **Ecosystem**: builder(6), store(40), fetch all passing.
 
 ## [3.7.0] - 2026-05-09
 
 ### Added / 新增
-- **Formal verification**: 14 Lean modules, lake build clean. Type safety theorem, EffectEval v3 (15 rules).
+- **v3.7.0 historical**: Formal verification listed 14 Lean modules and EffectEval v3 (15 rules).
 - **Security proofs**: Verify/Path (M-1), Verify/Environ (M-4), Verify/Limits (H-1, H-2) — machine-checked.
 - **Differential testing**: 300+ random pure expression tests (ALL MATCH), effects property tests, CI integration.
 - **Bug hunter**: scripts/bug_hunt.py — 11/11 security boundary attacks, 0 real bugs found.
@@ -275,7 +281,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed / 变更
 - `io.args()` return type changed from `List<String>` to `(List<String>, Record)`.
 - Feature matrix: shebang/argv upgraded to ✅; glob, record match, match exhaustiveness updated.
-- Phase 2 script polishing: 10/10 items complete per the Better Bash roadmap.
+- **v3.6.0 historical**: Phase 2 script polishing was reported as 10/10 items complete per the Better Bash roadmap.
 
 ### Fixed / 修复
 - `io.args`: negative numbers (`-10`) no longer parsed as flags.
@@ -314,7 +320,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Parser golden tests: 29 new tests added, 3 of 6 known gaps closed (crate import, multi-line comment, effect on impl method).
 
 ### Security / 安全
-- Phase 3 security audit: streaming timeout, size limits, path validation, signal safety, effect classification fixes.
+- **v3.5.0 historical**: The Phase 3 security audit covered streaming timeout, size limits, path validation, signal safety, and effect classification fixes.
 
 ---
 
@@ -323,19 +329,19 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added / 新增
 - **Effect system**: Added `effect` keyword for explicit side-effect annotation. Pure functions are checked by default; `--allow-effects` bypasses the check.
 - **Scripting builtins**: `io.execCommandLines` (line-by-line output), `io.awaitTaskWithTimeout` (timeout + process kill for Command/Pipeline), `io.args()` (script arguments), `io.env()` (environment variables), `io.sleep()`, `io.which()`.
-- **Shebang support**: `.neve` files starting with `#!/usr/bin/env neve` can be executed directly. `neve run file.neve arg1 arg2` passes arguments via `io.args()`.
+- **Shebang support**: `.n3v3` files starting with `#!/usr/bin/env n3v3` can be executed directly. `n3v3 run file.n3v3 arg1 arg2` passes arguments via `io.args()`.
 - **Pipeline timeout**: `io.awaitTaskWithTimeout` now supports Pipeline tasks with per-stage process kill.
 - **Windows process kill**: Timeout-based process termination uses `taskkill` on Windows, `kill -9` on Unix.
-- **Example scripts**: `manifest.neve` (file listing + SHA-256), `build-check.neve` (CI checks), `http-check.neve` (HTTP health), `backup.neve` (file backup with timestamp).
+- **Example scripts**: `manifest.n3v3` (file listing + SHA-256), `build-check.n3v3` (CI checks), `http-check.n3v3` (HTTP health), `backup.n3v3` (file backup with timestamp).
 
 ### Changed / 变更
-- **Effect checking is default-on**: `neve check` now rejects effectful calls by default. Use `--allow-effects` to restore permissive behavior. The old `--pure` flag is removed.
-- **Spec v2.1**: Updated language specification with Effect System and Scripting chapters. Keywords: 20 → 21 (added `effect`).
+- **Effect checking is default-on**: `n3v3 check` now rejects effectful calls by default. Use `--allow-effects` to restore permissive behavior. The old `--pure` flag is removed.
+- **v3.2.0 historical**: The specification changed its keyword count from 20 to 21 when `effect` was added.
 
 ### Improved / 改进
-- **Phase B exit criteria validated**: Build reproducibility, lockfile determinism, and GC safety all verified with real package builds.
+- **v3.2.0 historical**: Phase B exit criteria were validated for build reproducibility, lockfile determinism, and GC safety.
 - **Formatter**: Fixed `effect` keyword being dropped during formatting. Verified idempotent.
-- **Parser golden tests**: 189 tests including new syntax forms (effect annotation, list comprehension, safe field, try expression).
+- **v3.2.0 historical**: Parser golden coverage was reported as 189 tests, including effect annotation, list comprehension, safe field, and try expression forms.
 - **Cross-platform**: Process kill works on both Unix and Windows.
 
 ### Fixed / 修复
@@ -367,7 +373,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Legacy compat execution wrappers**: Removed public compat wrappers `io.exec`, `io.execWith`, `io.execShell`, `io.execResult`, `io.execWithResult`, `io.execShellResult`, and the old boundary redirect execution wrappers. Shell behavior is still available, but now only through explicit `Command` construction such as `io.command("sh", ["-c", ...])` or `io.command("cmd", ["/C", ...])`. / **旧兼容执行 wrapper**: 移除了公开 compat wrapper：`io.exec`、`io.execWith`、`io.execShell`、`io.execResult`、`io.execWithResult`、`io.execShellResult`，以及旧的 boundary redirect 执行 wrapper。shell 语义仍可用，但现在只能通过显式 `Command` 构造表达，例如 `io.command("sh", ["-c", ...])` 或 `io.command("cmd", ["/C", ...])`。
 
 ### Improved / 改进
-- **Full-pipeline release baseline**: The release was validated against `cargo build -p neve`, `cargo test --workspace`, and `cargo clippy --workspace --all-targets -- -D warnings`, in addition to the narrower convergence slices recorded in the forward plan. / **全流水线发布基线**: 本次发布除前向计划中的窄切片验证外，还通过了 `cargo build -p neve`、`cargo test --workspace` 与 `cargo clippy --workspace --all-targets -- -D warnings` 的完整发布基线。
+- **Full-pipeline release baseline**: The release was validated against `cargo build -p n3v3`, `cargo test --workspace`, and `cargo clippy --workspace --all-targets -- -D warnings`, in addition to the narrower convergence slices recorded in the forward plan. / **全流水线发布基线**: 本次发布除前向计划中的窄切片验证外，还通过了 `cargo build -p n3v3`、`cargo test --workspace` 与 `cargo clippy --workspace --all-targets -- -D warnings` 的完整发布基线。
 
 ## [2.0.0] - 2026-04-15
 
@@ -392,14 +398,14 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **File tail expression support**: Modules can now end with a trailing top-level expression, and the canonical HIR run path evaluates that final form consistently. / **文件尾表达式支持**: 模块现在可以以尾部顶层表达式结束，规范 HIR 运行路径会一致地执行这一最终 form。
 
 ### Improved / 改进
-- **Canonical CLI convergence**: `neve check` and the canonical HIR path in `neve run` now use frontend driver results instead of command-local `ModuleLoader + TypeChecker` orchestration. / **规范 CLI 收敛**: `neve check` 与 `neve run` 的规范 HIR 主路径现在直接使用 frontend driver 结果，不再在命令层手工拼装 `ModuleLoader + TypeChecker`。
+- **Canonical CLI convergence**: `n3v3 check` and the canonical HIR path in `n3v3 run` now use frontend driver results instead of command-local `ModuleLoader + TypeChecker` orchestration. / **规范 CLI 收敛**: `n3v3 check` 与 `n3v3 run` 的规范 HIR 主路径现在直接使用 frontend driver 结果，不再在命令层手工拼装 `ModuleLoader + TypeChecker`。
 - **REPL/LSP semantic consistency**: REPL `:type` and LSP hover now read frontend-owned side tables and display names, reducing semantic drift across CLI, REPL, and editor tooling. / **REPL/LSP 语义一致性**: REPL `:type` 与 LSP hover 现在直接读取 frontend 维护的 side tables 和类型展示名，减少 CLI、REPL 与编辑器工具链之间的语义漂移。
 - **Module infrastructure split**: `ModuleLoader` internals were decomposed into incremental cache, module path resolution, module graph bookkeeping, diagnostics storage, and module lowering helpers, preparing the path toward content-hash-based canonical loading. / **模块基础设施拆分**: `ModuleLoader` 内部已拆分为增量缓存、模块路径解析、模块图状态、诊断存储和模块 lowering 辅助层，为后续按稳定内容哈希收口的规范加载路径做准备。
-- **Explicit AST compatibility boundary**: AST evaluation is now surfaced through explicit compat paths, and repository-internal callers use `neve_eval::compat` instead of treating AST evaluation as a peer default API. / **显式 AST 兼容边界**: AST 求值现在通过显式 compat 路径暴露，仓库内部调用方统一改用 `neve_eval::compat`，不再把 AST 当作默认对等 API。
+- **Explicit AST compatibility boundary**: AST evaluation is now surfaced through explicit compat paths, and repository-internal callers use `n3v3_eval::compat` instead of treating AST evaluation as a peer default API. / **显式 AST 兼容边界**: AST 求值现在通过显式 compat 路径暴露，仓库内部调用方统一改用 `n3v3_eval::compat`，不再把 AST 当作默认对等 API。
 - **HIR builtin convergence**: The HIR evaluator now owns the canonical runtime path for existing higher-order `std.list` entrypoints such as `list.map` and `list.filter`, reducing residual AST/HIR runtime divergence. / **HIR builtin 收敛**: HIR evaluator 现在接管已有高阶 `std.list` 入口（如 `list.map`、`list.filter`）的规范运行时路径，进一步减少 AST/HIR 运行时分裂。
 
 ### Fixed / 修复
-- **Hidden backend fallback**: `neve run` / `neve eval` no longer silently switch to AST behavior; unsupported paths now fail clearly unless explicit compat mode is requested. / **隐藏后端回退**: `neve run` / `neve eval` 不再静默切回 AST；未覆盖路径现在会明确失败，除非用户显式请求 compat 模式。
+- **Hidden backend fallback**: `n3v3 run` / `n3v3 eval` no longer silently switch to AST behavior; unsupported paths now fail clearly unless explicit compat mode is requested. / **隐藏后端回退**: `n3v3 run` / `n3v3 eval` 不再静默切回 AST；未覆盖路径现在会明确失败，除非用户显式请求 compat 模式。
 
 ## [1.1.1] - 2026-04-07
 
@@ -409,8 +415,8 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **REPL test hygiene**: Moved REPL-only helper logic fully under test scope to keep the runtime surface cleaner. / **REPL 测试卫生**: 将 REPL 专用辅助逻辑完整收回测试作用域，减少正式运行路径上的测试残留代码。
 
 ### Fixed / 修复
-- **`neve doc` pager fallback**: Fixed terminal documentation viewing when `PAGER` points to commands like `cat`, by avoiding invalid pager flags and checking pager exit status before suppressing direct output fallback. / **`neve doc` 分页器回退**: 修复 `PAGER=cat` 等环境下的终端文档查看失败问题，不再向非 `less` 分页器传递无效参数，并会在分页器失败时正确回退到直接输出。
-- **Release metadata consistency**: Updated CLI/release wording to match Neve's current positioning as a standalone language for system configuration and structured shell automation. / **发布元数据一致性**: 更新 CLI 与 release 文案，使其与 Neve 目前“面向系统配置与结构化 shell 自动化的独立语言”定位保持一致。
+- **`n3v3 doc` pager fallback**: Fixed terminal documentation viewing when `PAGER` points to commands like `cat`, by avoiding invalid pager flags and checking pager exit status before suppressing direct output fallback. / **`n3v3 doc` 分页器回退**: 修复 `PAGER=cat` 等环境下的终端文档查看失败问题，不再向非 `less` 分页器传递无效参数，并会在分页器失败时正确回退到直接输出。
+- **Release metadata consistency**: Updated CLI/release wording to match n3v3's current positioning as a standalone language for system configuration and structured shell automation. / **发布元数据一致性**: 更新 CLI 与 release 文案，使其与 n3v3 目前“面向系统配置与结构化 shell 自动化的独立语言”定位保持一致。
 
 ## [1.1.0] - 2026-04-07
 
@@ -420,7 +426,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **System stdlib primitives**: Added structured `std.io` process execution, configurable execution, file writes/appends, and recursive directory lifecycle helpers. / **系统标准库原语**: 新增结构化 `std.io` 进程执行、可配置执行、文件写入/追加，以及递归目录生命周期辅助函数。
 
 ### Improved / 改进
-- **Canonical HIR path coverage**: `neve eval`/`neve run` now prefer frontend/HIR across local imports and common `std` item/module/glob imports, reducing AST fallback on the main CLI paths. / **规范 HIR 主路径覆盖**: `neve eval`/`neve run` 现在在本地导入和常见 `std` item/module/glob 导入场景下优先走 frontend/HIR，减少主 CLI 路径上的 AST 回退。
+- **Canonical HIR path coverage**: `n3v3 eval`/`n3v3 run` now prefer frontend/HIR across local imports and common `std` item/module/glob imports, reducing AST fallback on the main CLI paths. / **规范 HIR 主路径覆盖**: `n3v3 eval`/`n3v3 run` 现在在本地导入和常见 `std` item/module/glob 导入场景下优先走 frontend/HIR，减少主 CLI 路径上的 AST 回退。
 - **Semantic convergence**: HIR lowering/runtime now preserve `lazy`, `?`, `??`, method calls, `or`/binding/list-rest patterns, block `let` patterns, and more associated-type use sites with better AST/HIR parity. / **语义收敛**: HIR lowering/runtime 现已更完整保留 `lazy`、`?`、`??`、方法调用、`or`/绑定/list-rest 模式、块级 `let` 模式，以及更多关联类型 use-site，AST/HIR 一致性更好。
 - **Type system coverage**: Expanded typed stdlib coverage for `list`/`string`/`option`/`result`/`path`/`io`/`fetch`/`map`/`set`, trait impl checking, builtin `Option/Result` pattern analysis, and REPL/tooling type queries. / **类型系统覆盖**: 扩展了 `list`/`string`/`option`/`result`/`path`/`io`/`fetch`/`map`/`set` 的类型化覆盖，并强化了 trait impl 检查、内置 `Option/Result` 模式分析，以及 REPL/工具链类型查询。
 - **Tooling readability**: Diagnostics and type displays now render imported named types readably across `check`/`run`/REPL, instead of leaking raw `Type#...` placeholders. / **工具链可读性**: `check`/`run`/REPL 的诊断和类型展示现在能把导入类型显示成人类可读名称，不再泄漏 `Type#...` 占位符。
@@ -450,11 +456,11 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added / 新增
 - **Arbitrary-precision integers**: `Int` is now BigInt across lexer/parser/eval/typeck/stdlib. / `Int` 升级为任意精度 BigInt，覆盖词法/解析/求值/类型检查/标准库。
 - **Logo assets**: SVG variants (glow/transparent), PNG sizes, and ICO exports. / Logo 资源包含 SVG（含光晕/透明）、多尺寸 PNG 与 ICO。
-- **Documentation topics**: diagnostics, architecture, onboarding now available via `neve doc`. / `neve doc` 新增 diagnostics、architecture、onboarding 等主题。
+- **Documentation topics**: diagnostics, architecture, onboarding now available via `n3v3 doc`. / `n3v3 doc` 新增 diagnostics、architecture、onboarding 等主题。
 
 ### Improved / 改进
 - **Docs overhaul**: All docs unified as bilingual (EN/中文) with consistent headers. / 文档整体统一为中英双语结构并统一视觉头部。
-- **`neve doc` UX**: smarter topic matching, alias support, cleaner terminal rendering. / `neve doc` 支持别名与前缀匹配，渲染更干净。
+- **`n3v3 doc` UX**: smarter topic matching, alias support, cleaner terminal rendering. / `n3v3 doc` 支持别名与前缀匹配，渲染更干净。
 - **Runtime safety**: conversions and indexing guard against overflow and negative indices. / 运行时更安全，转换与索引处理更稳健。
 - **Release pipeline**: cross-platform artifacts produced by GitHub Actions. / Release 流水线使用 GitHub Actions 跨平台构建。
 
@@ -465,8 +471,8 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.7.0] - 2026-01-08
 
 ### Added / 新增
-- **Frontend pipeline**: New `neve-frontend` crate for parse → HIR → typecheck analysis / **前端流水线**: 新增 `neve-frontend`，统一 parse → HIR → typecheck 分析
-- **Docs**: Onboarding + diagnostics references, new `neve doc` topics / **文档**: 新增入门文档与诊断手册，并扩展 `neve doc` 主题
+- **Frontend pipeline**: New `n3v3-frontend` crate for parse → HIR → typecheck analysis / **前端流水线**: 新增 `n3v3-frontend`，统一 parse → HIR → typecheck 分析
+- **Docs**: Onboarding + diagnostics references, new `n3v3 doc` topics / **文档**: 新增入门文档与诊断手册，并扩展 `n3v3 doc` 主题
 - **Tests**: Frontend diagnostics, module loader, formatter, and LSP symbol coverage / **测试**: 增加 frontend 诊断、模块加载、格式化器、LSP 符号覆盖
 - **Stdlib imports**: `std.*` module overrides for AST evaluation / **标准库导入**: AST 求值支持 `std.*` 模块覆盖
 
@@ -552,7 +558,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.4.1] - 2025-12-29
 
 ### Added / 新增
-- **Terminal Markdown rendering**: `neve doc` now renders with colors and styling / **终端 Markdown 渲染**: `neve doc` 现在有颜色和样式了
+- **Terminal Markdown rendering**: `n3v3 doc` now renders with colors and styling / **终端 Markdown 渲染**: `n3v3 doc` 现在有颜色和样式了
 - **Windows one-line installer**: `irm .../install.ps1 | iex` / **Windows 一键安装**: `irm .../install.ps1 | iex`
 
 ### Improved / 改进
@@ -562,10 +568,10 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.4.0] - 2025-12-29
 
 ### Added / 新增
-- **`neve doc` command**: Man-like documentation viewer with embedded docs / **`neve doc` 命令**: 类似 man 的文档查看器，文档直接嵌入二进制
-- View any topic: `neve doc quickstart`, `neve doc api`, etc. / 查看任意主题: `neve doc quickstart`、`neve doc api` 等
+- **`n3v3 doc` command**: Man-like documentation viewer with embedded docs / **`n3v3 doc` 命令**: 类似 man 的文档查看器，文档直接嵌入二进制
+- View any topic: `n3v3 doc quickstart`, `n3v3 doc api`, etc. / 查看任意主题: `n3v3 doc quickstart`、`n3v3 doc api` 等
 - Uses pager (less/more) for comfortable reading / 自动用分页器 (less/more) 显示，看着舒服
-- Available topics: quickstart, tutorial, spec, api, philosophy, install, changelog / 支持主题: quickstart、tutorial、spec、api、philosophy、install、changelog
+- **v0.4.0 historical**: Available `n3v3 doc` topics were quickstart, tutorial, spec, api, philosophy, install, and changelog; the current topic list is maintained by `n3v3 doc --help`.
 
 ### Improved / 改进
 - **README redesign**: Cleaner layout and improved structure / **README 重新设计**: 更简洁的布局与结构优化

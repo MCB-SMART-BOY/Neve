@@ -9,6 +9,6 @@ pub fn create_test_module(dir: &Path, path: &[&str], content: &str) {
             fs::create_dir_all(&full_path).unwrap();
         }
     }
-    full_path.set_extension("neve");
+    full_path.set_extension("n3v3");
     fs::write(full_path, content).unwrap();
 }

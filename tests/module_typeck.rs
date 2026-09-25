@@ -1,8 +1,8 @@
 //! Integration tests for type checking across modules.
 
-use neve_frontend::rewrite_diagnostics_with_module_set;
-use neve_hir::ModuleLoader;
-use neve_typeck::TypeChecker;
+use n3v3_frontend::rewrite_diagnostics_with_module_set;
+use n3v3_hir::ModuleLoader;
+use n3v3_typeck::TypeChecker;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
@@ -15,7 +15,7 @@ fn write_module(dir: &Path, path: &[&str], content: &str) {
             fs::create_dir_all(&full_path).unwrap();
         }
     }
-    full_path.set_extension("neve");
+    full_path.set_extension("n3v3");
     fs::write(full_path, content).unwrap();
 }
 

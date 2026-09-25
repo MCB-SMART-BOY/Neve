@@ -1,0 +1,14 @@
+use std.list = list
+
+complete(t: _) = { title = t.title, done = true }
+
+is_done(t: _) = t.done
+
+summarize(tasks: _) = {
+  let done_count = len(list.filter(is_done, tasks));
+  "Tasks: " ++ toString(done_count) ++ "/" ++ toString(len(tasks)) ++ " done"
+}
+
+tasks = [{ title = "Learn n3v3", done = true }, { title = "Build project", done = false }]
+
+r = summarize(tasks)

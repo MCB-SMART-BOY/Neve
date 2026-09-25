@@ -1,9 +1,9 @@
-//! Integration tests for neve-fetch crate.
+//! Integration tests for n3v3-fetch crate.
 
-use neve_derive::Hash;
-use neve_fetch::Source;
-use neve_fetch::archive::ArchiveFormat;
-use neve_fetch::verify::{hash_dir, verify_content, verify_file};
+use n3v3_derive::Hash;
+use n3v3_fetch::Source;
+use n3v3_fetch::archive::ArchiveFormat;
+use n3v3_fetch::verify::{hash_dir, verify_content, verify_file};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -85,7 +85,7 @@ fn test_verify_content() {
 
 #[test]
 fn test_verify_file() {
-    let dir = env::temp_dir().join(format!("neve-verify-test-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-verify-test-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
 
     let file_path = dir.join("test.txt");
@@ -101,7 +101,7 @@ fn test_verify_file() {
 
 #[test]
 fn test_hash_dir() {
-    let dir = env::temp_dir().join(format!("neve-hash-dir-test-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("n3v3-hash-dir-test-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
 
     fs::write(dir.join("a.txt"), b"aaa").unwrap();
@@ -127,7 +127,7 @@ fn test_hash_dir() {
 #[test]
 #[ignore]
 fn test_fetch_url() {
-    use neve_fetch::url::fetch_url;
+    use n3v3_fetch::url::fetch_url;
     let content = fetch_url("https://httpbin.org/bytes/100").unwrap();
     assert_eq!(content.len(), 100);
 }
@@ -135,7 +135,7 @@ fn test_fetch_url() {
 #[test]
 #[ignore]
 fn test_clone_repo() {
-    use neve_fetch::git::clone_repo;
+    use n3v3_fetch::git::clone_repo;
     use tempfile::TempDir;
 
     let temp_dir = TempDir::new().unwrap();

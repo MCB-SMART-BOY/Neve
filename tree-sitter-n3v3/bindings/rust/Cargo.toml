@@ -1,0 +1,15 @@
+[package]
+name = "tree-sitter-n3v3"
+description = "n3v3 grammar for tree-sitter"
+version = "1.0.0"
+edition = "2024"
+license = "MPL-2.0"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+tree-sitter = "0.22"
+
+[build-dependencies]
+cc = "1"
