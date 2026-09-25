@@ -122,7 +122,7 @@ fn create_skin() -> MadSkin {
 pub fn list() -> Result<(), String> {
     let skin = create_skin();
     let mut content = String::from(
-        "# N3V3 DOCUMENTATION\n\n## Usage\n\n```\nneve doc <topic>\nneve doc --list\n```\n\n## Topics\n\n```\n",
+        "# N3V3 DOCUMENTATION\n\n## Usage\n\n```\nn3v3 doc <topic>\nn3v3 doc --list\n```\n\n## Topics\n\n```\n",
     );
     for (name, _, desc) in TOPICS {
         content.push_str(&format!("  {:14} - {}\n", name, desc));
