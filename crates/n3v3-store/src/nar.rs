@@ -21,12 +21,46 @@
 use n3v3_derive::Hash;
 use std::fs;
 use std::io::{self, Read, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use thiserror::Error;
 
 /// NAR magic string. / NAR 魔术字符串。
 const NAR_MAGIC: &str = "nix-archive-1";
+
+/// Mode bits NAR restores for executable and plain files.
+/// NAR 为可执行文件与普通文件恢复的权限位。
+const EXECUTABLE_MODE: u32 = 0o755;
+const REGULAR_MODE: u32 = 0o644;
+
+/// Whether the entry carries NAR's `executable` flag.
+/// 条目是否带 NAR 的 `executable` 标记。
+#[cfg(unix)]
+fn is_executable(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+/// Non-Unix platforms have no POSIX mode bits, so the flag stays unset.
+/// 非 Unix 平台没有 POSIX 权限位，因此不设置该标记。
+#[cfg(not(unix))]
+fn is_executable(_metadata: &fs::Metadata) -> bool {
+    false
+}
+
+/// Restore POSIX mode bits; a no-op where the platform has none.
+/// 恢复 POSIX 权限位；平台没有权限位时为空操作。
+fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode);
+        Ok(())
+    }
+}
 
 /// Errors during NAR operations.
 /// NAR 操作期间的错误。
@@ -92,7 +126,7 @@ impl<W: Write> NarWriter<W> {
 
             // Check if executable
             // 检查是否可执行
-            if metadata.permissions().mode() & 0o111 != 0 {
+            if is_executable(&metadata) {
                 self.write_str("executable")?;
                 self.write_str("")?;
             }
@@ -257,13 +291,12 @@ impl<R: Read> NarReader<R> {
                     // Set permissions after writing file
                     // 写入文件后设置权限
                     if contents_written {
-                        if executable {
-                            let perms = fs::Permissions::from_mode(0o755);
-                            fs::set_permissions(dest, perms)?;
+                        let mode = if executable {
+                            EXECUTABLE_MODE
                         } else {
-                            let perms = fs::Permissions::from_mode(0o644);
-                            fs::set_permissions(dest, perms)?;
-                        }
+                            REGULAR_MODE
+                        };
+                        set_mode(dest, mode)?;
                     }
                     return Ok(());
                 }
@@ -486,6 +519,7 @@ mod tests {
         assert_eq!(contents, "Hello, NAR!");
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_nar_executable_file() {
         let temp = TempDir::new().unwrap();
@@ -493,8 +527,7 @@ mod tests {
         fs::write(&file_path, b"#!/bin/sh\necho hello").unwrap();
 
         // Make executable
-        let perms = fs::Permissions::from_mode(0o755);
-        fs::set_permissions(&file_path, perms).unwrap();
+        set_mode(&file_path, EXECUTABLE_MODE).unwrap();
 
         // Create and extract NAR
         let nar_data = create_nar(&file_path).unwrap();
@@ -505,7 +538,7 @@ mod tests {
 
         // Verify executable bit
         let metadata = fs::metadata(&extract_path).unwrap();
-        assert!(metadata.permissions().mode() & 0o111 != 0);
+        assert!(is_executable(&metadata));
     }
 
     #[test]
@@ -543,6 +576,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_nar_symlink() {
         let temp = TempDir::new().unwrap();
