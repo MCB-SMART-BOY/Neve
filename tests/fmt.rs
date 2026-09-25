@@ -117,6 +117,16 @@ fn test_format_error_diagnostics() {
     assert!(!diags.unwrap().is_empty());
 }
 
+#[test]
+fn test_format_preserves_comment_text() {
+    let source = "-- first\nlet x = 1; -- inline\n-- -- block\n-- --\n";
+    let formatted = format(source).expect("format with comments should succeed");
+
+    assert!(formatted.contains("-- first"));
+    assert!(formatted.contains("-- inline"));
+    assert!(formatted.contains("-- -- block\n-- --"));
+}
+
 // Idempotence tests — formatting already-formatted code must be stable
 
 fn assert_idempotent(source: &str) {

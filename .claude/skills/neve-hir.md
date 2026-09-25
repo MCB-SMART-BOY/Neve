@@ -75,6 +75,21 @@ Resolution order for `use`:
 5. Relative path → resolved from current file's directory
 6. Flake input → resolved from `flake.neve`
 
+## Enum variant registration
+
+Enum type names and variant constructors share one global namespace, so the
+resolver refuses ambiguous registrations instead of overwriting:
+
+| Declaration | Diagnostic |
+|-------------|-----------|
+| `enum Choice { Yes(Int), Yes(Int) }` | `duplicate enum variant \`Yes\`` |
+| `enum Only { Only(Int) }` | `enum variant \`Only\` conflicts with the enum name \`Only\`` |
+| Variant name already bound by another global | `duplicate enum variant \`…\`` |
+
+Variant spans are keyed by `(enum DefId, span)` in `variant_ids`; variants that
+collide are reported and skipped rather than silently shadowing an existing
+global.
+
 ## Key Types
 
 ```rust
@@ -149,3 +164,19 @@ pub enum HIRExpr {
 - Tooling consumers use canonical spans for destructured/or-pattern bindings
   and constructor references; synthetic item mappings remain an explicit
   boundary for future convergence.
+
+## Unsupported-node policy
+
+Unsupported future AST forms are not lowered to a valid-looking HIR node.
+Expression and statement fallbacks become `ExprKind::Error` /
+`StmtKind::Expr` error nodes, unsupported patterns become
+`PatternKind::Error`, and unsupported import prefixes/items are rejected at
+the frontend boundary. Type checking reports preserved HIR errors before
+evaluation.
+
+- Resolver stores boundary diagnostics in `Module.diagnostics`; `TypeChecker`
+  forwards them before semantic passes, so unsupported declarations, enum
+  variants, and type forms cannot disappear silently.
+
+- Top-level patterns with no bindings are accepted only for `_`; known
+  refutable forms produce an AST-to-HIR boundary diagnostic.

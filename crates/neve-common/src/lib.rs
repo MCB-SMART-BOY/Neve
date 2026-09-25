@@ -11,6 +11,7 @@
 mod int;
 mod interner;
 mod span;
+mod trivia;
 
 pub use int::{
     Int, int_abs, int_from_f64, int_is_negative, int_is_zero, int_to_f64, int_to_i64, int_to_u32,
@@ -18,6 +19,7 @@ pub use int::{
 };
 pub use interner::{Interner, Symbol};
 pub use span::{BytePos, Span};
+pub use trivia::{Comment, CommentKind};
 
 /// Kill a process by PID using the platform-appropriate mechanism.
 /// This is the SINGLE SOURCE OF TRUTH for process termination across all crates.

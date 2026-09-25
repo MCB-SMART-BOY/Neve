@@ -1,12 +1,12 @@
 export const meta = {
   name: 'full-test',
-  description: 'Run full test suite: unit + integration + E2E + clippy + fmt + differential',
+  description: 'Run full test suite: unit + integration + E2E + clippy + fmt + compatibility audit',
   phases: [
     { title: 'Unit + Integration', detail: 'cargo test --workspace' },
     { title: 'E2E', detail: 'cargo test --test end_to_end -- --nocapture' },
     { title: 'Clippy', detail: 'cargo clippy --workspace --all-targets -- -D warnings' },
     { title: 'Format', detail: 'cargo fmt --all -- --check' },
-    { title: 'Differential', detail: 'AST vs HIR parity tests' },
+    { title: 'Compatibility audit', detail: 'Count ignored/deprecated tests and code paths' },
   ],
 }
 
@@ -34,11 +34,11 @@ const fmtResult = await agent('Run `cargo fmt --all -- --check` and report if an
 })
 log(fmtResult || 'Format: clean')
 
-phase('Differential')
+phase('Compatibility audit')
 const diffResult = await agent('Count the number of `#[ignore]` tests and `#[deprecated]` usages across `tests/` and `crates/`. Report findings.', {
-  label: 'differential'
+  label: 'compatibility-audit'
 })
-log(diffResult || 'Differential: clean')
+log(diffResult || 'Compatibility audit: no output captured')
 
 return {
   unit: unitResult,

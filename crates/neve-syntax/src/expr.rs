@@ -21,6 +21,7 @@ impl Expr {
 /// Expression kind.
 /// 表达式类型。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ExprKind {
     /// Integer literal / 整数字面量
     Int(Int),
@@ -111,7 +112,7 @@ pub enum ExprKind {
         default: Box<Expr>,
     },
 
-    /// If expression `if cond then a else b` / 条件表达式
+    /// If expression `if cond -> a else b`; legacy `then` remains accepted.
     If {
         condition: Box<Expr>,
         then_branch: Box<Expr>,
@@ -138,7 +139,7 @@ pub enum ExprKind {
         body: Box<Expr>,
     },
 
-    /// Lazy expression `lazy expr` / 惰性表达式
+    /// Lazy expression `~expr`; legacy `lazy expr` remains accepted.
     Lazy(Box<Expr>),
 
     /// Dotted path expression `std.list.map` / 点路径表达式
@@ -197,6 +198,7 @@ pub struct Stmt {
 /// Statement kind.
 /// 语句类型。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum StmtKind {
     /// Let binding `let x = 1;` / let 绑定
     Let {
@@ -211,6 +213,7 @@ pub enum StmtKind {
 /// Binary operators.
 /// 二元运算符。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BinOp {
     // Arithmetic 算术运算
     Add, // +
@@ -241,6 +244,7 @@ pub enum BinOp {
 /// Unary operators.
 /// 一元运算符。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum UnaryOp {
     Neg, // - 取负
     Not, // ! 取反
@@ -249,6 +253,7 @@ pub enum UnaryOp {
 /// A part of an interpolated string.
 /// 插值字符串的一部分。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum StringPart {
     /// Literal string part / 字面字符串部分
     Literal(String),

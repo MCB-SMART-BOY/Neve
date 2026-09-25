@@ -133,18 +133,25 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    /// Returns true if this token is a keyword.
-    /// v4.0 canonical: 12 keywords.
+    /// Returns true for all lexer-reserved keyword tokens.
+    ///
+    /// The v4.0 canonical surface has 12 keywords. Legacy declaration
+    /// keywords and module path prefixes remain reserved token kinds so the
+    /// parser can recognize their compatibility forms.
     pub fn is_keyword(&self) -> bool {
         matches!(
             self,
             TokenKind::Let
                 | TokenKind::Fn
                 | TokenKind::Type
+                | TokenKind::Struct
+                | TokenKind::Enum
                 | TokenKind::Trait
                 | TokenKind::Impl
                 | TokenKind::Use
                 | TokenKind::SelfLower
+                | TokenKind::Super
+                | TokenKind::Crate
                 | TokenKind::If
                 | TokenKind::Else
                 | TokenKind::Match
@@ -154,6 +161,7 @@ impl TokenKind {
     }
 
     /// Returns the keyword for an identifier, if any.
+    /// 通过标识符返回对应关键字（如果有）。
     pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         match s {
             "let" => Some(TokenKind::Let),

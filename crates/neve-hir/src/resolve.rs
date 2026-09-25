@@ -9,6 +9,7 @@ use crate::{
     builtin_constructor_id, builtin_type_id,
 };
 use neve_common::Span;
+use neve_diagnostic::{Diagnostic, DiagnosticKind};
 use neve_syntax::{self as ast, SourceFile};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -246,6 +247,7 @@ pub fn resolve_std_builtin_import(import: &ast::ImportDef) -> Option<StdBuiltinI
                     }
                 }
             }
+            _ => return None,
         }
 
         return Some(bindings);
@@ -271,6 +273,7 @@ pub fn resolve_std_builtin_import(import: &ast::ImportDef) -> Option<StdBuiltinI
             }
         }
         ast::ImportItems::Module => {}
+        _ => return None,
     }
 
     Some(bindings)
@@ -300,6 +303,7 @@ fn ast_is_std_root_builtin_import(import: &ast::ImportDef) -> bool {
             .all(|item| std_builtin_root_modules().contains(&item.name.as_str())),
         ast::ImportItems::All => true,
         ast::ImportItems::Module => false,
+        _ => false,
     }
 }
 
@@ -331,6 +335,9 @@ pub struct Resolver {
     /// Preallocated definition IDs for impl items keyed by source span.
     /// 按源码 span 预分配的 impl 项定义 ID。
     impl_item_ids: HashMap<Span, DefId>,
+    /// Definition IDs for enum variants keyed by their owning enum and span.
+    /// 按所属枚举和源码 span 存储枚举变体定义 ID。
+    variant_ids: HashMap<(DefId, Span), DefId>,
     /// Imported std builtin items keyed by in-scope name.
     /// 作用域内名称到 std builtin 全名的映射。
     imported_builtin_items: HashMap<String, String>,
@@ -342,6 +349,9 @@ pub struct Resolver {
     /// Current module path (for relative imports). / 当前模块路径（用于相对导入）。
     current_module_path: Vec<String>,
     /// Module loader for resolving imports. / 用于解析导入的模块加载器。
+    /// Diagnostics preserved while lowering unsupported AST forms.
+    /// 降级不支持 AST 形式时保留的诊断。
+    diagnostics: Vec<Diagnostic>,
     module_loader: Option<ModuleLoader>,
 }
 
@@ -360,10 +370,12 @@ impl Resolver {
             inherited_globals: HashMap::new(),
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
+            variant_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
             imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
+            diagnostics: Vec::new(),
             module_loader: None,
         }
     }
@@ -382,10 +394,12 @@ impl Resolver {
             inherited_globals: HashMap::new(),
             imported: HashMap::new(),
             impl_item_ids: HashMap::new(),
+            variant_ids: HashMap::new(),
             imported_builtin_items: HashMap::new(),
             imported_builtin_modules: HashMap::new(),
             imported_modules: HashSet::new(),
             current_module_path: Vec::new(),
+            diagnostics: Vec::new(),
             module_loader: Some(ModuleLoader::new(root_dir)),
         }
     }
@@ -394,6 +408,11 @@ impl Resolver {
     /// 设置模块加载器。
     pub fn set_module_loader(&mut self, loader: ModuleLoader) {
         self.module_loader = Some(loader);
+    }
+
+    fn report_unsupported(&mut self, span: Span, message: impl Into<String>) {
+        self.diagnostics
+            .push(Diagnostic::error(DiagnosticKind::Parser, span, message));
     }
 
     /// Get the module loader.
@@ -536,6 +555,7 @@ impl Resolver {
             items,
             imports,
             exports,
+            diagnostics: std::mem::take(&mut self.diagnostics),
         }
     }
 
@@ -597,7 +617,9 @@ impl Resolver {
         for item in &file.items {
             match &item.kind {
                 ast::ItemKind::Let(def) if def.visibility == ast::Visibility::Public => {
-                    exports.extend(Self::pattern_names(&def.pattern));
+                    if let Ok(names) = Self::pattern_names(&def.pattern) {
+                        exports.extend(names);
+                    }
                 }
                 ast::ItemKind::Fn(def) if def.visibility == ast::Visibility::Public => {
                     exports.push(def.name.name.clone());
@@ -648,6 +670,10 @@ impl Resolver {
                         ast::PathPrefix::Self_ => ImportPathPrefix::Self_,
                         ast::PathPrefix::Super => ImportPathPrefix::Super,
                         ast::PathPrefix::Crate => ImportPathPrefix::Crate,
+                        _ => {
+                            self.report_unsupported(item.span, "unsupported import path prefix");
+                            return None;
+                        }
                     };
 
                     let path: Vec<String> =
@@ -659,6 +685,10 @@ impl Resolver {
                             ImportKind::Items(items.iter().map(|i| i.name.clone()).collect())
                         }
                         ast::ImportItems::All => ImportKind::All,
+                        _ => {
+                            self.report_unsupported(item.span, "unsupported import items");
+                            return None;
+                        }
                     };
 
                     let alias = import_def.alias.as_ref().map(|a| a.name.clone());
@@ -791,8 +821,8 @@ impl Resolver {
         }
     }
 
-    /// Register a namespace root introduced by `import foo` or `import foo as bar`.
-    /// 注册由 `import foo` 或 `import foo as bar` 引入的命名空间根。
+    /// Register a namespace root introduced by `use foo` or legacy `import foo as bar`.
+    /// 注册由 `use foo` 或 legacy `import foo as bar` 引入的命名空间根。
     pub fn register_module_import_alias(&mut self, alias: String) {
         self.imported_modules.insert(alias);
     }
@@ -817,7 +847,14 @@ impl Resolver {
     fn collect_item(&mut self, item: &ast::Item) {
         match &item.kind {
             ast::ItemKind::Let(def) => {
-                for name in Self::pattern_names(&def.pattern) {
+                let names = match Self::pattern_names(&def.pattern) {
+                    Ok(names) => names,
+                    Err(()) => {
+                        self.report_unsupported(item.span, "unsupported top-level pattern");
+                        return;
+                    }
+                };
+                for name in names {
                     let id = self
                         .globals
                         .get(&name)
@@ -853,16 +890,53 @@ impl Resolver {
                     .or_else(|| self.inherited_globals.get(&def.name.name).copied())
                     .unwrap_or_else(|| self.fresh_def_id());
                 self.globals.insert(def.name.name.clone(), id);
-                // Also register variants
-                // 同时注册变体
+                let mut variant_names = HashSet::new();
                 for variant in &def.variants {
+                    let key = (id, variant.span);
                     let vid = self
-                        .globals
-                        .get(&variant.name.name)
+                        .variant_ids
+                        .get(&key)
                         .copied()
                         .or_else(|| self.inherited_globals.get(&variant.name.name).copied())
                         .unwrap_or_else(|| self.fresh_def_id());
-                    self.globals.insert(variant.name.name.clone(), vid);
+                    self.variant_ids.insert(key, vid);
+
+                    if !variant_names.insert(variant.name.name.clone()) {
+                        self.report_unsupported(
+                            variant.span,
+                            format!("duplicate enum variant `{}`", variant.name.name),
+                        );
+                        continue;
+                    }
+
+                    // Enum type names and variant constructors share one namespace,
+                    // so `enum Only { Only(Int) }` cannot be referenced by an
+                    // unqualified constructor name. Report the actual conflict
+                    // instead of claiming the variant is duplicated.
+                    // 枚举类型名与变体构造函数共用一个命名空间，因此
+                    // `enum Only { Only(Int) }` 无法用非限定名引用构造函数；
+                    // 这里报告真实冲突，而不是谎称变体重复。
+                    if variant.name.name == def.name.name {
+                        self.report_unsupported(
+                            variant.span,
+                            format!(
+                                "enum variant `{}` conflicts with the enum name `{}`",
+                                variant.name.name, def.name.name
+                            ),
+                        );
+                        continue;
+                    }
+
+                    match self.globals.get(&variant.name.name).copied() {
+                        Some(existing) if existing != vid => self.report_unsupported(
+                            variant.span,
+                            format!("duplicate enum variant `{}`", variant.name.name),
+                        ),
+                        Some(_) => {}
+                        None => {
+                            self.globals.insert(variant.name.name.clone(), vid);
+                        }
+                    }
                 }
             }
             ast::ItemKind::TypeAlias(def) => {
@@ -898,6 +972,7 @@ impl Resolver {
             ast::ItemKind::ExprStmt(_) => {
                 // Expression statements don't define names
             }
+            _ => self.report_unsupported(item.span, "unsupported AST item kind"),
         }
     }
 
@@ -913,9 +988,20 @@ impl Resolver {
     fn is_simple_top_level_let(pattern: &ast::Pattern) -> bool {
         matches!(&pattern.kind, ast::PatternKind::Var(ident) if ident.name != "_")
     }
+    fn is_unnamed_wildcard_pattern(pattern: &ast::Pattern) -> bool {
+        match &pattern.kind {
+            ast::PatternKind::Wildcard => true,
+            ast::PatternKind::Var(ident) => ident.name == "_",
+            _ => false,
+        }
+    }
 
-    fn pattern_names(pattern: &ast::Pattern) -> Vec<String> {
-        fn visit(pattern: &ast::Pattern, names: &mut Vec<String>, seen: &mut HashSet<String>) {
+    fn pattern_names(pattern: &ast::Pattern) -> Result<Vec<String>, ()> {
+        fn visit(
+            pattern: &ast::Pattern,
+            names: &mut Vec<String>,
+            seen: &mut HashSet<String>,
+        ) -> Result<(), ()> {
             match &pattern.kind {
                 ast::PatternKind::Var(ident) => {
                     if ident.name != "_" && seen.insert(ident.name.clone()) {
@@ -926,30 +1012,30 @@ impl Resolver {
                     if name.name != "_" && seen.insert(name.name.clone()) {
                         names.push(name.name.clone());
                     }
-                    visit(pattern, names, seen);
+                    visit(pattern, names, seen)?;
                 }
                 ast::PatternKind::Tuple(patterns)
                 | ast::PatternKind::List(patterns)
                 | ast::PatternKind::Or(patterns) => {
                     for pattern in patterns {
-                        visit(pattern, names, seen);
+                        visit(pattern, names, seen)?;
                     }
                 }
                 ast::PatternKind::ListRest { init, rest, tail } => {
                     for pattern in init {
-                        visit(pattern, names, seen);
+                        visit(pattern, names, seen)?;
                     }
                     if let Some(pattern) = rest {
-                        visit(pattern, names, seen);
+                        visit(pattern, names, seen)?;
                     }
                     for pattern in tail {
-                        visit(pattern, names, seen);
+                        visit(pattern, names, seen)?;
                     }
                 }
                 ast::PatternKind::Record { fields, .. } => {
                     for field in fields {
                         if let Some(pattern) = &field.pattern {
-                            visit(pattern, names, seen);
+                            visit(pattern, names, seen)?;
                         } else if field.name.name != "_" && seen.insert(field.name.name.clone()) {
                             names.push(field.name.name.clone());
                         }
@@ -957,16 +1043,18 @@ impl Resolver {
                 }
                 ast::PatternKind::Constructor { args, .. } => {
                     for pattern in args {
-                        visit(pattern, names, seen);
+                        visit(pattern, names, seen)?;
                     }
                 }
                 ast::PatternKind::Wildcard | ast::PatternKind::Literal(_) => {}
+                _ => return Err(()),
             }
+            Ok(())
         }
 
         let mut names = Vec::new();
-        visit(pattern, &mut names, &mut HashSet::new());
-        names
+        visit(pattern, &mut names, &mut HashSet::new())?;
+        Ok(names)
     }
 
     fn std_builtin_module_prefix(path: &[String]) -> Option<String> {
@@ -1124,6 +1212,15 @@ impl Resolver {
     // === 第二遍：降级项 ===
 
     fn lower_top_level_let(&mut self, item: &ast::Item, def: &ast::LetDef) -> Vec<Item> {
+        let names = match Self::pattern_names(&def.pattern) {
+            Ok(names) => names,
+            Err(()) => return Vec::new(),
+        };
+        if names.is_empty() && !Self::is_unnamed_wildcard_pattern(&def.pattern) {
+            self.report_unsupported(item.span, "top-level pattern must bind a name or be `_`");
+            return Vec::new();
+        }
+
         let source_id = self.fresh_def_id();
         let source_body = self.lower_top_level_let_value(&def.value);
         let source_ty = def
@@ -1144,7 +1241,6 @@ impl Resolver {
             span: item.span,
         }];
 
-        let names = Self::pattern_names(&def.pattern);
         if names.is_empty() {
             return items;
         }
@@ -1244,6 +1340,7 @@ impl Resolver {
                     .map(|pattern| Self::project_pattern(pattern, target))
                     .collect(),
             ),
+            PatternKind::Error(message) => PatternKind::Error(message.clone()),
         };
         Pattern {
             kind,
@@ -1384,12 +1481,15 @@ impl Resolver {
                 let id = self.lookup_global(&def.name.name)?;
                 self.push_bound_generic_scope(&def.generics);
                 let generics = self.lower_generics(&def.generics);
-                let variants = def
+                let Some(variants) = def
                     .variants
                     .iter()
                     .map(|v| {
-                        let variant_id =
-                            self.lookup_global(&v.name.name).unwrap_or(DefId(u32::MAX));
+                        let variant_id = self
+                            .variant_ids
+                            .get(&(id, v.span))
+                            .copied()
+                            .unwrap_or(DefId(u32::MAX));
                         let (fields, record_fields) = match &v.kind {
                             ast::VariantKind::Unit => (Vec::new(), None),
                             ast::VariantKind::Tuple(types) => {
@@ -1400,20 +1500,35 @@ impl Resolver {
                                     .iter()
                                     .map(|field| self.lower_field(field))
                                     .collect();
-                                let fields =
-                                    record_fields.iter().map(|field| field.ty.clone()).collect();
+                                let fields = vec![Ty {
+                                    kind: TyKind::Record(
+                                        record_fields
+                                            .iter()
+                                            .map(|field| (field.name.clone(), field.ty.clone()))
+                                            .collect(),
+                                    ),
+                                    span: v.span,
+                                }];
                                 (fields, Some(record_fields))
                             }
+                            _ => {
+                                self.report_unsupported(v.span, "unsupported enum variant kind");
+                                return None;
+                            }
                         };
-                        VariantDef {
+                        Some(VariantDef {
                             id: variant_id,
                             name: v.name.name.clone(),
                             fields,
                             record_fields,
                             span: v.span,
-                        }
+                        })
                     })
-                    .collect();
+                    .collect::<Option<Vec<_>>>()
+                else {
+                    self.pop_generic_scope();
+                    return None;
+                };
                 self.pop_generic_scope();
 
                 Some(Item {
@@ -1515,6 +1630,7 @@ impl Resolver {
                     span: expr.span,
                 })
             }
+            _ => None,
         }
     }
 
@@ -1529,7 +1645,7 @@ impl Resolver {
 
     /// Lower generic parameters.
     /// 降级泛型参数。
-    fn lower_generics(&self, generics: &[ast::GenericParam]) -> Vec<GenericParam> {
+    fn lower_generics(&mut self, generics: &[ast::GenericParam]) -> Vec<GenericParam> {
         generics
             .iter()
             .map(|p| GenericParam {
@@ -1572,7 +1688,7 @@ impl Resolver {
             PatternKind::Record { fields, .. } => fields
                 .iter()
                 .find_map(|(_, pattern)| Self::first_pattern_binding(pattern)),
-            PatternKind::Wildcard | PatternKind::Literal(_) => None,
+            PatternKind::Wildcard | PatternKind::Literal(_) | PatternKind::Error(_) => None,
         }
     }
 
@@ -1676,7 +1792,7 @@ impl Resolver {
 
     /// Lower an associated type definition.
     /// 降级关联类型定义。
-    fn lower_assoc_type_def(&self, assoc_type: &ast::AssocTypeDef) -> AssocTypeDef {
+    fn lower_assoc_type_def(&mut self, assoc_type: &ast::AssocTypeDef) -> AssocTypeDef {
         AssocTypeDef {
             name: assoc_type.name.name.clone(),
             bounds: assoc_type
@@ -1691,7 +1807,7 @@ impl Resolver {
 
     /// Lower an associated type implementation.
     /// 降级关联类型实现。
-    fn lower_assoc_type_impl(&self, assoc_type_impl: &ast::AssocTypeImpl) -> AssocTypeImpl {
+    fn lower_assoc_type_impl(&mut self, assoc_type_impl: &ast::AssocTypeImpl) -> AssocTypeImpl {
         AssocTypeImpl {
             name: assoc_type_impl.name.name.clone(),
             ty: self.lower_type(&assoc_type_impl.ty),
@@ -1944,14 +2060,18 @@ impl Resolver {
             ast::ExprKind::Binary { op, left, right } => {
                 let left = self.lower_expr(left);
                 let right = self.lower_expr(right);
-                let op = self.lower_binop(*op);
-                ExprKind::Binary(op, Box::new(left), Box::new(right))
+                match self.lower_binop(*op) {
+                    Some(op) => ExprKind::Binary(op, Box::new(left), Box::new(right)),
+                    None => ExprKind::Error("unsupported binary operator".to_string()),
+                }
             }
 
             ast::ExprKind::Unary { op, operand } => {
                 let operand = self.lower_expr(operand);
-                let op = self.lower_unaryop(*op);
-                ExprKind::Unary(op, Box::new(operand))
+                match self.lower_unaryop(*op) {
+                    Some(op) => ExprKind::Unary(op, Box::new(operand)),
+                    None => ExprKind::Error("unsupported unary operator".to_string()),
+                }
             }
 
             ast::ExprKind::If {
@@ -2039,17 +2159,26 @@ impl Resolver {
             ast::ExprKind::Try(inner) => ExprKind::Try(Box::new(self.lower_expr(inner))),
 
             ast::ExprKind::Interpolated(parts) => {
-                let parts = parts
+                let Some(parts) = parts
                     .iter()
                     .map(|part| match part {
-                        ast::StringPart::Literal(s) => StringPart::Literal(s.clone()),
-                        ast::StringPart::Expr(e) => StringPart::Expr(self.lower_expr(e)),
+                        ast::StringPart::Literal(s) => Some(StringPart::Literal(s.clone())),
+                        ast::StringPart::Expr(e) => Some(StringPart::Expr(self.lower_expr(e))),
+                        _ => None,
                     })
-                    .collect();
+                    .collect::<Option<Vec<_>>>()
+                else {
+                    return Expr {
+                        kind: ExprKind::Error("unsupported interpolated string part".to_string()),
+                        ty: Self::unknown_ty(span),
+                        span,
+                    };
+                };
                 ExprKind::Interpolated(parts)
             }
 
             ast::ExprKind::PathLit(path) => ExprKind::Literal(Literal::Path(path.clone())),
+            _ => ExprKind::Error("unsupported AST expression kind".to_string()),
         };
 
         Expr {
@@ -2076,6 +2205,11 @@ impl Resolver {
                 let expr = self.lower_expr(e);
                 StmtKind::Expr(expr)
             }
+            _ => StmtKind::Expr(Expr {
+                kind: ExprKind::Error("unsupported AST statement kind".to_string()),
+                ty: Self::unknown_ty(span),
+                span,
+            }),
         };
 
         Stmt { kind, span }
@@ -2156,6 +2290,7 @@ impl Resolver {
                     Self::collect_pattern_bindings(pattern, bindings);
                 }
             }
+            PatternKind::Error(_) => {}
         }
     }
 
@@ -2189,6 +2324,12 @@ impl Resolver {
                     ast::LiteralPattern::String(s) => Literal::String(s.clone()),
                     ast::LiteralPattern::Char(c) => Literal::Char(*c),
                     ast::LiteralPattern::Bool(b) => Literal::Bool(*b),
+                    _ => {
+                        return Pattern {
+                            kind: PatternKind::Error("unsupported literal pattern".to_string()),
+                            span,
+                        };
+                    }
                 };
                 PatternKind::Literal(literal)
             }
@@ -2319,6 +2460,7 @@ impl Resolver {
                     self.lower_pattern_with_bindings(pattern, shared_bindings, expose_new_bindings);
                 PatternKind::Binding(id, name.name.clone(), Box::new(inner))
             }
+            _ => PatternKind::Error("unsupported AST pattern kind".to_string()),
         };
 
         Pattern { kind, span }
@@ -2329,7 +2471,7 @@ impl Resolver {
 
     /// Lower an AST type to HIR.
     /// 将 AST 类型降级为 HIR。
-    fn lower_type(&self, ty: &ast::Type) -> Ty {
+    fn lower_type(&mut self, ty: &ast::Type) -> Ty {
         let span = ty.span;
         let kind = match &ty.kind {
             ast::TypeKind::Named { path, args } => {
@@ -2402,6 +2544,10 @@ impl Resolver {
             ast::TypeKind::Unit => TyKind::Unit,
 
             ast::TypeKind::Infer => TyKind::Unknown,
+            _ => {
+                self.report_unsupported(span, "unsupported AST type kind");
+                TyKind::Unknown
+            }
         };
 
         Ty { kind, span }
@@ -2412,8 +2558,8 @@ impl Resolver {
 
     /// Lower a binary operator.
     /// 降级二元运算符。
-    fn lower_binop(&self, op: ast::BinOp) -> BinOp {
-        match op {
+    fn lower_binop(&self, op: ast::BinOp) -> Option<BinOp> {
+        Some(match op {
             ast::BinOp::Add => BinOp::Add,
             ast::BinOp::Sub => BinOp::Sub,
             ast::BinOp::Mul => BinOp::Mul,
@@ -2431,16 +2577,18 @@ impl Resolver {
             ast::BinOp::Concat => BinOp::Concat,
             ast::BinOp::Merge => BinOp::Merge,
             ast::BinOp::Pipe => BinOp::Pipe,
-        }
+            _ => return None,
+        })
     }
 
     /// Lower a unary operator.
     /// 降级一元运算符。
-    fn lower_unaryop(&self, op: ast::UnaryOp) -> UnaryOp {
-        match op {
+    fn lower_unaryop(&self, op: ast::UnaryOp) -> Option<UnaryOp> {
+        Some(match op {
             ast::UnaryOp::Neg => UnaryOp::Neg,
             ast::UnaryOp::Not => UnaryOp::Not,
-        }
+            _ => return None,
+        })
     }
 }
 

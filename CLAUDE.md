@@ -8,12 +8,11 @@ Neve is a pure functional language for system configuration, built in Rust. 17 c
 
 ## Build & Test
 
-```bash
-cargo build -p neve                     # build CLI
+cargo build -p n3v3                     # build CLI
 cargo check --workspace                 # fast validation
 cargo test --workspace                  # all tests
-cargo test --test end_to_end -- --nocapture  # 541 E2E tests
-cargo test --test parser                # 220+ parser tests
+cargo test --test end_to_end -- --nocapture  # 550 E2E tests
+cargo test --test parser                # 234 parser tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 .claude/skills/run-neve/driver.sh       # smoke-test all CLI paths
@@ -38,7 +37,7 @@ crates/neve-fmt/       formatter
 
 ## Syntax v4.0
 
-`let`/`fn`/`;` optional at top level. `use` not `import`. `|x|` not `fn(x)`. `{ }` records (no `#` prefix). `&` record merge and line comments. `type Foo = | A | B` for enums. 12 canonical keywords (+6 legacy aliases accepted by lexer).
+`let`/`fn`/`;` optional at top level. `use` not `import`. `|x|` not `fn(x)`. `{ }` records (no `#` prefix). `&` record merge and line comments. `type Foo = | A | B` for enums. 12 canonical keywords. The parser retains 10 legacy spellings for source compatibility; only `struct`, `enum`, `super`, and `crate` are emitted as dedicated lexer tokens.
 
 v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `as`), `~expr` (was `lazy`), `effect` auto-inferred, `pub` removed (all public).
 
@@ -62,4 +61,4 @@ v4.0 simplifications: `if cond -> a else b` (was `then`), `use p = alias` (was `
 
 ## Current Status
 
-v4.0.4. 541 E2E tests (all pass). 21 LSP methods. 14 Stream<T> APIs. 55 error codes. 12 canonical keywords. Audit grade B+ → A- (62/62 fixed). All Phases complete. All CI green. Published on crates.io as `n3v3` (`cargo install n3v3`).
+v5.0.0. 550 E2E tests (all pass). 21 LSP methods. 14 Stream<T> APIs. 55 error codes. 12 canonical keywords. Public AST enums are `#[non_exhaustive]`; AST/HIR unsupported-node handling is explicit. Audit grade B+ → A- (62/62 fixed). All phases complete. Published on crates.io as `n3v3` (`cargo install n3v3`).

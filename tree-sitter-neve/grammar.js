@@ -7,6 +7,21 @@ module.exports = grammar({
     /\s/,
     $.comment,
   ],
+  conflicts: $ => [
+    [$.literal_pattern, $.literal],
+    [$.constructor_pattern, $.expr],
+    [$.tuple_pattern, $.tuple],
+    [$.block, $.record],
+    [$.record_pattern, $.block, $.record],
+    [$.record_pattern_field, $.path],
+    [$.expr_stmt, $.block],
+    [$.list_pattern, $.list],
+    [$.fn_type, $.tuple_type],
+    [$.method_call, $.field_access],
+    [$.type_decl, $.record_type],
+    [$.field_def, $.record_type],
+  ],
+
 
   rules: {
     source_file: $ => repeat(choice(

@@ -21,6 +21,7 @@ impl Pattern {
 /// Pattern kind.
 /// 模式类型。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum PatternKind {
     /// Wildcard `_` / 通配符
     Wildcard,
@@ -44,7 +45,7 @@ pub enum PatternKind {
         tail: Vec<Pattern>,
     },
 
-    /// Record pattern `#{ x, y = z }` / 记录模式
+    /// Record pattern `{ x, y = z }`; legacy `#{ ... }` remains accepted.
     Record {
         fields: Vec<RecordPatternField>,
         rest: bool,
@@ -66,6 +67,7 @@ pub enum PatternKind {
 /// A literal in a pattern.
 /// 模式中的字面量。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum LiteralPattern {
     Int(Int),
     Float(f64),

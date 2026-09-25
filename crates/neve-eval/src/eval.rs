@@ -41,7 +41,7 @@ impl<'a> EvaluableModuleRef<'a> {
 
 /// Evaluation errors.
 /// 求值错误。
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum EvalError {
     /// Unbound variable error / 未绑定变量错误
     #[error("unbound variable")]
@@ -200,6 +200,11 @@ pub struct Evaluator {
     /// 调用方注入的额外内置绑定。
     extra_builtins: HashMap<String, Value>,
     defer_stack: Vec<Value>,
+    /// Deferred actions of frames already left behind by a tail-call chain, outermost first.
+    /// They run when the chain finishes so a callee's cleanup precedes its caller's.
+    /// 已被尾调用链抛在身后的各帧延迟动作（最外层在前）；链结束时执行，保证被调用者的
+    /// 清理先于调用者。
+    pending_frame_defers: Vec<Vec<Value>>,
     /// Signal handlers registered via io.onSignal. Keyed by signal name ("INT", "TERM", etc.).
     /// 通过 io.onSignal 注册的信号处理程序。按信号名称（"INT"、"TERM" 等）索引。
     signal_handlers: HashMap<String, Value>,
@@ -216,6 +221,13 @@ pub struct Evaluator {
     /// so the DepthGuard can decrement without conflicting with `&self` borrows.
     /// 当前递归深度（仅非尾调用）。使用 Cell 实现内部可变性。
     recursion_depth: std::cell::Cell<u32>,
+    /// Stack address captured when the evaluator was created, used to bound
+    /// native stack consumption during evaluation.
+    /// 求值器创建时记录的栈地址，用于限制求值期间的原生栈消耗。
+    eval_stack_base: usize,
+    /// Native stack bytes available to evaluation frames on the current thread.
+    /// 当前线程可供求值帧使用的原生栈字节数。
+    eval_stack_budget: usize,
 }
 
 /// Default limits for streaming I/O safety.
@@ -226,6 +238,73 @@ const DEFAULT_MAX_INTERMEDIATE_BUFFER: usize = 50 * 1024 * 1024; // 50 MB
 /// Maximum recursion depth for non-tail calls (prevents stack overflow).
 /// 非尾调用的最大递归深度（防止栈溢出）。
 const MAX_RECURSION_DEPTH: u32 = 10_000;
+
+/// Native stack budget for evaluation frames before recursion is refused.
+/// 求值帧可用的原生栈预算，超出后拒绝继续递归。
+///
+/// A depth counter alone cannot protect the process: one interpreter frame costs
+/// several kilobytes, so the native stack is exhausted long before
+/// `MAX_RECURSION_DEPTH` levels are reached - measured stack overflow happens
+/// around 1_000 levels. The evaluator therefore measures how much stack the
+/// current thread actually has and refuses to recurse further once the budget is
+/// spent, turning a process abort into a diagnosable error.
+/// 仅靠深度计数无法保护进程：单个解释器帧占用数 KB，原生栈远早于
+/// `MAX_RECURSION_DEPTH` 层就耗尽（实测约 1_000 层溢出）。因此求值器测量当前
+/// 线程实际可用的栈空间，预算耗尽即拒绝继续递归，把进程中止变成可诊断的错误。
+///
+/// Stack held back for the rest of the process below the evaluation frames.
+/// 为求值帧之外的进程代码保留的原生栈字节数。
+const EVAL_STACK_RESERVE_BYTES: usize = 512 * 1024;
+
+/// Stack budget used when the thread stack size cannot be detected.
+/// 无法探测线程栈大小时使用的栈预算。
+const FALLBACK_EVAL_STACK_BYTES: usize = 512 * 1024;
+
+/// Address of the current stack frame.
+/// 当前栈帧的地址。
+fn stack_anchor() -> usize {
+    let anchor = std::hint::black_box(0u8);
+    &anchor as *const u8 as usize
+}
+
+/// Native stack bytes still available below the current frame.
+/// 当前栈帧之下仍可用的原生栈字节数。
+///
+/// Returns `None` where the platform cannot report the thread stack bounds.
+/// 平台无法报告线程栈边界时返回 `None`。
+fn available_stack_bytes() -> Option<usize> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    unsafe {
+        let mut attr: libc::pthread_attr_t = std::mem::zeroed();
+        if libc::pthread_getattr_np(libc::pthread_self(), &mut attr) != 0 {
+            return None;
+        }
+        let mut base: *mut libc::c_void = std::ptr::null_mut();
+        let mut size: libc::size_t = 0;
+        let status = libc::pthread_attr_getstack(&attr, &mut base, &mut size);
+        libc::pthread_attr_destroy(&mut attr);
+        if status != 0 {
+            return None;
+        }
+        let low = base as usize;
+        let anchor = stack_anchor();
+        // Stacks grow downwards on every supported target; the usable remainder is
+        // the distance to the low end. A frame outside the reported bounds means
+        // the thread reported a different stack, so keep the full size.
+        // 所有支持的目标平台上栈向下增长，可用余量即到低端地址的距离；
+        // 若当前帧不在上报范围内，说明线程上报了另一块栈，此时保留整块大小。
+        let remaining = if anchor >= low && anchor - low <= size {
+            anchor - low
+        } else {
+            size
+        };
+        Some(remaining.saturating_sub(EVAL_STACK_RESERVE_BYTES))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        None
+    }
+}
 
 /// A global definition.
 /// 全局定义。
@@ -257,11 +336,14 @@ impl Evaluator {
             method_resolutions: HashMap::new(),
             extra_builtins: HashMap::new(),
             defer_stack: Vec::new(),
+            pending_frame_defers: Vec::new(),
             signal_handlers: HashMap::new(),
             max_stream_lines: DEFAULT_MAX_STREAM_LINES,
             max_stdin_bytes: DEFAULT_MAX_STDIN_BYTES,
             max_intermediate_buffer: DEFAULT_MAX_INTERMEDIATE_BUFFER,
             recursion_depth: std::cell::Cell::new(0),
+            eval_stack_base: stack_anchor(),
+            eval_stack_budget: available_stack_bytes().unwrap_or(FALLBACK_EVAL_STACK_BYTES),
         }
     }
 
@@ -361,18 +443,35 @@ impl Evaluator {
             self.collect_item(item);
         }
 
-        // Second pass: evaluate definitions (for values) and return last result
+        // Second pass: evaluate definitions (for values) and return last result.
+        // The module body is itself a frame, so deferred actions registered at the
+        // top level run when the module finishes instead of being dropped.
+        // 第二遍求值：模块体本身也是一个帧，因此顶层注册的延迟动作在模块结束时执行，
+        // 而不是被丢弃。
+        let outer_defers = std::mem::take(&mut self.defer_stack);
         let mut result = Value::Unit;
+        let mut outcome = Ok(());
         for item in &module.items {
-            result = self.eval_item(item)?;
+            match self.eval_item(item) {
+                Ok(value) => result = value,
+                Err(error) => {
+                    outcome = Err(error);
+                    break;
+                }
+            }
         }
-
+        let settled = self.settle_defer_scope(outcome);
+        self.defer_stack = outer_defers;
+        settled?;
         Ok(result)
     }
 
     fn collect_item(&mut self, item: &Item) {
         match &item.kind {
             ItemKind::Fn(fn_def) => {
+                // A zero-parameter item is a value binding: it is evaluated once and
+                // stored as a value, so re-collecting must not clobber that value.
+                // 零参数项是值绑定：只求值一次并按值存储，重新收集不得覆盖该值。
                 if fn_def.params.is_empty()
                     && matches!(self.globals.get(&item.id), Some(GlobalDef::Value(_)))
                 {
@@ -416,15 +515,23 @@ impl Evaluator {
     fn eval_item(&mut self, item: &Item) -> Result<Value, EvalError> {
         match &item.kind {
             ItemKind::Fn(fn_def) => {
-                // For top-level let (converted to zero-param function), evaluate immediately
+                // Zero-parameter items are value bindings: the type checker types them
+                // as the body's value, so they are evaluated eagerly and bound as values.
+                // Items with parameters stay callable and are evaluated on demand.
+                // 零参数项是值绑定：类型检查按函数体的值确定其类型，因此这里饿求值并按值绑定；
+                // 带参数的项保持可调用，按需求值。
                 if fn_def.params.is_empty() {
-                    let value = self.eval(&fn_def.body)?;
-                    self.run_defers()?;
+                    let outer_defers = std::mem::take(&mut self.defer_stack);
+                    let body_result = self.eval(&fn_def.body);
+                    let value = self.settle_defer_scope(body_result);
+                    self.defer_stack = outer_defers;
+                    let value = value?;
                     self.globals
                         .insert(item.id, GlobalDef::Value(value.clone()));
                     Ok(value)
                 } else {
-                    // For real functions, they're already collected
+                    // Callable items are already collected; nothing to run yet.
+                    // 可调用项已在收集阶段注册，此处无需执行。
                     Ok(Value::Unit)
                 }
             }
@@ -795,13 +902,15 @@ impl Evaluator {
         Ok(values)
     }
 
-    fn eval_method_call(
+    /// Resolve a method call into its callable and prepared arguments.
+    /// 将方法调用解析为可调用对象与已准备的实参，供普通求值与尾调用复用。
+    fn resolve_method_call(
         &mut self,
         receiver: &Expr,
         target: &Expr,
         args: &[Expr],
         span: Span,
-    ) -> Result<Value, EvalError> {
+    ) -> Result<(Value, Vec<Value>), EvalError> {
         let receiver = self.eval(receiver)?;
         // Resolve the callable before preparing its explicit arguments.
         // 在准备显式实参前解析可调用对象，以保留参数的惰性语义。
@@ -814,6 +923,17 @@ impl Evaluator {
             None => self.eval(target)?,
         };
         let values = self.prepare_call_args(&callable, args, Some(receiver))?;
+        Ok((callable, values))
+    }
+
+    fn eval_method_call(
+        &mut self,
+        receiver: &Expr,
+        target: &Expr,
+        args: &[Expr],
+        span: Span,
+    ) -> Result<Value, EvalError> {
+        let (callable, values) = self.resolve_method_call(receiver, target, args, span)?;
         self.apply(callable, values)
     }
 
@@ -1265,7 +1385,62 @@ impl Evaluator {
         }
     }
 
+    /// Apply a callable to arguments, flushing the deferred actions of every frame
+    /// the tail-call chain left behind once the chain finishes.
+    /// 调用可调用对象，并在尾调用链结束后统一执行链上各帧留下的延迟动作。
     fn apply(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
+        let baseline = self.pending_frame_defers.len();
+        let outcome = self.apply_tco(func, args);
+        let cleanup = self.run_pending_frame_defers(baseline);
+        match outcome {
+            // A failing body reports its own cause; cleanup errors stay secondary.
+            // 主体失败时报告主因，清理阶段的错误居次。
+            Err(primary) => Err(primary),
+            Ok(value) => {
+                cleanup?;
+                Ok(value)
+            }
+        }
+    }
+
+    /// Run the frames a tail-call chain left pending, innermost frame first.
+    /// 执行尾调用链挂起的各帧，内层帧先执行。
+    fn run_pending_frame_defers(&mut self, baseline: usize) -> Result<(), EvalError> {
+        let mut first_error = None;
+        while self.pending_frame_defers.len() > baseline {
+            let Some(defers) = self.pending_frame_defers.pop() else {
+                break;
+            };
+            if let Some(error) = self.run_frame_defers(defers)
+                && first_error.is_none()
+            {
+                first_error = Some(error);
+            }
+        }
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
+    /// Run one frame's deferred actions in reverse registration order.
+    /// 按注册的逆序执行单帧的延迟动作。
+    ///
+    /// Every action is attempted even when one fails; the first error is reported.
+    /// 即使某个动作失败也会尝试全部动作，最终报告首个错误。
+    fn run_frame_defers(&mut self, mut defers: Vec<Value>) -> Option<EvalError> {
+        let mut first_error = None;
+        while let Some(func) = defers.pop() {
+            if let Err(error) = self.apply(func, vec![])
+                && first_error.is_none()
+            {
+                first_error = Some(error);
+            }
+        }
+        first_error
+    }
+
+    fn apply_tco(&mut self, func: Value, args: Vec<Value>) -> Result<Value, EvalError> {
         // Recursion depth guard: prevents stack overflow from non-tail recursion.
         // Uses a raw pointer to the Cell to avoid borrow conflicts with &self in TCO loop.
         let depth = self.recursion_depth.get() + 1;
@@ -1276,6 +1451,16 @@ impl Evaluator {
             return Err(EvalError::TypeError(format!(
                 "recursion depth exceeded (max {MAX_RECURSION_DEPTH})"
             )));
+        }
+        // The depth counter alone cannot trip before the native stack runs out, so
+        // measure real consumption and refuse before the process aborts.
+        // 深度计数无法在原生栈耗尽前触发，因此测量真实消耗并在进程中止前拒绝。
+        if self.eval_stack_base.abs_diff(stack_anchor()) > self.eval_stack_budget {
+            self.recursion_depth
+                .set(self.recursion_depth.get().saturating_sub(1));
+            return Err(EvalError::TypeError(
+                "recursion exhausted the evaluation stack; use a tail call".to_string(),
+            ));
         }
         struct DepthGuard(*const std::cell::Cell<u32>);
         impl Drop for DepthGuard {
@@ -1312,9 +1497,25 @@ impl Evaluator {
                     self.env = env.child();
                     self.env.define_many(bindings);
 
+                    // Deferred functions belong to this call frame: they run when
+                    // the frame exits, not when the whole program ends. A tail call
+                    // hands the frame over to the callee, so the frame's actions stay
+                    // pending until the chain finishes — that keeps the callee's
+                    // cleanup ahead of its caller's. The outer scope is restored
+                    // afterwards so callers keep their own defers.
+                    // 延迟函数属于当前调用帧：帧退出时即执行，而不是程序结束时。
+                    // 尾调用把该帧交给被调用者，因此本帧动作挂起到整条链结束，保证
+                    // 被调用者的清理先于调用者。之后恢复外层作用域，调用者保留自己的
+                    // 延迟函数。
+                    let outer_defers = std::mem::take(&mut self.defer_stack);
+                    let tco_result = self.eval_with_tco(&body);
+                    let frame_defers = std::mem::replace(&mut self.defer_stack, outer_defers);
+                    if !frame_defers.is_empty() {
+                        self.pending_frame_defers.push(frame_defers);
+                    }
+
                     // Restore the caller environment on both success and failure.
                     // 无论成功还是失败都恢复调用者环境。
-                    let tco_result = self.eval_with_tco(&body);
                     self.env = old_env;
                     match tco_result? {
                         TcoResult::Value(v) => return Ok(v),
@@ -1608,6 +1809,19 @@ impl Evaluator {
                 let func_val = self.eval(func)?;
                 let arg_vals = self.prepare_call_args(&func_val, args, None)?;
                 Ok(TcoResult::TailCall(func_val, arg_vals))
+            }
+
+            // Method call in tail position (`receiver.method(args)` / pipe form).
+            // 尾位置的方法调用，与方法调用保持同一解析路径。
+            ExprKind::MethodCall {
+                receiver,
+                target,
+                args,
+                ..
+            } => {
+                let (callable, values) =
+                    self.resolve_method_call(receiver, target, args, expr.span)?;
+                Ok(TcoResult::TailCall(callable, values))
             }
 
             // If-then-else: evaluate condition, then the appropriate branch with TCO
@@ -2525,12 +2739,33 @@ impl Evaluator {
         Ok(Value::Unit)
     }
 
-    /// Run all deferred functions in reverse order.
+    /// Run every deferred function registered in the current call frame.
+    /// 运行当前调用帧内注册的全部延迟函数。
+    ///
+    /// Deferred cleanup runs on success and on failure. When the primary
+    /// evaluation failed, that error is reported and any cleanup error is
+    /// dropped: the primary cause is what callers must see.
+    /// 延迟清理在成功和失败时都会执行；若主体求值失败，则报告主体的错误并放弃
+    /// 清理阶段的错误——调用方必须看到主因。
+    fn settle_defer_scope<T>(&mut self, primary: Result<T, EvalError>) -> Result<T, EvalError> {
+        let cleanup = self.run_defers();
+        let value = primary?;
+        cleanup?;
+        Ok(value)
+    }
+
+    /// Run all deferred functions in reverse order, attempting every one.
+    /// 按逆序执行全部延迟函数，并确保每个都被尝试。
+    ///
+    /// A failing action does not cancel the remaining ones; the first error is
+    /// reported after the frame has been fully cleaned up.
+    /// 单个动作失败不会取消其余动作；本帧全部清理完成后报告首个错误。
     fn run_defers(&mut self) -> Result<(), EvalError> {
-        while let Some(f) = self.defer_stack.pop() {
-            self.apply(f, vec![])?;
+        let defers = std::mem::take(&mut self.defer_stack);
+        match self.run_frame_defers(defers) {
+            Some(error) => Err(error),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     fn builtin_event_map(&mut self, event: &Value, func: &Value) -> Result<Value, EvalError> {
@@ -2880,6 +3115,7 @@ impl Evaluator {
             let state = thunk.state();
             match &*state {
                 crate::value::ThunkState::Evaluated(v) => return Ok(v.clone()),
+                crate::value::ThunkState::Failed(e) => return Err(e.clone()),
                 crate::value::ThunkState::Evaluating => {
                     return Err(EvalError::TypeError(
                         "infinite recursion in lazy evaluation".to_string(),
@@ -2905,14 +3141,21 @@ impl Evaluator {
             variant_ctors: self.variant_ctors.clone(),
             method_resolutions: self.method_resolutions.clone(),
             defer_stack: Vec::new(),
+            pending_frame_defers: Vec::new(),
             extra_builtins: self.extra_builtins.clone(),
             signal_handlers: self.signal_handlers.clone(),
             max_stream_lines: self.max_stream_lines,
             max_stdin_bytes: self.max_stdin_bytes,
             max_intermediate_buffer: self.max_intermediate_buffer,
             recursion_depth: std::cell::Cell::new(0),
+            eval_stack_base: self.eval_stack_base,
+            eval_stack_budget: self.eval_stack_budget,
         };
-        let result = eval.eval(&expr);
+        // The thunk body is a frame of its own: deferred actions it registers run
+        // here instead of being dropped with the child evaluator.
+        // thunk 体自成一帧：它注册的延迟动作在这里执行，而不是随子求值器一起丢弃。
+        let body_result = eval.eval(&expr);
+        let result = eval.settle_defer_scope(body_result);
 
         match result {
             Ok(value) => {
@@ -2922,9 +3165,10 @@ impl Evaluator {
             }
             Err(e) => {
                 let mut state = thunk.state_mut();
-                *state = crate::value::ThunkState::Evaluated(Value::Err(Box::new(Value::String(
-                    Rc::new(e.to_string()),
-                ))));
+                // Cache the failure so a second `force` reports the same error
+                // instead of re-running the (possibly effectful) body.
+                // 缓存失败状态，使再次 `force` 报告同一错误而不是重复（可能有副作用的）求值。
+                *state = crate::value::ThunkState::Failed(e.clone());
                 Err(e)
             }
         }
@@ -2977,6 +3221,7 @@ impl Evaluator {
                 PatternKind::Constructor(_, patterns) | PatternKind::Or(patterns) => {
                     patterns.iter().map(estimate_bindings).sum()
                 }
+                PatternKind::Error(_) => 0,
             }
         }
 
@@ -3152,6 +3397,7 @@ impl Evaluator {
                 }
                 None
             }
+            PatternKind::Error(_) => None,
         }
     }
 
@@ -3265,6 +3511,7 @@ impl Evaluator {
                 match &*thunk.state() {
                     ThunkState::Evaluated(v) => Self::value_to_string(v),
                     ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
+                    ThunkState::Failed(_) => "<thunk:failed>".to_string(),
                     ThunkState::HirUnevaluated { .. } => "<thunk>".to_string(),
                 }
             }
@@ -3478,5 +3725,205 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Value::Int(5050.into()));
+    }
+
+    #[test]
+    fn test_non_tail_recursion_reports_stack_budget_instead_of_aborting() {
+        // A single interpreter frame costs kilobytes, so deep non-tail recursion
+        // exhausts the native stack long before MAX_RECURSION_DEPTH levels: the
+        // evaluator must report a diagnosable error instead of aborting the process.
+        // 单个解释器帧占用数 KB，深递归在达到 MAX_RECURSION_DEPTH 之前就会耗尽
+        // 原生栈：求值器必须给出可诊断错误，而不是中止进程。
+        let span = Span::default();
+        let int_ty = || Ty {
+            kind: TyKind::Int,
+            span,
+        };
+        let mut evaluator = Evaluator::new();
+
+        let n_id = LocalId(0);
+        let count_def_id = DefId(0);
+
+        // if n <= 0 then 0 else 1 + count(n - 1)
+        let condition = Expr {
+            kind: ExprKind::Binary(
+                BinOp::Le,
+                Box::new(Expr {
+                    kind: ExprKind::Var(n_id),
+                    ty: int_ty(),
+                    span,
+                }),
+                Box::new(Expr {
+                    kind: ExprKind::Literal(Literal::Int(0.into())),
+                    ty: int_ty(),
+                    span,
+                }),
+            ),
+            ty: Ty {
+                kind: TyKind::Bool,
+                span,
+            },
+            span,
+        };
+        let recursive_call = Expr {
+            kind: ExprKind::Call(
+                Box::new(Expr {
+                    kind: ExprKind::Global(count_def_id),
+                    ty: int_ty(),
+                    span,
+                }),
+                vec![Expr {
+                    kind: ExprKind::Binary(
+                        BinOp::Sub,
+                        Box::new(Expr {
+                            kind: ExprKind::Var(n_id),
+                            ty: int_ty(),
+                            span,
+                        }),
+                        Box::new(Expr {
+                            kind: ExprKind::Literal(Literal::Int(1.into())),
+                            ty: int_ty(),
+                            span,
+                        }),
+                    ),
+                    ty: int_ty(),
+                    span,
+                }],
+            ),
+            ty: int_ty(),
+            span,
+        };
+        let body = Expr {
+            kind: ExprKind::If(
+                Box::new(condition),
+                Box::new(Expr {
+                    kind: ExprKind::Literal(Literal::Int(0.into())),
+                    ty: int_ty(),
+                    span,
+                }),
+                Box::new(Expr {
+                    kind: ExprKind::Binary(
+                        BinOp::Add,
+                        Box::new(Expr {
+                            kind: ExprKind::Literal(Literal::Int(1.into())),
+                            ty: int_ty(),
+                            span,
+                        }),
+                        Box::new(recursive_call),
+                    ),
+                    ty: int_ty(),
+                    span,
+                }),
+            ),
+            ty: int_ty(),
+            span,
+        };
+        let fn_def = FnDef {
+            name: "count".to_string(),
+            generics: vec![],
+            params: vec![Param {
+                id: n_id,
+                name: "n".to_string(),
+                pattern: Pattern {
+                    kind: PatternKind::Var(n_id, "n".to_string()),
+                    span,
+                },
+                ty: int_ty(),
+                is_lazy: false,
+                span,
+            }],
+            return_ty: int_ty(),
+            effectful: false,
+            body,
+        };
+        evaluator
+            .globals
+            .insert(count_def_id, GlobalDef::Function(fn_def.clone()));
+
+        let closure = Value::Closure {
+            params: fn_def.params.clone(),
+            body: fn_def.body.clone(),
+            env: Environment::new(),
+        };
+        let result = evaluator.apply(closure, vec![Value::Int(10_000.into())]);
+
+        match result {
+            Err(EvalError::TypeError(message)) => assert!(
+                message.contains("evaluation stack"),
+                "expected a stack budget error, got {message}"
+            ),
+            other => panic!("expected a stack budget error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_force_caches_thunk_failure() {
+        // A thunk whose body fails must remember the failure: forcing it again
+        // reports the same error instead of re-running the body.
+        // 函数体失败的 thunk 必须记住失败：再次强制求值报告同一错误，而不是重跑函数体。
+        let span = Span::default();
+        let int_ty = || Ty {
+            kind: TyKind::Int,
+            span,
+        };
+        let mut evaluator = Evaluator::new();
+
+        // ~{ 1 / 0 }
+        let body = Expr {
+            kind: ExprKind::Binary(
+                BinOp::Div,
+                Box::new(Expr {
+                    kind: ExprKind::Literal(Literal::Int(1.into())),
+                    ty: int_ty(),
+                    span,
+                }),
+                Box::new(Expr {
+                    kind: ExprKind::Literal(Literal::Int(0.into())),
+                    ty: int_ty(),
+                    span,
+                }),
+            ),
+            ty: int_ty(),
+            span,
+        };
+        let lazy = Expr {
+            kind: ExprKind::Lazy(Box::new(body)),
+            ty: int_ty(),
+            span,
+        };
+
+        let value = evaluator
+            .eval(&lazy)
+            .expect("creating a thunk must not evaluate it");
+
+        let first = evaluator
+            .force_value(&value)
+            .expect_err("division by zero must fail");
+        assert!(
+            matches!(first, EvalError::DivisionByZero),
+            "expected a division by zero, got {first:?}"
+        );
+
+        let second = evaluator
+            .force_value(&value)
+            .expect_err("the cached failure must be reported again");
+        assert!(
+            matches!(second, EvalError::DivisionByZero),
+            "expected the cached division by zero, got {second:?}"
+        );
+
+        let Value::Thunk(thunk) = &value else {
+            panic!("expected a thunk value");
+        };
+        let state = thunk.state();
+        assert!(
+            matches!(&*state, crate::value::ThunkState::Failed(_)),
+            "the failure must be cached in the thunk state"
+        );
+        drop(state);
+        assert!(
+            !thunk.is_evaluated(),
+            "a failed thunk is not an evaluated thunk"
+        );
     }
 }

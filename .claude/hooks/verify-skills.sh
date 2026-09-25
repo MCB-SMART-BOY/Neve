@@ -35,8 +35,16 @@ echo "=== Skill Verification ==="
 
 # --- neve-parser.md claims ---
 check_file "lexer.rs"        crates/neve-lexer/src/lexer.rs
+check_file "lexer token.rs"  crates/neve-lexer/src/token.rs
 check_file "parser lib.rs"   crates/neve-parser/src/lib.rs
+check_file "parser.rs"       crates/neve-parser/src/parser.rs
+check_file "recovery.rs"     crates/neve-parser/src/recovery.rs
 check_file "AST expr"        crates/neve-syntax/src/expr.rs
+check_file "AST ast.rs"      crates/neve-syntax/src/ast.rs
+check_file "AST types.rs"    crates/neve-syntax/src/types.rs
+check_file "AST pattern.rs"  crates/neve-syntax/src/pattern.rs
+check_file "common span.rs"  crates/neve-common/src/span.rs
+check_file "common trivia.rs" crates/neve-common/src/trivia.rs
 check_file "parser tests"    tests/parser.rs
 check_count "parser tests count" '#\[test\]' tests/parser.rs 220
 
@@ -65,7 +73,7 @@ check_count "lean modules"   '\.lean$' <(find formal -name '*.lean' 2>/dev/null 
 
 # --- neve-test.md claims ---
 check_file "e2e tests"       tests/end_to_end.rs
-check_count "e2e test count" '#\[test\]' tests/end_to_end.rs 540
+check_count "e2e test count" '#\[test\]' tests/end_to_end.rs 547
 
 echo ""
 echo "=== Result: $PASS passed, $FAIL failed ==="

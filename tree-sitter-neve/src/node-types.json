@@ -15,6 +15,41 @@
     }
   },
   {
+    "type": "binding",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "expr",
+          "named": true
+        },
+        {
+          "type": "fn_type",
+          "named": true
+        },
+        {
+          "type": "named_type",
+          "named": true
+        },
+        {
+          "type": "pattern",
+          "named": true
+        },
+        {
+          "type": "record_type",
+          "named": true
+        },
+        {
+          "type": "tuple_type",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "binding_pattern",
     "named": true,
     "fields": {},
@@ -85,29 +120,6 @@
         },
         {
           "type": "pattern",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "enum_def",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "generics",
-          "named": true
-        },
-        {
-          "type": "ident",
-          "named": true
-        },
-        {
-          "type": "variant",
           "named": true
         }
       ]
@@ -539,41 +551,6 @@
     }
   },
   {
-    "type": "let_stmt",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "expr",
-          "named": true
-        },
-        {
-          "type": "fn_type",
-          "named": true
-        },
-        {
-          "type": "named_type",
-          "named": true
-        },
-        {
-          "type": "pattern",
-          "named": true
-        },
-        {
-          "type": "record_type",
-          "named": true
-        },
-        {
-          "type": "tuple_type",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "list",
     "named": true,
     "fields": {},
@@ -947,14 +924,13 @@
   {
     "type": "source_file",
     "named": true,
-    "root": true,
     "fields": {},
     "children": {
       "multiple": true,
       "required": false,
       "types": [
         {
-          "type": "enum_def",
+          "type": "binding",
           "named": true
         },
         {
@@ -974,19 +950,15 @@
           "named": true
         },
         {
-          "type": "let_stmt",
-          "named": true
-        },
-        {
-          "type": "struct_def",
-          "named": true
-        },
-        {
           "type": "trait_def",
           "named": true
         },
         {
-          "type": "type_alias",
+          "type": "type_decl",
+          "named": true
+        },
+        {
+          "type": "use_stmt",
           "named": true
         }
       ]
@@ -1001,6 +973,10 @@
       "required": true,
       "types": [
         {
+          "type": "binding",
+          "named": true
+        },
+        {
           "type": "expr_stmt",
           "named": true
         },
@@ -1009,30 +985,7 @@
           "named": true
         },
         {
-          "type": "let_stmt",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "struct_def",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "field_def",
-          "named": true
-        },
-        {
-          "type": "generics",
-          "named": true
-        },
-        {
-          "type": "ident",
+          "type": "use_stmt",
           "named": true
         }
       ]
@@ -1162,13 +1115,17 @@
     }
   },
   {
-    "type": "type_alias",
+    "type": "type_decl",
     "named": true,
     "fields": {},
     "children": {
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "field_def",
+          "named": true
+        },
         {
           "type": "fn_type",
           "named": true
@@ -1192,6 +1149,10 @@
         {
           "type": "tuple_type",
           "named": true
+        },
+        {
+          "type": "variant",
+          "named": true
         }
       ]
     }
@@ -1206,6 +1167,25 @@
       "types": [
         {
           "type": "expr",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "use_stmt",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "ident",
+          "named": true
+        },
+        {
+          "type": "path",
           "named": true
         }
       ]
@@ -1255,11 +1235,11 @@
     "named": false
   },
   {
-    "type": "#{",
+    "type": "%",
     "named": false
   },
   {
-    "type": "%",
+    "type": "&",
     "named": false
   },
   {
@@ -1307,11 +1287,15 @@
     "named": false
   },
   {
-    "type": "/",
+    "type": ".*",
     "named": false
   },
   {
-    "type": "//",
+    "type": ".{",
+    "named": false
+  },
+  {
+    "type": "/",
     "named": false
   },
   {
@@ -1336,10 +1320,6 @@
   },
   {
     "type": "==",
-    "named": false
-  },
-  {
-    "type": "=>",
     "named": false
   },
   {
@@ -1375,10 +1355,6 @@
     "named": false
   },
   {
-    "type": "_",
-    "named": false
-  },
-  {
     "type": "`",
     "named": false
   },
@@ -1392,8 +1368,7 @@
   },
   {
     "type": "comment",
-    "named": true,
-    "extra": true
+    "named": true
   },
   {
     "type": "effect",
@@ -1481,6 +1456,10 @@
   },
   {
     "type": "type",
+    "named": false
+  },
+  {
+    "type": "use",
     "named": false
   },
   {

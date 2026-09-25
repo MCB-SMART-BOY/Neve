@@ -1,6 +1,6 @@
 # Neve Language Development Skills
 
-A comprehensive skill suite for developing the Neve functional programming language (v4.0.4).
+A comprehensive skill suite for developing the Neve functional programming language (v5.0.0).
 
 ## Available Skills
 
@@ -13,7 +13,7 @@ A comprehensive skill suite for developing the Neve functional programming langu
 | [neve-eval](neve-eval.md) | HIR tree-walking interpreter | neve-eval |
 | [neve-std](neve-std.md) | Standard library (I/O, Stream<T>, List) | neve-std |
 | [neve-lsp](neve-lsp.md) | Language Server Protocol | neve-lsp |
-| [neve-test](neve-test.md) | Testing strategy + 541 E2E tests | tests/ |
+| [neve-test](neve-test.md) | Testing strategy + 550 E2E tests | tests/ |
 | [neve-diagnostic](neve-diagnostic.md) | Compiler error system (55 codes) | neve-diagnostic |
 | [neve-fmt](neve-fmt.md) | Code formatter | neve-fmt |
 | [neve-effect](neve-effect.md) | Effect system (EffectEval v4.3) | neve-typeck, neve-eval |
@@ -91,23 +91,23 @@ Source Code (.neve)
 | `neve-config` | System configuration (generation-based) |
 | `neve-derive` | Derivation model + hashing |
 
-## Current Status (v4.0.4)
+## Current Status (v5.0.0)
 
 | Metric | Value |
 |--------|-------|
 | Phase 6 (Syntax v4.0) | ✅ Complete |
 | Phase 5 (Ecosystem) | ✅ Complete |
 | Phase 4 (Shell) | ✅ Complete |
-| E2E Tests | 541 (all pass) |
+| E2E Tests | 550 (all pass) |
 | Formatter idempotency | 37/37 |
 | Stream<T> APIs | 14 (Phase A-C) |
-| LSP Methods | 20 |
+| LSP Methods | 21 |
 | EffectEval Rules | 34 (v4.3) |
 | Lean Modules | 21 |
 | Error Codes | 55 |
 | Keywords | 12 (v4.0) |
 | CI | All green |
-| crates.io | Published (`cargo install neve`)|
+| crates.io | Published (`cargo install n3v3`)|
 
 ## Decisions (2026-06-03)
 

@@ -4,9 +4,14 @@
 
 <h1>Neve Feature Matrix</h1>
 
-<p><em>真实功能支持矩阵（v4.0）</em></p>
+<p><em>真实功能支持矩阵（v5.0）</em></p>
 
-> **2026-06: v4.0 syntax canonical.** 12 keywords, `let`/`fn`/`;` optional, `use` not `import`, `|x|` not `fn(x)`, `{ }` records, `&` line comments, `if -> else` not `then/else`, `~` not `lazy`, `pub` removed. Legacy keywords still accepted by lexer. This matrix reflects semantic support, not syntax surface alone.
+> **2026-09: v5.0 canonical HIR pipeline.** 12 canonical keywords,
+> `let`/`fn`/`;` optional, `use` not `import`, `|x|` not `fn(x)`, `{ }`
+> records, `&` line comments, `if -> else` not `then/else`, `~` not `lazy`,
+> and `pub` removed. The parser retains 10 legacy spellings for source
+> compatibility; only `struct`, `enum`, `super`, and `crate` are dedicated
+> lexer tokens.
 
 <p>
   <strong><a href="../../README.md">Home</a></strong> ·
@@ -43,7 +48,7 @@
 它当前重点回答：
 
 - parser 接受了，不代表语言真的支持了
-- AST evaluator 能跑，不代表 canonical runtime 已经闭环
+- AST 只是前端分析输入，不是运行时路径
 - 文档写了，不代表工具链已经对齐
 
 后续版本会继续扩展到更完整的 feature inventory。
@@ -53,24 +58,24 @@
 当前项目的总体情况可以用三句话概括：
 
 1. **语法表面比语义闭环走得更快。**
-2. **AST 路径历史上补过更多缺口，但主 CLI 路径已经开始优先收敛到 HIR。**
+2. **主 CLI、LSP、REPL 和测试都通过 canonical HIR runtime；AST 仅保留为分析输入。**
 3. **系统脚本能力已经起步，管道/重定向/进程执行/流式输出/信号/Task/glob/Stream<T> 已就绪，Phase 4 (Shell 能力替代) ✅ 已完成。**
-4. **端到端测试已覆盖 541 个用例（含 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, io.readKey）。**
+4. **端到端测试覆盖真实 frontend/runtime smoke tests。**
 5. **Stream<T> 14 APIs 已全部实现 (Phase A-C complete) ✅。**
 6. **LSP 21 methods implemented ✅ (CodeLens)，补全评分排序，模块↔flake 集成。**
 7. **Registry v1 API 完整 (8 endpoints) ✅，RegistryClient 已接入 install/search。**
-8. **v4.0 syntax is canonical — 12 keywords, `let`/`fn`/`;` optional, `|` lambda, `{}` records, `&` comments, `pub` removed.**
+8. **v5.0 syntax is canonical — 12 keywords, `let`/`fn`/`;` optional, `|` lambda, `{}` records, `&` comments, `pub` removed.**
 
 ## 语言高风险特性矩阵 / High-Risk Language Features
 
-| Feature / 特性 | Parser | HIR Lowering | Type Check | AST Runtime | HIR Runtime | Tooling | 当前判断 |
-|----------------|--------|--------------|------------|-------------|-------------|---------|----------|
+| Feature / 特性 | Parser | HIR Lowering | Type Check | AST Analysis | HIR Runtime | Tooling | 当前判断 |
+|----------------|--------|--------------|------------|--------------|-------------|---------|----------|
 | 基础字面量、算术、记录、列表、元组 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Syntax v3.0 收敛；管道/记录/列表/元组在 Parser→HIR→Typeck→HIR Runtime 全链路闭环 |
-| 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，主 CLI 路径在常见本地导入与 `std` 导入场景下已优先走 HIR，但边缘场景仍会回退 |
+| 模块导入与模块图 | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 模块系统已有实装，主 CLI 路径统一走 HIR；边缘场景仍可能产生导入诊断。 |
 | 列表推导 | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 语言层基本可用，工具链覆盖不足 |
 | 安全字段访问 `?.` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / record / option-record；类型拒绝非 record 非 option 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | 路径字面量 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `./config` 推断为 `Path` 类型；typed-path adapter 和 bridge 全覆盖 |
-| 惰性表达式 `~` (lazy) | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `lazy/force/isLazy/isEvaluated` 已在 AST/HIR 路径闭环，工具链覆盖仍需继续补齐 |
+| 惰性表达式 `~` (lazy) | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | `ExprKind::Lazy` 经 HIR 降级后由 canonical evaluator 执行；工具链覆盖仍需继续补齐 |
 | 空值合并 `??` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option / user enum `Some/None`；类型拒绝非 Option-like 的 `??` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | 错误传播 `?` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 已收敛：`resolve_optional_flow_payload` 统一处理 builtin Option/Result / user enum `Some/None`/`Ok/Err`；类型拒绝非 optional 的 `?` 调用点，与 runtime 一致；REPL `:type` / LSP hover / diagnostics 均已闭环 |
 | Trait 定义与 impl 完整性 | ✅ | ✅ | ⚠️ | N/A | N/A | ⚠️ | impl 签名规范化与方法派发优先顺序已定；impl-assoc 类型解析已统一到 canonical 路径；方法调用 UnknownMethod 诊断已到位；关联类型与缺省 alias 链的解析在全管线一致 |
@@ -84,19 +89,19 @@
 | Unreachable pattern 警告 | N/A | N/A | ⚠️ | N/A | N/A | ❌ | 现已支持“前置分支已完成总覆盖”后的不可达告警，包括不可反驳分支、布尔全覆盖、用户枚举全覆盖与 builtin `Option/Result` 全覆盖；更细粒度的子集判定仍需继续扩展 |
 | REPL `:type` | N/A | N/A | N/A | N/A | N/A | ⚠️ | 现在会复用增量 REPL 会话中的已加载模块、历史 HIR 模块与当前输入，一起做 typecheck 后查询表达式与全局定义类型；但跨项目根目录切换、跨模块命名类型显示和更完整的工具链镜像仍需继续补齐 |
 | 一等 Stream<T> | N/A | N/A | N/A | N/A | N/A | N/A | ✅ Phase A-C complete (14 APIs) |
-| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 541 个真实 frontend/runtime smoke tests (541 pass)（TupleIndex, block-with-let, 泛型推导, Option match, record match, 安全访问, pipeline stdlib, impl method, v3 enum, list comprehension, match parity） |
+| 真实端到端执行测试 | N/A | N/A | N/A | N/A | N/A | ⚠️ | `tests/end_to_end.rs` 550 个真实 frontend/HIR runtime smoke tests (550 pass)（TupleIndex, block-with-let, 泛型推导, Option match, record match, 安全访问, pipeline stdlib, impl method, v3 enum, list comprehension） |
 
 ## 工具链一致性矩阵 / Tooling Fidelity Matrix
 
 | Area / 领域 | 现状 | 主要问题 |
 |-------------|------|----------|
 | `neve check` | ⚠️ 可用 | 类型检查能跑，支持 `--pure` 模式拒绝副作用调用，当前模块和已加载依赖模块中的命名类型现在都能在 diagnostics 中较可读地显示；但完整语义镜像和更多编译器级保证还没闭环 |
-| `neve eval` | ⚠️ 可用 | 无 `import` 输入、本地模块导入，以及常见 `std` item/module/glob 导入已默认走 frontend/HIR；仅少数仍未收敛的导入/运行时边缘场景会回退 AST |
-| `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入已可走 HIR，跨模块命名类型在 diagnostics 中的显示也已更可读；真正的统一 canonical path 仍受少数边缘导入/运行时语义限制 |
+| `neve eval` | ⚠️ 可用 | 表达式与模块导入统一走 frontend/HIR；未收敛的是少数导入或运行时边缘诊断，不存在 AST runtime fallback |
+| `neve run` | ⚠️ 可用 | 普通模块图和常见 `std` item/module/glob 导入统一走 HIR，跨模块命名类型在 diagnostics 中的显示也已更可读；剩余问题是少数边缘导入/运行时语义 |
 | REPL | ⚠️ 可用 | 交互与 `:type` 都能工作，类型查询和求值主路径都已开始围绕增量 HIR runtime 收敛；普通持久绑定、跨输入重定义、跨输入 trait/impl 方法派发、常见 `std.<module>` 导入、项目内模块 item/module 导入、`:load` 文件场景下的相对模块导入、新导入模块的 type diagnostics 展示，以及清空会话后的安全跨项目根目录切换都已可工作。当前仍明确缺少更完整的 module graph/tooling 镜像 |
 | Formatter | ⚠️ 基本可用 | 日常可用，但“稳定且幂等”还应继续验证 |
 | LSP | ⚠️ 持续收敛中 (21 methods) | 前端管线已接入，hover 支持定义点类型和语义类型。`goto definition` / `references` / `rename` 对局部遮蔽场景已按实际绑定解析。补全评分排序 (exact/prefix/contains)。CodeLens 引用计数。21 methods: hover, completion (type-aware + scored), completionItem/resolve, signatureHelp, definition, references, documentHighlight, rename, prepareRename, formatting, documentSymbol, workspace/symbol, semanticTokens/full, inlayHint, foldingRange, codeAction, codeLens, didOpen, didChange, didSave, didClose |
-| End-to-end tests | ⚠️ 可信 smoke baseline（541 个测试，541 pass） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
+| End-to-end tests | ⚠️ 可信 smoke baseline（550 个测试，550 pass） | 覆盖 Task spawn/poll/cancel/awaitAny, signals, glob, env/cwd, redirects, streaming, bytes, shebang, Stream<T> 14 APIs, TTY, Job control, defer/retry/ensure, try/catch/option, fmt roundtrip, init scaffold, test discovery, io.readKey；覆盖深度仍需继续扩展 |
 
 ## 系统脚本能力矩阵 / System Scripting Matrix
 
@@ -121,7 +126,7 @@
 | 时序约束 | `io.retry(fn, n, ms)`、`io.ensure(check, timeout, interval)` |
 | 流组合子 | `io.glob` + `list.filter` + `list.map` 已验证 |
 
-### 仍然缺失的关键能力### 仍然缺失的关键能力
+### 仍然缺失的关键能力
 
 | Capability / 能力 | 当前状态 | 为什么还不能叫“替代 Bash” |
 |-------------------|----------|----------------------------|
@@ -146,8 +151,7 @@
 最危险的不是 parser 不支持，而是：
 
 - parser 支持了
-- AST runtime 跑了
-- 但 lowering 或 typeck 或 HIR runtime 没闭环
+- HIR lowering、typeck 或 canonical HIR runtime 仍未闭环
 
 这种状态最容易制造“看起来已经有了”的错觉。
 

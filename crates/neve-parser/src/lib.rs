@@ -44,9 +44,9 @@ pub fn parse(source: &str) -> (SourceFile, Vec<Diagnostic>) {
         source
     };
     let lexer = Lexer::new(source);
-    let (tokens, mut diagnostics) = lexer.tokenize();
+    let (tokens, comments, mut diagnostics) = lexer.tokenize_with_trivia();
 
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new_with_comments(tokens, comments);
     let file = parser.parse_file();
 
     diagnostics.extend(parser.diagnostics());

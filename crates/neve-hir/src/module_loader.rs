@@ -336,7 +336,14 @@ impl ModuleLoader {
         // 模块相互重导出符号时的无限循环。
         for item in &source_file.items {
             if let neve_syntax::ItemKind::Import(import_def) = &item.kind {
-                let import_path = ModulePath::from_import_def(import_def);
+                let Some(import_path) = ModulePath::from_import_def(import_def) else {
+                    self.diagnostics.push(Diagnostic::error(
+                        neve_diagnostic::DiagnosticKind::Module,
+                        item.span,
+                        "unsupported import path prefix",
+                    ));
+                    continue;
+                };
 
                 // v4.0: all imports are public, no re-export concept.
                 // Circular dependencies must always be detected.
@@ -388,7 +395,7 @@ impl ModuleLoader {
             }
         }
 
-        let imports = collect_imports(&source_file);
+        let imports = collect_imports(&source_file, &mut self.diagnostics);
         let mut resolved_imports = Vec::new();
         let mut reexports: Vec<(String, DefId)> = Vec::new();
         for import in &imports {
@@ -583,6 +590,7 @@ impl ModuleLoader {
                     false
                 }
                 Visibility::Private => from_module == target_path.as_slice(),
+                _ => false,
             }
         };
 

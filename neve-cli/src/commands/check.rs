@@ -6,7 +6,7 @@ use neve_diagnostic::{DiagnosticKind, emit};
 use neve_frontend::FrontendDriver;
 use neve_hir::{ExprKind, ItemKind, StmtKind};
 use neve_std::is_effectful_builtin;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Discover flake inputs (Unix only).
@@ -100,7 +100,15 @@ pub fn run(file: &str, verbose: bool, allow_effects: bool) -> Result<(), String>
     if !allow_effects {
         let mut effectful = Vec::new();
         for entry in analysis.evaluable_modules_in_order() {
-            collect_effectful_calls(&entry.module, &entry.method_resolutions, &mut effectful);
+            let Some(semantics) = analysis.semantics(entry.module_id) else {
+                continue;
+            };
+            collect_effectful_calls(
+                &entry.module,
+                &entry.method_resolutions,
+                &semantics.effectful_definitions,
+                &mut effectful,
+            );
         }
         if !effectful.is_empty() {
             for (name, span) in &effectful {
@@ -121,18 +129,29 @@ pub fn run(file: &str, verbose: bool, allow_effects: bool) -> Result<(), String>
     Ok(())
 }
 
+struct EffectContext<'a> {
+    method_resolutions: &'a HashMap<neve_common::Span, neve_hir::DefId>,
+    effectful_definitions: &'a HashSet<neve_hir::DefId>,
+}
+
 fn collect_effectful_calls(
     module: &neve_hir::Module,
     method_resolutions: &HashMap<neve_common::Span, neve_hir::DefId>,
+    effectful_definitions: &HashSet<neve_hir::DefId>,
     out: &mut Vec<(String, neve_common::Span)>,
 ) {
+    let context = EffectContext {
+        method_resolutions,
+        effectful_definitions,
+    };
+
     for item in &module.items {
         match &item.kind {
-            ItemKind::Fn(fn_def) => walk_expr(&fn_def.body, method_resolutions, out),
-            ItemKind::Expr(expr) => walk_expr(expr, method_resolutions, out),
+            ItemKind::Fn(fn_def) => walk_expr(&fn_def.body, &context, out),
+            ItemKind::Expr(expr) => walk_expr(expr, &context, out),
             ItemKind::Impl(impl_def) => {
                 for method in &impl_def.items {
-                    walk_expr(&method.body, method_resolutions, out);
+                    walk_expr(&method.body, &context, out);
                 }
             }
             _ => {}
@@ -142,15 +161,15 @@ fn collect_effectful_calls(
 
 fn walk_expr(
     expr: &neve_hir::Expr,
-    method_resolutions: &HashMap<neve_common::Span, neve_hir::DefId>,
+    context: &EffectContext<'_>,
     out: &mut Vec<(String, neve_common::Span)>,
 ) {
     match &expr.kind {
         ExprKind::Builtin(_) | ExprKind::Global(_) => {}
         ExprKind::Call(func, args) => {
-            walk_callee(func, method_resolutions, out);
+            walk_callee(func, context, out);
             for a in args {
-                walk_expr(a, method_resolutions, out);
+                walk_expr(a, context, out);
             }
         }
         ExprKind::MethodCall {
@@ -159,85 +178,89 @@ fn walk_expr(
             args,
             ..
         } => {
-            walk_expr(receiver, method_resolutions, out);
-            if !method_resolutions.contains_key(&expr.span) {
-                walk_callee(target, method_resolutions, out);
+            walk_expr(receiver, context, out);
+            if let Some(def_id) = context.method_resolutions.get(&expr.span) {
+                if context.effectful_definitions.contains(def_id) {
+                    out.push(("effectful method".to_string(), expr.span));
+                }
+            } else {
+                walk_callee(target, context, out);
             }
             for a in args {
-                walk_expr(a, method_resolutions, out);
+                walk_expr(a, context, out);
             }
         }
         ExprKind::Binary(_, left, right) => {
-            walk_expr(left, method_resolutions, out);
-            walk_expr(right, method_resolutions, out);
+            walk_expr(left, context, out);
+            walk_expr(right, context, out);
         }
         ExprKind::Index { base, index } => {
-            walk_expr(base, method_resolutions, out);
-            walk_expr(index, method_resolutions, out);
+            walk_expr(base, context, out);
+            walk_expr(index, context, out);
         }
-        ExprKind::Unary(_, op) => walk_expr(op, method_resolutions, out),
+        ExprKind::Unary(_, op) => walk_expr(op, context, out),
         ExprKind::If(cond, then_body, else_body) => {
-            walk_expr(cond, method_resolutions, out);
-            walk_expr(then_body, method_resolutions, out);
-            walk_expr(else_body, method_resolutions, out);
+            walk_expr(cond, context, out);
+            walk_expr(then_body, context, out);
+            walk_expr(else_body, context, out);
         }
         ExprKind::Block(stmts, tail) => {
             for s in stmts {
                 match &s.kind {
-                    StmtKind::Let { value, .. } => walk_expr(value, method_resolutions, out),
-                    StmtKind::Expr(e) => walk_expr(e, method_resolutions, out),
+                    StmtKind::Let { value, .. } => walk_expr(value, context, out),
+                    StmtKind::Expr(e) => walk_expr(e, context, out),
                 }
             }
             if let Some(e) = tail {
-                walk_expr(e, method_resolutions, out);
+                walk_expr(e, context, out);
             }
         }
         ExprKind::Let { value, body, .. } => {
-            walk_expr(value, method_resolutions, out);
-            walk_expr(body, method_resolutions, out);
+            walk_expr(value, context, out);
+            walk_expr(body, context, out);
         }
         ExprKind::Match(scrutinee, arms) => {
-            walk_expr(scrutinee, method_resolutions, out);
+            walk_expr(scrutinee, context, out);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    walk_expr(guard, method_resolutions, out);
+                    walk_expr(guard, context, out);
                 }
-                walk_expr(&arm.body, method_resolutions, out);
+                walk_expr(&arm.body, context, out);
             }
         }
-        ExprKind::Field(base, _) => walk_expr(base, method_resolutions, out),
-        ExprKind::SafeField { base, .. } => walk_expr(base, method_resolutions, out),
-        ExprKind::TupleIndex(base, _) => walk_expr(base, method_resolutions, out),
-        ExprKind::Try(inner) => walk_expr(inner, method_resolutions, out),
+        ExprKind::Field(base, _) => walk_expr(base, context, out),
+        ExprKind::SafeField { base, .. } => walk_expr(base, context, out),
+        ExprKind::TupleIndex(base, _) => walk_expr(base, context, out),
+        ExprKind::Try(inner) => walk_expr(inner, context, out),
         ExprKind::Coalesce { value, default } => {
-            walk_expr(value, method_resolutions, out);
-            walk_expr(default, method_resolutions, out);
+            walk_expr(value, context, out);
+            walk_expr(default, context, out);
         }
         ExprKind::ListComp { body, generators } => {
-            walk_expr(body, method_resolutions, out);
+            walk_expr(body, context, out);
             for g in generators {
-                walk_expr(&g.iter, method_resolutions, out);
+                walk_expr(&g.iter, context, out);
                 if let Some(condition) = &g.condition {
-                    walk_expr(condition, method_resolutions, out);
+                    walk_expr(condition, context, out);
                 }
             }
         }
         ExprKind::Record(fields) => {
             for (_, v) in fields {
-                walk_expr(v, method_resolutions, out);
+                walk_expr(v, context, out);
             }
         }
         ExprKind::List(items) | ExprKind::Tuple(items) => {
             for item in items {
-                walk_expr(item, method_resolutions, out);
+                walk_expr(item, context, out);
             }
         }
-        ExprKind::Lambda { body, .. } => walk_expr(body, method_resolutions, out),
-        ExprKind::Lazy(inner) => walk_expr(inner, method_resolutions, out),
+        ExprKind::Lambda { body, .. } => walk_expr(body, context, out),
+        ExprKind::Lazy(inner) => walk_expr(inner, context, out),
         ExprKind::Interpolated(parts) => {
             for part in parts {
                 if let neve_hir::StringPart::Expr(e) = part {
-                    walk_expr(e, method_resolutions, out);
+                    walk_expr(e, context, out);
                 }
             }
         }
@@ -247,15 +270,18 @@ fn walk_expr(
 
 fn walk_callee(
     expr: &neve_hir::Expr,
-    method_resolutions: &HashMap<neve_common::Span, neve_hir::DefId>,
+    context: &EffectContext<'_>,
     out: &mut Vec<(String, neve_common::Span)>,
 ) {
     match &expr.kind {
         ExprKind::Builtin(name) if is_effectful_builtin(name) => {
             out.push((name.clone(), expr.span));
         }
+        ExprKind::Global(def_id) if context.effectful_definitions.contains(def_id) => {
+            out.push(("effectful function".to_string(), expr.span));
+        }
         ExprKind::Builtin(_) | ExprKind::Global(_) => {}
-        _ => walk_expr(expr, method_resolutions, out),
+        _ => walk_expr(expr, context, out),
     }
 }
 
@@ -315,5 +341,30 @@ let reader = io.readFile;
         );
 
         assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn check_rejects_imported_effectful_function() {
+        let dir = tempdir().expect("temporary directory should be created");
+        let dependency = dir.path().join("dependency.neve");
+        let main = dir.path().join("main.neve");
+        std::fs::write(
+            &dependency,
+            "use std.io = io;\nfn read_file(path: String) -> String = io.readFile(path);\n",
+        )
+        .expect("dependency fixture should be written");
+        std::fs::write(
+            &main,
+            "use dependency (read_file);\nfn outer(path: String) -> String = read_file(path);\n",
+        )
+        .expect("main fixture should be written");
+
+        let result = run(
+            main.to_str().expect("temporary path should be valid UTF-8"),
+            false,
+            false,
+        );
+
+        assert_eq!(result, Err("effect check failed".to_string()));
     }
 }

@@ -7,6 +7,7 @@
 
 use crate::config::FormatConfig;
 use crate::printer::Printer;
+use neve_common::Comment;
 use neve_syntax::{
     AssocTypeDef, AssocTypeImpl, BinOp, EnumDef, Expr, ExprKind, FieldDef, FnDef, Generator,
     GenericParam, ImplDef, ImplItem, ImportDef, ImportItems, Item, ItemKind, LambdaParam, LetDef,
@@ -33,6 +34,7 @@ impl Formatter {
     /// 格式化源文件。
     pub fn format(&self, file: &SourceFile) -> Result<String, String> {
         let mut printer = Printer::new(self.config.clone());
+        let mut comment_index = 0;
 
         for (i, item) in file.items.iter().enumerate() {
             if i > 0 {
@@ -43,7 +45,35 @@ impl Formatter {
                 }
                 printer.newline();
             }
+            self.format_comments_before(
+                &mut printer,
+                &file.comments,
+                &mut comment_index,
+                item.span.start,
+            );
             self.format_item(&mut printer, item);
+        }
+
+        if let Some(tail_expr) = &file.tail_expr {
+            if !file.items.is_empty() {
+                if printer.config().blank_lines_between_items {
+                    printer.newline();
+                }
+                printer.newline();
+            }
+            self.format_comments_before(
+                &mut printer,
+                &file.comments,
+                &mut comment_index,
+                tail_expr.span.start,
+            );
+            self.format_expr(&mut printer, tail_expr);
+            printer.newline();
+        }
+
+        self.format_remaining_comments(&mut printer, &file.comments, &mut comment_index);
+        if let Some(error) = printer.take_error() {
+            return Err(error);
         }
 
         // Ensure we're at indent level 0 at end of file
@@ -56,6 +86,45 @@ impl Formatter {
         }
 
         Ok(printer.finish())
+    }
+
+    /// Format comments whose source position precedes an AST node.
+    /// 格式化位于 AST 节点之前的注释。
+    fn format_comments_before(
+        &self,
+        p: &mut Printer,
+        comments: &[Comment],
+        index: &mut usize,
+        start: neve_common::BytePos,
+    ) {
+        while let Some(comment) = comments.get(*index) {
+            if comment.span.end > start {
+                break;
+            }
+            self.format_comment(p, comment);
+            *index += 1;
+        }
+    }
+
+    /// Format comments that are not attached to a following AST node.
+    /// 格式化没有后续 AST 节点的注释。
+    fn format_remaining_comments(&self, p: &mut Printer, comments: &[Comment], index: &mut usize) {
+        while let Some(comment) = comments.get(*index) {
+            self.format_comment(p, comment);
+            *index += 1;
+        }
+    }
+
+    /// Write a retained comment without losing its internal line breaks.
+    /// 写入保留的注释，同时保留其内部换行。
+    fn format_comment(&self, p: &mut Printer, comment: &Comment) {
+        for (line_index, line) in comment.text.split('\n').enumerate() {
+            if line_index > 0 {
+                p.newline();
+            }
+            p.write(line);
+        }
+        p.newline();
     }
 
     /// Format an item.
@@ -75,6 +144,7 @@ impl Formatter {
                 p.write(";");
                 p.newline();
             }
+            _ => p.mark_error("unsupported AST item kind"),
         }
     }
 
@@ -211,6 +281,7 @@ impl Formatter {
                     }
                     p.write(" }");
                 }
+                _ => p.mark_error("unsupported AST variant kind"),
             }
         }
 
@@ -308,6 +379,7 @@ impl Formatter {
             ImportItems::All => {
                 p.write(".*");
             }
+            _ => p.mark_error("unsupported AST import items"),
         }
 
         if let Some(ref alias) = def.alias {
@@ -726,14 +798,18 @@ impl Formatter {
             ExprKind::Binary { op, left, right } => {
                 self.format_expr(p, left);
                 p.write(" ");
-                p.write(self.binop_str(*op));
+                if let Some(symbol) = self.binop_str(*op) {
+                    p.write(symbol);
+                } else {
+                    p.mark_error("unsupported binary operator");
+                }
                 p.write(" ");
                 self.format_expr(p, right);
             }
 
             // Unary / 一元运算
             ExprKind::Unary { op, operand } => {
-                p.write(self.unaryop_str(*op));
+                self.format_unaryop(p, *op);
                 self.format_expr(p, operand);
             }
 
@@ -848,6 +924,7 @@ impl Formatter {
                             self.format_expr(p, e);
                             p.write("}");
                         }
+                        _ => p.mark_error("unsupported interpolated string part"),
                     }
                 }
                 p.write("`");
@@ -858,6 +935,7 @@ impl Formatter {
             ExprKind::PathLit(path) => {
                 p.write(path);
             }
+            _ => p.mark_error("unsupported AST expression kind"),
         }
     }
 
@@ -928,6 +1006,7 @@ impl Formatter {
                 p.write(";");
                 p.newline();
             }
+            _ => p.mark_error("unsupported AST statement kind"),
         }
     }
 
@@ -1028,6 +1107,7 @@ impl Formatter {
                 p.write(" @ ");
                 self.format_pattern(p, pattern);
             }
+            _ => p.mark_error("unsupported AST pattern kind"),
         }
     }
 
@@ -1048,6 +1128,7 @@ impl Formatter {
                 p.write("'");
             }
             LiteralPattern::Bool(b) => p.write(if *b { "true" } else { "false" }),
+            _ => p.mark_error("unsupported literal pattern"),
         }
     }
 
@@ -1121,6 +1202,7 @@ impl Formatter {
             }
             TypeKind::Unit => p.write("()"),
             TypeKind::Infer => p.write("_"),
+            _ => p.mark_error("unsupported AST type kind"),
         }
     }
 
@@ -1134,34 +1216,46 @@ impl Formatter {
 
     /// Get the string representation of a binary operator.
     /// 获取二元运算符的字符串表示。
-    fn binop_str(&self, op: BinOp) -> &'static str {
+    fn binop_str(&self, op: BinOp) -> Option<&'static str> {
         match op {
-            BinOp::Add => "+",
-            BinOp::Sub => "-",
-            BinOp::Mul => "*",
-            BinOp::Div => "/",
-            BinOp::Mod => "%",
-            BinOp::Pow => "^",
-            BinOp::Eq => "==",
-            BinOp::Ne => "!=",
-            BinOp::Lt => "<",
-            BinOp::Le => "<=",
-            BinOp::Gt => ">",
-            BinOp::Ge => ">=",
-            BinOp::And => "&&",
-            BinOp::Or => "||",
-            BinOp::Concat => "++",
-            BinOp::Merge => "&",
-            BinOp::Pipe => "|>",
+            BinOp::Add => Some("+"),
+            BinOp::Sub => Some("-"),
+            BinOp::Mul => Some("*"),
+            BinOp::Div => Some("/"),
+            BinOp::Mod => Some("%"),
+            BinOp::Pow => Some("^"),
+            BinOp::Eq => Some("=="),
+            BinOp::Ne => Some("!="),
+            BinOp::Lt => Some("<"),
+            BinOp::Le => Some("<="),
+            BinOp::Gt => Some(">"),
+            BinOp::Ge => Some(">="),
+            BinOp::And => Some("&&"),
+            BinOp::Or => Some("||"),
+            BinOp::Concat => Some("++"),
+            BinOp::Merge => Some("&"),
+            BinOp::Pipe => Some("|>"),
+            _ => None,
         }
     }
 
     /// Get the string representation of a unary operator.
     /// 获取一元运算符的字符串表示。
-    fn unaryop_str(&self, op: UnaryOp) -> &'static str {
+    fn unaryop_str(&self, op: UnaryOp) -> Option<&'static str> {
         match op {
-            UnaryOp::Neg => "-",
-            UnaryOp::Not => "!",
+            UnaryOp::Neg => Some("-"),
+            UnaryOp::Not => Some("!"),
+            _ => None,
+        }
+    }
+
+    /// Write a unary operator, recording unknown future operators.
+    /// 写入一元运算符，同时记录未知的未来运算符。
+    fn format_unaryop(&self, p: &mut Printer, op: UnaryOp) {
+        if let Some(symbol) = self.unaryop_str(op) {
+            p.write(symbol);
+        } else {
+            p.mark_error("unsupported unary operator");
         }
     }
 }

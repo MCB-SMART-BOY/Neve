@@ -2,7 +2,7 @@
 //! 顶层 AST 定义。
 
 use crate::{Expr, Pattern, Type};
-use neve_common::Span;
+use neve_common::{Comment, Span};
 
 /// A complete source file.
 /// 完整的源文件。
@@ -10,6 +10,7 @@ use neve_common::Span;
 pub struct SourceFile {
     pub items: Vec<Item>,
     pub tail_expr: Option<Expr>,
+    pub comments: Vec<Comment>,
     pub span: Span,
 }
 
@@ -24,6 +25,7 @@ pub struct Item {
 /// Kind of top-level item.
 /// 顶层项的类型。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ItemKind {
     /// `let name = expr;` / let 绑定
     Let(LetDef),
@@ -39,7 +41,7 @@ pub enum ItemKind {
     Trait(TraitDef),
     /// `impl Trait for Type { items };` / 实现块
     Impl(ImplDef),
-    /// `import path;` / 导入语句
+    /// `use path;` / 导入语句；legacy `import path;` remains accepted.
     Import(ImportDef),
     /// Expression statement (top-level expression, not the last). / 表达式语句
     ExprStmt(Expr),
@@ -64,9 +66,11 @@ pub struct FnDef {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
-    /// DEPRECATED(v4.0): The `effect` keyword has been removed. Effects are
-    /// now auto-inferred by the type checker. This field is only populated by
-    /// legacy parser compatibility and is ignored during HIR lowering.
+    /// Legacy `effect` syntax retained as an initial effect-inference seed.
+    ///
+    /// Canonical v4.0 source omits this marker and infers effects from the
+    /// body. The parser still records the legacy marker so old programs keep
+    /// their declared effect boundary through HIR and type checking.
     pub effect: bool,
     pub body: Expr,
 }
@@ -142,6 +146,7 @@ pub struct Variant {
 /// Kind of enum variant.
 /// 枚举变体的类型。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum VariantKind {
     /// `Variant` / 单元变体
     Unit,
@@ -170,7 +175,7 @@ pub struct TraitItem {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
-    /// DEPRECATED(v4.0): see FnDef.effect.
+    /// Legacy `effect` syntax retained as an initial effect-inference seed.
     pub effect: bool,
     pub default: Option<Expr>,
     pub span: Span,
@@ -205,6 +210,7 @@ pub struct ImplItem {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
+    /// Legacy `effect` syntax retained as an initial effect-inference seed.
     pub effect: bool,
     pub body: Expr,
     pub span: Span,
@@ -219,8 +225,8 @@ pub struct AssocTypeImpl {
     pub span: Span,
 }
 
-/// An import statement.
-/// 导入语句。
+/// A `use` import statement.
+/// `use` 导入语句（legacy `import` 拼写仍被接受）。
 #[derive(Debug, Clone)]
 pub struct ImportDef {
     /// Path prefix (self, super, crate, or absolute). / 路径前缀。
@@ -238,6 +244,7 @@ pub struct ImportDef {
 /// Path prefix for imports and module paths.
 /// 导入和模块路径的前缀。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum PathPrefix {
     /// Absolute path (no prefix, starts from root). / 绝对路径。
     #[default]
@@ -253,18 +260,20 @@ pub enum PathPrefix {
 /// What to import from a module.
 /// 从模块导入的内容。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ImportItems {
     /// Import the module itself. / 导入模块本身。
     Module,
-    /// Import specific items: `import a.b (x, y)`. / 导入特定项。
+    /// Import specific items: `use a.b (x, y)`. / 导入特定项。
     Items(Vec<Ident>),
-    /// Import all: `import a.b (*)`. / 导入全部。
+    /// Import all: `use a.b (*)`. / 导入全部。
     All,
 }
 
 /// Visibility level for items.
 /// 项的可见性级别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum Visibility {
     /// Private to the current module (default). / 私有（默认）。
     #[default]

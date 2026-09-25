@@ -34,6 +34,19 @@ fn test_frontend_reports_type_errors() {
 }
 
 #[test]
+fn test_frontend_rejects_duplicate_enum_variant_names() {
+    let result = analyze_source("enum First { Same }; enum Second { Same };");
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diag| diag.message.contains("duplicate enum variant `Same`")),
+        "expected duplicate variant diagnostic, got {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_formats_named_types_readably_in_diagnostics() {
     let result = analyze_source(
         r#"
@@ -3535,6 +3548,19 @@ fn test_typeck_rejects_duplicate_top_level_let() {
 }
 
 #[test]
+fn test_typeck_rejects_top_level_refutable_pattern_without_binding() {
+    let result = analyze_source("let 1 = 2;");
+    let has_pattern_error = result.diagnostics.iter().any(|diagnostic| {
+        diagnostic.message.contains("top-level pattern") && diagnostic.message.contains("bind")
+    });
+    assert!(
+        has_pattern_error,
+        "expected top-level pattern diagnostic, got {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn test_typeck_auto_infers_effect_for_io_call() {
     let result = analyze_source(
         r#"
@@ -3714,6 +3740,60 @@ fn test_typeck_method_effect_propagates_to_forward_lambda() {
     );
 }
 
+#[test]
+fn test_typeck_trait_effect_marker_propagates_to_impl_method() {
+    assert_typeck_effect_diagnostics(
+        r#"
+        trait Loader { fn load(self) -> String effect; };
+        impl Loader for String {
+            fn load(self) -> String = self;
+        };
+        fn wrapper(path: String) -> String = path.load();
+        |path: String| wrapper(path);
+        "#,
+        Some("wrapper"),
+    );
+}
+
+#[test]
+fn test_typeck_trait_effect_marker_is_order_independent() {
+    let source = r#"
+        impl Loader for String {
+            fn load(self) -> String = self;
+        };
+        trait Loader { fn load(self) -> String effect; };
+        fn wrapper(path: String) -> String = path.load();
+        |path: String| wrapper(path);
+        "#;
+    let result = analyze_source(source);
+    assert!(
+        !result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("using callable fallback")),
+        "trait impl order should not require callable fallback: {:?}",
+        result.diagnostics
+    );
+    assert_typeck_effect_diagnostics(source, Some("wrapper"));
+}
+
+#[test]
+fn test_typeck_trait_impl_registration_is_order_independent() {
+    let result = analyze_source(
+        r#"
+        impl Loader for String {};
+        trait Loader { fn load(self) -> String; };
+        "#,
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("missing method `load`")),
+        "impl-before-trait should still validate trait completeness: {:?}",
+        result.diagnostics
+    );
+}
 #[test]
 fn test_typeck_pure_method_named_like_builtin_is_not_effectful() {
     assert_typeck_effect_diagnostics(

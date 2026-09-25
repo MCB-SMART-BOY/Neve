@@ -23,10 +23,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 ## Build
 
-```bash
-cargo build -p neve          # debug — fast compile, for dev iteration
-cargo build -p neve --release  # release — for performance benchmarks
-```
+cargo build -p n3v3          # debug — fast compile, for dev iteration
+cargo build -p n3v3 --release  # release — for performance benchmarks
 
 ## Run (agent path) — smoke driver
 
@@ -87,16 +85,14 @@ tmux kill-session -t neve-repl
 
 ## Run (human path)
 
-```bash
-cargo run -p neve -- repl     # interactive REPL
-cargo run -p neve -- run file.neve
-```
+cargo run -p n3v3 -- repl     # interactive REPL
+cargo run -p n3v3 -- run file.neve
 
 ## Test
 
 ```bash
 cargo test --workspace                     # unit + integration
-cargo test --test end_to_end -- --nocapture  # 541 E2E tests
+cargo test --test end_to_end -- --nocapture  # 547 E2E tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```

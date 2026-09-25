@@ -13,15 +13,15 @@ You are working on the Neve parser pipeline:
 
 1. When adding new syntax, follow the checklist in `.claude/skills/neve-parser.md`
 2. Every new token needs a test in `tests/parser.rs`
-3. Backward compatibility: legacy syntax must be accepted by the lexer
+3. Backward compatibility: legacy syntax must be accepted by the parser; only reserved forms should be lexer tokens
 4. Parser error messages must use `neve-diagnostic` codes
-5. Never introduce ambiguity — the parser is LL(1), no backtracking
+5. Keep the LL(1) grammar unambiguous; any speculative lookahead must restore cursor and diagnostics
 
 ## Key References
 
 - Skill: `.claude/skills/neve-parser.md`
 - Spec: `docs/reference/spec.md`
-- Tests: `tests/parser.rs` (220+ tests)
+- Tests: `tests/parser.rs` (233 tests)
 
 ## Checklist Before Returning
 

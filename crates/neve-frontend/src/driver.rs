@@ -1,7 +1,7 @@
 //! Compatibility multi-module frontend driver.
 //! 兼容式多模块前端驱动。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -13,7 +13,7 @@ use neve_typeck::TypeChecker;
 use crate::{
     Diagnostic, DiagnosticStats, Module, ModuleSemantics, SourceFile, collect_diagnostic_stats,
     collect_item_names_from_modules, collect_module_semantics, diagnostics_have_errors,
-    rewrite_diagnostics_with_names,
+    read_diagnostic_source, rewrite_diagnostics_with_names,
 };
 
 /// Per-module semantic analysis produced by the compatibility driver.
@@ -289,7 +289,7 @@ impl ProgramAnalysis {
                 Some(ProgramDiagnosticModule {
                     module_id: *module_id,
                     file_path: info.file_path.clone(),
-                    source: std::fs::read_to_string(&info.file_path).unwrap_or_default(),
+                    source: read_diagnostic_source(&info.file_path),
                     diagnostics,
                 })
             })
@@ -454,16 +454,22 @@ impl FrontendDriver {
             .load_module(module_path)
             .map_err(FrontendError::ModuleLoad)?;
 
+        let modules: Vec<&Module> = loader
+            .load_order()
+            .iter()
+            .filter_map(|module_id| loader.hir_module(*module_id))
+            .collect();
+        let global_traits = TypeChecker::collect_global_trait_resolver(modules.iter().copied());
         let mut global_types = HashMap::new();
         let mut global_spans = HashMap::new();
         let mut global_fn_bounds = HashMap::new();
-        for module_id in loader.load_order() {
-            if let Some(module) = loader.hir_module(*module_id) {
-                let (types, spans, bounds) = TypeChecker::collect_signatures(module);
-                global_types.extend(types);
-                global_spans.extend(spans);
-                global_fn_bounds.extend(bounds);
-            }
+        let mut global_effectful_definitions = HashSet::new();
+        for module in &modules {
+            let (types, spans, bounds) =
+                TypeChecker::collect_signatures_with_trait_resolver(module, &global_traits);
+            global_types.extend(types);
+            global_spans.extend(spans);
+            global_fn_bounds.extend(bounds);
         }
 
         let type_names = collect_item_names_from_modules(
@@ -490,14 +496,16 @@ impl FrontendDriver {
             let Some(module) = loader.hir_module(*module_id) else {
                 continue;
             };
-
-            let mut checker = TypeChecker::with_global_env(
+            let mut checker = TypeChecker::with_global_env_and_traits(
                 global_types.clone(),
                 global_spans.clone(),
                 global_fn_bounds.clone(),
-            );
+                global_traits.clone(),
+            )
+            .with_effectful_definitions(global_effectful_definitions.iter().copied());
             checker.check(module);
             let semantics = collect_module_semantics(&checker);
+            global_effectful_definitions.extend(checker.effectful_definitions().iter().copied());
             let diagnostics =
                 rewrite_diagnostics_with_names(checker.diagnostics_ref().to_vec(), &type_names);
 

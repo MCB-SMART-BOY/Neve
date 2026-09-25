@@ -21,6 +21,36 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *What changed, when, and why.*  
 > 更新日志：记录改变、时间和原因。
 
+## [Unreleased]
+
+### Fixed
+- **Lexer**: `/` is a path literal only when the previous token cannot end an operand, so `6/2` lexes as division instead of an absolute path. Postfix `?` also ends an operand, so `total?/2` is division.
+- **HIR**: Enum variant registration reports the real conflict — `enum Only { Only(Int) }` now reports that the variant conflicts with the enum name instead of claiming a duplicate variant.
+- **Evaluator**: Zero-parameter items (top-level `let` and `fn name() = …`) are value bindings, matching the type checker instead of diverging on explicit zero-parameter functions.
+- **Evaluator**: `io.defer` runs per frame — the module body, thunk bodies, zero-parameter bindings, and closures each run their deferred actions on frame exit, including when the body fails. A tail call keeps its caller's actions pending until the chain finishes, so frames clean up innermost-first; previously a tail-position cleanup ran before the callee and module-level or thunk-level actions were dropped. One failing action no longer cancels the remaining actions of its frame.
+- **Evaluator**: A failed thunk caches the failure (`ThunkState::Failed`) so a later `force` reports the same error rather than re-running side effects.
+- **Evaluator**: Method calls in tail position (`receiver.method(args)`) run through the tail-call loop, so tail recursion through trait/impl methods no longer consumes native stack.
+- **Evaluator**: Deep non-tail recursion reports a diagnosable error instead of aborting the process with a native stack overflow; the evaluator measures the thread's available stack and keeps a 512 KiB reserve.
+- **LSP**: Semantic token positions and lengths use UTF-16 code units, so astral characters no longer shift later tokens on the line. The AST-token path no longer computes a dead offset, and its comment now matches the "whole-set fallback" behavior.
+
+### Tests
+- Replaced a tautological `io.defer` smoke assertion with real call-frame, cleanup-on-failure, and scope-isolation tests; added module-frame, thunk-frame, tail-chain ordering, and chain-failure cleanup coverage.
+- Replaced two tautological E2E assertions: the bytes-length case now reads a real temp file through `io.readFileBytesPath` and asserts `bytes.len(data) > 0`, and the retry case asserts both a clean type check and a successful HIR evaluation.
+- Added coverage for slash disambiguation (`6/2`, `total?/2`), thunk failure caching, method-call tail recursion, the evaluation stack budget, enum-variant name conflicts, and UTF-16 semantic token positions.
+
+### Docs
+- Syntax spec documents the slash disambiguation, the identifier character rule (ASCII start, Unicode continuation), and zero-parameter value bindings.
+- Skills synchronized with the checks above; `.claude/hooks/verify-skills.sh` now verifies the parser/AST/common source paths it previously let drift.
+
+## [5.0.0] - 2026-09-24
+
+### Breaking
+- **AST API boundary**: Public syntax enums are now `#[non_exhaustive]`; downstream matches must include a wildcard arm.
+- **AST/HIR compatibility**: Unsupported future syntax is rejected or preserved as an explicit diagnostic node instead of silently degrading.
+
+### Changed
+- **Version bump**: Workspace and internal crate requirements 4.0.4 → 5.0.0.
+
 ## [4.0.4] - 2026-06-17
 
 ### Changed
@@ -57,7 +87,7 @@ Based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [4.0.0] - 2026-06-16
 
 ### Changed
-- **v4.0 syntax is canonical**: `let`/`fn`/`;` optional at top level, `use` not `import`, `if -> else` not `then/else`, `~` not `lazy`, `{ }` records, `&` line comments, `pub` removed (all public by default). 12 canonical keywords (+6 legacy aliases = 22 total accepted by lexer).
+- **v4.0 syntax is canonical**: `let`/`fn`/`;` optional at top level, `use` not `import`, `if -> else` not `then/else`, `~` not `lazy`, `{ }` records, `&` line comments, `pub` removed (all public by default). 12 canonical keywords remain; the parser accepts 10 legacy spellings for source compatibility, with only `struct`, `enum`, `super`, and `crate` emitted as dedicated lexer tokens.
 - **Phase D complete**: AST compatibility path (`ast_eval.rs`, `AstClosure`, `AstEnv`) fully removed (~3500 lines). All evaluation goes through canonical HIR pipeline.
 - **Phase B gap closure: 12/12**: All 12 E2E gap tests now pass. Phase B complete.
 - **Generic identity inference**: Functions without explicit generics (`id = |x| x`) now get polymorphic types via `generalize` + `instantiate` fix.

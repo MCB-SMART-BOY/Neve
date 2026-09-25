@@ -364,6 +364,7 @@ impl SymbolIndex {
             ItemKind::ExprStmt(_) => {
                 // Expression statements don't define new symbols
             }
+            _ => {}
         }
     }
 
@@ -552,6 +553,7 @@ impl SymbolIndex {
             | ExprKind::Bool(_)
             | ExprKind::Unit
             | ExprKind::PathLit(_) => {}
+            _ => {}
         }
     }
 
@@ -564,6 +566,7 @@ impl SymbolIndex {
             StmtKind::Expr(e) => {
                 self.index_expr(e);
             }
+            _ => {}
         }
     }
 
@@ -654,6 +657,7 @@ impl SymbolIndex {
                 }
             }
             PatternKind::Wildcard | PatternKind::Literal(_) | PatternKind::Var(_) => {}
+            _ => {}
         }
         names
     }
@@ -833,6 +837,7 @@ impl SymbolIndex {
             // These don't introduce or reference symbols
             // 这些不引入或引用符号
             PatternKind::Wildcard | PatternKind::Literal(_) => {}
+            _ => {}
         }
     }
 

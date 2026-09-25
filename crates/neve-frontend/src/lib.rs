@@ -31,8 +31,21 @@ use neve_common::Span;
 use neve_hir::{ModuleId, lower};
 use neve_parser::parse;
 use neve_typeck::{TypeChecker, format_builtin_named_type};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+pub(crate) fn read_diagnostic_source(path: &Path) -> String {
+    match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!(
+                "failed to read source for diagnostic attribution at {}: {error}",
+                path.display()
+            );
+            String::new()
+        }
+    }
+}
 
 /// Canonical per-module semantic side tables.
 /// 规范化后的单模块语义 side tables。
@@ -59,6 +72,9 @@ pub struct ModuleSemantics {
     /// Human-readable names for global definitions (for type display).
     /// 全局定义的可读名称（用于类型显示）。
     pub global_names: HashMap<DefId, String>,
+    /// Definitions inferred as effectful in this module or imported from dependencies.
+    /// 本模块或依赖中推断为有副作用的定义。
+    pub effectful_definitions: HashSet<DefId>,
 }
 
 impl ModuleSemantics {
@@ -322,7 +338,7 @@ pub fn analyze_snippet_ast(
             let file_path = entry.file_path;
             LoadedSnippetModule {
                 module_id: entry.module_id,
-                source: std::fs::read_to_string(&file_path).unwrap_or_default(),
+                source: read_diagnostic_source(&file_path),
                 file_path,
                 hir: entry.module,
                 diagnostics: entry.analysis.diagnostics,
@@ -379,6 +395,7 @@ pub(crate) fn collect_module_semantics(checker: &TypeChecker) -> ModuleSemantics
         local_types,
         expr_types,
         global_names: checker.global_names_ref().clone(),
+        effectful_definitions: checker.effectful_definitions().clone(),
     }
 }
 

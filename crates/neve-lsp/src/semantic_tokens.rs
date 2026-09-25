@@ -59,8 +59,9 @@ pub fn generate_semantic_tokens(tokens: &[Token], source: &str) -> Vec<SemanticT
     for token in tokens {
         if let Some((token_type, modifiers)) = classify_token(token) {
             let start: usize = token.span.start.into();
+            let end: usize = token.span.end.into();
             let (line, col) = offset_to_line_col(source, start);
-            let length = token.span.len() as u32;
+            let length = utf16_length(source, start, end);
 
             let delta_line = line - prev_line;
             let delta_col = if delta_line == 0 { col - prev_col } else { col };
@@ -124,8 +125,9 @@ pub fn generate_semantic_tokens_with_context(tokens: &[Token], source: &str) -> 
     for token in tokens {
         if let Some((token_type, modifiers)) = classify_token_with_context(token, &ctx) {
             let start: usize = token.span.start.into();
+            let end: usize = token.span.end.into();
             let (line, col) = offset_to_line_col(source, start);
-            let length = token.span.len() as u32;
+            let length = utf16_length(source, start, end);
 
             let delta_line = line - prev_line;
             let delta_col = if delta_line == 0 { col - prev_col } else { col };
@@ -264,25 +266,47 @@ fn classify_token(token: &Token) -> Option<(u32, u32)> {
     classify_token_with_context(token, &ClassifyContext::default())
 }
 
-/// Convert byte offset to line and column.
-/// 将字节偏移量转换为行和列。
+/// Convert a byte offset to a zero-based line and UTF-16 column.
+/// 将字节偏移量转换为从零开始的行号与 UTF-16 列号。
+///
+/// LSP positions use UTF-16 code units by default, so a scalar value outside
+/// the BMP (for example an emoji) spans two columns while plain character
+/// counting would shift every following token on that line.
+/// LSP 位置默认以 UTF-16 码元计数：BMP 之外的标量值（例如 emoji）占两列，
+/// 按字符计数会使同一行后续 token 的列号整体左移。
 fn offset_to_line_col(source: &str, offset: usize) -> (u32, u32) {
     let mut line = 0u32;
-    let mut col = 0u32;
+    let mut line_start = 0usize;
 
-    for (i, c) in source.chars().enumerate() {
-        if i == offset {
-            break;
+    for line_text in source.split('\n') {
+        let line_end = line_start + line_text.len();
+        if offset <= line_end {
+            return (line, utf16_col_in_line(line_text, offset - line_start));
         }
-        if c == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
+        line_start = line_end + 1;
+        line += 1;
     }
 
-    (line, col)
+    (line, 0)
+}
+
+/// Length of a byte prefix expressed in UTF-16 code units.
+/// 计算行内字节前缀对应的 UTF-16 列数。
+fn utf16_col_in_line(line_text: &str, byte_prefix: usize) -> u32 {
+    let prefix = line_text.get(..byte_prefix).unwrap_or(line_text);
+    prefix.chars().map(|c| c.len_utf16() as u32).sum()
+}
+
+/// Length of a byte range expressed in UTF-16 code units.
+/// 计算字节区间对应的 UTF-16 长度，用于 LSP token 的 `length` 字段。
+fn utf16_length(source: &str, start: usize, end: usize) -> u32 {
+    match source.get(start..end) {
+        Some(text) => text.chars().map(|c| c.len_utf16() as u32).sum(),
+        // Spans come from the lexer and are char-aligned; a mismatch means the
+        // source changed under us, so fall back to the raw byte length.
+        // span 来自词法分析器且对齐到字符边界；不匹配说明源码已被替换，退回字节长度。
+        None => end.saturating_sub(start) as u32,
+    }
 }
 
 // =============================================================================
@@ -545,6 +569,7 @@ pub fn generate_semantic_tokens_from_ast(source: &str) -> Vec<SemanticToken> {
             ItemKind::ExprStmt(expr) => {
                 classify_ast_expr(&mut semantic_set, expr);
             }
+            _ => {}
         }
     }
 
@@ -580,11 +605,13 @@ fn result_from_ast_set(
     // 需要源码来计算行/列。
     let mut prev_line = 0u32;
     let mut prev_col = 0u32;
-    let mut _prev_offset = 0u32;
 
-    for (&offset, &(_token_type, _modifiers, length)) in semantic_set {
+    for (&offset, &(token_type, modifiers, byte_length)) in semantic_set {
         let start: usize = offset as usize;
         let (line, col) = offset_to_line_col(source, start);
+        // AST entries store byte lengths; LSP requires UTF-16 code units.
+        // AST 集合存储字节长度；LSP 需要 UTF-16 码元长度。
+        let length = utf16_length(source, start, start + byte_length as usize);
 
         let delta_line = line - prev_line;
         let delta_col = if delta_line == 0 { col - prev_col } else { col };
@@ -593,20 +620,18 @@ fn result_from_ast_set(
             delta_line,
             delta_start: delta_col,
             length,
-            token_type: _token_type,
-            token_modifiers_bitset: _modifiers,
+            token_type,
+            token_modifiers_bitset: modifiers,
         });
 
         prev_line = line;
         prev_col = col;
-        _prev_offset = offset + length;
     }
 
-    // Append lexer tokens as fallback, offset-adjusted
-    // 追加词法 token 作为后备，调整偏移量
+    // Only when the AST produced no tokens at all does the lexer set stand in
+    // for it; the two sets are never merged.
+    // 只有当 AST 完全没有产出 token 时，才整体回退到词法 token 集合；两者不会合并。
     if result.is_empty() {
-        // No AST tokens, just use lexer tokens directly
-        // 没有 AST token，直接使用词法 token
         return lexer_tokens;
     }
 
@@ -652,6 +677,7 @@ fn classify_ast_pattern(
             }
         }
         PatternKind::Wildcard | PatternKind::Literal(_) => {}
+        _ => {}
     }
 }
 
@@ -722,6 +748,7 @@ fn classify_ast_expr(
                     StmtKind::Expr(e) => {
                         classify_ast_expr(semantic_set, e);
                     }
+                    _ => {}
                 }
             }
             if let Some(tail_expr) = tail {

@@ -4,7 +4,7 @@
 
 ```
            ┌──────────┐
-           │ E2E      │  541 tests (all pass) — full pipeline smoke
+           │ E2E      │ 550 tests (all pass) — full pipeline smoke
            │ (smoke)  │  tests/end_to_end.rs
            ├──────────┤
            │ Inte-    │  ~600 tests — subsystem validation
@@ -36,9 +36,9 @@ mod tests {
 
 | Test File | What It Validates | Count |
 |-----------|-------------------|-------|
-| `tests/parser.rs` | Lexer + parser for all syntax forms | 220+ |
+| `tests/parser.rs` | Lexer + parser for all syntax forms | 233 |
 | `tests/typeck.rs` | Type inference, traits, exhaustiveness | 287+ |
-| `tests/end_to_end.rs` | Full pipeline: parse→typeck→eval | 541 |
+| `tests/end_to_end.rs` | Full pipeline: parse→typeck→eval | 550 |
 | `tests/eval.rs` | HIR evaluator unit tests | ~30 |
 | `tests/lsp_e2e.rs` | LSP protocol conformance | 8 |
 | `tests/syntax_policy.rs` | Semantic policy assertions | 4 |
@@ -62,7 +62,7 @@ fn run(source: &str) -> Result<Value, EvalError> {
 // The AST compat path was fully removed in v4.0 (Phase D).
 ```
 
-## E2E Coverage (541 tests)
+## E2E Coverage (550 tests)
 
 | Category | Tests | Examples |
 |----------|-------|----------|
@@ -110,8 +110,8 @@ Implementation order:
 
 | File | What |
 |------|------|
-| `tests/end_to_end.rs` | 541 canonical pipeline tests |
-| `tests/parser.rs` | 220+ parser integration tests + golden tests |
+| `tests/end_to_end.rs` | 550 canonical pipeline tests |
+| `tests/parser.rs` | 234 parser integration tests + golden tests |
 | `tests/typeck.rs` | 287+ type system tests |
 | `tests/frontend.rs` | Effect propagation and frontend pipeline regressions |
 | `tests/lsp.rs` | LSP semantic hover, symbol, and navigation regressions |

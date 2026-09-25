@@ -385,9 +385,63 @@ builder、config、fetch、frontend、lsp、store、fmt 集成测试在 Windows 
 
 ---
 
-## 最终状态 (v4.0.1)
+## AST/HIR/IR Review (2026-09-25)
 
-**Current status (2026-09-23):** The historical “62 findings resolved” statement is not a current verification result. Core parser/HIR/typeck/eval checks pass, but the AST/HIR follow-up audit still has open boundaries: comment trivia preservation, AST enum sealing, tree-sitter native generation, record-variant semantics, duplicate variant identity, top-level refutable `let`, and tooling mappings.
+按项目 v4.0/v5.0 语法设定重新核对 lexer → parser → AST → HIR → typeck → eval 全链路，重点检查 AST 解析覆盖与 IR 完整性。发现并修复：
+
+| # | 位置 | 问题 | 修复 | 验证 |
+|---|------|------|------|------|
+| 1 | `neve-lexer/src/lexer.rs` | `/` 一律按绝对路径字面量扫描，`6/2` 被切成 `PathLit` | 记录 `last_token_kind`，仅在上一 token 不能结束操作数时进入路径扫描 | `tests/lexer.rs::test_compact_division_is_not_an_absolute_path` |
+| 2 | `neve-hir/src/resolve.rs` | 枚举变体与已有全局同名时静默覆盖；与枚举自身同名被误报为重复变体 | 按 `(enum DefId, span)` 记录变体，冲突时给出精确诊断 | `tests/typeck.rs`（self-name / duplicate 两例） |
+| 3 | `neve-eval/src/eval.rs` | 零参数项求值语义与 typeck 不一致（显式 `fn f() = …` 被当作可调用对象） | 统一为值绑定语义；移除临时引入的 `FnDef.is_binding` 字段 | `cargo test --workspace`、typeck 一致性 |
+| 4 | `neve-eval/src/eval.rs` | `io.defer` 只在程序结束时统一执行，失败路径不执行 | 延迟动作归属调用帧，帧退出（成功或失败）即执行，并恢复外层作用域 | `tests/end_to_end.rs` 三个 defer 测试 |
+| 5 | `neve-eval/src/value.rs` + `eval.rs` | thunk 失败后被缓存为 `Evaluated(Err(..))`，再次 `force` 得到 `Ok(Err(..))` 且状态与错误不一致 | 新增 `ThunkState::Failed(EvalError)`，失败结果原样缓存 | `eval::tests::test_force_caches_thunk_failure` |
+| 6 | `neve-eval/src/eval.rs` | `ExprKind::MethodCall` 不在 `eval_with_tco` 分支中，方法调用尾递归退化为普通递归 | 方法调用解析拆分为 `resolve_method_call`，尾位置返回 `TcoResult::TailCall` | `tests/eval.rs::test_eval_method_call_tail_recursion_is_optimized`（11_000 层） |
+| 7 | `neve-eval/src/eval.rs` | `MAX_RECURSION_DEPTH = 10_000` 实际不可达：单帧数 KB，约 1_000 层即原生栈溢出并 `abort`（debug/release 均复现） | `apply` 测量当前线程可用栈（`pthread_getattr_np`，512 KiB 保留，探测失败回退 512 KiB），预算耗尽即返回可诊断错误 | CLI 复现转为 `E0303`；`eval::tests::test_non_tail_recursion_reports_stack_budget_instead_of_aborting` |
+| 8 | `neve-lsp/src/semantic_tokens.rs` | 列号按字符计数、长度按字节计算，astral 字符使同行后续 token 偏移 | `offset_to_line_col` / `utf16_length` 统一按 UTF-16 码元计算 | `tests/lsp.rs::test_semantic_tokens_positions_use_utf16_code_units` |
+| 9 | `tests/end_to_end.rs` | `test_defer_execution_order` 为恒真断言（`assert!(ok || err)`） | 删除并替换为真实行为测试 | 同上 |
+
+未修复（记录为后续边界）：
+
+| 位置 | 现象 | 影响 |
+|------|------|------|
+| `neve-lexer` | 非 ASCII 标识符被拒绝（`E0001 unexpected character`） | 语言词汇表限定为 ASCII 标识符；如需 Unicode 标识符需单独立项 |
+| `neve-eval` | 表达式深度（非 `apply` 路径）不受栈预算约束 | 极深嵌套表达式仍可能触及原生栈；当前由解析器先行失败覆盖 |
+| `neve-typeck` / `neve-eval` | 零参数 `fn f() = …` 是值绑定，`f()` 不是合法调用 | 与 Rust 直觉不同，属既有语义；已在 changelog 与技能文档中明确 |
+
+**安全复审（2026-09-25，security-reviewer，只读）**：本批次新增的 3 处 `unsafe`（`neve-common::kill_process` 的 `libc::kill`、`neve-eval` 的栈探测与信号处理、tree-sitter 的 `unsafe extern "C"`）逐条核对无越界读写、无 UB，平台回退为 fail-safe（预算偏保守，不会放过溢出）。无 critical/high。cargo audit / cargo deny / trivy / gitleaks 均通过（`validate.sh` Gate 1/5）。两条 low 属既有代码，**不由本批次引入**，留待后续：
+
+| 位置 | 现象 | 建议 |
+|------|------|------|
+| `crates/neve-eval/src/builtin.rs` `json_to_value`（`builtin.rs:1637-1730`，`fromJSON` 入口） | 递归解析外部 JSON 无深度上限；不经过 `Evaluator::apply`，因此新增的栈预算守卫覆盖不到，深层嵌套 `[` 可在解析期耗尽原生栈 | 增加显式深度上限（例如 128）并返回可诊断错误；`value_to_json` 同样处理；加测试固定上限 |
+| `crates/neve-common/src/lib.rs` `kill_process`（`lib.rs:30-40`） | `pid as i32` 隐式截断改变 `kill` 语义（Linux `pid_max ≤ 2^22`，实际不可达）；超时 kill 与 `child.wait_with_output()` 回收之间存在 PID 复用窗口 | `libc::pid_t::try_from` + 失败跳过；或由持有 `Child` 的线程终止 / Linux 上用 `pidfd_open` |
+
+其他 info 级建议（不阻塞）：`install_signal_handler` 忽略 `libc::sigaction` 返回值；`DepthGuard` 的裸指针可改用 `&Cell<u32>` 持有以去掉 `unsafe`；注册 `io.onSignal` 会取代 TERM/HUP 的默认终止语义，需在文档中说明。
+
+**独立审查（2026-09-25，agent://reviewer，只读）**：`CHANGES REQUESTED`，两条 Major 均属本次新增的按帧 `io.defer` 语义，已修复并补齐失败前/通过后的回归证据：
+
+| # | 位置 | 问题 | 修复 | 证据 |
+|---|------|------|------|------|
+| 1 | `eval.rs` `eval_module` / `force_thunk` | 模块帧与 thunk 帧注册的 defer 永不执行（相对旧的“程序结束统一执行”是静默回归） | 模块第二遍求值包在 take/settle/restore 中；thunk 子求值器在丢弃前 settle | `test_defer_runs_at_module_scope`、`test_defer_runs_inside_thunk_frame`（禁用修复即失败） |
+| 2 | `eval.rs` TCO 循环 | 尾位置的 defer 在被调用者执行前、以 FIFO 顺序运行，与同构非尾调用相反 | 帧 defer 挂起到 `pending_frame_defers`，链结束时由内层向外层 flush | `test_defer_order_matches_tail_and_non_tail_calls`、`test_defer_runs_when_tail_called_frame_fails`（禁用修复即失败） |
+| 3 | `lexer.rs` `can_start_operand` | 漏掉后缀 `?`，`total?/2` 被词法成 `PathLit("/2")` | 操作数结束集合加入 `Question` | `tests/lexer.rs::test_slash_after_try_operator_is_division` |
+| 4 | `eval.rs` `run_defers` | 单个 defer 失败会跳过同帧其余 defer，函数注释却称“全部执行” | 全部尝试，报告首个错误 | 与 #2 的测试共用路径 |
+| 5 | `tests/end_to_end.rs` | `test_end_to_end_bytes_len` 恒真断言掩盖了源码缺少 `use std.io = io`（该用例从未真正通过类型检查）；retry 用例同样恒真 | bytes 用例改为 TempDir 真实读取并断言 `bytes.len(data) > 0`；retry 用例断言类型检查干净且 HIR 求值成功 | 两用例现均为真实断言并通过 |
+| 6 | 文档/配置 | spec 的“标识符为 ASCII”与实现（ASCII 起始 + Unicode 续字符）矛盾；技能表引用不存在的 `neve-lexer/src/span.rs`、`neve-syntax/src/item.rs`、`neve-parser/src/{expr,pattern}.rs`；`.editorconfig` 对生成的 `parser.c` 用 4 空格；`semantic_tokens.rs` 存留死变量与失实注释 | 按实现改写 spec 与技能；表内路径改为实际文件并纳入 `verify-skills.sh` 校验；`parser.c` 单独声明 2 空格；删除死变量并修正注释 | `verify-skills.sh` 17 → 25 项检查全通过 |
+
+**新增后续边界（非本批次引入，未修复）**：
+
+| 位置 | 现象 | 影响 / 建议 |
+|------|------|-----------|
+| `neve-typeck/src/traits.rs` `resolve_method` trait 回退分支 | 在 `trait_impls`（HashMap）上取首个匹配的 impl，迭代顺序随进程随机种子变化 | 多个候选 impl 且接收者仍是类型变量时，方法选择不确定且被写进运行时分派表；需确定性排序 + 多匹配歧义诊断。该循环早于本批次存在（`git diff --cached` 中为上下文行），本批次的替换匹配扩大了可匹配面 |
+| `crates/neve-eval/src/diagnostics.rs` | 递归上限与栈预算以 `TypeError` → E0303 “runtime type error” + “加个类型标注”帮助呈现，且 >80 字符的消息被截断 | 建议为递归/栈耗尽增加独立 `EvalError` 变体与 `ErrorCode`（会新增第 56 个错误码，需同步 codes 表与文档）；本批次先把消息缩短到不被截断 |
+| `tree-sitter-neve/grammar.js` | 仍是 v3.x 形态（`if … then … else`、`lazy`、强制 `{ … }` 枚举、无后缀 `?`），而 `src/parser.c` 已随本批次重新生成 | 编辑器语法与编译器行为分歧；需按 v4.0 规范补规则并重新 generate |
+
+---
+
+## 最新验证状态 (v5.0.0)
+
+**Current status (2026-09-24):** The v5.0.0 AST boundary cutover is implemented and verified: public AST enums are non-exhaustive, unsupported AST-to-HIR forms retain explicit diagnostics, and top-level refutable `let` patterns without bindings are rejected instead of being silently dropped. Remaining follow-up boundaries are comment trivia preservation, tree-sitter native generation, record-variant semantics, duplicate variant identity, and tooling mappings.
 
 The release fixes documented above remain historical evidence. New changes MUST be validated against the current source and targeted behavior, not this ledger alone.
 

@@ -59,8 +59,10 @@ pub enum Value {
 }
 
 pub enum ThunkState {
-    Pending(TypedExpr, Rc<Environment>),  // Not yet evaluated
-    Forced(Value),                        // Memoized result
+    HirUnevaluated { expr: Expr, env: Environment },  // Not yet evaluated
+    Evaluating,                                      // Cycle detection
+    Evaluated(Value),                                // Memoized result
+    Failed(EvalError),                               // Cached failure
 }
 ```
 
@@ -172,10 +174,29 @@ impl Evaluator {
 
 ## Memory & Performance
 
-- **Thunks**: Memoized on first force; no re-evaluation
+- **Thunks**: Memoized on first force; a failed body caches the error in
+  `ThunkState::Failed` so a later `force` reports the same failure without
+  re-running side effects. `isEvaluated` stays false for failed thunks.
 - **Closures**: Capture `Rc<Environment>` at creation time
 - **Value sharing**: `Rc` for structural types (List, Record)
-- **Tail-call optimization**: Detected in `eval_call` for recursive functions
+- **Tail-call optimization**: A call in tail position returns `TcoResult::TailCall`
+  in `eval_with_tco` and the loop in `apply` iterates instead of recursing. This
+  covers direct calls and method calls (`receiver.method(args)`), so tail
+  recursion through trait/impl methods does not consume native stack.
+- **Deferred actions**: `io.defer` registers into the *current frame*; every frame
+  runs its defers when it exits (success or failure) and restores the caller's
+  defer scope afterwards. Frames include closures, zero-parameter value bindings,
+  the module body, and thunk bodies. A tail call hands its frame to the callee, so
+  the caller's defers stay pending until the chain finishes: frames run innermost
+  first, and each frame's own actions run last-registered-first. A failing body
+  error wins over a cleanup error, and one failing action does not cancel the
+  remaining actions of its frame (the first error is reported).
+- **Stack budget**: A depth counter cannot trip before native stack exhaustion
+  (measured overflow near 1_000 levels), so `apply` also compares the current
+  frame address against the evaluator's startup anchor and returns
+  `EvalError::TypeError` once the thread's available stack budget
+  (`available_stack_bytes()`, 512 KiB reserve, 512 KiB fallback) is spent.
+  `MAX_RECURSION_DEPTH` (10_000) remains the hard depth cap for non-tail calls.
 - **Fast paths**: Built-in arithmetic avoids thunk overhead
 
 ## Integration Points

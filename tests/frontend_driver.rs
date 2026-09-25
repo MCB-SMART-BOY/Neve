@@ -53,6 +53,55 @@ fn test_frontend_driver_analyzes_multi_module_program() {
 }
 
 #[test]
+fn test_frontend_driver_resolves_trait_impls_across_modules() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    create_test_module(
+        root,
+        &["traits"],
+        r#"
+            trait Show { fn show(self) -> String; };
+        "#,
+    );
+    create_test_module(
+        root,
+        &["impls"],
+        r#"
+            use traits (Show);
+            impl Show for String {
+                fn show(self) -> String = self;
+            };
+        "#,
+    );
+    create_test_module(
+        root,
+        &["main"],
+        r#"
+            use traits (Show);
+            use impls;
+            fn run() -> String = "ok".show();
+        "#,
+    );
+
+    let analysis = FrontendDriver::new(root)
+        .analyze_module_path(&["main".into()])
+        .unwrap();
+
+    for module_id in analysis.load_order() {
+        let diagnostics = analysis.diagnostics(*module_id).unwrap();
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.severity != Severity::Error),
+            "unexpected cross-module trait diagnostics for {:?}: {:?}",
+            module_id,
+            diagnostics
+        );
+    }
+}
+
+#[test]
 fn test_frontend_driver_preserves_parse_diagnostics_per_module() {
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();

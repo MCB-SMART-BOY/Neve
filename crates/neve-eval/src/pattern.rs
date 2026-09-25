@@ -117,6 +117,7 @@ fn pattern_specificity(pattern: &Pattern) -> Specificity {
             // 绑定为内部模式添加最小特异性
             pattern_specificity(pattern).combine(Specificity::VARIABLE)
         }
+        _ => Specificity::WILDCARD,
     }
 }
 
@@ -155,6 +156,7 @@ fn classify_pattern(pattern: &Pattern) -> PatternClass {
         PatternKind::Record { .. } => PatternClass::Record,
         PatternKind::Or(_) => PatternClass::Disjunction,
         PatternKind::Binding { pattern, .. } => classify_pattern(pattern),
+        _ => PatternClass::Complex,
     }
 }
 
@@ -225,6 +227,7 @@ fn get_discriminant(pattern: &Pattern) -> Discriminant {
                 .unwrap_or(Discriminant::None)
         }
         PatternKind::Binding { pattern, .. } => get_discriminant(pattern),
+        _ => Discriminant::None,
     }
 }
 
@@ -251,6 +254,7 @@ fn extract_literal(pattern: &Pattern) -> Option<LiteralValue> {
             LiteralPattern::String(s) => Some(LiteralValue::String(s.clone())),
             LiteralPattern::Char(c) => Some(LiteralValue::Char(*c)),
             LiteralPattern::Bool(b) => Some(LiteralValue::Bool(*b)),
+            _ => None,
         },
         PatternKind::Binding { pattern, .. } => extract_literal(pattern),
         _ => None,

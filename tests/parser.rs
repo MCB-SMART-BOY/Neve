@@ -661,6 +661,20 @@ fn test_only_comments() {
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 0);
 }
+#[test]
+fn test_parse_retains_comment_trivia() {
+    let source = "-- first\nlet x = 1; -- inline\n-- -- block\n-- --\n";
+    let (file, diags) = parse(source);
+
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    assert_eq!(file.comments.len(), 3);
+    assert_eq!(file.comments[0].text, "-- first");
+    assert_eq!(file.comments[1].text, "-- inline");
+    assert_eq!(file.comments[2].text, "-- -- block\n-- --");
+    assert!(file.comments[0].is_line_start);
+    assert!(!file.comments[1].is_line_start);
+    assert!(file.comments[2].is_line_start);
+}
 
 // ============================================================================
 // Stress Tests
@@ -1745,6 +1759,47 @@ fn test_parse_import_std_items() {
     let (file, diags) = parse("use std.list (map, filter);");
     assert!(diags.is_empty());
     assert_eq!(file.items.len(), 1);
+}
+
+#[test]
+fn test_parse_legacy_syntax_aliases_into_ast() {
+    let (file, diags) = parse(
+        r#"
+        import std.io as io;
+        effect fn marked(value: Int) -> Int = value;
+        fn choose(flag: Bool) -> Int = if flag then 1 else 0;
+        let delayed = lazy 1;
+        "#,
+    );
+
+    assert!(diags.is_empty(), "unexpected parse errors: {diags:?}");
+    assert_eq!(file.items.len(), 4);
+
+    match &file.items[0].kind {
+        ItemKind::Import(import) => {
+            assert_eq!(
+                import.alias.as_ref().map(|alias| alias.name.as_str()),
+                Some("io")
+            );
+        }
+        _ => panic!("expected legacy import item"),
+    }
+    match &file.items[1].kind {
+        ItemKind::Fn(function) => assert!(function.effect),
+        _ => panic!("expected legacy effect function"),
+    }
+    match &file.items[2].kind {
+        ItemKind::Fn(function) => {
+            assert!(matches!(&function.body.kind, ExprKind::If { .. }));
+        }
+        _ => panic!("expected function with legacy then branch"),
+    }
+    match &file.items[3].kind {
+        ItemKind::Let(binding) => {
+            assert!(matches!(&binding.value.kind, ExprKind::Lazy(_)));
+        }
+        _ => panic!("expected legacy lazy binding"),
+    }
 }
 
 #[test]

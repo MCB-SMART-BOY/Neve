@@ -123,16 +123,16 @@ Tests Hindley-Milner type inference and trait constraints.
 ### [end_to_end.rs](end_to_end.rs)
 **端到端测试 / End-to-End Tests**
 
-测试真实入口的烟雾路径: Frontend(parse → lower → typecheck) + Runtime(AST/HIR)
+测试真实入口的烟雾路径: Frontend(parse → lower → typecheck) + HIR Runtime
 
-Tests the trustworthy smoke path: Frontend(parse → lower → typecheck) + Runtime(AST/HIR)
+Tests the trustworthy smoke path: Frontend(parse → lower → typecheck) + HIR
+Runtime.
 
 涵盖内容 / Coverage:
 - ✅ 前端 parse 错误真实上报 / Real parser diagnostics through the frontend
 - ✅ 前端 type 错误真实上报 / Real type diagnostics through the frontend
-- ✅ AST/HIR 在已支持子集上的结果一致性 / AST/HIR parity on the supported subset
-- ✅ 算术、记录字段访问、递归、管道、列表匹配、枚举匹配等 smoke coverage
-- ✅ `lazy/force` 在前端、AST runtime、HIR runtime 上的真实闭环回归
+- ✅ canonical HIR runtime 的算术、记录字段访问、递归、管道、列表匹配、枚举匹配等 smoke coverage
+- ✅ `lazy/force` 在前端与 HIR runtime 上的真实闭环回归
 
 ## 运行测试 / Running Tests
 

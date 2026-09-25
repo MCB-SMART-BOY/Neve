@@ -761,6 +761,22 @@ fn pattern_is_irrefutable_for(
                 .all(|(pattern, ty)| pattern_is_irrefutable_for(pattern, ty, ctx)),
             _ => false,
         },
+        PatternKind::Record { fields, rest } => {
+            let TyKind::Record(expected_fields) = &expected.kind else {
+                return false;
+            };
+            let fields_are_irrefutable = fields.iter().all(|(name, pattern)| {
+                expected_fields
+                    .iter()
+                    .find(|(expected_name, _)| expected_name == name)
+                    .is_some_and(|(_, ty)| pattern_is_irrefutable_for(pattern, ty, ctx))
+            });
+            fields_are_irrefutable
+                && (*rest
+                    || expected_fields
+                        .iter()
+                        .all(|(name, _)| fields.iter().any(|(field, _)| field == name)))
+        }
         PatternKind::Constructor(def_id, patterns) => {
             let Some(variant) = ctx.variants.get(def_id) else {
                 return false;

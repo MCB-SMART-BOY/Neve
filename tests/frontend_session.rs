@@ -62,6 +62,85 @@ fn test_frontend_session_builds_in_memory_module_against_loaded_dependencies() {
 }
 
 #[test]
+fn test_frontend_session_does_not_leak_dependency_definition_names() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(temp_dir.path(), &["dependency"], "fn compute() = 1;");
+
+    let ast = parse_ok(
+        r#"
+            use dependency;
+            fn compute() = 2;
+        "#,
+    );
+    let mut session = FrontendSession::new(temp_dir.path());
+    let build = session
+        .build_module_from_ast(
+            &ast,
+            "repl".to_string(),
+            Vec::new(),
+            &SessionBuildInputs::default(),
+        )
+        .expect("session build should succeed");
+
+    let analysis = session.analyze_module(&build.module);
+    assert!(
+        analysis.diagnostics.iter().all(|diagnostic| {
+            diagnostic.kind != DiagnosticKind::Parser
+                || !diagnostic.message.contains("duplicate definition")
+        }),
+        "dependency definitions leaked into current-module diagnostics: {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
+fn test_frontend_session_resolves_trait_impls_across_modules() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_module(
+        temp_dir.path(),
+        &["traits"],
+        "trait Show { fn show(self) -> String; };",
+    );
+    create_test_module(
+        temp_dir.path(),
+        &["impls"],
+        r#"
+            use traits (Show);
+            impl Show for String {
+                fn show(self) -> String = self;
+            };
+        "#,
+    );
+
+    let ast = parse_ok(
+        r#"
+            use traits (Show);
+            use impls;
+            fn run() -> String = "ok".show();
+        "#,
+    );
+    let mut session = FrontendSession::new(temp_dir.path());
+    let build = session
+        .build_module_from_ast(
+            &ast,
+            "repl".to_string(),
+            Vec::new(),
+            &SessionBuildInputs::default(),
+        )
+        .expect("session build should succeed");
+
+    let analysis = session.analyze_module(&build.module);
+    assert!(
+        analysis
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != Severity::Error),
+        "unexpected session trait diagnostics: {:?}",
+        analysis.diagnostics
+    );
+}
+
+#[test]
 fn test_frontend_session_resolves_imported_bindings_and_module_aliases() {
     let temp_dir = TempDir::new().unwrap();
     create_test_module(temp_dir.path(), &["math"], "fn add(x, y) = x + y;");

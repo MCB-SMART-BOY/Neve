@@ -47,6 +47,30 @@ fn test_all_keywords() {
 }
 
 #[test]
+fn test_reserved_keyword_tokens_report_keyword() {
+    let tokens =
+        lex("let fn type struct enum trait impl use self super crate if else match true false");
+    assert!(
+        tokens
+            .iter()
+            .filter(|token| **token != TokenKind::Eof)
+            .all(TokenKind::is_keyword)
+    );
+    assert_eq!(
+        lex("then as lazy effect pub import"),
+        vec![
+            TokenKind::Ident("then".to_string()),
+            TokenKind::Ident("as".to_string()),
+            TokenKind::Ident("lazy".to_string()),
+            TokenKind::Ident("effect".to_string()),
+            TokenKind::Ident("pub".to_string()),
+            TokenKind::Ident("import".to_string()),
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn test_numbers() {
     assert_eq!(
         lex("42 3.25 0xFF 0b1010"),
@@ -974,6 +998,35 @@ fn test_slash_is_division() {
     assert!(tokens.contains(&TokenKind::Slash));
     assert!(tokens.contains(&TokenKind::Int(10.into())));
     assert!(tokens.contains(&TokenKind::Int(2.into())));
+}
+
+#[test]
+fn test_compact_division_is_not_an_absolute_path() {
+    assert_eq!(
+        lex("6/2"),
+        vec![
+            TokenKind::Int(6.into()),
+            TokenKind::Slash,
+            TokenKind::Int(2.into()),
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn test_slash_after_try_operator_is_division() {
+    // A postfix `?` ends an operand, so the following slash is division.
+    // 后缀 `?` 结束一个操作数，因此其后的斜杠是除号。
+    assert_eq!(
+        lex("total?/2"),
+        vec![
+            TokenKind::Ident("total".to_string()),
+            TokenKind::Question,
+            TokenKind::Slash,
+            TokenKind::Int(2.into()),
+            TokenKind::Eof,
+        ]
+    );
 }
 
 #[test]

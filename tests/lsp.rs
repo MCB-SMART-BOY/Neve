@@ -3201,6 +3201,38 @@ fn test_generate_semantic_tokens() {
 }
 
 #[test]
+fn test_semantic_tokens_positions_use_utf16_code_units() {
+    // LSP positions count UTF-16 code units. An astral character (emoji) occupies
+    // two units, so counting characters (or bytes) shifts every later token on the
+    // line. `let icon = "` is 11 units, the string literal holds 4 units
+    // (quote + surrogate pair + quote), so `tag` starts at unit 21 while
+    // character counting would report 20 and byte counting 23.
+    // LSP 位置以 UTF-16 码元计数：BMP 之外的字符（emoji）占两个码元，按字符或
+    // 字节计数都会使该行后续 token 的位置偏移。
+    let source = "let icon = \"😀\"; let tag = icon;\n";
+    let tokens = neve_lsp::generate_semantic_tokens_from_ast(source);
+
+    let mut decoded = Vec::new();
+    let mut line = 0u32;
+    let mut column = 0u32;
+    for token in &tokens {
+        line += token.delta_line;
+        column = if token.delta_line == 0 {
+            column + token.delta_start
+        } else {
+            token.delta_start
+        };
+        decoded.push((line, column, token.length));
+    }
+
+    assert_eq!(
+        decoded,
+        vec![(0, 4, 4), (0, 21, 3), (0, 27, 4)],
+        "semantic token positions must be UTF-16 based"
+    );
+}
+
+#[test]
 fn test_semantic_tokens_function() {
     let source = "fn add(x, y) = x + y;";
     let lexer = Lexer::new(source);

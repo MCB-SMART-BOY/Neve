@@ -109,11 +109,11 @@
       "path": ".claude/skills/neve-std.md"
     },
     "neve-lsp": {
-      "description": "Language Server Protocol (23 methods)",
+      "description": "Language Server Protocol (21 methods, 2 stub notifications)",
       "path": ".claude/skills/neve-lsp.md"
     },
     "neve-test": {
-      "description": "Testing strategy with 450 E2E tests",
+      "description": "Testing strategy with 547 E2E tests",
       "path": ".claude/skills/neve-test.md"
     },
     "neve-effect": {

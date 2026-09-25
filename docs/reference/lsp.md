@@ -29,10 +29,10 @@ Open any `.neve` file in Helix — syntax highlighting, auto-completion, and dia
 | `textDocument/didChange` | ✅ | Re-parse on change (full sync) |
 | `textDocument/didSave` | ✅ | Re-parse on save |
 | `textDocument/didClose` | ✅ | Clear diagnostics on close |
-| `textDocument/hover` | ✅ | Type info + definition text + builtin docs (22 functions) |
-| `textDocument/completion` | ✅ | Keywords, stdlib (101 fns), types (14), methods (54, type-aware), imports, document symbols |
-| `textDocument/completionItem/resolve` | ✅ | Documentation for 24 functions |
-| `textDocument/signatureHelp` | ✅ | User-defined + 60+ builtin function signatures |
+| `textDocument/hover` | ✅ | Type info + definition text + builtin docs |
+| `textDocument/completion` | ✅ | Keywords, stdlib modules, types, methods, imports, document symbols |
+| `textDocument/completionItem/resolve` | ✅ | Documentation for completion items |
+| `textDocument/signatureHelp` | ✅ | User-defined and builtin function signatures |
 | `textDocument/definition` | ✅ | Go-to-definition via scope-aware symbol index |
 | `textDocument/references` | ✅ | Find all references with declaration toggle |
 | `textDocument/documentHighlight` | ✅ | Read/write occurrence highlighting |
@@ -73,7 +73,7 @@ Installs:
 
 Helix features enabled:
 - ✅ Syntax highlighting (tree-sitter + LSP semantic tokens)
-- ✅ Auto-completion (19 categories)
+- ✅ Auto-completion (keywords, stdlib, types, methods, imports)
 - ✅ Auto-format on save
 - ✅ Code folding
 - ✅ Structural text objects (`maf`, `mif`, etc.)
@@ -92,29 +92,29 @@ Syntax definition in `editors/neve.sublime-syntax`.
 
 ## Completion Categories
 
-| Category | Count | Example |
-|----------|-------|---------|
-| Keywords | 12 | `let`, `fn`, `if`, `match`, `trait`, `impl` (v4.0: `struct`/`enum` are legacy) |
-| Stdlib IO | 55 | `io.readFile`, `io.streamMap`, `io.cancel` |
-| Stdlib List | 16 | `list.map`, `list.fold`, `list.zip` |
-| Stdlib String | 12 | `string.split`, `string.trim` |
-| Stdlib Math | 14 | `math.pi`, `math.sqrt` |
-| Stdlib Path | 4 | `path.fromString`, `path.join` |
-| Types | 14 | `Int`, `String`, `List`, `Option`, `Result`, `Stream` |
-| Methods (type-aware) | 54 | `map`, `filter`, `split`, `unwrap`, `keys` |
-| Import paths | dynamic | Scans workspace for `.neve` modules |
+The completion registry is assembled from the standard-library completion
+modules in `crates/neve-lsp/src/stdlib_completion`; inventory counts are
+intentionally not duplicated here.
+
+| Category | Coverage | Example |
+|----------|----------|---------|
+| Keywords | Canonical and legacy parser keywords | `let`, `fn`, `if`, `match`, `trait`, `impl` |
+| Standard library | Registry-backed module completions | `io.readFile`, `list.map`, `string.trim` |
+| Types | Built-in and user-defined types | `Int`, `String`, `List`, `Option`, `Result`, `Stream` |
+| Methods | Receiver-type-aware completions | `map`, `filter`, `split`, `unwrap`, `keys` |
+| Import paths | Workspace-aware module paths | `.neve` modules |
 
 ### Type-Aware Method Completion
 
 When typing `expr.`, only methods applicable to the expression's inferred type are shown:
 
-| Receiver Type | Methods | Example |
-|---------------|---------|---------|
-| `List<T>` | 32 | `map`, `filter`, `fold`, `head`, `tail`, `sort`, `sum`, `zip`, ... |
-| `String` | 16 | `split`, `trim`, `upper`, `replace`, `lines`, `toInt`, ... |
-| `Option<T>` | 11 | `unwrap`, `isSome`, `map`, `andThen`, `filter`, ... |
-| `Result<T,E>` | 9 | `unwrap`, `isOk`, `isErr`, `map`, `andThen`, ... |
-| `Record` | 3 | `keys`, `values`, `hasField` |
+| Receiver Type | Representative methods | Example |
+|---------------|------------------------|---------|
+| `List<T>` | Mapping, filtering, folding, indexing | `map`, `filter`, `fold`, `head`, `tail` |
+| `String` | Splitting, trimming, case conversion, parsing | `split`, `trim`, `upper`, `replace`, `toInt` |
+| `Option<T>` | Unwrapping, mapping, filtering | `unwrap`, `isSome`, `map`, `andThen` |
+| `Result<T,E>` | Unwrapping, status checks, mapping | `unwrap`, `isOk`, `isErr`, `map`, `andThen` |
+| `Record` | Field-oriented helpers | `keys`, `values`, `hasField` |
 
 ## Semantic Token Types
 
@@ -157,7 +157,7 @@ Source Text → Parser (AST) → Lowering (HIR) → Type Check → ModuleSemanti
 cargo build -p n3v3
 
 # Test LSP crate
-cargo test -p neve-lsp          # 20 unit tests
+cargo test -p neve-lsp          # 19 unit tests
 
 # Test LSP integration
 cargo test --test lsp            # LSP integration tests

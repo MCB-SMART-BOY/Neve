@@ -3,8 +3,10 @@
 
 use std::collections::{HashMap, HashSet};
 
+use neve_diagnostic::{Diagnostic, DiagnosticKind};
 use neve_syntax::{self, SourceFile, Visibility};
 
+use crate::module_diagnostics::ModuleDiagnostics;
 use crate::{DefId, Import, ImportKind, Module, ModuleId, Resolver};
 
 /// Lowered artifacts produced for a single module load.
@@ -19,7 +21,10 @@ pub(crate) struct LoweredModuleArtifacts {
 
 /// Collect all imports from a source file.
 /// 从源文件收集所有导入。
-pub(crate) fn collect_imports(file: &SourceFile) -> Vec<Import> {
+pub(crate) fn collect_imports(
+    file: &SourceFile,
+    diagnostics: &mut ModuleDiagnostics,
+) -> Vec<Import> {
     file.items
         .iter()
         .filter_map(|item| match &item.kind {
@@ -29,6 +34,7 @@ pub(crate) fn collect_imports(file: &SourceFile) -> Vec<Import> {
                     neve_syntax::PathPrefix::Self_ => crate::ImportPathPrefix::Self_,
                     neve_syntax::PathPrefix::Super => crate::ImportPathPrefix::Super,
                     neve_syntax::PathPrefix::Crate => crate::ImportPathPrefix::Crate,
+                    _ => return None,
                 };
 
                 let path: Vec<String> = import_def.path.iter().map(|p| p.name.clone()).collect();
@@ -39,6 +45,14 @@ pub(crate) fn collect_imports(file: &SourceFile) -> Vec<Import> {
                         ImportKind::Items(items.iter().map(|i| i.name.clone()).collect())
                     }
                     neve_syntax::ImportItems::All => ImportKind::All,
+                    _ => {
+                        diagnostics.push(Diagnostic::error(
+                            DiagnosticKind::Module,
+                            item.span,
+                            "unsupported import items",
+                        ));
+                        return None;
+                    }
                 };
 
                 let alias = import_def.alias.as_ref().map(|a| a.name.clone());
@@ -128,7 +142,9 @@ mod tests {
         let (file, diagnostics) = parse(source);
         assert!(diagnostics.is_empty());
 
-        let imports = collect_imports(&file);
+        let mut lowering_diagnostics = ModuleDiagnostics::default();
+        let imports = collect_imports(&file, &mut lowering_diagnostics);
+        assert!(lowering_diagnostics.as_slice().is_empty());
         assert_eq!(imports.len(), 2);
         // v4.0: all imports are public by default
         assert!(imports[0].is_pub);

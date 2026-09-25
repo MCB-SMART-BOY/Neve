@@ -41,6 +41,11 @@ User Input (.neve file or REPL line)
        └──→ Config evaluation (flake.nix-like)
 ```
 
+For multi-module analysis, the frontend first finalizes one shared
+`TraitResolver` from all loaded HIR modules, then gives each module a cloned
+resolver and a fresh `TypeChecker`. Module-local definition and diagnostic
+state is never reused across dependency and current-module checks.
+
 The `neve check` purity gate walks canonical HIR with the frontend's method
 resolution table. Resolved trait methods are checked by their method identity;
 unresolved targets retain builtin fallback checking, and index operands,
@@ -48,8 +53,7 @@ guards, comprehension conditions, lambdas, and interpolations are traversed.
 
 ## Build Commands
 
-```bash
-cargo build -p neve         # CLI binary (CI target)
+cargo build -p n3v3         # CLI binary (CI target)
 cargo check --workspace     # Fast validation (no codegen)
 cargo test --workspace      # Unit + integration
 cargo test --test end_to_end -- --nocapture  # E2E

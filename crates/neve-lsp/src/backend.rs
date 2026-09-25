@@ -771,6 +771,7 @@ impl LanguageServer for Backend {
                     }
                     ItemKind::Import(_) => continue,
                     ItemKind::ExprStmt(_) => continue,
+                    _ => continue,
                 };
 
                 symbols.push(symbol);
@@ -1692,6 +1693,7 @@ fn format_type_name(ty: &Type) -> String {
         }
         TypeKind::Unit => "()".to_string(),
         TypeKind::Infer => "_".to_string(),
+        _ => "_".to_string(),
     }
 }
 

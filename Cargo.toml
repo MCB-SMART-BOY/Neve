@@ -1,6 +1,6 @@
 [package]
 name = "neve-workspace"
-version = "4.0.4"
+version = "5.0.0"
 edition = "2024"
 license = "MPL-2.0"
 
@@ -9,12 +9,11 @@ resolver = "2"
 members = [
     "crates/*",
     "neve-cli",
-    # tree-sitter-neve/bindings/rust is not yet buildable in the workspace
-    # because src/parser.c must be generated first via `tree-sitter generate`.
+    "tree-sitter-neve/bindings/rust",
 ]
 
 [workspace.package]
-version = "4.0.4"
+version = "5.0.0"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/MCB-SMART-BOY/neve"

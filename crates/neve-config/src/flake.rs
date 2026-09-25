@@ -1457,20 +1457,20 @@ pub fn init_flake(root: &Path, description: Option<&str>) -> Result<Flake, Confi
     std::fs::create_dir_all(root)?;
 
     let flake_content = format!(
-        r#"let flake = #{{
+        r#"let flake = {{
     description = "{}",
 
-    inputs = #{{
-        neve = #{{
-            url = "github:example/neve"
-        }}
+    inputs = {{
+        neve = {{
+            url = "github:example/neve",
+        }},
     }},
 
-    outputs = fn(inputs) #{{
-        packages = #{{
-            x86_64_linux = #{{
-                default = inputs.neve.packages.x86_64_linux.hello
-            }}
+    outputs = fn(inputs) {{
+        packages = {{
+            x86_64_linux = {{
+                default = inputs.neve.packages.x86_64_linux.hello,
+            }},
         }}
     }}
 }};
@@ -1638,6 +1638,26 @@ fn temp_work_dir(prefix: &str) -> Result<PathBuf, ConfigError> {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_init_flake_writes_canonical_source() -> Result<(), Box<dyn std::error::Error>> {
+        let temp = tempdir()?;
+        let flake = init_flake(temp.path(), Some("A test flake"))?;
+
+        assert_eq!(flake.description.as_deref(), Some("A test flake"));
+        assert!(
+            flake.outputs.is_some(),
+            "initialized flake should have outputs"
+        );
+
+        let source = fs::read_to_string(temp.path().join("flake.neve"))?;
+        assert!(source.contains("let flake = {"));
+        assert!(
+            !source.contains("#{"),
+            "initializer must emit canonical records"
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_eval_outputs_recursively_loads_path_inputs() -> Result<(), Box<dyn std::error::Error>> {

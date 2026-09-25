@@ -14,12 +14,12 @@ pub struct Printer {
     config: FormatConfig,
     /// Output buffer. / 输出缓冲区。
     output: String,
-    /// Current indentation level. / 当前缩进级别。
     indent_level: usize,
-    /// Current line width in characters. / 当前行宽度（字符数）。
     current_line_width: usize,
-    /// Whether we're at the start of a line. / 是否在行首。
     at_line_start: bool,
+    /// First unsupported AST construct encountered during formatting.
+    /// 格式化期间遇到的第一个不支持 AST 构造。
+    error: Option<String>,
 }
 
 impl Printer {
@@ -32,6 +32,7 @@ impl Printer {
             indent_level: 0,
             current_line_width: 0,
             at_line_start: true,
+            error: None,
         }
     }
 
@@ -114,5 +115,19 @@ impl Printer {
     /// 获取配置引用。
     pub fn config(&self) -> &FormatConfig {
         &self.config
+    }
+
+    /// Record an unsupported AST construct without emitting invalid source.
+    /// 记录不支持的 AST 构造，避免输出无效源码。
+    pub fn mark_error(&mut self, message: impl Into<String>) {
+        if self.error.is_none() {
+            self.error = Some(message.into());
+        }
+    }
+
+    /// Take the first formatting error, if any.
+    /// 获取第一个格式化错误（如果有）。
+    pub fn take_error(&mut self) -> Option<String> {
+        self.error.take()
     }
 }

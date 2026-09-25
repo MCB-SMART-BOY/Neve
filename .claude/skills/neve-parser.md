@@ -49,7 +49,11 @@ Source Code (.neve)
 | `fn foo() effect = ...` | same | `fn foo() = ...` | Auto-inferred |
 | `pub fn` | same | `fn` | All public by default |
 
-**Backward compatibility**: The lexer still accepts all legacy keywords (`then`, `as`, `lazy`, `effect`, `pub`, `struct`, `enum`, `import`). 12 canonical keywords, 6 legacy aliases.
+**Backward compatibility:** The parser accepts 10 legacy spellings:
+`struct`, `enum`, `import`, `pub`, `as`, `then`, `lazy`, `effect`, `super`,
+and `crate`. The lexer emits dedicated tokens for `struct`, `enum`, `super`,
+and `crate`; the other six remain identifiers and are recognized contextually
+by the parser. Canonical v4.0 source uses 12 keywords.
 
 ## Lexer Design (neve-lexer)
 
@@ -69,6 +73,21 @@ peek_char()
     ├── '{'/'}'/'('...→ Delimiter
     └── ...
 ```
+
+**Slash disambiguation.** The lexer tracks the last emitted token kind
+(`Lexer::last_token_kind`). `/` begins an absolute path literal only when the
+previous token cannot end an operand (`can_start_operand()`); after an operand
+(Int, Float, String, Char, Bool/True/False, PathLit, Ident, `?`, `)`, `]`, `}`,
+interpolated-string end, `self`) it is the division operator, so `6/2` lexes as
+`Int(6) Slash Int(2)` and `/etc/hosts` remains a path literal. A path starts
+only when the next character is alphanumeric or `_ - .`.
+
+**Identifier characters.** `identifier()` requires an ASCII letter or `_` in
+first position (anything else is `E0001`), then consumes `char::is_alphanumeric`,
+so continuation characters may be Unicode (`café` is one identifier). The
+tree-sitter grammar in `tree-sitter-neve/grammar.js` is stricter
+(`[a-zA-Z_][a-zA-Z0-9_]*`) and does not yet track v4.0 syntax
+(`if -> else`, `~`, bare `|` enums, postfix `?`).
 
 ### Resolved gaps
 - Unicode `\u{...}` escapes: ✅ Done (v3.18+)
@@ -151,6 +170,18 @@ pub enum ExprKind {
 }
 ```
 
+## Public AST API boundary
+
+All public AST enums that describe syntax (`ItemKind`, `VariantKind`,
+`PathPrefix`, `ImportItems`, `Visibility`, `ExprKind`, `StmtKind`, `BinOp`,
+`UnaryOp`, `StringPart`, `PatternKind`, `LiteralPattern`, and `TypeKind`) are
+`#[non_exhaustive]`. External consumers must include a wildcard arm when
+matching them; this is the v5 API policy for future syntax evolution.
+
+The AST-to-HIR boundary must preserve unsupported future forms as diagnostics
+or reject them explicitly. It must not silently turn a node into a wildcard,
+empty import, or unrelated fallback.
+
 ## Integration Points
 
 | From | To | Data |
@@ -164,15 +195,18 @@ pub enum ExprKind {
 
 | File | What |
 |------|------|
-| `neve-lexer/src/lexer.rs` | Lexer — `peek_char()`, `advance()`, `number()`, `ident()`, `skip_block_comment()` |
+| `neve-lexer/src/lexer.rs` | Lexer — `peek_char()`, `advance()`, `number()`, `identifier()`, `skip_block_comment()`, `can_start_operand()` |
 | `neve-lexer/src/token.rs` | Token enum — Int, Float, Str, Ident, Keywords, Delimiters, Operators |
-| `neve-lexer/src/span.rs` | Span type — start/end positions for diagnostics |
-| `neve-parser/src/lib.rs` | Parser entry + Pratt parser + `parse_module()` |
-| `neve-parser/src/expr.rs` | Expression parsing sub-functions |
-| `neve-parser/src/pattern.rs` | Pattern parsing (match arms, let bindings) |
-| `neve-syntax/src/expr.rs` | Core `Expr` / `ExprKind` / `MatchArm` types |
-| `neve-syntax/src/item.rs` | Item, LetBinding, FnDef, TypeDef |
-| `tests/parser.rs` | 220+ parser golden/integration tests |
+| `neve-common/src/span.rs` | `Span` / `BytePos` — start/end positions for diagnostics |
+| `neve-parser/src/lib.rs` | Parser entry + `Parser::new_with_comments()`, token/trivia wiring |
+| `neve-parser/src/parser.rs` | Recursive descent + Pratt parser + `parse_module()` |
+| `neve-parser/src/recovery.rs` | Error recovery — sync points and diagnostic de-duplication |
+| `neve-syntax/src/expr.rs` | Core `Expr` / `ExprKind` / `Stmt` / `MatchArm` types |
+| `neve-syntax/src/ast.rs` | `Item` / `ItemKind` / `SourceFile` / `FnDef` / `TypeAlias` |
+| `neve-syntax/src/types.rs` | `TypeKind` / `Type` / `GenericParam` / trait AST |
+| `neve-syntax/src/pattern.rs` | `PatternKind` / `Pattern` types |
+| `neve-common/src/trivia.rs` | `Comment` / `CommentKind` — lexer trivia consumed by neve-fmt |
+| `tests/parser.rs` | 234 parser golden/integration tests |
 
 - **Golden tests**: Parse source, compare formatted AST output to `.txt` baseline.
 - **Integration tests**: `tests/parser.rs` — tests cover canonical and legacy

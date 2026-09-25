@@ -21,6 +21,7 @@ impl Type {
 /// Type kind.
 /// 类型种类。
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum TypeKind {
     /// A named type `Int`, `String`, `List<T>` / 命名类型
     Named { path: Vec<Ident>, args: Vec<Type> },
@@ -34,7 +35,7 @@ pub enum TypeKind {
     /// A tuple type `(A, B, C)` / 元组类型
     Tuple(Vec<Type>),
 
-    /// A record type `#{ name: String, age: Int }` / 记录类型
+    /// A record type `{ name: String, age: Int }`; legacy `#{ ... }` remains accepted.
     Record(Vec<RecordTypeField>),
 
     /// Unit type `()` / 单元类型

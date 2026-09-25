@@ -53,10 +53,10 @@ jobs:
           cache-on-failure: true
 
       - name: Build Rust (neve CLI, release mode)
-        run: cargo build -p neve --release
+        run: cargo build -p n3v3 --release
 
       - name: Run bug hunt (security boundary attacks)
-        run: cargo run --release -p neve --example bug_hunt
+        run: cargo run --release -p n3v3 --example bug_hunt
         env:
           # 使用 release 构建以获得更快的执行速度
           CARGO_TARGET_DIR: target
@@ -88,10 +88,10 @@ jobs:
           cache-on-failure: true
 
       - name: Build Rust (neve CLI, release mode)
-        run: cargo build -p neve --release
+        run: cargo build -p n3v3 --release
 
       - name: Run effects property tests
-        run: cargo run --release -p neve --example gen_diff_test -- --effects -n 50
+        run: cargo run --release -p n3v3 --example gen_diff_test -- --effects -n 50
         env:
           CARGO_TARGET_DIR: target
 
@@ -171,7 +171,7 @@ jobs:
           restore-keys: lake-${{ runner.os }}-
 
       - name: Build Rust (neve CLI, debug)
-        run: cargo build -p neve
+        run: cargo build -p n3v3
 
       - name: Build Lean (lake)
         run: |
@@ -179,7 +179,7 @@ jobs:
           lake build
 
       - name: Run quick diff test (50 expressions, depth 3)
-        run: cargo run --release -p neve --example gen_diff_test -- -n 50 -d 3
+        run: cargo run --release -p n3v3 --example gen_diff_test -- -n 50 -d 3
         env:
           CARGO_TARGET_DIR: target
 

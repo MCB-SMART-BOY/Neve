@@ -3883,3 +3883,28 @@ fn test_eval_comparison_op_forces_thunk() {
         other => panic!("expected Bool(true), got {:?}", other),
     }
 }
+
+// --- Tail calls through method syntax ---
+
+#[test]
+fn test_eval_method_call_tail_recursion_is_optimized() {
+    // A method call in tail position must run through the evaluator's tail-call
+    // loop. 11_000 levels exceed MAX_RECURSION_DEPTH (10_000), which only the
+    // optimized path can survive: each extra level otherwise nests one `apply`.
+    // 尾位置的方法调用必须在求值器的尾调用循环中执行：11_000 层超过
+    // MAX_RECURSION_DEPTH（10_000），非优化路径每层都会多嵌套一次 `apply`。
+    let result = eval_checked_hir(
+        r#"
+        trait Countdown { fn countdown(self) -> Int; };
+        impl Countdown for Int {
+            fn countdown(self) -> Int = if self <= 0 -> 0 else (self - 1).countdown();
+        };
+        let x = 11000.countdown();
+        x
+        "#,
+    );
+    match result {
+        Ok(Value::Int(v)) => assert_eq!(v, int(0)),
+        other => panic!("expected Int(0), got {:?}", other),
+    }
+}

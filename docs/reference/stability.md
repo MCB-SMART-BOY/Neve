@@ -2,11 +2,11 @@
 
 ## API Stability Tiers
 
-This document defines the stability guarantees for the Neve standard library (stdlib) and platform support. Current release is v4.0.4 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
+This document defines the stability guarantees for the Neve standard library (stdlib), platform support, and compiler-facing AST APIs. Current release is v5.0.0 (v4.0 syntax is canonical; legacy keywords accepted for backward compatibility). Breaking changes to stable APIs will only occur with a major version bump.
 
 ## Tier 1: Stable ✅
 
-**Guarantee**: These APIs are guaranteed not to break within v4.x. They have been extensively exercised in real-world usage and their semantics are well-understood.
+**Guarantee**: These APIs are guaranteed not to break within v5.x. They have been extensively exercised in real-world usage and their semantics are well-understood.
 
 ### Core I/O
 
@@ -295,8 +295,8 @@ Neve follows a **SemVer-hybrid** model, adapted for rapid language evolution:
 | Version | Meaning | Breaking changes |
 |---------|---------|------------------|
 | **Major** (v4 → v5) | Semantic completeness milestone. | Allowed, with documented migration paths. |
-| **Minor** (v4.0 → v4.1) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
-| **Patch** (v4.0.4 → v4.0.4) | Bug fix release. No new features. | Not allowed. |
+| **Minor** (v5.0 → v5.1) | Feature release. New APIs, syntax improvements, tooling expansion. | Allowed with deprecation warnings (1 minor release grace period). |
+| **Patch** (v5.0.0 → v5.0.1) | Bug fix release. No new features. | Not allowed. |
 
 ### Deprecation Policy / 废弃策略
 
@@ -320,6 +320,17 @@ v4.0 marked the transition from "language prototype" to "stable language platfor
 4. Release policy formalized and stable — ✅ Done
 5. 62/62 design audit findings resolved — ✅ Done
 6. Semantic convergence: all features survive lowering without loss — ✅ Done
+
+### v5.0 AST API cutover
+
+The public AST is a forward-compatible boundary. External consumers must
+wildcard-match all public syntax enums, including `ItemKind`, `ExprKind`,
+`PatternKind`, `TypeKind`, and their operator/import/literal sub-enums.
+
+AST-to-HIR lowering rejects unsupported import forms and preserves unsupported
+expression, statement, and pattern forms as explicit error nodes. Type checking
+reports those nodes before evaluation; no unsupported form is silently treated
+as a wildcard or empty construct.
 
 ### Why Not Strict SemVer?
 

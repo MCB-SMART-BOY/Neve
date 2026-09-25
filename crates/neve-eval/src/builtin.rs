@@ -1035,6 +1035,7 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                             use crate::value::ThunkState;
                             match &*thunk.state() {
                                 ThunkState::Evaluated(v) => Ok(v.clone()),
+                                ThunkState::Failed(e) => Err(e.to_string()),
                                 ThunkState::HirUnevaluated { .. } | ThunkState::Evaluating => {
                                     Err("cannot force unevaluated thunk in this context"
                                         .to_string())
@@ -1948,6 +1949,7 @@ pub(crate) fn format_value(v: &Value) -> String {
             match &*thunk.state() {
                 ThunkState::Evaluated(v) => format_value(v),
                 ThunkState::Evaluating => "<thunk:evaluating>".to_string(),
+                ThunkState::Failed(_) => "<thunk:failed>".to_string(),
                 ThunkState::HirUnevaluated { .. } => "<thunk>".to_string(),
             }
         }

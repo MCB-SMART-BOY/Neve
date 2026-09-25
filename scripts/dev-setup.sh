@@ -13,7 +13,7 @@ echo ""
 
 # 1. Build the binary
 echo "[1/4] Building neve binary..."
-cargo build -p neve --release 2>&1 | tail -2
+cargo build -p n3v3 --release 2>&1 | tail -2
 echo ""
 
 # 2. Run tests

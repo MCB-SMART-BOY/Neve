@@ -5,7 +5,7 @@
 //! a token stream into an abstract syntax tree (AST).
 //! 本模块实现了一个递归下降解析器，将 token 流转换为抽象语法树（AST）。
 
-use neve_common::{Span, int_to_u32};
+use neve_common::{Comment, Span, int_to_u32};
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 use neve_lexer::{Token, TokenKind};
 use neve_syntax::*;
@@ -25,6 +25,9 @@ pub struct Parser {
     /// The input tokens.
     /// 输入的 token 序列。
     tokens: Vec<Token>,
+    /// Comments retained separately from the token stream.
+    /// 从 token 流单独保留的注释。
+    comments: Vec<Comment>,
     /// Current position in the token stream.
     /// 在 token 流中的当前位置。
     pos: usize,
@@ -43,16 +46,21 @@ impl Parser {
     /// Create a new parser from a token stream.
     /// 从 token 流创建新的解析器。
     pub fn new(tokens: Vec<Token>) -> Self {
+        Self::new_with_comments(tokens, Vec::new())
+    }
+
+    /// Create a parser with comments retained by the lexer.
+    /// 使用 lexer 保留的注释创建解析器。
+    pub fn new_with_comments(tokens: Vec<Token>, comments: Vec<Comment>) -> Self {
         Self {
             tokens,
+            comments,
             pos: 0,
             diagnostics: Vec::new(),
             delimiter_stack: DelimiterStack::new(),
             recovery_mode: RecoveryMode::Statement,
         }
     }
-
-    /// Consume the parser and return accumulated diagnostics.
     /// 消耗解析器并返回累积的诊断信息。
     pub fn diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
@@ -102,6 +110,7 @@ impl Parser {
         SourceFile {
             items,
             tail_expr,
+            comments: self.comments.clone(),
             span: start.merge(end),
         }
     }
@@ -732,11 +741,11 @@ impl Parser {
         }
     }
 
-    /// Parse an import definition.
-    /// 解析导入定义。
+    /// Parse a `use` import definition.
+    /// 解析 `use` 导入定义。
     ///
-    /// Syntax: `import [prefix.]path[.(items)] [as alias];`
-    /// 语法：`import [前缀.]路径[.(导入项)] [as 别名];`
+    /// Syntax: `use [prefix.]path[.(items)] [= alias];`
+    /// Legacy `import ... [as alias]` spelling is accepted for compatibility.
     fn parse_import_def(&mut self, _is_pub: bool) -> ImportDef {
         // Parse optional path prefix (self, super, crate)
         // 解析可选的路径前缀（self、super、crate）

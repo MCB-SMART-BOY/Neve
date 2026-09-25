@@ -107,6 +107,16 @@ true  false
 ./relative  ../parent  /absolute
 ```
 
+**Identifiers** start with an ASCII letter or `_`; continuation characters may
+be any Unicode alphanumeric (so `café` is one identifier). A non-ASCII character
+in first position is a lexical error (`E0001`).
+
+**`/` depends on context.** After a token that can end an operand (`Int`,
+`Float`, `String`, `Char`, `Bool`, path literal, interpolated-string end,
+identifier, `self`, `?`, `)`, `]`, `}`) `/` is division; otherwise it starts an
+absolute path literal. `6/2` is division, `/etc/hosts` is a path literal. A path
+literal requires the next character to be alphanumeric or `_`, `-`, `.`.
+
 
 ### 注释
 
@@ -143,6 +153,10 @@ true  false
 -- 路径字面量（目前就是字符串）
 ./relative  ../parent  /absolute
 ```
+
+**标识符**首字符为 ASCII 字母或 `_`；后续字符可以是任意 Unicode 字母数字（因此 `café` 是一个标识符）。首字符出现非 ASCII 字符是词法错误（`E0001`）。
+
+**`/` 的含义取决于上下文。** 当上一个 token 可以结束操作数（`Int`、`Float`、`String`、`Char`、`Bool`、路径字面量、插值字符串结束、标识符、`self`、`?`、`)`、`]`、`}`）时，`/` 是除法；否则是绝对路径字面量的开始。因此 `6/2` 是除法，`/etc/hosts` 是路径字面量。路径字面量要求后一个字符是字母数字或 `_`、`-`、`.`。
 
 
 ## 4. Types / 类型
@@ -249,6 +263,11 @@ let add = |x: Int, y: Int| x + y;
 readConfig(path: String) -> String = io.readFile(path)
 ```
 
+**Zero-parameter items are value bindings.** `fn f() = 1` (like `f() = 1` and
+`f = 1`) binds `f` to the value `1` of type `Int`; it is not a callable of type
+`Fn([], Int)`. `f + 1` evaluates to `2`, while `f()` is a type error (`E0200`,
+`Int` vs `Fn`). Functions with at least one parameter keep their function type.
+
 
 顶层 `let`/`fn`/`;` 在 v4.0 中是**可选的**。`struct`/`enum` → `type`。
 
@@ -279,6 +298,8 @@ let add = |x: Int, y: Int| x + y;
 -- 副作用函数（effect 自动推导）
 readConfig(path: String) -> String = io.readFile(path)
 ```
+
+**零参数项是值绑定。** `fn f() = 1`（与 `f() = 1`、`f = 1` 相同）把 `f` 绑定到类型为 `Int` 的值 `1`，而不是类型为 `Fn([], Int)` 的可调用对象。`f + 1` 求值为 `2`，`f()` 是类型错误（`E0200`，`Int` 与 `Fn` 不匹配）。至少带一个参数的函数保持函数类型。
 
 
 ## 6. Expressions / 表达式
@@ -640,10 +661,12 @@ if else match
 true false
 ```
 
-**12 keywords** (v4.0 canonical; 22 total including legacy)
+**12 keywords** (v4.0 canonical; the parser retains 10 legacy spellings)
 
-> Legacy keywords (`struct`, `enum`, `import`, `pub`, `as`, `then`, `lazy`, `effect`, `super`, `crate`)
-> still accepted by the lexer for backward compatibility but are not canonical v4.0 syntax.
+> Legacy spellings (`struct`, `enum`, `import`, `pub`, `as`, `then`, `lazy`,
+> `effect`, `super`, `crate`) remain accepted for source compatibility. The
+> lexer emits dedicated tokens for `struct`, `enum`, `super`, and `crate`;
+> the other six are contextual parser identifiers.
 
 
 ```
@@ -653,7 +676,7 @@ if else match
 true false
 ```
 
-**12 个规范关键字** (v4.0; 含向后兼容别名共 22 个)
+**12 个规范关键字**（v4.0；解析器保留 10 个旧拼写用于源码兼容）
 
 
 ## Appendix B: Nix Comparison / 附录 B: 跟 Nix 对照

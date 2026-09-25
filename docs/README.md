@@ -14,7 +14,7 @@
 
 </div>
 
-**Current version: v4.0.4**. 12 canonical keywords, 55 diagnostic codes, 541 E2E tests (all pass), 21 LSP methods. Install via `cargo install n3v3`.
+**Current version: v5.0.0**. 12 canonical keywords, 55 diagnostic codes, 550 E2E tests (all pass), 21 LSP methods. Install via `cargo install n3v3`.
 
 Welcome to the Neve documentation hub. For **developer reference** (per-crate APIs,
 architecture, integration points), see `.claude/skills/` — one skill per crate,

@@ -38,7 +38,11 @@ Resolved HIR Module (from neve-hir)
        │ Typed HIR + Diagnostics
        ▼
      neve-eval
+
 ```
+`TypeChecker::check` also preserves diagnostics emitted while lowering unsupported
+AST forms into HIR; callers receive those boundary diagnostics together with
+type-checking diagnostics.
 
 ## Type System
 
@@ -184,6 +188,18 @@ fn resolve_method(&self, recv_ty: &Type, method: &Name) -> Result<ResolvedMethod
 }
 ```
 
+### Multi-module trait registry
+
+The frontend builds one shared `TraitResolver` for all loaded HIR modules
+before checking any module. `TypeChecker::collect_global_trait_resolver`
+registers traits, resolves associated-type bounds, canonicalizes every impl
+signature, and then registers impls. Each module is checked with
+`TypeChecker::with_global_env_and_traits` and a fresh checker, so method lookup
+and generic bounds can resolve imported traits without leaking module-local
+state. Generic impl matching structurally binds `TyKind::Param` values and
+compares trait type arguments. Impl completeness diagnostics remain
+module-local through the checker's `local_impls` set.
+
 ## Exhaustiveness Checking
 
 All `match` expressions must be exhaustive. The checker covers:
@@ -221,12 +237,15 @@ pub enum TypeError {
 
 `infer_function_effects` builds the caller graph before body checking, so
 effect propagation is independent of declaration order and supports recursive
-chains. The graph records resolved method `DefId`s as well as direct function
-calls, and a final pass recomputes effects after method dispatch is known.
-Its shared HIR walk visits calls, nested lambdas, match guards, and
-list-comprehension conditions. The CLI effect checker uses the same expression
-coverage and method-resolution table for direct builtin calls and inferred
-effectful function calls.
+chains. Trait definitions are collected before impl registrations, so trait
+dispatch and completeness are also independent of source order. The graph
+records resolved method `DefId`s as well as direct function calls, and a final
+pass recomputes effects after method dispatch is known. Its shared HIR walk
+visits calls, nested lambdas, match guards, and list-comprehension conditions.
+Legacy `effect` markers on trait method declarations seed the corresponding
+impl methods before dispatch analysis.
+The CLI effect checker uses the same expression coverage and method-resolution
+table for direct builtin calls and inferred effectful function calls.
 
 ## Integration Points
 

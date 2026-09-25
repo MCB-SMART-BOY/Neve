@@ -2,7 +2,7 @@
 //! Neve 词法分析器。
 
 use crate::token::{Token, TokenKind};
-use neve_common::{Span, parse_int_radix};
+use neve_common::{Comment, CommentKind, Span, parse_int_radix};
 use neve_diagnostic::{Diagnostic, DiagnosticKind, ErrorCode, Label};
 
 /// Mode for lexer state machine.
@@ -37,6 +37,12 @@ pub struct Lexer<'src> {
     /// Collected diagnostics (errors and warnings)
     /// 收集的诊断信息（错误和警告）
     diagnostics: Vec<Diagnostic>,
+    /// Comments skipped from tokens but retained as source trivia.
+    /// 从 token 中跳过但作为源码 trivia 保留的注释。
+    comments: Vec<Comment>,
+    /// Last emitted token, used to disambiguate `/path` from division.
+    /// 最近发出的 token，用于区分 `/path` 与除法。
+    last_token_kind: Option<TokenKind>,
     /// Stack of lexer modes for handling nested contexts
     /// 词法分析器模式栈，用于处理嵌套上下文
     mode_stack: Vec<LexerMode>,
@@ -51,6 +57,8 @@ impl<'src> Lexer<'src> {
             chars: source.char_indices().peekable(),
             pos: 0,
             diagnostics: Vec::new(),
+            comments: Vec::new(),
+            last_token_kind: None,
             mode_stack: vec![LexerMode::Normal],
         }
     }
@@ -77,19 +85,37 @@ impl<'src> Lexer<'src> {
 
     /// Tokenize the entire source and return tokens and diagnostics.
     /// 对整个源代码进行词法分析，返回 token 列表和诊断信息。
-    pub fn tokenize(mut self) -> (Vec<Token>, Vec<Diagnostic>) {
+    pub fn tokenize(self) -> (Vec<Token>, Vec<Diagnostic>) {
+        let (tokens, _, diagnostics) = self.tokenize_with_trivia();
+        (tokens, diagnostics)
+    }
+
+    /// Tokenize the source while retaining comments as trivia.
+    /// 对源代码进行词法分析，同时保留注释 trivia。
+    pub fn tokenize_with_trivia(mut self) -> (Vec<Token>, Vec<Comment>, Vec<Diagnostic>) {
         let mut tokens = Vec::new();
 
         loop {
             let token = self.next_token();
             let is_eof = token.kind == TokenKind::Eof;
+            self.last_token_kind = Some(token.kind.clone());
             tokens.push(token);
             if is_eof {
                 break;
             }
         }
 
-        (tokens, self.diagnostics)
+        (tokens, self.comments, self.diagnostics)
+    }
+
+    /// Retain a comment using its exact source slice.
+    /// 使用源码原始切片保留注释。
+    fn retain_comment(&mut self, start: usize, kind: CommentKind) {
+        let span = Span::from_usize(start, self.pos);
+        let text = self.source[span.range()].to_string();
+        let is_line_start = self.is_line_start(start);
+        self.comments
+            .push(Comment::new(kind, span, text, is_line_start));
     }
 
     /// Get the next token based on current mode.
@@ -144,6 +170,7 @@ impl<'src> Lexer<'src> {
         {
             self.advance();
             self.skip_line_comment();
+            self.retain_comment(start, CommentKind::Line);
             return self.next_token_normal();
         }
 
@@ -215,7 +242,7 @@ impl<'src> Lexer<'src> {
                     // Could be line comment (-- ...) or block comment (-- -- ... -- --)
                     // 可能是行注释 (-- ...) 或块注释 (-- -- ... -- --)
                     self.advance(); // consume second -
-                    if self.peek_char() == Some(' ')
+                    let comment_kind = if self.peek_char() == Some(' ')
                         && self.peek_nth(1) == Some('-')
                         && self.peek_nth(2) == Some('-')
                     {
@@ -225,11 +252,14 @@ impl<'src> Lexer<'src> {
                         self.advance(); // skip -
                         self.advance(); // skip -
                         self.skip_block_comment();
+                        CommentKind::Block
                     } else {
                         // Line comment: -- to end of line
                         // 行注释：-- 到行尾
                         self.skip_line_comment();
-                    }
+                        CommentKind::Line
+                    };
+                    self.retain_comment(start, comment_kind);
                     return self.next_token();
                 } else {
                     TokenKind::Minus
@@ -245,9 +275,9 @@ impl<'src> Lexer<'src> {
                 if self.peek_char() == Some('/') {
                     self.advance();
                     TokenKind::SlashSlash
-                } else if Self::is_path_start_char(self.peek_char()) {
-                    // Absolute path starting with /
-                    // 以 / 开头的绝对路径
+                } else if self.can_start_operand() && Self::is_path_start_char(self.peek_char()) {
+                    // Absolute paths are only recognized where an operand can begin.
+                    // 仅在操作数可以开始的位置识别绝对路径。
                     self.scan_absolute_path()
                 } else {
                     TokenKind::Slash
@@ -877,6 +907,31 @@ impl<'src> Lexer<'src> {
             .with_code(ErrorCode::UnexpectedCharacter)
             .with_label(Label::new(span, "unexpected character here")),
         );
+    }
+    /// Return whether the next token may begin an operand.
+    /// 判断下一个 token 是否可以开始一个操作数。
+    fn can_start_operand(&self) -> bool {
+        match self.last_token_kind.as_ref() {
+            None => true,
+            Some(
+                TokenKind::Int(_)
+                | TokenKind::Float(_)
+                | TokenKind::String(_)
+                | TokenKind::Char(_)
+                | TokenKind::Bool(_)
+                | TokenKind::True
+                | TokenKind::False
+                | TokenKind::PathLit(_)
+                | TokenKind::Ident(_)
+                | TokenKind::RParen
+                | TokenKind::RBracket
+                | TokenKind::RBrace
+                | TokenKind::InterpolatedEnd
+                | TokenKind::Question
+                | TokenKind::SelfLower,
+            ) => false,
+            Some(_) => true,
+        }
     }
 
     /// Check if a character can start a path component after /.

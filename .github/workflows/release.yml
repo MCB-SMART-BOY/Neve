@@ -69,15 +69,15 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} -p neve
+            cross build --release --target ${{ matrix.target }} -p n3v3
           else
-            cargo build --release --target ${{ matrix.target }} -p neve
+            cargo build --release --target ${{ matrix.target }} -p n3v3
           fi
         shell: bash
 
       - name: Build binary (Windows)
         if: matrix.os == 'windows-latest'
-        run: cargo build --release --target ${{ matrix.target }} -p neve
+        run: cargo build --release --target ${{ matrix.target }} -p n3v3
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-latest'

@@ -2589,14 +2589,38 @@ fn test_typeck_match_user_enum_subset_shadowing_is_unreachable() {
 #[test]
 fn test_typeck_match_single_variant_irrefutable_constructor_makes_later_arm_unreachable() {
     let source = "
-        enum Only { Only(Int) };
-        let x = match Only(1) {
-            Only(value) -> value,
-            Only(1) -> 1
+        enum Only { Mk(Int) };
+        let x = match Mk(1) {
+            Mk(value) -> value,
+            Mk(1) -> 1
         };
         ";
     assert_has_diagnostic(source, Severity::Warning, "unreachable pattern");
-    assert_warning_previous_label_contains(source, "unreachable pattern", "Only(value) -> value");
+    assert_warning_previous_label_contains(source, "unreachable pattern", "Mk(value) -> value");
+}
+
+#[test]
+fn test_typeck_enum_variant_matching_enum_name_reports_conflict() {
+    assert_has_diagnostic(
+        "
+        enum Only { Only(Int) };
+        let x = Only(1);
+        ",
+        Severity::Error,
+        "enum variant `Only` conflicts with the enum name `Only`",
+    );
+}
+
+#[test]
+fn test_typeck_duplicate_enum_variant_reports_duplicate() {
+    assert_has_diagnostic(
+        "
+        enum Choice { Yes(Int), Yes(Int) };
+        let x = Yes(1);
+        ",
+        Severity::Error,
+        "duplicate enum variant `Yes`",
+    );
 }
 
 #[test]
@@ -2885,6 +2909,35 @@ fn test_typeck_global_type_preserves_explicit_generic_params() {
 }
 
 #[test]
+fn test_typeck_generic_trait_bounds_are_order_independent() {
+    assert_has_diagnostic(
+        "
+        fn require<T: Show>(value: T) -> T = value;
+        trait Show {};
+        require(1);
+    ",
+        Severity::Error,
+        "does not implement trait `Show`",
+    );
+}
+
+#[test]
+fn test_typeck_generic_trait_impl_matches_concrete_type() {
+    check_no_errors(
+        "
+        trait Show { fn show(self) -> String; };
+        impl Show for Int {
+            fn show(self) -> String = \"int\";
+        };
+        impl<T: Show> Show for List<T> {
+            fn show(self) -> String = \"list\";
+        };
+        let rendered: String = [1].show();
+    ",
+    );
+}
+
+#[test]
 fn test_typeck_polymorphic_const() {
     // 单次调用多态函数是可以的
     check_no_errors(
@@ -2999,6 +3052,19 @@ fn test_typeck_assoc_type_bounds_missing_impl() {
         struct Foo {};
         impl Iterator for Foo { type Item = Int; };
     ",
+    );
+}
+#[test]
+fn test_typeck_assoc_type_bounds_are_order_independent() {
+    assert_has_diagnostic(
+        "
+        trait Iterator { type Item: Show; };
+        trait Show {};
+        struct Foo {};
+        impl Iterator for Foo { type Item = Int; };
+    ",
+        Severity::Error,
+        "associated type 'Item' in impl of trait 'Iterator' must satisfy bound 'Show'",
     );
 }
 

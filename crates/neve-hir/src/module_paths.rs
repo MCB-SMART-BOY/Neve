@@ -67,13 +67,18 @@ impl ModulePath {
 
     /// Create a module path from an AST import definition.
     /// 从 AST 导入定义创建模块路径。
-    pub fn from_import_def(import: &neve_syntax::ImportDef) -> Self {
+    ///
+    /// Returns `None` when a newer syntax crate introduces an unsupported
+    /// path prefix.
+    /// 当更新的语法 crate 引入不支持的路径前缀时返回 `None`。
+    pub fn from_import_def(import: &neve_syntax::ImportDef) -> Option<Self> {
         let segments: Vec<String> = import.path.iter().map(|i| i.name.clone()).collect();
         match import.prefix {
-            neve_syntax::PathPrefix::Absolute => Self::absolute(segments),
-            neve_syntax::PathPrefix::Self_ => Self::self_(segments),
-            neve_syntax::PathPrefix::Super => Self::super_(segments),
-            neve_syntax::PathPrefix::Crate => Self::crate_(segments),
+            neve_syntax::PathPrefix::Absolute => Some(Self::absolute(segments)),
+            neve_syntax::PathPrefix::Self_ => Some(Self::self_(segments)),
+            neve_syntax::PathPrefix::Super => Some(Self::super_(segments)),
+            neve_syntax::PathPrefix::Crate => Some(Self::crate_(segments)),
+            _ => None,
         }
     }
 

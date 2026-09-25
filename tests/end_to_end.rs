@@ -239,6 +239,20 @@ fn test_end_to_end_enum_match_runtime_parity() {
 }
 
 #[test]
+fn test_end_to_end_record_enum_variant_match_runtime_parity() {
+    assert_runtime_parity(
+        "
+        enum Event { Click { x: Int, y: Int } };
+        let event = Click { x = 2, y = 3 };
+        match event {
+            Click({ x, y }) -> x + y,
+        };
+        ",
+        Value::Int(int(5)),
+    );
+}
+
+#[test]
 fn test_end_to_end_trait_bound_enforced() {
     // Verify that trait bounds on generic parameters are checked.
     // This should produce a type error because Int does not implement Show.
@@ -3081,15 +3095,22 @@ fn test_end_to_end_function_pipe_still_works() {
 
 #[test]
 fn test_end_to_end_bytes_len() {
-    let source = r#"
-    use std.bytes = bytes;
-    let data = io.readFileBytesPath(./tests/fmt.rs);
-    let x = bytes.len(data) > 0;
-    "#;
-    let analysis = analyze_source(source);
-    let hir_value = eval_hir(&analysis);
-    // May fail if file doesn't exist, but type checking should pass
-    assert!(hir_value.is_ok() || hir_value.is_err());
+    // Real pipeline read: `bytes.len` reports the size of a file it just read.
+    // 真实管线读取：`bytes.len` 报告刚读取文件的字节数。
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("bytes-len.txt");
+    fs::write(&path, "hello").unwrap();
+    let escaped = path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        use std.bytes = bytes;
+        use std.path = path;
+        let data = io.readFileBytesPath(path.fromString("{escaped}"));
+        bytes.len(data) > 0
+        "#
+    );
+    assert_runtime_parity(&source, Value::Bool(true));
 }
 
 #[test]
@@ -3433,10 +3454,17 @@ fn test_end_to_end_io_retry_eventually_succeeds() {
     "#;
     // retry is evaluator-owned — needs HIR path
     let analysis = analyze_source(source);
+    let errors: Vec<_> = analysis
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected frontend errors: {errors:?}");
     let hir_result = eval_hir(&analysis);
-    // retry with closure mutation might not work as expected;
-    // at minimum, type checking should pass
-    assert!(hir_result.is_ok() || hir_result.is_err());
+    assert!(
+        hir_result.is_ok(),
+        "retry through the HIR path should evaluate: {hir_result:?}"
+    );
 }
 
 #[test]
@@ -7490,11 +7518,11 @@ fn test_init_creates_flake_and_main() {
 
     let flake_content = format!(
         r#"{{
-    description = "A Neve project";
-    name = "{}";
-    version = "0.1.0";
+    description = "A Neve project",
+    name = "{}",
+    version = "0.1.0",
 
-    inputs = {{}};
+    inputs = {{}},
 
     outputs = fn(inputs) {{
         let pkgs = {{}};
@@ -7502,7 +7530,7 @@ fn test_init_creates_flake_and_main() {
             default = fn() {{ true }},
         }};
         {{ packages = pkgs, checks = checks }}
-    }};
+    }},
 }}"#,
         proj_dir.file_name().unwrap().to_string_lossy()
     );
@@ -7512,15 +7540,12 @@ fn test_init_creates_flake_and_main() {
 -- {name} — main entry point
 use std.io = io;
 
-fn main() = {{
-    let (args, _) = io.args();
-    let name = match args {{
-        [n, ..] -> n,
-        [] -> "World"
-    }};
-    io.println("Hello, " ++ name ++ "!");
-    0
+let (args, _) = io.args();
+let name = match args {{
+    [n, ..] -> n,
+    [] -> "World"
 }};
+io.println("Hello, " ++ name ++ "!");
 "#,
         name = proj_dir.file_name().unwrap().to_string_lossy()
     );
@@ -7543,42 +7568,64 @@ fn main() = {{
         ".gitignore should exist"
     );
 
-    // Verify flake.neve contains expected fields
-    let flake = std::fs::read_to_string(proj_dir.join("flake.neve")).unwrap();
+    let flake = neve_config::flake::Flake::load(&proj_dir)
+        .expect("generated flake should evaluate through frontend/HIR");
+    assert_eq!(flake.description.as_deref(), Some("A Neve project"));
     assert!(
-        flake.contains("description"),
+        flake.outputs.is_some(),
+        "generated flake should define outputs"
+    );
+
+    let flake_source = std::fs::read_to_string(proj_dir.join("flake.neve")).unwrap();
+    assert!(
+        flake_source.contains("description"),
         "flake.neve should have description"
     );
-    assert!(flake.contains("name"), "flake.neve should have name");
-    assert!(flake.contains("version"), "flake.neve should have version");
+    assert!(flake_source.contains("name"), "flake.neve should have name");
+    assert!(
+        flake_source.contains("version"),
+        "flake.neve should have version"
+    );
 
-    // Verify main.neve contains expected imports and function
+    // Verify main.neve contains executable top-level code.
     let main = std::fs::read_to_string(proj_dir.join("main.neve")).unwrap();
     assert!(
         main.contains("use std.io = io"),
         "main.neve should use std.io"
     );
     assert!(
-        main.contains("fn main() ="),
-        "main.neve should have main function"
+        main.contains("let (args, _) = io.args();"),
+        "main.neve should read command arguments"
+    );
+    assert!(
+        !main.contains("fn main() ="),
+        "main.neve should not rely on an implicit function entrypoint"
+    );
+
+    let analysis = analyze_source(&main);
+    let errors: Vec<_> = analysis
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == neve_diagnostic::Severity::Error)
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "generated main.neve should type-check: {errors:?}"
     );
 }
 
 #[test]
 fn test_init_project_typechecks() {
-    // Verify the scaffolded main.neve passes type checking.
-    // Effect checking is separate; the effect annotation allows effectful calls.
+    // Verify the scaffolded main.neve passes type checking through its
+    // executable top-level expressions.
     let source = r#"use std.io = io;
 
-fn main() = {
-    let (args, _) = io.args();
-    let name = match args {
-        [n, ..] -> n,
-        [] -> "World"
-    };
-    io.println("Hello, " ++ name ++ "!");
-    0
+let (args, _) = io.args();
+let name = match args {
+    [n, ..] -> n,
+    [] -> "World"
 };
+io.println("Hello, " ++ name ++ "!");
 "#;
 
     let analysis = analyze_source(source);
@@ -7724,15 +7771,12 @@ fn test_neve_init_scaffold() {
 -- main entry point
 use std.io = io;
 
-fn main() = {
-    let (args, _) = io.args();
-    let name = match args {
-        [n, ..] -> n,
-        [] -> "Neve"
-    };
-    io.println("Hello, " ++ name ++ "!");
-    0
+let (args, _) = io.args();
+let name = match args {
+    [n, ..] -> n,
+    [] -> "Neve"
 };
+io.println("Hello, " ++ name ++ "!");
 "#;
     std::fs::write(proj_dir.join("main.neve"), main_content).unwrap();
 
@@ -7743,21 +7787,25 @@ fn main() = {
         "should have shebang"
     );
     assert!(main.contains("use std.io = io"), "should use io");
-    assert!(main.contains("fn main() ="), "should have main function");
+    assert!(
+        main.contains("let (args, _) = io.args();"),
+        "should read command arguments"
+    );
+    assert!(
+        !main.contains("fn main() ="),
+        "should not rely on an implicit function entrypoint"
+    );
     assert!(main.contains("io.println"), "should use io.println");
 
     // Verify scaffolded content type-checks
     let source = r#"
 use std.io = io;
-fn main() = {
-    let (args, _) = io.args();
-    let name = match args {
-        [n, ..] -> n,
-        [] -> "Neve"
-    };
-    io.println("Hello, " ++ name ++ "!");
-    0
+let (args, _) = io.args();
+let name = match args {
+    [n, ..] -> n,
+    [] -> "Neve"
 };
+io.println("Hello, " ++ name ++ "!");
 "#;
     let analysis = analyze_source(source);
     let errors: Vec<_> = analysis
@@ -7906,18 +7954,205 @@ fn test_option_question_operator() {
 }
 
 #[test]
-fn test_defer_execution_order() {
-    // io.defer registers a deferred action (evaluator-owned builtin).
-    // Verifies the builtin can be called and returns Unit.
+fn test_defer_runs_when_function_returns() {
+    // A deferred action belongs to the call frame that registered it and must
+    // run when that frame exits, not when the whole program ends.
+    // 延迟动作属于注册它的调用帧，必须在帧退出时执行，而不是程序结束时。
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("defer-order.txt");
+    let escaped = path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        fn record(text: String) = io.appendFile("{escaped}", text);
+        let run = fn() {{
+            io.defer(fn() {{ record("b") }});
+            record("a");
+            ()
+        }};
+        let done = run();
+        io.readFile("{escaped}")
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(value, Value::String(Rc::new("ab".to_string())));
+}
+
+#[test]
+fn test_defer_runs_when_function_fails() {
+    // Deferred cleanup also runs while a frame is unwinding from an error.
+    // 帧因错误退出时，延迟清理同样执行。
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("defer-error.txt");
+    let escaped = path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        let fail = fn() {{
+            io.defer(fn() {{ io.appendFile("{escaped}", "cleanup") }});
+            1 / 0
+        }};
+        let outcome = fail();
+        io.readFile("{escaped}")
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let error = eval_hir(&analysis).expect_err("division by zero should fail");
+    assert!(matches!(error, EvalError::DivisionByZero), "got {error:?}");
+    let written = fs::read_to_string(&path).expect("cleanup should have written the file");
+    assert_eq!(written, "cleanup");
+}
+
+#[test]
+fn test_defer_scope_does_not_leak_to_callers() {
+    // A defer registered by a callee must not fire in the caller's frame.
+    // 被调用方注册的延迟动作不应在调用者帧中触发。
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("defer-scope.txt");
+    let escaped = path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        let inner = fn() {{
+            io.defer(fn() {{ io.appendFile("{escaped}", "inner") }});
+            ()
+        }};
+        let outer = fn() {{
+            io.defer(fn() {{ io.appendFile("{escaped}", "outer") }});
+            let done = inner();
+            ()
+        }};
+        let done = outer();
+        io.readFile("{escaped}")
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(value, Value::String(Rc::new("innerouter".to_string())));
+}
+
+#[test]
+fn test_defer_runs_at_module_scope() {
+    // The module body is a frame too: a top-level defer runs when the module
+    // finishes instead of being dropped. An effectful module-level lambda is
+    // rejected by the effect checker, so the registered action fails instead of
+    // writing a file — the failure is observable proof that it ran.
+    // 模块体也是帧：顶层 defer 在模块结束时执行，而不是被丢弃。模块级效果 lambda 会被
+    // 效果检查拒绝，因此这里用“执行即失败”的动作代替写文件，失败本身就是已执行的证据。
     let source = r#"
-    use std.io = io;
-    let _ = io.defer(fn() { () });
-    let x = true;
-    "#;
-    let analysis = analyze_source(source);
-    let hir_result = eval_hir(&analysis);
-    // defer pushes to defer_stack; if it doesn't crash, it's working
-    assert!(hir_result.is_ok() || hir_result.is_err());
+        use std.io = io;
+        io.defer(fn() { let ignored = 1 / 0; () });
+        ()
+        "#;
+    let analysis = analyze_without_diagnostics(source);
+    let error = eval_hir(&analysis).expect_err("module-level defer should have run");
+    assert!(matches!(error, EvalError::DivisionByZero), "got {error:?}");
+}
+
+#[test]
+fn test_defer_order_matches_tail_and_non_tail_calls() {
+    // A tail call hands the frame to the callee, so the caller's cleanup must
+    // wait for the callee frame: tail and non-tail chains clean up in the same
+    // order (innermost frame first).
+    // 尾调用把帧交给被调用者，调用者的清理必须等待被调用者的帧；尾调用链与非尾调用
+    // 链的清理顺序一致（内层帧先执行）。
+    let temp = TempDir::new().unwrap();
+    let tail_path = temp.path().join("defer-tail.txt");
+    let plain_path = temp.path().join("defer-plain.txt");
+    let tail = tail_path.display().to_string();
+    let plain = plain_path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        let inner_tail = fn() {{
+            io.defer(fn() {{ io.appendFile("{tail}", "inner") }});
+            1
+        }};
+        let tail_outer = fn() {{
+            io.defer(fn() {{ io.appendFile("{tail}", "outer") }});
+            inner_tail()
+        }};
+        let inner_plain = fn() {{
+            io.defer(fn() {{ io.appendFile("{plain}", "inner") }});
+            1
+        }};
+        let plain_outer = fn() {{
+            io.defer(fn() {{ io.appendFile("{plain}", "outer") }});
+            let done = inner_plain();
+            done
+        }};
+        let a = tail_outer();
+        let b = plain_outer();
+        ()
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let value = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(value, Value::Unit);
+    let tail_log = fs::read_to_string(&tail_path).expect("tail chain should have cleaned up");
+    let plain_log = fs::read_to_string(&plain_path).expect("non-tail chain should have cleaned up");
+    assert_eq!(
+        tail_log, "innerouter",
+        "tail chain cleaned up in the wrong order"
+    );
+    assert_eq!(
+        plain_log, "innerouter",
+        "non-tail chain cleaned up in the wrong order"
+    );
+}
+
+#[test]
+fn test_defer_runs_when_tail_called_frame_fails() {
+    // Pending cleanups still run when the tail-call chain ends in an error.
+    // 尾调用链以错误结束时，挂起的清理仍然执行。
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("defer-tail-error.txt");
+    let escaped = path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        let boom = fn() {{ 1 / 0 }};
+        let caller = fn() {{
+            io.defer(fn() {{ io.appendFile("{escaped}", "cleanup") }});
+            boom()
+        }};
+        let outcome = caller();
+        ()
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let error = eval_hir(&analysis).expect_err("division by zero should fail");
+    assert!(matches!(error, EvalError::DivisionByZero), "got {error:?}");
+    let written =
+        fs::read_to_string(&path).expect("pending cleanup should run while unwinding the chain");
+    assert_eq!(written, "cleanup");
+}
+
+#[test]
+fn test_defer_runs_inside_thunk_frame() {
+    // A lazy thunk body is its own frame; defers registered while forcing it run
+    // when that frame exits.
+    // 惰性 thunk 体自成一帧；force 期间注册的 defer 在该帧退出时执行。
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("defer-thunk.txt");
+    let escaped = path.display().to_string();
+    let source = format!(
+        r#"
+        use std.io = io;
+        let thunk = ~{{
+            io.defer(fn() {{ io.appendFile("{escaped}", "lazy") }});
+            42
+        }};
+        let value = force(thunk);
+        ()
+        "#
+    );
+    let analysis = analyze_without_diagnostics(&source);
+    let result = eval_hir(&analysis).expect("HIR evaluator should succeed");
+    assert_eq!(result, Value::Unit);
+    let written = fs::read_to_string(&path).expect("thunk-frame defer should have run");
+    assert_eq!(written, "lazy");
 }
 
 #[test]

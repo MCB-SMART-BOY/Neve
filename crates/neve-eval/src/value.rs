@@ -8,6 +8,7 @@
 //! implementation details. External callers should prefer HIR evaluator.
 
 use crate::Environment;
+use crate::EvalError;
 use neve_common::{Int, int_to_f64};
 use neve_hir::{Expr, Param};
 use std::cell::RefCell;
@@ -19,14 +20,17 @@ use std::rc::Rc;
 /// A thunk represents a suspended computation for lazy evaluation.
 /// Thunk 表示用于惰性求值的暂停计算。
 ///
-/// It can be in one of three states:
-/// 它可以处于以下三种状态之一：
+/// It can be in one of four states:
+/// 它可以处于以下四种状态之一：
 /// - Unevaluated: contains the expression and environment to evaluate
 ///   未求值：包含要求值的表达式和环境
 /// - Evaluating: currently being evaluated (used to detect cycles)
 ///   正在求值：当前正在求值（用于检测循环）
 /// - Evaluated: contains the cached result
 ///   已求值：包含缓存的结果
+/// - Failed: evaluation failed; the original error is cached so forcing again
+///   reports the same failure instead of re-running side effects
+///   失败：求值失败；缓存原始错误，再次强制求值会报告同一错误而不重复副作用
 #[derive(Clone)]
 pub struct Thunk {
     /// The inner state of the thunk, wrapped in `Rc<RefCell>` for shared mutable access.
@@ -47,6 +51,9 @@ pub(crate) enum ThunkState {
     /// Already evaluated and cached.
     /// 已求值并缓存。
     Evaluated(Value),
+    /// Evaluation failed; the original error is cached.
+    /// 求值失败；缓存原始错误。
+    Failed(EvalError),
 }
 
 impl Thunk {
@@ -100,6 +107,7 @@ impl fmt::Debug for Thunk {
             }
             ThunkState::Evaluating => write!(f, "<thunk:evaluating>"),
             ThunkState::Evaluated(v) => write!(f, "<thunk:{:?}>", v),
+            ThunkState::Failed(e) => write!(f, "<thunk:failed:{}>", e),
         }
     }
 }
@@ -1584,6 +1592,9 @@ impl KeyCtx {
                 self.key_for_ptr(ptr, |ctx| match &*thunk.state() {
                     ThunkState::Evaluated(v) => format!("Thunk(Evaluated,{})", ctx.value_key(v)),
                     ThunkState::Evaluating => "Thunk(Evaluating)".to_string(),
+                    ThunkState::Failed(e) => {
+                        format!("Thunk(Failed,{})", escape_string(&e.to_string()))
+                    }
                     ThunkState::HirUnevaluated { expr, env } => {
                         let expr_key = format!("Expr({})", escape_string(&format!("{:?}", expr)));
                         let env_key = ctx.env_key(env);

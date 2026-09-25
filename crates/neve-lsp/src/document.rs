@@ -238,6 +238,7 @@ fn visit_pattern_bindings(pattern: &ast::Pattern, visit: &mut impl FnMut(&ast::I
             }
         }
         AstPatternKind::Wildcard | AstPatternKind::Literal(_) => {}
+        _ => {}
     }
 }
 

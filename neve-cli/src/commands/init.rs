@@ -11,11 +11,11 @@ pub fn run(dir: &str) -> Result<(), String> {
     // flake.neve
     let flake = format!(
         r#"{{
-    description = "A Neve project";
-    name = "{}";
-    version = "0.1.0";
+    description = "A Neve project",
+    name = "{}",
+    version = "0.1.0",
 
-    inputs = {{}};
+    inputs = {{}},
 
     outputs = fn(inputs) {{
         let pkgs = {{}};
@@ -23,7 +23,7 @@ pub fn run(dir: &str) -> Result<(), String> {
             default = fn() {{ true }},
         }};
         {{ packages = pkgs, checks = checks }}
-    }};
+    }},
 }}"#,
         dir.file_name()
             .unwrap_or("my-project".as_ref())
@@ -36,17 +36,14 @@ pub fn run(dir: &str) -> Result<(), String> {
     let main = format!(
         r#"#!/usr/bin/env neve run
 -- {name} — main entry point
-import std.io as io;
+use std.io = io;
 
-fn main() effect = {{
-    let (args, _) = io.args();
-    let name = match args {{
-        [n, ..] -> n,
-        [] -> "World"
-    }};
-    io.println("Hello, " ++ name ++ "!");
-    0
+let (args, _) = io.args();
+let name = match args {{
+    [n, ..] -> n,
+    [] -> "World"
 }};
+io.println("Hello, " ++ name ++ "!");
 "#,
         name = dir
             .file_name()
@@ -57,9 +54,58 @@ fn main() effect = {{
     fs::write(dir.join("main.neve"), main).map_err(|e| format!("write main.neve: {e}"))?;
 
     // .gitignore
-    fs::write(dir.join(".gitignore"), "result\n.direnv\n").ok();
+    fs::write(dir.join(".gitignore"), "result\n.direnv\n")
+        .map_err(|e| format!("write .gitignore: {e}"))?;
 
     println!("✅ Created Neve project in {}", dir.display());
     println!("   cd {} && neve run main.neve", dir.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run;
+
+    #[test]
+    fn run_writes_canonical_main_source() {
+        let dir = tempfile::tempdir().expect("temporary project directory");
+        run(dir.path().to_str().expect("temporary path should be UTF-8"))
+            .expect("init should create the project");
+
+        let main = std::fs::read_to_string(dir.path().join("main.neve"))
+            .expect("generated main.neve should be readable");
+        assert!(main.contains("use std.io = io;"));
+        assert!(main.contains("let (args, _) = io.args();"));
+        assert!(!main.contains("fn main() ="));
+        assert!(!main.contains("import std.io"));
+        assert!(!main.contains("effect ="));
+
+        let analysis = neve_frontend::analyze_source(&main);
+
+        let has_errors = analysis
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == neve_diagnostic::Severity::Error);
+        assert!(
+            !has_errors,
+            "generated source should type-check: {:?}",
+            analysis.diagnostics
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_writes_loadable_flake_source() {
+        let dir = tempfile::tempdir().expect("temporary project directory");
+        run(dir.path().to_str().expect("temporary path should be UTF-8"))
+            .expect("init should create the project");
+
+        let flake = neve_config::flake::Flake::load(dir.path())
+            .expect("generated flake.neve should evaluate through frontend/HIR");
+        assert_eq!(flake.description.as_deref(), Some("A Neve project"));
+        assert!(
+            flake.outputs.is_some(),
+            "generated flake should define outputs"
+        );
+    }
 }

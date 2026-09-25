@@ -45,14 +45,14 @@ didSave  →  (same as didChange, plus diagnostic publish)
 didClose →  remove from document store
 ```
 
-## Implemented Methods (20)
+## Implemented Methods (21)
 
 | Method | Handler | Data Source |
 |--------|---------|-------------|
 | `textDocument/hover` | `handle_hover` | TypedHIR — type of expr/def at position |
 | `textDocument/completion` | `handle_completion` | ModuleSemantics — locals, stdlib, types, keywords |
-| `completionItem/resolve` | `handle_resolve` | Docs database — 77 function docs |
-| `textDocument/signatureHelp` | `handle_signature` | 80 builtin sigs + user fn sigs via AST |
+| `completionItem/resolve` | `handle_resolve` | Standard-library and builtin completion documentation |
+| `textDocument/signatureHelp` | `handle_signature` | User-defined and builtin function signatures |
 | `textDocument/definition` | `handle_goto_def` | DefTable — resolved DefId → span |
 | `textDocument/references` | `handle_references` | DefTable — all uses of a DefId |
 | `textDocument/rename` | `handle_rename` | DefTable — rename across workspace |
@@ -71,11 +71,30 @@ didClose →  remove from document store
 | `textDocument/didSave` | `handle_save` | Publish diagnostics |
 | `textDocument/didClose` | `handle_close` | Cleanup |
 
+The table above lists 21 implemented LSP request and document-lifecycle
+methods advertised by the server. The backend also accepts two protocol
+notifications, `workspace/didChangeConfiguration` and
+`workspace/didChangeWatchedFiles`; both are explicit stubs and are not counted
+as implemented capabilities.
+
 ## Completion Architecture
 
 Semantic tokens classify nested destructuring bindings from their original AST
 identifier spans. Wildcards are intentionally omitted, while constructor
 patterns retain their constructor/reference spans for definition navigation.
+
+All positions produced by `semantic_tokens.rs` use LSP's default UTF-16 code
+unit encoding: `offset_to_line_col` converts a byte offset to a UTF-16 column
+and `utf16_length` converts byte spans to UTF-16 lengths, so an astral character
+(emoji, 4 UTF-8 bytes / 2 UTF-16 units) shifts later tokens on the line by two
+columns rather than by one (character counting) or four (byte counting).
+Identifiers start with an ASCII letter or `_` but may continue with Unicode
+alphanumerics (`café`), so a token's column width is measured in UTF-16 units
+rather than assumed equal to its byte length.
+
+Known limitation: a token that spans several lines (a raw multi-line string)
+reports a length covering the whole span, which exceeds its first line. LSP
+expects semantic tokens to stay within one line.
 
 ```
 User types:  dat
@@ -110,15 +129,15 @@ including nested lambda bodies. Pattern indexing preserves one definition
 identity for bindings introduced by an or-pattern, while constructor
 references retain their resolved declaration spans.
 
-## Type-Aware Completion (54 methods, 5 receiver types)
+## Type-Aware Completion
 
-| Receiver Type | Method Count | Example |
-|---------------|-------------|---------|
-| `List<T>` | 32 | `.map`, `.filter`, `.fold`, `.head`, `.tail`... |
-| `String` | 16 | `.len`, `.split`, `.trim`, `.upper`, `.lower`... |
-| `Option<T>` | 11 | `.map`, `.flatMap`, `.unwrap`, `.isSome`... |
-| `Result<T,E>` | 9 | `.map`, `.flatMap`, `.unwrap`, `.isOk`... |
-| `Record` | 3 | Field access via `.fieldName` |
+| Receiver Type | Representative methods | Example |
+|---------------|------------------------|---------|
+| `List<T>` | Mapping, filtering, folding, indexing | `.map`, `.filter`, `.fold`, `.head`, `.tail` |
+| `String` | Splitting, trimming, case conversion, parsing | `.len`, `.split`, `.trim`, `.upper`, `.lower` |
+| `Option<T>` | Mapping, unwrapping, filtering | `.map`, `.flatMap`, `.unwrap`, `.isSome` |
+| `Result<T,E>` | Mapping, unwrapping, status checks | `.map`, `.flatMap`, `.unwrap`, `.isOk` |
+| `Record` | Field access | `.fieldName` |
 
 ## CodeLens — Reference Counts
 
@@ -174,10 +193,10 @@ Extension in `editors/vscode/` — TextMate grammar + LSP client + publish scrip
 
 | File | What |
 |------|------|
-| `lsp/src/lib.rs` | Server initialization + connection loop |
-| `lsp/src/backend.rs` | All 21 LSP method handlers |
-| `lsp/src/capabilities.rs` | Server capability registration |
-| `lsp/src/document.rs` | Document store — open/changed/saved |
-| `lsp/src/semantic_tokens.rs` | Semantic token encoding |
-| `lsp/src/symbol_index.rs` | Workspace symbol indexing |
-| `lsp/src/stdlib_completion/` | Standard library completions |
+| `crates/neve-lsp/src/lib.rs` | Server initialization + connection loop |
+| `crates/neve-lsp/src/backend.rs` | All 21 implemented method handlers |
+| `crates/neve-lsp/src/capabilities.rs` | Server capability registration |
+| `crates/neve-lsp/src/document.rs` | Document store — open/changed/saved |
+| `crates/neve-lsp/src/semantic_tokens.rs` | Semantic token encoding |
+| `crates/neve-lsp/src/symbol_index.rs` | Workspace symbol indexing |
+| `crates/neve-lsp/src/stdlib_completion/` | Standard library completions |

@@ -39,7 +39,7 @@ fi
 echo ""
 echo "Building grammar..."
 cd "$GRAMMAR_DIR"
-$TREE_SITTER generate 2>&1 | tail -1
+$TREE_SITTER generate --no-bindings 2>&1 | tail -1
 $TREE_SITTER build 2>&1
 
 # 4. Verify output

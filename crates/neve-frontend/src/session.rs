@@ -20,7 +20,7 @@ use neve_typeck::TypeChecker;
 use crate::{
     Diagnostic, Module, ModuleAnalysis, ModuleSemantics, collect_item_names_from_modules,
     collect_module_semantics, diagnostics_have_errors, format_type_with_names_map,
-    rewrite_diagnostics_with_names,
+    read_diagnostic_source, rewrite_diagnostics_with_names,
 };
 
 const REPL_EXPR_BINDING_NAME: &str = "__expr__";
@@ -715,8 +715,10 @@ impl FrontendSession {
     /// Return dependency-first loaded module entries with HIR and semantic results.
     /// 返回带 HIR 与语义结果的依赖优先已加载模块条目。
     pub fn loaded_modules_in_order(&self) -> Vec<SessionLoadedModule> {
-        let (global_types, global_spans, global_fn_bounds) = self.collect_loaded_global_env();
+        let (global_types, global_spans, global_fn_bounds, global_traits) =
+            self.collect_loaded_global_env();
         let type_names = self.collect_type_names(None);
+        let mut global_effectful_definitions = HashSet::new();
         let mut entries = Vec::new();
 
         for module_id in self.loader.load_order() {
@@ -742,12 +744,15 @@ impl FrontendSession {
                 continue;
             };
 
-            let mut checker = TypeChecker::with_global_env(
+            let mut checker = TypeChecker::with_global_env_and_traits(
                 global_types.clone(),
                 global_spans.clone(),
                 global_fn_bounds.clone(),
-            );
+                global_traits.clone(),
+            )
+            .with_effectful_definitions(global_effectful_definitions.iter().copied());
             checker.check(module);
+            global_effectful_definitions.extend(checker.effectful_definitions().iter().copied());
             let semantics = collect_module_semantics(&checker);
             let diagnostics =
                 rewrite_diagnostics_with_names(checker.diagnostics_ref().to_vec(), &type_names);
@@ -789,19 +794,26 @@ impl FrontendSession {
     /// Analyze a current in-memory module against loaded + persisted session state.
     /// 基于已加载模块与持久化模块状态分析当前内存模块。
     pub fn analyze_module(&self, current_module: &Module) -> ModuleAnalysis {
-        let mut checker = TypeChecker::new().with_repl_mode(true);
+        let mut modules: Vec<&Module> = self
+            .loader
+            .load_order()
+            .iter()
+            .filter_map(|module_id| self.loader.hir_module(*module_id))
+            .collect();
+        modules.extend(self.persisted_modules.iter());
+        modules.push(current_module);
 
-        for module_id in self.loader.load_order() {
-            let Some(module) = self.loader.hir_module(*module_id) else {
-                continue;
-            };
-            checker.check(module);
-            checker.clear_diagnostics();
-            checker.clear_method_resolutions();
-            checker.clear_assoc_projection_resolutions();
-        }
+        let (global_types, global_spans, global_fn_bounds, global_traits) =
+            Self::collect_global_env(modules.iter().copied());
+        let mut checker = TypeChecker::with_global_env_and_traits(
+            global_types,
+            global_spans,
+            global_fn_bounds,
+            global_traits,
+        )
+        .with_repl_mode(true);
 
-        for module in &self.persisted_modules {
+        for module in modules.iter().take(modules.len() - 1) {
             checker.check(module);
             checker.clear_diagnostics();
             checker.clear_method_resolutions();
@@ -930,7 +942,7 @@ impl FrontendSession {
                 entries.push(SessionLoadedDiagnostics {
                     module_id: entry.module_id,
                     file_path: entry.file_path.clone(),
-                    source: std::fs::read_to_string(&entry.file_path).unwrap_or_default(),
+                    source: read_diagnostic_source(&entry.file_path),
                     diagnostics: entry.analysis.diagnostics,
                 });
             }
@@ -959,7 +971,11 @@ impl FrontendSession {
                 continue;
             }
 
-            let import_path = ModulePath::from_import_def(import);
+            let Some(import_path) = ModulePath::from_import_def(import) else {
+                return Err(SessionError::CannotResolveImportPath(format_import_path(
+                    import,
+                )));
+            };
             let Some(absolute_path) = self
                 .loader
                 .resolve_module_path(&import_path, Some(&module_path))
@@ -1268,7 +1284,10 @@ impl FrontendSession {
 
             let bindings = self
                 .loader
-                .resolve_import(&hir_import_from_ast(item.span, import), current_module_path)
+                .resolve_import(
+                    &hir_import_from_ast(item.span, import)?,
+                    current_module_path,
+                )
                 .map_err(|err| SessionError::ImportResolution(err.to_string()))?;
             resolved.bindings.extend(bindings);
 
@@ -1287,28 +1306,46 @@ impl FrontendSession {
     }
 
     #[allow(clippy::type_complexity)]
+    fn collect_global_env<'a>(
+        modules: impl IntoIterator<Item = &'a Module>,
+    ) -> (
+        HashMap<DefId, Ty>,
+        HashMap<DefId, neve_common::Span>,
+        HashMap<DefId, Vec<(u32, neve_typeck::TraitBound)>>,
+        neve_typeck::TraitResolver,
+    ) {
+        let modules: Vec<&Module> = modules.into_iter().collect();
+        let global_traits = TypeChecker::collect_global_trait_resolver(modules.iter().copied());
+        let mut global_types = HashMap::new();
+        let mut global_spans = HashMap::new();
+        let mut global_fn_bounds = HashMap::new();
+
+        for module in &modules {
+            let (types, spans, bounds) =
+                TypeChecker::collect_signatures_with_trait_resolver(module, &global_traits);
+            global_types.extend(types);
+            global_spans.extend(spans);
+            global_fn_bounds.extend(bounds);
+        }
+
+        (global_types, global_spans, global_fn_bounds, global_traits)
+    }
+
+    #[allow(clippy::type_complexity)]
     fn collect_loaded_global_env(
         &self,
     ) -> (
         HashMap<DefId, Ty>,
         HashMap<DefId, neve_common::Span>,
         HashMap<DefId, Vec<(u32, neve_typeck::TraitBound)>>,
+        neve_typeck::TraitResolver,
     ) {
-        let mut global_types = HashMap::new();
-        let mut global_spans = HashMap::new();
-        let mut global_fn_bounds = HashMap::new();
-
-        for module_id in self.loader.load_order() {
-            let Some(module) = self.loader.hir_module(*module_id) else {
-                continue;
-            };
-            let (types, spans, bounds) = TypeChecker::collect_signatures(module);
-            global_types.extend(types);
-            global_spans.extend(spans);
-            global_fn_bounds.extend(bounds);
-        }
-
-        (global_types, global_spans, global_fn_bounds)
+        let modules = self
+            .loader
+            .load_order()
+            .iter()
+            .filter_map(|module_id| self.loader.hir_module(*module_id));
+        Self::collect_global_env(modules)
     }
 
     fn collect_type_names(&self, current_module: Option<&Module>) -> HashMap<DefId, String> {
@@ -1349,12 +1386,18 @@ impl Default for FrontendSession {
     }
 }
 
-fn hir_import_from_ast(span: Span, import: &ImportDef) -> HirImport {
+fn hir_import_from_ast(span: Span, import: &ImportDef) -> Result<HirImport, SessionError> {
     let prefix = match import.prefix {
         PathPrefix::Absolute => ImportPathPrefix::Absolute,
         PathPrefix::Self_ => ImportPathPrefix::Self_,
         PathPrefix::Super => ImportPathPrefix::Super,
         PathPrefix::Crate => ImportPathPrefix::Crate,
+        _ => {
+            return Err(SessionError::ImportResolution(format!(
+                "unsupported import prefix at {}..{}",
+                span.start.0, span.end.0
+            )));
+        }
     };
 
     let kind = match &import.items {
@@ -1363,9 +1406,15 @@ fn hir_import_from_ast(span: Span, import: &ImportDef) -> HirImport {
             HirImportKind::Items(items.iter().map(|item| item.name.clone()).collect())
         }
         ImportItems::All => HirImportKind::All,
+        _ => {
+            return Err(SessionError::ImportResolution(format!(
+                "unsupported import items at {}..{}",
+                span.start.0, span.end.0
+            )));
+        }
     };
 
-    HirImport {
+    Ok(HirImport {
         prefix,
         path: import
             .path
@@ -1376,7 +1425,7 @@ fn hir_import_from_ast(span: Span, import: &ImportDef) -> HirImport {
         alias: import.alias.as_ref().map(|alias| alias.name.clone()),
         is_pub: import.visibility == Visibility::Public,
         span,
-    }
+    })
 }
 
 fn find_checked_binding_type_target(module: &Module, binding_name: &str) -> Option<DefId> {
@@ -1416,6 +1465,7 @@ fn item_visibility(item: &neve_syntax::Item) -> Visibility {
         ItemKind::Import(def) => def.visibility,
         ItemKind::Impl(_) => Visibility::Private,
         ItemKind::ExprStmt(_) => Visibility::Private,
+        _ => Visibility::Private,
     }
 }
 
@@ -1446,10 +1496,12 @@ fn item_defined_names(item: &neve_syntax::Item) -> Vec<String> {
                 .unwrap_or_default(),
             ImportItems::Items(items) => items.iter().map(|item| item.name.clone()).collect(),
             ImportItems::All => Vec::new(),
+            _ => Vec::new(),
         },
         ItemKind::Impl(_) => Vec::new(),
         ItemKind::Fn(_) => Vec::new(),
         ItemKind::ExprStmt(_) => Vec::new(),
+        _ => Vec::new(),
     }
 }
 
@@ -1517,6 +1569,7 @@ fn format_import_path(import: &ImportDef) -> String {
         PathPrefix::Self_ => "self.",
         PathPrefix::Super => "super.",
         PathPrefix::Crate => "crate.",
+        _ => "",
     };
     format!(
         "{}{}",

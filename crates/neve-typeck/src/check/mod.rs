@@ -145,6 +145,9 @@ pub struct TypeChecker {
     /// Trait resolver for trait/impl handling.
     /// 用于处理 trait/impl 的特征解析器。
     trait_resolver: TraitResolver,
+    /// Impl definitions owned by the module currently being checked.
+    /// 当前检查模块拥有的 impl 定义。
+    local_impls: HashSet<DefId>,
     /// Pending trait constraints to verify at end of type checking.
     /// 待验证的特征约束（在类型检查结束时验证）。
     pending_trait_constraints: Vec<TraitConstraint>,
@@ -202,6 +205,7 @@ impl TypeChecker {
             local_definitions: HashMap::new(),
             expr_types: HashMap::new(),
             trait_resolver: TraitResolver::new(),
+            local_impls: HashSet::new(),
             type_alias_expansion: HashSet::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
@@ -233,12 +237,40 @@ impl TypeChecker {
         global_spans: HashMap<DefId, Span>,
         fn_bounds: HashMap<DefId, Vec<(u32, TraitBound)>>,
     ) -> Self {
+        Self::with_global_env_and_traits(globals, global_spans, fn_bounds, TraitResolver::new())
+    }
+
+    /// Create a type checker with global signatures and a shared trait environment.
+    /// 使用全局签名和共享特征环境创建类型检查器。
+    pub fn with_global_env_and_traits(
+        globals: HashMap<DefId, Ty>,
+        global_spans: HashMap<DefId, Span>,
+        fn_bounds: HashMap<DefId, Vec<(u32, TraitBound)>>,
+        trait_resolver: TraitResolver,
+    ) -> Self {
         Self {
             globals,
             global_spans,
             fn_bounds,
+            trait_resolver,
             ..Self::new()
         }
+    }
+
+    /// Seed effect inference with definitions imported from checked dependencies.
+    /// 使用已检查依赖中的定义初始化副作用推断。
+    pub fn with_effectful_definitions(
+        mut self,
+        definitions: impl IntoIterator<Item = DefId>,
+    ) -> Self {
+        self.effectful_functions.extend(definitions);
+        self
+    }
+
+    /// Borrow the effectful definitions discovered for this module.
+    /// 借用当前模块发现的有副作用定义。
+    pub fn effectful_definitions(&self) -> &HashSet<DefId> {
+        &self.effectful_functions
     }
 
     /// Create a type checker with unused variable checking disabled.
@@ -248,6 +280,68 @@ impl TypeChecker {
             check_unused: false,
             ..Self::new()
         }
+    }
+
+    /// Collect a trait registry for all modules before module checking.
+    /// 在逐模块检查前为所有模块收集共享特征注册表。
+    pub fn collect_global_trait_resolver<'a>(
+        modules: impl IntoIterator<Item = &'a Module>,
+    ) -> TraitResolver {
+        let modules: Vec<&Module> = modules.into_iter().collect();
+        let mut resolver = TraitResolver::new();
+
+        for module in &modules {
+            for item in &module.items {
+                if let ItemKind::Trait(trait_def) = &item.kind {
+                    resolver.register_trait(item.id, trait_def);
+                }
+            }
+        }
+
+        for module in &modules {
+            for item in &module.items {
+                if let ItemKind::Trait(trait_def) = &item.kind {
+                    resolver.resolve_trait_assoc_bounds(item.id, trait_def);
+                }
+            }
+        }
+
+        for module in &modules {
+            for item in &module.items {
+                if let ItemKind::Impl(impl_def) = &item.kind {
+                    resolver.register_impl(item.id, impl_def);
+                }
+            }
+        }
+
+        let mut checker = TypeChecker::with_global_env_and_traits(
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            resolver,
+        );
+        checker.canonicalize_registered_impls();
+        checker.trait_resolver
+    }
+    /// Collect signatures using a resolver that already contains all traits.
+    /// 使用已包含全部特征的解析器收集模块签名。
+    #[allow(clippy::type_complexity)]
+    pub fn collect_signatures_with_trait_resolver(
+        module: &Module,
+        trait_resolver: &TraitResolver,
+    ) -> (
+        HashMap<DefId, Ty>,
+        HashMap<DefId, Span>,
+        HashMap<DefId, Vec<(u32, TraitBound)>>,
+    ) {
+        let mut checker = TypeChecker::with_global_env_and_traits(
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            trait_resolver.clone(),
+        );
+        checker.collect_module_items(module);
+        (checker.globals, checker.global_spans, checker.fn_bounds)
     }
 
     /// Collect global signatures and trait bounds from a module without checking bodies.
@@ -261,20 +355,22 @@ impl TypeChecker {
         HashMap<DefId, Vec<(u32, TraitBound)>>,
     ) {
         let mut checker = TypeChecker::new();
-        for item in &module.items {
-            checker.collect_item(item);
-        }
+        checker.collect_module_items(module);
         (checker.globals, checker.global_spans, checker.fn_bounds)
     }
 
     /// Type check a module.
     /// 对模块进行类型检查。
     pub fn check(&mut self, module: &Module) {
-        // First pass: collect all definitions (functions, traits, impls)
-        // 第一遍：收集所有定义（函数、特征、实现）
-        for item in &module.items {
-            self.collect_item(item);
-        }
+        // Preserve AST-to-HIR boundary diagnostics alongside type errors.
+        // 保留 AST 到 HIR 边界诊断，并与类型错误一并返回。
+        self.diagnostics.extend(module.diagnostics.iter().cloned());
+        self.defined_names.clear();
+        self.local_impls.clear();
+        // First pass: collect all definitions, then register impls after every
+        // trait is available for trait-reference resolution.
+        // 第一遍：先收集所有定义，再在所有特征可解析后注册实现。
+        self.collect_module_items(module);
 
         // Second pass: check trait impls are complete
         // 第二遍：检查特征实现是否完整
@@ -303,6 +399,26 @@ impl TypeChecker {
         self.check_trait_bounds();
     }
 
+    /// Canonicalize all registered trait impl signatures before cloning a resolver.
+    /// 在复制解析器前规范化所有已注册的特征实现签名。
+    fn canonicalize_registered_impls(&mut self) {
+        let trait_infos: Vec<_> = self
+            .trait_resolver
+            .all_traits()
+            .map(|(trait_id, info)| (*trait_id, info.clone()))
+            .collect();
+
+        for (trait_id, trait_info) in trait_infos {
+            for impl_id in self.trait_resolver.impl_ids_for_trait(trait_id) {
+                let Some(impl_info) = self.trait_resolver.impl_info(impl_id).cloned() else {
+                    continue;
+                };
+                let assoc_types = self.canonical_impl_assoc_types(&trait_info, &impl_info);
+                self.canonicalize_trait_impl_signatures(impl_id, &impl_info, &assoc_types);
+            }
+        }
+    }
+
     /// Check all registered impls for completeness.
     /// 检查所有已注册的实现是否完整。
     fn check_all_impls(&mut self) {
@@ -316,8 +432,10 @@ impl TypeChecker {
         // Check each trait's impls
         for (trait_id, trait_info) in trait_infos {
             let impl_ids = self.trait_resolver.impl_ids_for_trait(trait_id);
-
             for impl_id in impl_ids {
+                if !self.local_impls.contains(&impl_id) {
+                    continue;
+                }
                 let Some(impl_info) = self.trait_resolver.impl_info(impl_id).cloned() else {
                     continue;
                 };
@@ -1043,7 +1161,11 @@ impl TypeChecker {
             // Check if the concrete type implements the trait.
             if self
                 .trait_resolver
-                .find_trait_impl(constraint.bound.trait_id, &concrete_ty)
+                .find_trait_impl_with_args(
+                    constraint.bound.trait_id,
+                    &constraint.bound.args,
+                    &concrete_ty,
+                )
                 .is_none()
             {
                 let trait_name = self
@@ -1144,7 +1266,7 @@ impl TypeChecker {
             for bound in &assoc_def.bounds {
                 if self
                     .trait_resolver
-                    .find_trait_impl(bound.trait_id, assoc_ty)
+                    .find_trait_impl_with_args(bound.trait_id, &bound.args, assoc_ty)
                     .is_some()
                 {
                     continue;
@@ -1757,10 +1879,15 @@ impl TypeChecker {
                 ),
                 ItemKind::Impl(implementation) => {
                     for method in &implementation.items {
+                        let trait_method_effectful =
+                            implementation.trait_ref.as_ref().is_some_and(|trait_ty| {
+                                self.trait_resolver
+                                    .trait_method_is_effectful(trait_ty, &method.name)
+                            });
                         self.collect_effect_dependencies(
                             method.id,
                             &method.body,
-                            method.effectful,
+                            method.effectful || trait_method_effectful,
                             include_method_fallbacks,
                             &mut callers,
                         );
@@ -2245,16 +2372,14 @@ impl TypeChecker {
                     let fn_ty = self.fn_signature(fn_def);
                     self.globals.insert(item.id, fn_ty);
                 }
-                // Collect trait bounds on generic parameters for later enforcement.
-                self.collect_fn_bounds(item.id, fn_def);
             }
             ItemKind::Expr(_) => {}
             ItemKind::Trait(trait_def) => {
-                self.collect_trait(item.id, trait_def);
+                if self.trait_resolver.get_trait(item.id).is_none() {
+                    self.collect_trait(item.id, trait_def);
+                }
             }
-            ItemKind::Impl(impl_def) => {
-                self.collect_impl(item.id, impl_def);
-            }
+            ItemKind::Impl(_) => {}
             ItemKind::Struct(struct_def) => {
                 self.collect_struct(item.id, struct_def);
             }
@@ -2263,6 +2388,35 @@ impl TypeChecker {
             }
             ItemKind::TypeAlias(type_alias) => {
                 self.collect_type_alias(item.id, type_alias);
+            }
+        }
+    }
+
+    /// Collect module definitions with trait implementations registered last.
+    /// 收集模块定义，并在所有特征注册后注册特征实现。
+    fn collect_module_items(&mut self, module: &Module) {
+        for item in &module.items {
+            self.collect_item(item);
+        }
+        self.collect_deferred_bounds(module);
+        for item in &module.items {
+            if let ItemKind::Impl(impl_def) = &item.kind {
+                self.local_impls.insert(item.id);
+                if self.trait_resolver.get_impl(item.id).is_none() {
+                    self.collect_impl(item.id, impl_def);
+                }
+            }
+        }
+    }
+
+    fn collect_deferred_bounds(&mut self, module: &Module) {
+        for item in &module.items {
+            match &item.kind {
+                ItemKind::Fn(fn_def) => self.collect_fn_bounds(item.id, fn_def),
+                ItemKind::Trait(trait_def) => self
+                    .trait_resolver
+                    .resolve_trait_assoc_bounds(item.id, trait_def),
+                _ => {}
             }
         }
     }
@@ -3615,6 +3769,7 @@ impl TypeChecker {
                     Self::pattern_binding_ids(pattern, bindings);
                 }
             }
+            PatternKind::Error(_) => {}
         }
     }
 
@@ -3630,6 +3785,12 @@ impl TypeChecker {
     fn check_pattern(&mut self, pattern: &Pattern, expected: &Ty) {
         let expected = self.apply(expected);
         match &pattern.kind {
+            PatternKind::Error(message) => {
+                self.error(
+                    pattern.span,
+                    format!("unsupported pattern in HIR: {message}"),
+                );
+            }
             PatternKind::Wildcard => {}
 
             PatternKind::Var(local_id, name) => {

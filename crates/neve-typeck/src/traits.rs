@@ -12,6 +12,7 @@
 //! - Trait resolution (finding the right impl for a type) / 特征解析（为类型找到正确的实现）
 //! - Associated types and their resolution / 关联类型及其解析
 
+use crate::unify::Substitution;
 use neve_common::Span;
 use neve_hir::{DefId, GenericParam, ImplDef, TraitDef, Ty, TyKind};
 use std::collections::HashMap;
@@ -50,6 +51,9 @@ pub struct TraitMethod {
     pub return_ty: Ty,
     /// Whether a default implementation exists. / 是否存在默认实现。
     pub has_default: bool,
+    /// Whether the legacy declaration marked this method effectful.
+    /// 旧声明是否将该方法标记为有副作用。
+    pub effectful: bool,
 }
 
 /// An associated type in a trait (resolved info).
@@ -125,7 +129,7 @@ pub struct ImplMethod {
 
 /// The trait resolver - maintains trait and impl registries.
 /// 特征解析器 - 维护特征和实现的注册表。
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TraitResolver {
     /// Registered traits. / 已注册的特征。
     traits: HashMap<DefId, TraitInfo>,
@@ -156,20 +160,18 @@ impl TraitResolver {
                 params: item.params.iter().map(|param| param.ty.clone()).collect(),
                 return_ty: item.return_ty.clone(),
                 has_default: item.default.is_some(),
+                effectful: item.effectful,
             })
             .collect();
 
-        // Extract associated types from the trait definition
+        // Associated-type bounds are resolved after all traits are registered.
+        // 关联类型约束在所有特征注册后解析。
         let assoc_types: Vec<AssocType> = def
             .assoc_types
             .iter()
             .map(|at| AssocType {
                 name: at.name.clone(),
-                bounds: at
-                    .bounds
-                    .iter()
-                    .filter_map(|bound_ty| self.ty_to_trait_bound(bound_ty))
-                    .collect(),
+                bounds: Vec::new(),
                 default: at.default.clone(),
             })
             .collect();
@@ -187,6 +189,29 @@ impl TraitResolver {
         self.trait_impls.insert(def_id, Vec::new());
 
         def_id
+    }
+
+    /// Resolve associated-type bounds after all traits are registered.
+    /// 在所有特征注册后解析关联类型约束。
+    pub fn resolve_trait_assoc_bounds(&mut self, def_id: DefId, def: &TraitDef) {
+        let bounds_by_name: HashMap<String, Vec<TraitBound>> = def
+            .assoc_types
+            .iter()
+            .map(|assoc| {
+                let bounds = assoc
+                    .bounds
+                    .iter()
+                    .filter_map(|bound_ty| self.ty_to_trait_bound(bound_ty))
+                    .collect();
+                (assoc.name.clone(), bounds)
+            })
+            .collect();
+
+        if let Some(info) = self.traits.get_mut(&def_id) {
+            for assoc in &mut info.assoc_types {
+                assoc.bounds = bounds_by_name.get(&assoc.name).cloned().unwrap_or_default();
+            }
+        }
     }
 
     /// Register an impl block.
@@ -312,26 +337,85 @@ impl TraitResolver {
         self.traits.get(&id)
     }
 
+    /// Return whether a trait method declaration seeds effect inference.
+    /// 返回特征方法声明是否为 effect inference 提供种子。
+    pub fn trait_method_is_effectful(&self, trait_ty: &Ty, method_name: &str) -> bool {
+        let Some(trait_ref) = self.resolve_trait_ref(trait_ty) else {
+            return false;
+        };
+        self.traits
+            .get(&trait_ref.trait_id)
+            .and_then(|trait_info| {
+                trait_info
+                    .methods
+                    .iter()
+                    .find(|method| method.name == method_name)
+            })
+            .is_some_and(|method| method.effectful)
+    }
+
     /// Get impl info by ID.
     /// 按 ID 获取实现信息。
     pub fn get_impl(&self, id: DefId) -> Option<&ImplInfo> {
         self.impls.get(&id)
     }
-
-    /// Find implementations of a trait for a specific type.
-    /// 为特定类型查找特征的实现。
-    pub fn find_trait_impl(&self, trait_id: DefId, self_ty: &Ty) -> Option<DefId> {
+    /// Find an implementation and its generic parameter substitution.
+    /// 查找实现及其泛型参数替换。
+    fn find_trait_impl_match(
+        &self,
+        trait_id: DefId,
+        trait_args: &[Ty],
+        self_ty: &Ty,
+    ) -> Option<(DefId, Substitution)> {
         let impls = self.trait_impls.get(&trait_id)?;
 
         for impl_id in impls {
-            if let Some(info) = self.impls.get(impl_id)
-                && self.types_match(&info.self_ty, self_ty)
-            {
-                return Some(*impl_id);
+            let Some(info) = self.impls.get(impl_id) else {
+                continue;
+            };
+            let mut subst = Substitution::new();
+            if !self.types_match_with_substitution(&info.self_ty, self_ty, &mut subst) {
+                continue;
             }
+            if !trait_args.is_empty() {
+                let Some(trait_ref) = &info.trait_ref else {
+                    continue;
+                };
+                if trait_ref.args.len() != trait_args.len()
+                    || !trait_ref
+                        .args
+                        .iter()
+                        .zip(trait_args)
+                        .all(|(impl_arg, requested_arg)| {
+                            self.types_match_with_substitution(impl_arg, requested_arg, &mut subst)
+                        })
+                {
+                    continue;
+                }
+            }
+            return Some((*impl_id, subst));
         }
 
         None
+    }
+
+    /// Find an implementation for a type.
+    /// 为类型查找特征实现。
+    pub fn find_trait_impl(&self, trait_id: DefId, self_ty: &Ty) -> Option<DefId> {
+        self.find_trait_impl_match(trait_id, &[], self_ty)
+            .map(|(impl_id, _)| impl_id)
+    }
+
+    /// Find an implementation while matching trait type arguments.
+    /// 查找实现并匹配特征类型参数。
+    pub fn find_trait_impl_with_args(
+        &self,
+        trait_id: DefId,
+        trait_args: &[Ty],
+        self_ty: &Ty,
+    ) -> Option<DefId> {
+        self.find_trait_impl_match(trait_id, trait_args, self_ty)
+            .map(|(impl_id, _)| impl_id)
     }
 
     /// Find inherent impls for a type.
@@ -341,43 +425,62 @@ impl TraitResolver {
         self.inherent_impls.get(&key).cloned().unwrap_or_default()
     }
 
-    /// Check if two types match (for trait impl lookup).
-    /// Type variables match anything (concrete types resolved during unification).
-    /// 检查两个类型是否匹配（用于 trait impl 查找）。
-    /// 类型变量匹配任何类型（具体类型在统一化期间解析）。
-    fn types_match(&self, t1: &Ty, t2: &Ty) -> bool {
-        match (&t1.kind, &t2.kind) {
-            (TyKind::Int, TyKind::Int) => true,
-            (TyKind::Float, TyKind::Float) => true,
-            (TyKind::Bool, TyKind::Bool) => true,
-            (TyKind::Char, TyKind::Char) => true,
-            (TyKind::String, TyKind::String) => true,
-            (TyKind::Unit, TyKind::Unit) => true,
-            (TyKind::SelfType, TyKind::SelfType) => true,
+    /// Match an impl type against a concrete type and bind impl parameters.
+    /// 将实现类型与具体类型匹配并绑定实现参数。
+    fn types_match_with_substitution(
+        &self,
+        pattern: &Ty,
+        actual: &Ty,
+        subst: &mut Substitution,
+    ) -> bool {
+        let pattern = subst.apply(pattern);
+        let actual = subst.apply(actual);
+        match (&pattern.kind, &actual.kind) {
+            (TyKind::Param(index, _), _) => subst.bind_param(*index, actual),
+            (TyKind::Var(_), _) | (_, TyKind::Var(_)) => true,
+            (TyKind::Int, TyKind::Int)
+            | (TyKind::Float, TyKind::Float)
+            | (TyKind::Bool, TyKind::Bool)
+            | (TyKind::Char, TyKind::Char)
+            | (TyKind::String, TyKind::String)
+            | (TyKind::Unit, TyKind::Unit)
+            | (TyKind::SelfType, TyKind::SelfType)
+            | (TyKind::Unknown, TyKind::Unknown) => true,
             (TyKind::SelfAssoc(left), TyKind::SelfAssoc(right)) => left == right,
             (TyKind::Named(id1, args1), TyKind::Named(id2, args2)) => {
                 id1 == id2
                     && args1.len() == args2.len()
-                    && args1.iter().zip(args2.iter()).all(|(a, b)| {
-                        matches!(
-                            (&a.kind, &b.kind),
-                            (TyKind::Var(_), _) | (_, TyKind::Var(_))
-                        ) || self.types_match(a, b)
-                    })
-            }
-            (TyKind::Record(f1), TyKind::Record(f2)) => {
-                f1.len() == f2.len()
-                    && f1
+                    && args1
                         .iter()
-                        .zip(f2.iter())
-                        .all(|((n1, t1), (n2, t2))| n1 == n2 && self.types_match(t1, t2))
+                        .zip(args2)
+                        .all(|(left, right)| self.types_match_with_substitution(left, right, subst))
             }
-            (TyKind::Tuple(ts1), TyKind::Tuple(ts2)) => {
-                ts1.len() == ts2.len()
-                    && ts1
+            (TyKind::Fn(params1, ret1), TyKind::Fn(params2, ret2)) => {
+                params1.len() == params2.len()
+                    && params1
                         .iter()
-                        .zip(ts2.iter())
-                        .all(|(a, b)| self.types_match(a, b))
+                        .zip(params2)
+                        .all(|(left, right)| self.types_match_with_substitution(left, right, subst))
+                    && self.types_match_with_substitution(ret1, ret2, subst)
+            }
+            (TyKind::Tuple(items1), TyKind::Tuple(items2)) => {
+                items1.len() == items2.len()
+                    && items1
+                        .iter()
+                        .zip(items2)
+                        .all(|(left, right)| self.types_match_with_substitution(left, right, subst))
+            }
+            (TyKind::Record(fields1), TyKind::Record(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1
+                        .iter()
+                        .zip(fields2)
+                        .all(|((name1, ty1), (name2, ty2))| {
+                            name1 == name2 && self.types_match_with_substitution(ty1, ty2, subst)
+                        })
+            }
+            (TyKind::Forall(names1, body1), TyKind::Forall(names2, body2)) => {
+                names1 == names2 && self.types_match_with_substitution(body1, body2, subst)
             }
             (TyKind::Record(_), TyKind::DynamicRecord(_))
             | (TyKind::DynamicRecord(_), TyKind::Record(_))
@@ -387,63 +490,160 @@ impl TraitResolver {
             | (TyKind::SafeRecordBase(_), TyKind::DynamicRecord(_))
             | (TyKind::DynamicRecord(_), TyKind::SafeRecordBase(_))
             | (TyKind::SafeRecordBase(_), TyKind::SafeRecordBase(_)) => true,
-            (TyKind::Var(_), _) | (_, TyKind::Var(_)) => true, // Type vars match anything
             _ => false,
+        }
+    }
+
+    fn instantiate_impl_type(&self, ty: &Ty, self_ty: &Ty, subst: &Substitution) -> Ty {
+        self.replace_self_type(&subst.apply(ty), self_ty)
+    }
+
+    fn replace_self_type(&self, ty: &Ty, self_ty: &Ty) -> Ty {
+        match &ty.kind {
+            TyKind::SelfType => self_ty.clone(),
+            TyKind::Fn(params, ret) => Ty {
+                kind: TyKind::Fn(
+                    params
+                        .iter()
+                        .map(|param| self.replace_self_type(param, self_ty))
+                        .collect(),
+                    Box::new(self.replace_self_type(ret, self_ty)),
+                ),
+                span: ty.span,
+            },
+            TyKind::Tuple(items) => Ty {
+                kind: TyKind::Tuple(
+                    items
+                        .iter()
+                        .map(|item| self.replace_self_type(item, self_ty))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Named(id, args) => Ty {
+                kind: TyKind::Named(
+                    *id,
+                    args.iter()
+                        .map(|arg| self.replace_self_type(arg, self_ty))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Record(fields) => Ty {
+                kind: TyKind::Record(
+                    fields
+                        .iter()
+                        .map(|(name, field)| (name.clone(), self.replace_self_type(field, self_ty)))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::DynamicRecord(fields) => Ty {
+                kind: TyKind::DynamicRecord(
+                    fields
+                        .iter()
+                        .map(|(name, field)| (name.clone(), self.replace_self_type(field, self_ty)))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::SafeRecordBase(fields) => Ty {
+                kind: TyKind::SafeRecordBase(
+                    fields
+                        .iter()
+                        .map(|(name, field)| (name.clone(), self.replace_self_type(field, self_ty)))
+                        .collect(),
+                ),
+                span: ty.span,
+            },
+            TyKind::Forall(names, body) => Ty {
+                kind: TyKind::Forall(
+                    names.clone(),
+                    Box::new(self.replace_self_type(body, self_ty)),
+                ),
+                span: ty.span,
+            },
+            _ => ty.clone(),
         }
     }
 
     /// Resolve a method call on a type.
     /// 解析类型上的方法调用。
     pub fn resolve_method(&self, self_ty: &Ty, method_name: &str) -> Option<MethodResolution> {
-        // First, check inherent impls
+        // First, check inherent impls.
         for impl_id in self.find_inherent_impls(self_ty) {
-            if let Some(info) = self.impls.get(&impl_id) {
-                for method in &info.methods {
-                    if method.name == method_name {
-                        return Some(MethodResolution {
-                            impl_id,
-                            method_def_id: method.def_id,
-                            method_name: method_name.to_string(),
-                            self_ty: info.self_ty.clone(),
-                            params: method.params.clone(),
-                            return_ty: method.return_ty.clone(),
-                        });
-                    }
-                }
+            let Some(info) = self.impls.get(&impl_id) else {
+                continue;
+            };
+            let mut subst = Substitution::new();
+            if !self.types_match_with_substitution(&info.self_ty, self_ty, &mut subst) {
+                continue;
             }
+            let Some(method) = info
+                .methods
+                .iter()
+                .find(|method| method.name == method_name)
+            else {
+                continue;
+            };
+            return Some(self.build_method_resolution(impl_id, info, method, self_ty, &subst));
         }
 
-        // Then check trait impls
+        // Then check trait impls.
         for (trait_id, impl_ids) in &self.trait_impls {
-            // Check if trait has this method
-            if let Some(trait_info) = self.traits.get(trait_id) {
-                let has_method = trait_info.methods.iter().any(|m| m.name == method_name);
+            let Some(trait_info) = self.traits.get(trait_id) else {
+                continue;
+            };
+            if !trait_info
+                .methods
+                .iter()
+                .any(|method| method.name == method_name)
+            {
+                continue;
+            }
 
-                if has_method {
-                    // Find an impl that matches our type
-                    for impl_id in impl_ids {
-                        if let Some(info) = self.impls.get(impl_id)
-                            && self.types_match(&info.self_ty, self_ty)
-                        {
-                            for method in &info.methods {
-                                if method.name == method_name {
-                                    return Some(MethodResolution {
-                                        impl_id: *impl_id,
-                                        method_def_id: method.def_id,
-                                        method_name: method_name.to_string(),
-                                        self_ty: info.self_ty.clone(),
-                                        params: method.params.clone(),
-                                        return_ty: method.return_ty.clone(),
-                                    });
-                                }
-                            }
-                        }
-                    }
+            for impl_id in impl_ids {
+                let Some(info) = self.impls.get(impl_id) else {
+                    continue;
+                };
+                let mut subst = Substitution::new();
+                if !self.types_match_with_substitution(&info.self_ty, self_ty, &mut subst) {
+                    continue;
                 }
+                let Some(method) = info
+                    .methods
+                    .iter()
+                    .find(|method| method.name == method_name)
+                else {
+                    continue;
+                };
+                return Some(self.build_method_resolution(*impl_id, info, method, self_ty, &subst));
             }
         }
 
         None
+    }
+
+    fn build_method_resolution(
+        &self,
+        impl_id: DefId,
+        info: &ImplInfo,
+        method: &ImplMethod,
+        receiver_ty: &Ty,
+        subst: &Substitution,
+    ) -> MethodResolution {
+        MethodResolution {
+            impl_id,
+            method_def_id: method.def_id,
+            method_name: method.name.clone(),
+            self_ty: self.instantiate_impl_type(&info.self_ty, receiver_ty, subst),
+            params: method
+                .params
+                .iter()
+                .map(|param| self.instantiate_impl_type(param, receiver_ty, subst))
+                .collect(),
+            return_ty: self.instantiate_impl_type(&method.return_ty, receiver_ty, subst),
+        }
     }
 
     /// Check that an impl provides all required trait methods.
@@ -558,22 +758,24 @@ impl TraitResolver {
         trait_id: DefId,
         assoc_type_name: &str,
     ) -> Option<Ty> {
-        // Find the impl for this type and trait
-        let impl_id = self.find_trait_impl(trait_id, self_ty)?;
+        let (impl_id, subst) = self.find_trait_impl_match(trait_id, &[], self_ty)?;
         let impl_info = self.impls.get(&impl_id)?;
 
-        // Look for the associated type in the impl
+        // Look for the associated type in the impl.
         for assoc in &impl_info.assoc_types {
             if assoc.name == assoc_type_name {
-                return Some(assoc.ty.clone());
+                return Some(self.instantiate_impl_type(&assoc.ty, self_ty, &subst));
             }
         }
 
-        // Check if the trait has a default for this associated type
+        // Check if the trait has a default for this associated type.
         let trait_info = self.traits.get(&trait_id)?;
         for assoc in &trait_info.assoc_types {
             if assoc.name == assoc_type_name {
-                return assoc.default.clone();
+                return assoc
+                    .default
+                    .as_ref()
+                    .map(|ty| self.instantiate_impl_type(ty, self_ty, &subst));
             }
         }
 
@@ -710,7 +912,7 @@ impl ConstraintSolver {
     /// 检查类型是否满足特征约束。
     fn is_satisfied(&self, ty: &Ty, bound: &TraitBound) -> bool {
         self.trait_resolver
-            .find_trait_impl(bound.trait_id, ty)
+            .find_trait_impl_with_args(bound.trait_id, &bound.args, ty)
             .is_some()
     }
 

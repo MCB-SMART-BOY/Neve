@@ -2,6 +2,7 @@
 //! HIR 节点定义。
 
 use neve_common::{Int, Span};
+use neve_diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// A unique identifier for a definition.
@@ -105,6 +106,8 @@ pub struct Module {
     pub imports: Vec<Import>,
     /// Exported names (None = export all public items). / 导出的名称（None = 导出所有公共项）。
     pub exports: Option<Vec<String>>,
+    /// Errors preserved at the AST-to-HIR boundary. / AST 到 HIR 边界保留的错误。
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl Module {
@@ -117,6 +120,7 @@ impl Module {
             items: Vec::new(),
             imports: Vec::new(),
             exports: None,
+            diagnostics: Vec::new(),
         }
     }
 }
@@ -158,11 +162,11 @@ pub enum ImportPathPrefix {
 /// 导入的类型。
 #[derive(Debug, Clone)]
 pub enum ImportKind {
-    /// Import the entire module: `import std.list`. / 导入整个模块：`import std.list`。
+    /// Import the entire module: `use std.list`.
     Module,
-    /// Import specific items: `import std.list (map, filter)`. / 导入特定项：`import std.list (map, filter)`。
+    /// Import specific items: `use std.list (map, filter)`.
     Items(Vec<String>),
-    /// Import all public items: `import std.list (*)`. / 导入所有公共项：`import std.list (*)`。
+    /// Import all public items: `use std.list (*)`.
     All,
 }
 
@@ -465,9 +469,11 @@ pub struct FnDef {
     pub generics: Vec<GenericParam>,
     /// Function parameters. / 函数参数。
     pub params: Vec<Param>,
-    /// Return type. / 返回类型。
+    /// Return type.
+    /// 返回类型。
     pub return_ty: Ty,
-    /// Whether this function is effectful. / 该函数是否有副作用。
+    /// Whether effect inference marked this function as effectful.
+    /// 该函数是否被副作用推断标记为 effectful。
     pub effectful: bool,
     /// Function body. / 函数体。
     pub body: Expr,
@@ -563,7 +569,8 @@ pub struct VariantDef {
     pub id: DefId,
     /// Variant name. / 变体名称。
     pub name: String,
-    /// Variant fields (for tuple variants). / 变体字段（用于元组变体）。
+    /// Positional payload types. Record variants have one record payload.
+    /// 位置载荷类型。记录变体包含一个记录载荷。
     pub fields: Vec<Ty>,
     /// Named fields for record variants. / 记录变体的命名字段。
     pub record_fields: Option<Vec<FieldDef>>,
@@ -615,7 +622,7 @@ pub struct AssocTypeDef {
 /// Trait 项（方法声明）。
 #[derive(Debug, Clone)]
 pub struct TraitItem {
-    /// Whether this method is annotated with `effect`.
+    /// Whether effect inference marked this method as effectful.
     pub effectful: bool,
     /// Method name.
     pub name: String,
@@ -673,8 +680,8 @@ pub struct ImplItem {
     pub params: Vec<Param>,
     /// Return type. / 返回类型。
     pub return_ty: Ty,
-    /// Whether this method is annotated with `effect`.
-    /// 是否用 `effect` 注解。
+    /// Whether effect inference marked this method as effectful.
+    /// 该方法是否被副作用推断标记为 effectful。
     pub effectful: bool,
     /// Method body. / 方法体。
     pub body: Expr,
@@ -942,6 +949,9 @@ pub enum PatternKind {
     Constructor(DefId, Vec<Pattern>),
     /// Or pattern (`a | b`). / Or 模式（`a | b`）。
     Or(Vec<Pattern>),
+    /// Unsupported pattern preserved as a type-checking error.
+    /// 保留不支持的模式，并在类型检查阶段报告错误。
+    Error(String),
 }
 
 /// HIR statement.

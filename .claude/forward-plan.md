@@ -3,12 +3,21 @@
 ## Current State
 
 ```
-v4.0.4 | canonical HIR pipeline | parser/HIR/typeck/eval audit in progress
+v5.0.0 | canonical HIR pipeline | AST/HIR/tooling boundary audit closed
 Core parser, HIR, typeck, eval, LSP and smoke checks pass locally.
 ```
 
 The historical release and audit numbers below are preserved as release history,
 not as a claim that every AST/HIR boundary is currently closed.
+
+**Latest review (2026-09-25)**: a full lexer → parser → AST → HIR → typeck → eval
+re-check against the v4.0/v5.0 syntax settled nine defects — slash-vs-division
+lexing, enum-variant name conflicts, zero-parameter binding semantics, per-frame
+`io.defer`, thunk failure caching, method-call TCO, the native stack budget,
+UTF-16 semantic token positions, and one tautological defer test. See
+`audit-report.md` → "AST/HIR/IR Review (2026-09-25)" for evidence and the
+remaining boundaries (ASCII-only identifiers, expression-depth stack budget,
+zero-parameter call semantics).
 
 ## v4.0 Exit Criteria
 
@@ -17,7 +26,7 @@ not as a claim that every AST/HIR boundary is currently closed.
 | 1 | AST compat path fully removed | ✅ Done (2026-06-16) — ast_eval.rs deleted |
 | 2 | All 6 implementation gaps closed | ✅ Done — shebang now handled by parser (M22) |
 | 3 | Lean axioms documented | ✅ 3 axioms documented (blocked on Lean 4.29+) |
-| 4 | Release policy stable for 2+ minor versions | ✅ v3.18 → v3.19 → v4.0 → v4.0.4 |
+| 4 | Release policy stable for 2+ minor versions | ✅ v3.18 → v3.19 → v4.0 → v4.0.4 → v5.0.0 |
 | 5 | External contribution policy published | ✅ Done — docs/contributor/contributing.md |
 | 6 | Semantic convergence verified | ✅ 12 E2E gap tests resolved |
 
@@ -74,25 +83,25 @@ The 12 gaps, ordered by impact:
 | C4 | CONTRIBUTING.md update | ✅ Done (comprehensive guide) |
 | C5 | CLA/DCO decision | Deferred (MPL-2.0 is inbound-only) |
 
-### Phase D: v4.0 Launch ✅ COMPLETE (v4.0.4 released, v4.0.4 published on crates.io)
+### Phase D: v5.0 API Cutover ✅ COMPLETE (v5.0.0 workspace release)
 
-**Goal**: Execute the v4.0 exit criteria. All done.
+**Goal**: Seal the public AST boundary and preserve future syntax additions across the canonical pipeline.
 
 | ID | Task | Status |
 |----|------|--------|
-| D1 | Remove `neve_eval::compat` path | ✅ Done |
-| D2 | Migrate all callers off AstEvaluator | ✅ Done |
-| D3 | Lean axioms documented (Lean 4.29+ pending) | ✅ Documented |
-| D4 | v4.0 release notes + migration guide | ✅ Done |
-| D5 | v4.0.4 release | ✅ Released |
-| D6 | v4.0.4 patch release on crates.io | ✅ Done |
+| D1 | Add `#[non_exhaustive]` to public AST enums | ✅ Done |
+| D2 | Migrate all workspace AST matches to wildcard handling | ✅ Done |
+| D3 | Add AST/HIR unsupported-node diagnostics | ✅ Done |
+| D4 | Version workspace and internal requirements to v5.0.0 | ✅ Done |
+| D5 | Add external-consumer compile-fail regression | ✅ Done |
+| D6 | Update stability and migration documentation | ✅ Done |
 
 ## Immediate Priority
 
 ```
 ✅ Core parser/HIR/typeck/eval checks
-⚠️ AST/HIR follow-up audit: semantic and tooling boundaries remain
-[OK] Global quality gates: gitleaks/trivy/cargo audit/cargo deny pass; AST/HIR review risks remain
+✅ AST/HIR/tooling boundary audit: non-exhaustive AST and explicit unsupported-node handling
+✅ Global quality gates: gitleaks/trivy/cargo audit/cargo deny pass; v5 API cutover verified
 ```
 
 ## Risk Register
@@ -110,7 +119,7 @@ The 12 gaps, ordered by impact:
 **All decision gates cleared.**
 ```
 
-Q6 + Q7 are the last two gates before v4.0.
+Q6 + Q7 were the last two gates before v4.0; v5.0.0 AST API cutover is complete.
 
 ## 2026-06-16: Comprehensive Design Audit (62 findings)
 
@@ -175,7 +184,7 @@ See `.claude/audit-report.md` for full details (62 findings, fix roadmap).
 
 ### Friction Map
 
-1. **Semantic authority still split** — AST compat path fully removed in v4.0; all evaluation is canonical HIR. However, `run`, `eval`, `build`, and config-related flows still expose or depend on AST behavior. Some HIR consumers still manually reconstruct parse/lower/typecheck/eval orchestration instead of using one driver.
+1. **Semantic authority is converged** — AST compat evaluation was fully removed in v4.0 and all evaluation now uses canonical HIR. Remaining friction is consumer-specific orchestration in `run`, `eval`, `build`, and config-related flows; some consumers still reconstruct parse/lower/typecheck/eval steps instead of using one shared driver.
 
 2. **Module infrastructure is over-coupled** — `ModuleLoader` mixes file discovery, source caching, module graph construction, import resolution, lowering orchestration, and diagnostics accumulation. `Resolver` still knows about module loading concerns and std import shortcuts. Cache identity still leans on `mtime`, dirty flags, and non-stable hash behavior.
 
