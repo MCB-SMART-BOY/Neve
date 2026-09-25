@@ -2590,8 +2590,58 @@ impl Parser {
 
     /// Parse function call arguments.
     /// 解析函数调用参数。
+    ///
+    /// Calls take positional arguments only - `name = value` is not an argument
+    /// form. Such a pair is reported for what it is and then dropped, so the
+    /// remaining arguments and the closing `)` still parse.
+    /// 调用只接受位置参数，`name = value` 不是合法的实参形式。遇到时按此报告并丢弃
+    /// 该键值对，使其余实参和右括号仍能解析。
     fn parse_args(&mut self) -> Vec<Expr> {
-        self.parse_comma_list(TokenKind::RParen, |parser| Some(parser.parse_expr()))
+        self.parse_comma_list(TokenKind::RParen, |parser| {
+            if parser.at_named_argument() {
+                let name_span = parser.current_span();
+                parser.advance(); // name
+                parser.advance(); // `=`
+                parser.error_named_argument(name_span.merge(parser.previous_span()));
+                // Only a present value may go through `parse_expr`: with a missing
+                // one its recovery runs to the end of the statement and would
+                // swallow the closing `)` and any following arguments.
+                // 只在值存在时交给 `parse_expr`：值缺失时它的恢复会一路吃到语句结束，
+                // 吞掉右括号和后续实参。
+                if !parser.check(TokenKind::Comma)
+                    && !parser.check(TokenKind::RParen)
+                    && !parser.at_end()
+                {
+                    let _ = parser.parse_expr(); // discarded: the pair is not an argument
+                }
+                return None;
+            }
+            Some(parser.parse_expr())
+        })
+    }
+
+    /// Whether the cursor sits on `name =` inside an argument list.
+    /// 判断光标是否位于实参列表中的 `name =`。
+    fn at_named_argument(&self) -> bool {
+        matches!(self.current_kind(), TokenKind::Ident(_))
+            && matches!(
+                self.tokens.get(self.pos + 1).map(|token| &token.kind),
+                Some(TokenKind::Eq)
+            )
+    }
+
+    /// Report `name = value` used as a call argument, spanning `name =`.
+    /// 报告把 `name = value` 用作调用实参，范围覆盖 `name =`。
+    fn error_named_argument(&mut self, span: Span) {
+        let diag = Diagnostic::error(
+            DiagnosticKind::Parser,
+            span,
+            "named arguments are not supported; calls take positional arguments",
+        )
+        .with_code(ErrorCode::UnexpectedToken)
+        .with_label(Label::new(span, "here"))
+        .with_help("pass a single record instead, e.g. `f({ program = \"cat\" })`");
+        self.diagnostics.push(diag);
     }
 
     // ========== Pattern Parsing 模式解析 ==========

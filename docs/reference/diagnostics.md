@@ -67,7 +67,9 @@ This reference documents **55 diagnostic codes**.
 <a name="E0100"></a>
 ### E0100 — Unexpected token / 意外的 token
 - Description: unexpected token
+- Note: a call argument written as `name = value` reports this code too - calls take positional arguments only, so pass a single record instead, e.g. `f({ program = "cat" })`
 - 描述：遇到了不符合语法的 token
+- 说明：调用实参写成 `name = value` 时同样报此码——调用只接受位置参数，请改为传入单个 record，例如 `f({ program = "cat" })`
 
 <a name="E0101"></a>
 ### E0101 — Expected expression / 需要表达式

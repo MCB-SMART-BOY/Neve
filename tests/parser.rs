@@ -1,5 +1,6 @@
 //! Integration tests for n3v3-parser crate.
 
+use n3v3_diagnostic::ErrorCode;
 use n3v3_parser::parse;
 use n3v3_syntax::{BinOp, ExprKind, ItemKind, PatternKind, TypeKind};
 
@@ -1616,6 +1617,68 @@ fn test_recovery_continue_after_error() {
     assert!(!diags.is_empty());
     // Should still parse the second item
     assert!(!file.items.is_empty());
+}
+
+#[test]
+fn test_named_argument_reports_specific_error() {
+    let (file, diags) = parse("let cmd = f(\"cat\", [], cwd = \"x\");");
+    assert_eq!(diags.len(), 1, "expected one diagnostic, got: {diags:?}");
+    assert_eq!(diags[0].code, Some(ErrorCode::UnexpectedToken));
+    assert!(
+        diags[0]
+            .message
+            .contains("named arguments are not supported"),
+        "got: {}",
+        diags[0].message
+    );
+    assert!(
+        diags[0]
+            .help
+            .as_deref()
+            .is_some_and(|help| help.contains("record")),
+        "help should point at the record form, got: {:?}",
+        diags[0].help
+    );
+    // Recovery: the pair is dropped and the positional arguments survive.
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::Call { args, .. } = &def.value.kind else {
+        panic!("expected call expression");
+    };
+    assert_eq!(args.len(), 2, "positional arguments must survive: {args:?}");
+}
+
+#[test]
+fn test_named_argument_in_method_call() {
+    let (_, diags) = parse("let x = y.m(z = 1);");
+    assert_eq!(diags.len(), 1, "expected one diagnostic, got: {diags:?}");
+    assert_eq!(diags[0].code, Some(ErrorCode::UnexpectedToken));
+}
+
+#[test]
+fn test_named_argument_without_value_keeps_call_arguments() {
+    let (file, diags) = parse("let cmd = f(x = , 1);");
+    assert_eq!(diags.len(), 1, "expected one diagnostic, got: {diags:?}");
+    assert_eq!(diags[0].code, Some(ErrorCode::UnexpectedToken));
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::Call { args, .. } = &def.value.kind else {
+        panic!("expected call expression");
+    };
+    assert_eq!(
+        args.len(),
+        1,
+        "the positional argument must survive: {args:?}"
+    );
+}
+
+#[test]
+fn test_record_argument_is_not_a_named_argument() {
+    let (file, diags) = parse("let cmd = f(\"cat\", { program = \"cat\" });");
+    assert!(diags.is_empty(), "got: {diags:?}");
+    assert_eq!(file.items.len(), 1);
 }
 
 // ============================================================================
