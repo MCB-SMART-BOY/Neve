@@ -642,8 +642,18 @@ mod tests {
         let err = activator
             .activate(&generated)
             .expect_err("activation should fail");
-        let msg = err.to_string();
-        assert!(msg.contains("activation script failed"));
+        // The fixture only fails by exit code where a shell runs it. On Windows
+        // the script cannot be launched at all, so the reason differs while the
+        // rollback below still has to hold.
+        // 该脚本只在有 shell 的平台上按退出码失败。Windows 上根本无法启动它，因此失败
+        // 原因不同，但下面的回滚仍然必须成立。
+        #[cfg(unix)]
+        assert!(err.to_string().contains("activation script failed"));
+        #[cfg(not(unix))]
+        assert!(
+            !err.to_string().is_empty(),
+            "the activation must fail with a reported reason"
+        );
 
         let existing_after = fs::read_to_string(&existing_target)?;
         assert_eq!(existing_after, "old-content\n");
