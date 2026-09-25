@@ -134,10 +134,17 @@ count_lsp_facts() {
     fi
 
     methods=$(printf '%s\n' "$block" | grep -c -E '^[[:space:]]+(async )?fn ' || true)
+    # Handler names are extracted once. Piping this ~1k-line block into
+    # `grep -q` makes the writer die of EPIPE as soon as grep matches, and
+    # `pipefail` then reports the whole pipeline as failed - which silently
+    # dropped a handler on CI (lsp_notifications actual=6 expected=7).
+    # 处理器名只提取一次：把这块 ~1k 行文本管道给 `grep -q`，写入方会在 grep 命中后
+    # 因 EPIPE 失败，`pipefail` 随即判定整条管道失败——在 CI 上曾静默漏掉一个处理器。
+    declared=$(printf '%s\n' "$block" |
+        sed -n -E 's/^[[:space:]]+(async[[:space:]]+)?fn[[:space:]]+([A-Za-z0-9_]+).*/\2/p')
     for handler in initialized did_open did_change did_save did_close \
         did_change_configuration did_change_watched_files; do
-        if printf '%s\n' "$block" | grep -q -E \
-            "^[[:space:]]+(async )?fn ${handler}[[:space:]]*\("; then
+        if grep -qxF "$handler" <<<"$declared"; then
             notifications=$((notifications + 1))
         fi
     done

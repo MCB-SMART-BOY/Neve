@@ -76,10 +76,17 @@ lsp_block=$(awk '
 ' crates/n3v3-lsp/src/backend.rs)
 [ -n "$lsp_block" ] || die "cannot locate impl LanguageServer for Backend"
 lsp_methods=$(printf '%s\n' "$lsp_block" | grep -c -E '^[[:space:]]+(async )?fn ' || true)
+# Handler names are extracted once and matched without a pipeline: piping this
+# ~1k-line block into `grep -q` lets the writer die of EPIPE, which `pipefail`
+# turns into a failed pipeline (see .claude/hooks/verify-skills.sh).
+# 处理器名只提取一次，匹配时不走管道：把这块 ~1k 行文本管道给 `grep -q` 会让写入方
+# 因 EPIPE 失败，而 `pipefail` 会把整条管道判为失败（见 .claude/hooks/verify-skills.sh）。
+lsp_declared=$(printf '%s\n' "$lsp_block" |
+  sed -n -E 's/^[[:space:]]+(async[[:space:]]+)?fn[[:space:]]+([A-Za-z0-9_]+).*/\2/p')
 lsp_notifications=0
 for handler in initialized did_open did_change did_save did_close \
   did_change_configuration did_change_watched_files; do
-  if printf '%s\n' "$lsp_block" | grep -q -E "^[[:space:]]+(async )?fn ${handler}\b"; then
+  if grep -qxF "$handler" <<<"$lsp_declared"; then
     lsp_notifications=$((lsp_notifications + 1))
   fi
 done
