@@ -1771,7 +1771,10 @@ impl Parser {
             return Expr::new(ExprKind::Unit, start.merge(self.previous_span()));
         }
 
-        let first = self.parse_expr();
+        let first = match self.parse_element_expr(Self::NAMED_PAIR_IN_EXPRESSION) {
+            Some(expr) => expr,
+            None => Expr::new(ExprKind::Unit, self.previous_span()),
+        };
 
         // Check for tuple (comma after first element)
         // 检查是否为元组（第一个元素后有逗号）
@@ -1779,7 +1782,9 @@ impl Parser {
             let mut elements = vec![first];
             if !self.check(TokenKind::RParen) {
                 loop {
-                    elements.push(self.parse_expr());
+                    if let Some(element) = self.parse_element_expr(Self::NAMED_PAIR_IN_EXPRESSION) {
+                        elements.push(element);
+                    }
                     if !self.eat(TokenKind::Comma) {
                         break;
                     }
@@ -1814,7 +1819,10 @@ impl Parser {
             );
         }
 
-        let first = self.parse_expr();
+        let first = match self.parse_element_expr(Self::NAMED_PAIR_IN_EXPRESSION) {
+            Some(expr) => expr,
+            None => Expr::new(ExprKind::Unit, self.previous_span()),
+        };
 
         // Check for list comprehension
         // 检查是否为列表推导
@@ -1838,7 +1846,9 @@ impl Parser {
             if self.check(TokenKind::RBracket) {
                 break;
             }
-            elements.push(self.parse_expr());
+            if let Some(element) = self.parse_element_expr(Self::NAMED_PAIR_IN_EXPRESSION) {
+                elements.push(element);
+            }
         }
 
         self.expect(TokenKind::RBracket);
@@ -2598,30 +2608,54 @@ impl Parser {
     /// 该键值对，使其余实参和右括号仍能解析。
     fn parse_args(&mut self) -> Vec<Expr> {
         self.parse_comma_list(TokenKind::RParen, |parser| {
-            if parser.at_named_argument() {
-                let name_span = parser.current_span();
-                parser.advance(); // name
-                parser.advance(); // `=`
-                parser.error_named_argument(name_span.merge(parser.previous_span()));
-                // Only a present value may go through `parse_expr`: with a missing
-                // one its recovery runs to the end of the statement and would
-                // swallow the closing `)` and any following arguments.
-                // 只在值存在时交给 `parse_expr`：值缺失时它的恢复会一路吃到语句结束，
-                // 吞掉右括号和后续实参。
-                if !parser.check(TokenKind::Comma)
-                    && !parser.check(TokenKind::RParen)
-                    && !parser.at_end()
-                {
-                    let _ = parser.parse_expr(); // discarded: the pair is not an argument
-                }
-                return None;
-            }
-            Some(parser.parse_expr())
+            parser.parse_element_expr(
+                "named arguments are not supported; calls take positional arguments",
+            )
         })
     }
 
-    /// Whether the cursor sits on `name =` inside an argument list.
-    /// 判断光标是否位于实参列表中的 `name =`。
+    /// Message for `name = value` in a position that requires an expression.
+    /// 需要表达式的位置出现 `name = value` 时的消息。
+    const NAMED_PAIR_IN_EXPRESSION: &str =
+        "`name = value` is not an expression; use a record instead";
+
+    /// Parse one element of a separator-delimited list.
+    /// 解析分隔符列表中的一个元素。
+    ///
+    /// A `name = value` pair is reported with `message` and dropped, so the
+    /// remaining elements and the closing delimiter still parse.
+    /// `name = value` 会按 `message` 报错并被丢弃，使其余元素和闭合定界符仍能解析。
+    fn parse_element_expr(&mut self, message: &str) -> Option<Expr> {
+        if !self.at_named_argument() {
+            return Some(self.parse_expr());
+        }
+
+        let name_span = self.current_span();
+        self.advance(); // name
+        self.advance(); // `=`
+        self.error_named_argument(name_span.merge(self.previous_span()), message);
+        // Only a value that is followed by something other than a separator may go
+        // through `parse_expr`: with a missing value its recovery runs to the end of
+        // the statement and would swallow the closing delimiter and any following
+        // elements. A token that cannot begin an expression (e.g. `+`) is still
+        // consumed, and its recovery may append `expected RParen`/`expected RBracket`
+        // to already-invalid input.
+        // 只有后面不是分隔符的值才交给 `parse_expr`：值缺失时它的恢复会一路吃到语句结束，
+        // 吞掉闭合定界符和后续元素。无法作为表达式起始的 token（如 `+`）仍会被消费，其恢复
+        // 可能在本已非法的输入上追加 `expected RParen`/`expected RBracket`。
+        if !self.check(TokenKind::Comma)
+            && !self.check(TokenKind::RParen)
+            && !self.check(TokenKind::RBracket)
+            && !self.at_end()
+        {
+            let _ = self.parse_expr(); // discarded: the pair is not an element
+        }
+        None
+    }
+
+    /// Whether the cursor sits on `name =` inside a comma-separated list
+    /// (call arguments, tuple elements, list elements).
+    /// 判断光标是否位于逗号分隔列表（调用实参、元组元素、列表元素）中的 `name =`。
     fn at_named_argument(&self) -> bool {
         matches!(self.current_kind(), TokenKind::Ident(_))
             && matches!(
@@ -2630,17 +2664,13 @@ impl Parser {
             )
     }
 
-    /// Report `name = value` used as a call argument, spanning `name =`.
-    /// 报告把 `name = value` 用作调用实参，范围覆盖 `name =`。
-    fn error_named_argument(&mut self, span: Span) {
-        let diag = Diagnostic::error(
-            DiagnosticKind::Parser,
-            span,
-            "named arguments are not supported; calls take positional arguments",
-        )
-        .with_code(ErrorCode::UnexpectedToken)
-        .with_label(Label::new(span, "here"))
-        .with_help("pass a single record instead, e.g. `f({ program = \"cat\" })`");
+    /// Report `name = value` used where an expression is required, spanning `name =`.
+    /// 报告在需要表达式的位置使用 `name = value`，范围覆盖 `name =`。
+    fn error_named_argument(&mut self, span: Span, message: &str) {
+        let diag = Diagnostic::error(DiagnosticKind::Parser, span, message)
+            .with_code(ErrorCode::UnexpectedToken)
+            .with_label(Label::new(span, "here"))
+            .with_help("pass a single record instead, e.g. `f({ program = \"cat\" })`");
         self.diagnostics.push(diag);
     }
 

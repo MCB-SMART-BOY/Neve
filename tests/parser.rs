@@ -1675,6 +1675,37 @@ fn test_named_argument_without_value_keeps_call_arguments() {
 }
 
 #[test]
+fn test_named_pair_in_tuple_and_list_reports_specific_error() {
+    for source in [
+        "let t = (x = 1);",
+        "let t = (a, x = 1);",
+        "let t = (x = );",
+        "let l = [x = 1];",
+        "let l = [x = ];",
+    ] {
+        let (file, diags) = parse(source);
+        assert_eq!(diags.len(), 1, "{source} -> {diags:?}");
+        assert_eq!(diags[0].code, Some(ErrorCode::UnexpectedToken));
+        assert!(
+            diags[0].message.contains("is not an expression"),
+            "{source} -> {}",
+            diags[0].message
+        );
+        assert_eq!(file.items.len(), 1);
+    }
+    // Recovery: the dropped pair is not an element, its neighbours survive.
+    let (file, diags) = parse("let l = [a, x = , b];");
+    assert_eq!(diags.len(), 1, "expected one diagnostic, got: {diags:?}");
+    let ItemKind::Let(def) = &file.items[0].kind else {
+        panic!("expected let item");
+    };
+    let ExprKind::List(items) = &def.value.kind else {
+        panic!("expected list expression");
+    };
+    assert_eq!(items.len(), 2, "list elements must survive: {items:?}");
+}
+
+#[test]
 fn test_record_argument_is_not_a_named_argument() {
     let (file, diags) = parse("let cmd = f(\"cat\", { program = \"cat\" });");
     assert!(diags.is_empty(), "got: {diags:?}");
