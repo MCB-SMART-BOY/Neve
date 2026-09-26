@@ -366,19 +366,22 @@ impl Fetcher {
     /// 获取 Git 仓库的缓存路径。
     fn git_cache_path(&self, hash: &Hash, name: &str) -> PathBuf {
         let hash_prefix = &hash.to_hex()[..2];
-        self.cache_dir
-            .join("git")
-            .join(hash_prefix)
-            .join(format!("{}-{}", hash.to_hex(), name))
+        self.cache_dir.join("git").join(hash_prefix).join(format!(
+            "{}-{}",
+            hash.to_hex(),
+            sanitize_cache_segment(name)
+        ))
     }
 
     /// Get the cache path for a hash.
     /// 获取哈希的缓存路径。
     fn cache_path(&self, hash: &Hash, name: &str) -> PathBuf {
         let hash_prefix = &hash.to_hex()[..2];
-        self.cache_dir
-            .join(hash_prefix)
-            .join(format!("{}-{}", hash.to_hex(), name))
+        self.cache_dir.join(hash_prefix).join(format!(
+            "{}-{}",
+            hash.to_hex(),
+            sanitize_cache_segment(name)
+        ))
     }
 
     /// Fetch text content from a URL.
@@ -403,6 +406,36 @@ impl Fetcher {
     }
 }
 
+/// Sanitize a name for use as a single cache path segment.
+/// 将名称清理为单个缓存路径段。
+///
+/// Characters that Windows forbids in file names are replaced with `_`, and
+/// trailing dots/spaces are trimmed, so names derived from URLs or paths stay
+/// valid everywhere (e.g. a Windows repo path `C:\repos\x` must not leak its
+/// colon into the cache file name). The caller prefixes the hash, so reserved
+/// device names cannot occur.
+fn sanitize_cache_segment(name: &str) -> String {
+    const INVALID: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if INVALID.contains(&c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_end_matches(['.', ' ']);
+
+    if trimmed.is_empty() {
+        "cache".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 /// Recursively copy a directory.
 /// 递归复制目录。
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), FetchError> {
@@ -420,4 +453,31 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Fetc
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_cache_segment_replaces_windows_invalid_characters() {
+        assert_eq!(
+            sanitize_cache_segment(r"C:\Users\runner\repo"),
+            "C__Users_runner_repo"
+        );
+        assert_eq!(sanitize_cache_segment("repo<1>:v2"), "repo_1__v2");
+        assert_eq!(sanitize_cache_segment("host:8080"), "host_8080");
+    }
+
+    #[test]
+    fn sanitize_cache_segment_trims_trailing_dots_and_spaces() {
+        assert_eq!(sanitize_cache_segment("repo."), "repo");
+        assert_eq!(sanitize_cache_segment("repo "), "repo");
+    }
+
+    #[test]
+    fn sanitize_cache_segment_falls_back_when_nothing_remains() {
+        assert_eq!(sanitize_cache_segment("..."), "cache");
+        assert_eq!(sanitize_cache_segment(""), "cache");
+    }
 }

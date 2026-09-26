@@ -193,7 +193,7 @@ On Unix, `n3v3 registry-update`, `n3v3 registry-serve`, and
 
 | API | Signature | Description |
 |-----|-----------|-------------|
-| `io.onSignal` | `(signal: String, handler: () -> Unit) -> Unit` | Register signal handler |
+| `io.onSignal` | `(signal: String, handler: () -> Unit) -> Unit` | Register signal handler (Unix-only; other platforms report an error) |
 
 ### Bytes Type
 

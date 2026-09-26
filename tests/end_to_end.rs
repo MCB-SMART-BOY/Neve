@@ -659,6 +659,21 @@ fn test_end_to_end_builtin_result_match_runtime_parity() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn test_end_to_end_std_path_builtin_windows_parity() {
+    assert_runtime_parity(
+        r#"
+        use std.path = path;
+        let joined = path.join("C:\\a", "b");
+        let parent = path.parent("C:\\tmp\\file.txt") ?? "missing";
+        let x = if path.is_absolute("C:\\tmp") -> joined == "C:\\a\\b" && parent == "C:\\tmp" else false;
+        "#,
+        Value::Bool(true),
+    );
+}
+
+#[cfg(unix)]
 #[test]
 fn test_end_to_end_std_path_builtin_runtime_parity() {
     assert_runtime_parity(
@@ -2350,17 +2365,23 @@ fn test_end_to_end_std_math_trigonometric_runtime_parity() {
 
 #[test]
 fn test_end_to_end_write_read_roundtrip() {
+    let temp = TempDir::new().unwrap();
+    let path = temp.path().join("n3v3_e2e_rt.txt");
+    let escaped = path.to_string_lossy().replace('\\', "\\\\");
     assert_runtime_parity(
-        r#"
+        &format!(
+            r#"
         use std.io = io;
         use std.string = string;
-        let _ = io.writeFile("/tmp/n3v3_e2e_rt.txt", "roundtrip data");
-        string.trim(io.readFile("/tmp/n3v3_e2e_rt.txt"))
-        "#,
+        let _ = io.writeFile("{escaped}", "roundtrip data");
+        string.trim(io.readFile("{escaped}"))
+        "#
+        ),
         n3v3_eval::Value::String("roundtrip data".to_string().into()),
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn test_end_to_end_io_which_finds_sh() {
     assert_runtime_parity(
@@ -2369,6 +2390,16 @@ fn test_end_to_end_io_which_finds_sh() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn test_end_to_end_io_which_finds_cmd() {
+    assert_runtime_parity(
+        r#"use std.io = io; match io.which("cmd.exe") { Some(_) -> true, None -> false }"#,
+        n3v3_eval::Value::Bool(true),
+    );
+}
+
+#[cfg(unix)]
 #[test]
 fn test_end_to_end_full_scripting_workflow() {
     // Test the complete scripting workflow: args, file I/O, process exec, pipes
@@ -2844,6 +2875,7 @@ fn test_end_to_end_io_exec_pipeline_streaming_with_timeout_effect_checking() {
 
 // === Signal handling tests ===
 
+#[cfg(unix)]
 #[test]
 fn test_end_to_end_io_on_signal_registers_handler() {
     // Verify that io.onSignal accepts valid signal names and returns Unit.
@@ -3144,7 +3176,7 @@ fn test_end_to_end_bytes_len() {
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("bytes-len.txt");
     fs::write(&path, "hello").unwrap();
-    let escaped = path.display().to_string();
+    let escaped = path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -5336,6 +5368,7 @@ fn test_wait_any_job_returns_result() {
 // Signal tests / 信号测试
 // ============================================================================
 
+#[cfg(unix)]
 #[test]
 fn test_signal_handler_registration() {
     let source = r#"
@@ -5774,6 +5807,7 @@ fn test_stream_drop_exact_length() {
 // Pipe + Command integration (4 tests) / 管道与命令集成测试
 // ============================================================================
 
+#[cfg(unix)]
 #[test]
 fn test_command_pipe_with_cwd_and_env() {
     let source = r#"
@@ -6612,6 +6646,7 @@ fn test_task_wait_any_job_with_spawn() {
 // Signal + TTY (3 tests) / 信号与终端测试
 // ============================================================================
 
+#[cfg(unix)]
 #[test]
 fn test_signal_handler_multiple_registrations() {
     let source = r#"
@@ -7992,7 +8027,7 @@ fn test_defer_runs_when_function_returns() {
     // 延迟动作属于注册它的调用帧，必须在帧退出时执行，而不是程序结束时。
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("defer-order.txt");
-    let escaped = path.display().to_string();
+    let escaped = path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -8017,7 +8052,7 @@ fn test_defer_runs_when_function_fails() {
     // 帧因错误退出时，延迟清理同样执行。
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("defer-error.txt");
-    let escaped = path.display().to_string();
+    let escaped = path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -8042,7 +8077,7 @@ fn test_defer_scope_does_not_leak_to_callers() {
     // 被调用方注册的延迟动作不应在调用者帧中触发。
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("defer-scope.txt");
-    let escaped = path.display().to_string();
+    let escaped = path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -8092,8 +8127,8 @@ fn test_defer_order_matches_tail_and_non_tail_calls() {
     let temp = TempDir::new().unwrap();
     let tail_path = temp.path().join("defer-tail.txt");
     let plain_path = temp.path().join("defer-plain.txt");
-    let tail = tail_path.display().to_string();
-    let plain = plain_path.display().to_string();
+    let tail = tail_path.display().to_string().replace('\\', "\\\\");
+    let plain = plain_path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -8140,7 +8175,7 @@ fn test_defer_runs_when_tail_called_frame_fails() {
     // 尾调用链以错误结束时，挂起的清理仍然执行。
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("defer-tail-error.txt");
-    let escaped = path.display().to_string();
+    let escaped = path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -8168,7 +8203,7 @@ fn test_defer_runs_inside_thunk_frame() {
     // 惰性 thunk 体自成一帧；force 期间注册的 defer 在该帧退出时执行。
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("defer-thunk.txt");
-    let escaped = path.display().to_string();
+    let escaped = path.display().to_string().replace('\\', "\\\\");
     let source = format!(
         r#"
         use std.io = io;
@@ -8223,6 +8258,7 @@ fn test_ensure_builtin_exists() {
 
 // === Critical coverage gap tests (E2E 440 → 450) ===
 
+#[cfg(unix)]
 #[test]
 fn test_stream_command_with_cwd() {
     // streamCommand respects cwd setting via commandWith
@@ -8357,6 +8393,7 @@ fn test_bytes_hash_roundtrip() {
     assert_eq!(hir_value, Value::Bool(true));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_path_join_resolve() {
     // Path operations chain correctly

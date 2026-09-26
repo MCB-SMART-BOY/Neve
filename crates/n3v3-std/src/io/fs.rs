@@ -1545,7 +1545,9 @@ pub fn builtins() -> Vec<(&'static str, Value)> {
                 },
             }),
         ),
-        #[cfg(unix)]
+        // Registered on every platform: the implementation lives in the
+        // evaluator and uses `tempfile`, which is cross-platform.
+        // 在所有平台注册：实现位于 evaluator，使用跨平台的 `tempfile`。
         (
             "io.tempDir",
             Value::Builtin(BuiltinFn {

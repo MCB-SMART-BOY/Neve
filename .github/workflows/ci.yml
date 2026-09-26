@@ -74,9 +74,12 @@ jobs:
         if: matrix.os == 'windows-latest'
         # Full workspace coverage includes every crate under crates/ and
         # tree-sitter-n3v3/bindings/rust; no platform-specific test is silently omitted.
+        # --no-fail-fast keeps later binaries running so one run reports every
+        # platform-specific failure instead of only the first failing binary.
         # 全工作区覆盖 crates/ 下全部 crate 与 tree-sitter-n3v3/bindings/rust，
-        # 不静默排除任何平台测试。
-        run: cargo test --workspace --all-targets --verbose -- --nocapture
+        # 不静默排除任何平台测试。--no-fail-fast 让后续测试二进制继续运行，使单次运行
+        # 报告全部平台相关失败，而不是只报第一个失败的二进制。
+        run: cargo test --workspace --all-targets --verbose --no-fail-fast -- --nocapture
 
 
 
