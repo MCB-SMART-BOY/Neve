@@ -1732,6 +1732,12 @@ mod tests {
         fail_gets: &Arc<Mutex<HashMap<String, usize>>>,
         request_counts: &Arc<Mutex<HashMap<String, usize>>>,
     ) -> std::io::Result<()> {
+        // The listener is non-blocking and accepted streams inherit that mode,
+        // so a request body that arrives in several segments would make `read`
+        // fail with `WouldBlock` and close the connection mid-request.
+        // listener 是非阻塞的，accept 到的连接会继承该模式，因此分多段到达的请求体会让
+        // `read` 返回 `WouldBlock` 并在请求中途关闭连接。
+        stream.set_nonblocking(false)?;
         stream.set_read_timeout(Some(Duration::from_secs(2)))?;
 
         let mut request = Vec::new();
@@ -2195,6 +2201,42 @@ mod tests {
         assert_eq!(
             fs::read(fetched_path).unwrap(),
             b"remote-add-content-roundtrip"
+        );
+    }
+
+    #[test]
+    fn test_http_cache_server_reads_split_request_body() {
+        let server = TestHttpCacheServer::start();
+        let addr = server
+            .base_url
+            .strip_prefix("http://")
+            .expect("base url keeps the http scheme");
+
+        let mut client = std::net::TcpStream::connect(addr).unwrap();
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        client
+            .write_all(
+                b"PUT /split HTTP/1.1\r\nHost: localhost\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabc",
+            )
+            .unwrap();
+        // Windows returns a non-blocking socket when accepting from a
+        // non-blocking listener, so a body split across reads used to close the
+        // connection mid-request; Unix returns a blocking one, so the failure
+        // only surfaces on Windows.
+        // Windows 上从非阻塞 listener accept 会得到非阻塞连接，分段到达的请求体曾导致连接
+        // 在请求中途被关闭；Unix 返回阻塞连接，因此该故障只在 Windows 暴露。
+        thread::sleep(std::time::Duration::from_millis(100));
+        client.write_all(b"def").unwrap();
+
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.contains("200 OK"), "got: {response:?}");
+        assert_eq!(
+            server.read_path("/split"),
+            Some(b"abcdef".to_vec()),
+            "the full request body must be stored"
         );
     }
 
