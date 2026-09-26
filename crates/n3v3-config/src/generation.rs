@@ -50,15 +50,30 @@ impl GenerationManager {
         self.generations_dir().join(format!("generation-{}", num))
     }
 
+    /// Read the target of a generation link.
+    /// 读取代链接的目标。
+    ///
+    /// Unix stores the link as a symlink; other platforms (Windows without
+    /// symlink privileges) store it as a text file holding the target path.
+    /// Unix 上链接是符号链接；其他平台（无符号链接权限的 Windows）写成保存目标
+    /// 路径的文本文件。
+    fn read_link_target(link: &PathBuf) -> Result<Option<PathBuf>, ConfigError> {
+        if link.is_symlink() {
+            return Ok(Some(fs::read_link(link)?));
+        }
+        if link.exists() {
+            return Ok(Some(PathBuf::from(fs::read_to_string(link)?.trim())));
+        }
+        Ok(None)
+    }
+
     /// Get the current generation number.
     /// 获取当前代号。
     pub fn current_generation(&self) -> Result<Option<u64>, ConfigError> {
         let current = self.current_link();
-        if !current.exists() {
+        let Some(target) = Self::read_link_target(&current)? else {
             return Ok(None);
-        }
-
-        let target = fs::read_link(&current)?;
+        };
         let name = target
             .file_name()
             .and_then(|n| n.to_str())
@@ -177,13 +192,10 @@ impl GenerationManager {
         // Load store path
         // 加载存储路径
         let store_link = gen_path.join("system");
-        let store_path_str = if store_link.is_symlink() {
-            fs::read_link(&store_link)?.to_string_lossy().into_owned()
-        } else if store_link.exists() {
-            fs::read_to_string(&store_link)?
-        } else {
-            return Err(ConfigError::Invalid("missing system link".to_string()));
-        };
+        let store_path_str = Self::read_link_target(&store_link)?
+            .ok_or_else(|| ConfigError::Invalid("missing system link".to_string()))?
+            .to_string_lossy()
+            .into_owned();
 
         let store_path = StorePath::parse_name(&store_path_str)
             .ok_or_else(|| ConfigError::Invalid("invalid store path".to_string()))?;
@@ -348,4 +360,28 @@ fn current_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_current_generation_reads_plain_file_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = GenerationManager::new(dir.path().to_path_buf()).unwrap();
+
+        // Windows writes the current link as a plain file (no symlink privilege),
+        // so simulate that form on every platform.
+        // Windows 上当前代链接写成普通文件（无符号链接权限），因此在所有平台模拟该形式。
+        let current = dir.path().join(GENERATIONS_DIR).join("current");
+        fs::write(
+            &current,
+            manager.generation_path(7).to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(manager.current_generation().unwrap(), Some(7));
+        assert_eq!(manager.next_generation().unwrap(), 8);
+    }
 }
