@@ -571,6 +571,7 @@ fn test_path_extension_path_builtin_returns_option_string() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_path_is_absolute_path_builtin_reports_bool() {
     let builtin =
@@ -579,6 +580,22 @@ fn test_path_is_absolute_path_builtin_reports_bool() {
         &builtin,
         &[Value::Path(Rc::new(std::path::PathBuf::from(
             "/tmp/n3v3.txt",
+        )))],
+    )
+    .expect("path.isAbsolutePath should succeed");
+
+    assert_eq!(result, Value::Bool(true));
+}
+
+#[cfg(windows)]
+#[test]
+fn test_path_is_absolute_path_builtin_reports_bool_on_windows() {
+    let builtin =
+        get_builtin("path.isAbsolutePath").expect("path.isAbsolutePath builtin should exist");
+    let result = call_builtin(
+        &builtin,
+        &[Value::Path(Rc::new(std::path::PathBuf::from(
+            "C:\\n3v3.txt",
         )))],
     )
     .expect("path.isAbsolutePath should succeed");
@@ -800,6 +817,11 @@ fn test_fetch_git_with_hash_builtin_returns_metadata_record() {
         Value::String(Rc::new("main".to_string())),
         Value::String(Rc::new(expected_hash.clone())),
     ];
+    // A shared fetch cache makes the first call environment-dependent: it is a hit
+    // only when another test already populated the same content hash. Warm the cache
+    // first so only the second call is asserted as cached.
+    // 共享缓存使首次调用的结果依赖环境，先预热缓存，仅对第二次调用断言 cached。
+    call_builtin(&builtin, &args).expect("fetch.gitWithHash warm-up should succeed");
     let result = call_builtin(&builtin, &args).expect("fetch.gitWithHash should succeed");
 
     match result {

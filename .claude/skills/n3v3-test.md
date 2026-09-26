@@ -4,7 +4,7 @@
 
 ```
            ┌──────────┐
-           │ E2E      │ 556 E2E tests (all pass) — full pipeline smoke
+           │ E2E      │ 558 E2E tests (all pass) — full pipeline smoke
            │ (smoke)  │  tests/end_to_end.rs
            ├──────────┤
            │ Inte-    │  Subsystem validation — see tests/*.rs
@@ -36,9 +36,9 @@ mod tests {
 
 | Test File | What It Validates | Verification |
 |-----------|-------------------|--------------|
-| `tests/parser.rs` | Lexer + parser for all syntax forms | `cargo test --test parser` (234 parser tests) |
+| `tests/parser.rs` | Lexer + parser for all syntax forms | `cargo test --test parser` (239 parser tests) |
 | `tests/typeck.rs` | Type inference, traits, exhaustiveness | `cargo test --test typeck` |
-| `tests/end_to_end.rs` | Full pipeline: parse→typeck→eval | `cargo test --test end_to_end` (556 E2E tests) |
+| `tests/end_to_end.rs` | Full pipeline: parse→typeck→eval | `cargo test --test end_to_end` (558 E2E tests) |
 | `tests/eval.rs` | HIR evaluator unit tests | `cargo test --test eval` |
 | `tests/lsp_e2e.rs` | LSP protocol conformance | `cargo test --test lsp_e2e` |
 | `tests/syntax_policy.rs` | Semantic policy assertions | `cargo test --test syntax_policy` |
@@ -60,7 +60,7 @@ fn run(source: &str) -> Result<Value, EvalError> {
 // The AST compat path was fully removed in v4.0 (Phase D).
 ```
 
-## E2E Coverage (556 E2E tests)
+## E2E Coverage (558 E2E tests)
 
 | Category | Representative coverage |
 |----------|-------------------------|
@@ -107,7 +107,7 @@ Implementation order:
 
 | File | What |
 |------|------|
-| `tests/end_to_end.rs` | 556 E2E tests through the canonical pipeline |
+| `tests/end_to_end.rs` | 558 E2E tests through the canonical pipeline |
 | `tests/parser.rs` | 234 parser integration tests + golden tests |
 | `tests/typeck.rs` | Type system and exhaustiveness tests |
 | `tests/frontend.rs` | Effect propagation and frontend pipeline regressions |

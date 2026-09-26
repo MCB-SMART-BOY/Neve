@@ -61,7 +61,7 @@ code, and `.claude/hooks/verify-skills.sh` compares the skill claims against it.
 
 - "Key file: `crates/n3v3-typeck/src/check/mod.rs`" → the file must exist
 - "26 LSP methods" → `scripts/counts.sh lsp_methods`
-- "556 E2E tests" → `scripts/counts.sh e2e_tests`
+- "558 E2E tests" → `scripts/counts.sh e2e_tests`
 - "12 canonical keywords", "13 Stream<T> APIs", "21 Lean modules", "55 diagnostic
   codes" → the matching `counts.sh` key
 

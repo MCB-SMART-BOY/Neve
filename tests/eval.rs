@@ -173,6 +173,7 @@ fn test_eval_hir_builtin_result_match_patterns() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_eval_hir_std_path_builtins() {
     let source = r#"
@@ -182,6 +183,20 @@ fn test_eval_hir_std_path_builtins() {
     "#;
     match eval_checked_hir(source) {
         Ok(Value::String(s)) => assert_eq!(s.as_ref(), "/tmp"),
+        other => panic!("expected string, got {:?}", other),
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn test_eval_hir_std_path_builtins_windows_semantics() {
+    let source = r#"
+        use std.path = path;
+        let parent = path.parent("C:\\tmp\\file.txt") ?? "/";
+        let result = if path.is_absolute("C:\\tmp\\file.txt") -> parent else "nope";
+    "#;
+    match eval_checked_hir(source) {
+        Ok(Value::String(s)) => assert_eq!(s.as_ref(), "C:\\tmp"),
         other => panic!("expected string, got {:?}", other),
     }
 }
@@ -1774,6 +1789,7 @@ fn test_eval_hir_std_io_await_pipeline_task_matches_exec_pipeline() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_eval_hir_std_io_exec_pipeline_honors_embedded_pipeline_redirects() {
     let temp = TempDir::new().expect("temp dir should exist");

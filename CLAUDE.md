@@ -11,8 +11,8 @@ n3v3 is a pure functional language for system configuration, built in Rust. 17 c
 cargo build -p n3v3                     # build CLI
 cargo check --workspace                 # fast validation
 cargo test --workspace                  # all tests
-cargo test --test end_to_end -- --nocapture  # 556 E2E tests
-cargo test --test parser                # 234 parser tests
+cargo test --test end_to_end -- --nocapture  # 558 E2E tests
+cargo test --test parser                # 239 parser tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 .claude/skills/run-n3v3/driver.sh       # smoke-test all CLI paths
@@ -79,4 +79,4 @@ truth. `scripts/check-docs.sh` mechanically checks documentation claims.
 
 ## Current Status
 
-v5.0.0. 556 E2E tests (all pass). 26 LSP methods (19 requests + 7 notifications; `did_change_configuration` and `did_change_watched_files` are stubs and require a server restart). 13 Stream<T> APIs. 55 error codes. 12 canonical keywords. Public AST enums are `#[non_exhaustive]`; AST/HIR unsupported-node handling is explicit. Audit grade B+ → A- (62/62 fixed). All milestones complete. Published on crates.io as `n3v3` (`cargo install n3v3`).
+v5.0.0. 558 E2E tests (all pass). 26 LSP methods (19 requests + 7 notifications; `did_change_configuration` and `did_change_watched_files` are stubs and require a server restart). 13 Stream<T> APIs. 55 error codes. 12 canonical keywords. Public AST enums are `#[non_exhaustive]`; AST/HIR unsupported-node handling is explicit. Audit grade B+ → A- (62/62 fixed). All milestones complete. Published on crates.io as `n3v3` (`cargo install n3v3`).

@@ -8,7 +8,7 @@ The v5.0.0 canonical HIR pipeline is the current implementation baseline. Curren
 | Fact | Current value |
 |------|---------------|
 | Product version | v5.0.0 |
-| E2E tests | 556 E2E tests |
+| E2E tests | 558 E2E tests |
 | LSP surface | 26 LSP methods |
 | Diagnostics | 55 diagnostic codes |
 | Canonical syntax | 12 canonical keywords |

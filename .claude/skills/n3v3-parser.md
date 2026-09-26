@@ -214,7 +214,7 @@ empty import, or unrelated fallback.
 | `crates/n3v3-syntax/src/types.rs` | `TypeKind` / `Type` / `GenericParam` / trait AST |
 | `crates/n3v3-syntax/src/pattern.rs` | `PatternKind` / `Pattern` types |
 | `crates/n3v3-common/src/trivia.rs` | `Comment` / `CommentKind` — lexer trivia consumed by n3v3-fmt |
-| `tests/parser.rs` | 234 parser tests (golden and integration) |
+| `tests/parser.rs` | 239 parser tests (golden and integration) |
 
 - **Golden tests**: Parse source, compare formatted AST output to `.txt` baseline.
 - **Integration tests**: `tests/parser.rs` — tests cover canonical and legacy

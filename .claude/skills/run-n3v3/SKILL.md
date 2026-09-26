@@ -92,7 +92,7 @@ cargo run -p n3v3 -- run file.n3v3
 
 ```bash
 cargo test --workspace                     # unit + integration
-cargo test --test end_to_end -- --nocapture  # 556 E2E tests
+cargo test --test end_to_end -- --nocapture  # 558 E2E tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```

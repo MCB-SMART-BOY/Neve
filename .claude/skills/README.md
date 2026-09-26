@@ -13,7 +13,7 @@ A comprehensive skill suite for developing the n3v3 functional programming langu
 | [n3v3-eval](n3v3-eval.md) | HIR tree-walking interpreter | n3v3-eval |
 | [n3v3-std](n3v3-std.md) | Standard library (I/O, Stream<T>, List) | n3v3-std |
 | [n3v3-lsp](n3v3-lsp.md) | Language Server Protocol | n3v3-lsp |
-| [n3v3-test](n3v3-test.md) | Testing strategy + 556 E2E tests | tests/ |
+| [n3v3-test](n3v3-test.md) | Testing strategy + 558 E2E tests | tests/ |
 | [n3v3-diagnostic](n3v3-diagnostic.md) | Compiler error system (55 diagnostic codes) | n3v3-diagnostic |
 | [n3v3-fmt](n3v3-fmt.md) | Code formatter | n3v3-fmt |
 | [n3v3-effect](n3v3-effect.md) | Effect system (EffectEval v4.3) | n3v3-typeck, n3v3-eval |
@@ -99,7 +99,7 @@ Source Code (.n3v3)
 | Phase 6 (Syntax v4.0) | ✅ Complete |
 | Phase 5 (Ecosystem) | ✅ Complete |
 | Phase 4 (Shell) | ✅ Complete |
-| E2E Tests | 556 E2E tests (all pass) |
+| E2E Tests | 558 E2E tests (all pass) |
 | Formatter idempotency | 37/37 |
 | Stream<T> APIs | 13 Stream<T> APIs |
 | LSP Methods | 26 LSP methods (19 requests + 7 notifications) |
